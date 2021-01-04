@@ -1,82 +1,81 @@
 == Physical Plan ==
-CollectLimit (72)
-+- * HashAggregate (71)
-   +- Exchange (70)
-      +- * HashAggregate (69)
-         +- Union (68)
-            :- * Project (51)
-            :  +- * BroadcastHashJoin Inner BuildRight (50)
-            :     :- * Project (44)
-            :     :  +- * BroadcastHashJoin LeftSemi BuildRight (43)
-            :     :     :- * Project (27)
-            :     :     :  +- * BroadcastHashJoin LeftSemi BuildRight (26)
-            :     :     :     :- * Filter (3)
-            :     :     :     :  +- * ColumnarToRow (2)
-            :     :     :     :     +- Scan parquet default.catalog_sales (1)
-            :     :     :     +- BroadcastExchange (25)
-            :     :     :        +- * Project (24)
-            :     :     :           +- * Filter (23)
-            :     :     :              +- * HashAggregate (22)
-            :     :     :                 +- Exchange (21)
-            :     :     :                    +- * HashAggregate (20)
-            :     :     :                       +- * Project (19)
-            :     :     :                          +- * BroadcastHashJoin Inner BuildRight (18)
-            :     :     :                             :- * Project (13)
-            :     :     :                             :  +- * BroadcastHashJoin Inner BuildRight (12)
-            :     :     :                             :     :- * Filter (6)
-            :     :     :                             :     :  +- * ColumnarToRow (5)
-            :     :     :                             :     :     +- Scan parquet default.store_sales (4)
-            :     :     :                             :     +- BroadcastExchange (11)
-            :     :     :                             :        +- * Project (10)
-            :     :     :                             :           +- * Filter (9)
-            :     :     :                             :              +- * ColumnarToRow (8)
-            :     :     :                             :                 +- Scan parquet default.date_dim (7)
-            :     :     :                             +- BroadcastExchange (17)
-            :     :     :                                +- * Filter (16)
-            :     :     :                                   +- * ColumnarToRow (15)
-            :     :     :                                      +- Scan parquet default.item (14)
-            :     :     +- BroadcastExchange (42)
-            :     :        +- * Project (41)
-            :     :           +- * Filter (40)
-            :     :              +- * HashAggregate (39)
-            :     :                 +- Exchange (38)
-            :     :                    +- * HashAggregate (37)
-            :     :                       +- * Project (36)
-            :     :                          +- * BroadcastHashJoin Inner BuildRight (35)
-            :     :                             :- * Filter (30)
-            :     :                             :  +- * ColumnarToRow (29)
-            :     :                             :     +- Scan parquet default.store_sales (28)
-            :     :                             +- BroadcastExchange (34)
-            :     :                                +- * Filter (33)
-            :     :                                   +- * ColumnarToRow (32)
-            :     :                                      +- Scan parquet default.customer (31)
-            :     +- BroadcastExchange (49)
-            :        +- * Project (48)
-            :           +- * Filter (47)
-            :              +- * ColumnarToRow (46)
-            :                 +- Scan parquet default.date_dim (45)
-            +- * Project (67)
-               +- * BroadcastHashJoin Inner BuildRight (66)
-                  :- * Project (64)
-                  :  +- * BroadcastHashJoin LeftSemi BuildRight (63)
-                  :     :- * Project (57)
-                  :     :  +- * BroadcastHashJoin LeftSemi BuildRight (56)
-                  :     :     :- * Filter (54)
-                  :     :     :  +- * ColumnarToRow (53)
-                  :     :     :     +- Scan parquet default.web_sales (52)
-                  :     :     +- ReusedExchange (55)
-                  :     +- BroadcastExchange (62)
-                  :        +- * Project (61)
-                  :           +- * Filter (60)
-                  :              +- * HashAggregate (59)
-                  :                 +- ReusedExchange (58)
-                  +- ReusedExchange (65)
+* HashAggregate (71)
++- Exchange (70)
+   +- * HashAggregate (69)
+      +- Union (68)
+         :- * Project (51)
+         :  +- * BroadcastHashJoin Inner BuildRight (50)
+         :     :- * Project (44)
+         :     :  +- * BroadcastHashJoin LeftSemi BuildRight (43)
+         :     :     :- * Project (27)
+         :     :     :  +- * BroadcastHashJoin LeftSemi BuildRight (26)
+         :     :     :     :- * Filter (3)
+         :     :     :     :  +- * ColumnarToRow (2)
+         :     :     :     :     +- Scan parquet default.catalog_sales (1)
+         :     :     :     +- BroadcastExchange (25)
+         :     :     :        +- * Project (24)
+         :     :     :           +- * Filter (23)
+         :     :     :              +- * HashAggregate (22)
+         :     :     :                 +- Exchange (21)
+         :     :     :                    +- * HashAggregate (20)
+         :     :     :                       +- * Project (19)
+         :     :     :                          +- * BroadcastHashJoin Inner BuildRight (18)
+         :     :     :                             :- * Project (13)
+         :     :     :                             :  +- * BroadcastHashJoin Inner BuildRight (12)
+         :     :     :                             :     :- * Filter (6)
+         :     :     :                             :     :  +- * ColumnarToRow (5)
+         :     :     :                             :     :     +- Scan parquet default.store_sales (4)
+         :     :     :                             :     +- BroadcastExchange (11)
+         :     :     :                             :        +- * Project (10)
+         :     :     :                             :           +- * Filter (9)
+         :     :     :                             :              +- * ColumnarToRow (8)
+         :     :     :                             :                 +- Scan parquet default.date_dim (7)
+         :     :     :                             +- BroadcastExchange (17)
+         :     :     :                                +- * Filter (16)
+         :     :     :                                   +- * ColumnarToRow (15)
+         :     :     :                                      +- Scan parquet default.item (14)
+         :     :     +- BroadcastExchange (42)
+         :     :        +- * Project (41)
+         :     :           +- * Filter (40)
+         :     :              +- * HashAggregate (39)
+         :     :                 +- Exchange (38)
+         :     :                    +- * HashAggregate (37)
+         :     :                       +- * Project (36)
+         :     :                          +- * BroadcastHashJoin Inner BuildRight (35)
+         :     :                             :- * Filter (30)
+         :     :                             :  +- * ColumnarToRow (29)
+         :     :                             :     +- Scan parquet default.store_sales (28)
+         :     :                             +- BroadcastExchange (34)
+         :     :                                +- * Filter (33)
+         :     :                                   +- * ColumnarToRow (32)
+         :     :                                      +- Scan parquet default.customer (31)
+         :     +- BroadcastExchange (49)
+         :        +- * Project (48)
+         :           +- * Filter (47)
+         :              +- * ColumnarToRow (46)
+         :                 +- Scan parquet default.date_dim (45)
+         +- * Project (67)
+            +- * BroadcastHashJoin Inner BuildRight (66)
+               :- * Project (64)
+               :  +- * BroadcastHashJoin LeftSemi BuildRight (63)
+               :     :- * Project (57)
+               :     :  +- * BroadcastHashJoin LeftSemi BuildRight (56)
+               :     :     :- * Filter (54)
+               :     :     :  +- * ColumnarToRow (53)
+               :     :     :     +- Scan parquet default.web_sales (52)
+               :     :     +- ReusedExchange (55)
+               :     +- BroadcastExchange (62)
+               :        +- * Project (61)
+               :           +- * Filter (60)
+               :              +- * HashAggregate (59)
+               :                 +- ReusedExchange (58)
+               +- ReusedExchange (65)
 
 
 (1) Scan parquet default.catalog_sales
 Output [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_bill_customer_sk:int,cs_item_sk:int,cs_quantity:int,cs_list_price:decimal(7,2)>
 
@@ -90,7 +89,7 @@ Condition : isnotnull(cs_sold_date_sk#1)
 (4) Scan parquet default.store_sales
 Output [2]: [ss_sold_date_sk#6, ss_item_sk#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int>
 
@@ -104,7 +103,7 @@ Condition : (isnotnull(ss_sold_date_sk#6) AND isnotnull(ss_item_sk#7))
 (7) Scan parquet default.date_dim
 Output [3]: [d_date_sk#8, d_date#9, d_year#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [In(d_year, [2000,2001,2002,2003]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_year:int>
 
@@ -135,7 +134,7 @@ Input [4]: [ss_sold_date_sk#6, ss_item_sk#7, d_date_sk#8, d_date#9]
 (14) Scan parquet default.item
 Output [2]: [i_item_sk#12, i_item_desc#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_item_desc:string>
 
@@ -201,7 +200,7 @@ Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#
 (28) Scan parquet default.store_sales
 Output [3]: [ss_customer_sk#23, ss_quantity#24, ss_sales_price#25]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_customer_sk:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
 
@@ -215,7 +214,7 @@ Condition : isnotnull(ss_customer_sk#23)
 (31) Scan parquet default.customer
 Output [1]: [c_customer_sk#26]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/customer]
+Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int>
 
@@ -281,7 +280,7 @@ Input [4]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_quantity#4, cs_list_pri
 (45) Scan parquet default.date_dim
 Output [3]: [d_date_sk#8, d_year#10, d_moy#38]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2000), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -312,7 +311,7 @@ Input [4]: [cs_sold_date_sk#1, cs_quantity#4, cs_list_price#5, d_date_sk#8]
 (52) Scan parquet default.web_sales
 Output [5]: [ws_sold_date_sk#41, ws_item_sk#42, ws_bill_customer_sk#43, ws_quantity#44, ws_list_price#45]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_quantity:int,ws_list_price:decimal(7,2)>
 
@@ -398,139 +397,135 @@ Functions [1]: [sum(sales#40)]
 Aggregate Attributes [1]: [sum(sales#40)#57]
 Results [1]: [sum(sales#40)#57 AS sum(sales)#58]
 
-(72) CollectLimit
-Input [1]: [sum(sales)#58]
-Arguments: 100
-
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 40 Hosting Expression = Subquery scalar-subquery#35, [id=#36]
-* HashAggregate (94)
-+- Exchange (93)
-   +- * HashAggregate (92)
-      +- * HashAggregate (91)
-         +- Exchange (90)
-            +- * HashAggregate (89)
-               +- * Project (88)
-                  +- * BroadcastHashJoin Inner BuildRight (87)
-                     :- * Project (81)
-                     :  +- * BroadcastHashJoin Inner BuildRight (80)
-                     :     :- * Filter (75)
-                     :     :  +- * ColumnarToRow (74)
-                     :     :     +- Scan parquet default.store_sales (73)
-                     :     +- BroadcastExchange (79)
-                     :        +- * Filter (78)
-                     :           +- * ColumnarToRow (77)
-                     :              +- Scan parquet default.customer (76)
-                     +- BroadcastExchange (86)
-                        +- * Project (85)
-                           +- * Filter (84)
-                              +- * ColumnarToRow (83)
-                                 +- Scan parquet default.date_dim (82)
+* HashAggregate (93)
++- Exchange (92)
+   +- * HashAggregate (91)
+      +- * HashAggregate (90)
+         +- Exchange (89)
+            +- * HashAggregate (88)
+               +- * Project (87)
+                  +- * BroadcastHashJoin Inner BuildRight (86)
+                     :- * Project (80)
+                     :  +- * BroadcastHashJoin Inner BuildRight (79)
+                     :     :- * Filter (74)
+                     :     :  +- * ColumnarToRow (73)
+                     :     :     +- Scan parquet default.store_sales (72)
+                     :     +- BroadcastExchange (78)
+                     :        +- * Filter (77)
+                     :           +- * ColumnarToRow (76)
+                     :              +- Scan parquet default.customer (75)
+                     +- BroadcastExchange (85)
+                        +- * Project (84)
+                           +- * Filter (83)
+                              +- * ColumnarToRow (82)
+                                 +- Scan parquet default.date_dim (81)
 
 
-(73) Scan parquet default.store_sales
+(72) Scan parquet default.store_sales
 Output [4]: [ss_sold_date_sk#6, ss_customer_sk#23, ss_quantity#24, ss_sales_price#25]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_customer_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_customer_sk:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
 
-(74) ColumnarToRow [codegen id : 3]
+(73) ColumnarToRow [codegen id : 3]
 Input [4]: [ss_sold_date_sk#6, ss_customer_sk#23, ss_quantity#24, ss_sales_price#25]
 
-(75) Filter [codegen id : 3]
+(74) Filter [codegen id : 3]
 Input [4]: [ss_sold_date_sk#6, ss_customer_sk#23, ss_quantity#24, ss_sales_price#25]
 Condition : (isnotnull(ss_customer_sk#23) AND isnotnull(ss_sold_date_sk#6))
 
-(76) Scan parquet default.customer
+(75) Scan parquet default.customer
 Output [1]: [c_customer_sk#26]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/customer]
+Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int>
 
-(77) ColumnarToRow [codegen id : 1]
+(76) ColumnarToRow [codegen id : 1]
 Input [1]: [c_customer_sk#26]
 
-(78) Filter [codegen id : 1]
+(77) Filter [codegen id : 1]
 Input [1]: [c_customer_sk#26]
 Condition : isnotnull(c_customer_sk#26)
 
-(79) BroadcastExchange
+(78) BroadcastExchange
 Input [1]: [c_customer_sk#26]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#59]
 
-(80) BroadcastHashJoin [codegen id : 3]
+(79) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_customer_sk#23]
 Right keys [1]: [c_customer_sk#26]
 Join condition: None
 
-(81) Project [codegen id : 3]
+(80) Project [codegen id : 3]
 Output [4]: [ss_sold_date_sk#6, ss_quantity#24, ss_sales_price#25, c_customer_sk#26]
 Input [5]: [ss_sold_date_sk#6, ss_customer_sk#23, ss_quantity#24, ss_sales_price#25, c_customer_sk#26]
 
-(82) Scan parquet default.date_dim
+(81) Scan parquet default.date_dim
 Output [2]: [d_date_sk#8, d_year#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [In(d_year, [2000,2001,2002,2003]), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
-(83) ColumnarToRow [codegen id : 2]
+(82) ColumnarToRow [codegen id : 2]
 Input [2]: [d_date_sk#8, d_year#10]
 
-(84) Filter [codegen id : 2]
+(83) Filter [codegen id : 2]
 Input [2]: [d_date_sk#8, d_year#10]
 Condition : (d_year#10 IN (2000,2001,2002,2003) AND isnotnull(d_date_sk#8))
 
-(85) Project [codegen id : 2]
+(84) Project [codegen id : 2]
 Output [1]: [d_date_sk#8]
 Input [2]: [d_date_sk#8, d_year#10]
 
-(86) BroadcastExchange
+(85) BroadcastExchange
 Input [1]: [d_date_sk#8]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#60]
 
-(87) BroadcastHashJoin [codegen id : 3]
+(86) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ss_sold_date_sk#6]
 Right keys [1]: [d_date_sk#8]
 Join condition: None
 
-(88) Project [codegen id : 3]
+(87) Project [codegen id : 3]
 Output [3]: [ss_quantity#24, ss_sales_price#25, c_customer_sk#26]
 Input [5]: [ss_sold_date_sk#6, ss_quantity#24, ss_sales_price#25, c_customer_sk#26, d_date_sk#8]
 
-(89) HashAggregate [codegen id : 3]
+(88) HashAggregate [codegen id : 3]
 Input [3]: [ss_quantity#24, ss_sales_price#25, c_customer_sk#26]
 Keys [1]: [c_customer_sk#26]
 Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))]
 Aggregate Attributes [2]: [sum#61, isEmpty#62]
 Results [3]: [c_customer_sk#26, sum#63, isEmpty#64]
 
-(90) Exchange
+(89) Exchange
 Input [3]: [c_customer_sk#26, sum#63, isEmpty#64]
 Arguments: hashpartitioning(c_customer_sk#26, 5), true, [id=#65]
 
-(91) HashAggregate [codegen id : 4]
+(90) HashAggregate [codegen id : 4]
 Input [3]: [c_customer_sk#26, sum#63, isEmpty#64]
 Keys [1]: [c_customer_sk#26]
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))]
 Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))#66]
 Results [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#24 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#25 as decimal(12,2)))), DecimalType(18,2), true))#66 AS csales#67]
 
-(92) HashAggregate [codegen id : 4]
+(91) HashAggregate [codegen id : 4]
 Input [1]: [csales#67]
 Keys: []
 Functions [1]: [partial_max(csales#67)]
 Aggregate Attributes [1]: [max#68]
 Results [1]: [max#69]
 
-(93) Exchange
+(92) Exchange
 Input [1]: [max#69]
 Arguments: SinglePartition, true, [id=#70]
 
-(94) HashAggregate [codegen id : 5]
+(93) HashAggregate [codegen id : 5]
 Input [1]: [max#69]
 Keys: []
 Functions [1]: [max(csales#67)]

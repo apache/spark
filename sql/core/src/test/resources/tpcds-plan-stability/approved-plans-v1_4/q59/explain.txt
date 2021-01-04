@@ -48,7 +48,7 @@ TakeOrderedAndProject (44)
 (1) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_sales_price#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
@@ -62,7 +62,7 @@ Condition : (isnotnull(ss_sold_date_sk#1) AND isnotnull(ss_store_sk#2))
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#4, d_week_seq#5, d_day_name#6]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date_sk), IsNotNull(d_week_seq)]
 ReadSchema: struct<d_date_sk:int,d_week_seq:int,d_day_name:string>
 
@@ -107,7 +107,7 @@ Results [9]: [d_week_seq#5, ss_store_sk#2, MakeDecimal(sum(UnscaledValue(CASE WH
 (13) Scan parquet default.store
 Output [3]: [s_store_sk#37, s_store_id#38, s_store_name#39]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_id)]
 ReadSchema: struct<s_store_sk:int,s_store_id:string,s_store_name:string>
 
@@ -134,7 +134,7 @@ Input [12]: [d_week_seq#5, ss_store_sk#2, sun_sales#30, mon_sales#31, tue_sales#
 (19) Scan parquet default.date_dim
 Output [2]: [d_month_seq#41, d_week_seq#42]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223), IsNotNull(d_week_seq)]
 ReadSchema: struct<d_month_seq:int,d_week_seq:int>
 
@@ -175,7 +175,7 @@ Results [9]: [d_week_seq#5, ss_store_sk#2, MakeDecimal(sum(UnscaledValue(CASE WH
 (28) Scan parquet default.store
 Output [2]: [s_store_sk#37, s_store_id#38]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_id)]
 ReadSchema: struct<s_store_sk:int,s_store_id:string>
 
@@ -202,7 +202,7 @@ Input [11]: [d_week_seq#5, ss_store_sk#2, sun_sales#30, mon_sales#31, tue_sales#
 (34) Scan parquet default.date_dim
 Output [2]: [d_month_seq#69, d_week_seq#70]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1224), LessThanOrEqual(d_month_seq,1235), IsNotNull(d_week_seq)]
 ReadSchema: struct<d_month_seq:int,d_week_seq:int>
 

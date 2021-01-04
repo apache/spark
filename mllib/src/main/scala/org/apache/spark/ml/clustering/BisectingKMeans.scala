@@ -29,9 +29,8 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.clustering.{BisectingKMeans => MLlibBisectingKMeans,
   BisectingKMeansModel => MLlibBisectingKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
@@ -276,21 +275,6 @@ class BisectingKMeans @Since("2.0.0") (
   override def fit(dataset: Dataset[_]): BisectingKMeansModel = instrumented { instr =>
     transformSchema(dataset.schema, logging = true)
 
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
-      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
-    } else {
-      lit(1.0)
-    }
-
-    val instances: RDD[(OldVector, Double)] = dataset
-      .select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w).rdd.map {
-      case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight)
-    }
-    if (handlePersistence) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
-    }
-
     instr.logPipelineStage(this)
     instr.logDataset(dataset)
     instr.logParams(this, featuresCol, predictionCol, k, maxIter, seed,
@@ -302,11 +286,18 @@ class BisectingKMeans @Since("2.0.0") (
       .setMinDivisibleClusterSize($(minDivisibleClusterSize))
       .setSeed($(seed))
       .setDistanceMeasure($(distanceMeasure))
-    val parentModel = bkm.runWithWeight(instances, Some(instr))
-    val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
-    if (handlePersistence) {
-      instances.unpersist()
+
+    val w = if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      checkNonNegativeWeight(col($(weightCol)).cast(DoubleType))
+    } else {
+      lit(1.0)
     }
+    val instances = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol), w)
+      .rdd.map { case Row(point: Vector, weight: Double) => (OldVectors.fromML(point), weight) }
+
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    val parentModel = bkm.runWithWeight(instances, handlePersistence, Some(instr))
+    val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
 
     val summary = new BisectingKMeansSummary(
       model.transform(dataset),

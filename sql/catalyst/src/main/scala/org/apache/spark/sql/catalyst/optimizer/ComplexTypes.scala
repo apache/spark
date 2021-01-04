@@ -39,17 +39,18 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
       // Remove redundant field extraction.
       case GetStructField(createNamedStruct: CreateNamedStruct, ordinal, _) =>
         createNamedStruct.valExprs(ordinal)
-      case GetStructField(w @ WithFields(struct, names, valExprs), ordinal, maybeName) =>
-        val name = w.dataType(ordinal).name
-        val matches = names.zip(valExprs).filter(_._1 == name)
-        if (matches.nonEmpty) {
-          // return last matching element as that is the final value for the field being extracted.
-          // For example, if a user submits a query like this:
-          // `$"struct_col".withField("b", lit(1)).withField("b", lit(2)).getField("b")`
-          // we want to return `lit(2)` (and not `lit(1)`).
-          matches.last._2
-        } else {
-          GetStructField(struct, ordinal, maybeName)
+      case GetStructField(u: UpdateFields, ordinal, _)if !u.structExpr.isInstanceOf[UpdateFields] =>
+        val structExpr = u.structExpr
+        u.newExprs(ordinal) match {
+          // if the struct itself is null, then any value extracted from it (expr) will be null
+          // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
+          case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
+          case expr =>
+            if (structExpr.nullable) {
+              If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+            } else {
+              expr
+            }
         }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
@@ -59,7 +60,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))), useStringTypeWhenEmpty)
 
       // Remove redundant map lookup.
-      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx)) =>
+      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx), _) =>
         // Instead of creating the array and then selecting one row, remove array creation
         // altogether.
         if (idx >= 0 && idx < elems.size) {
@@ -69,7 +70,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)
         }
-      case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
+      case GetMapValue(CreateMap(elems, _), key, _) => CaseKeyWhen(key, elems)
     }
   }
 }

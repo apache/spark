@@ -1,5 +1,5 @@
 == Physical Plan ==
-TakeOrderedAndProject (28)
+* Sort (28)
 +- * HashAggregate (27)
    +- Exchange (26)
       +- * HashAggregate (25)
@@ -32,7 +32,7 @@ TakeOrderedAndProject (28)
 (1) Scan parquet default.store_sales
 Output [3]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_sold_time_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_time_sk:int,ss_hdemo_sk:int,ss_store_sk:int>
 
@@ -46,7 +46,7 @@ Condition : ((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_sold_time_sk#1)) AND isn
 (4) Scan parquet default.household_demographics
 Output [2]: [hd_demo_sk#4, hd_dep_count#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/household_demographics]
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,7), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
@@ -77,7 +77,7 @@ Input [4]: [ss_sold_time_sk#1, ss_hdemo_sk#2, ss_store_sk#3, hd_demo_sk#4]
 (11) Scan parquet default.time_dim
 Output [3]: [t_time_sk#7, t_hour#8, t_minute#9]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/time_dim]
+Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), IsNotNull(t_minute), EqualTo(t_hour,20), GreaterThanOrEqual(t_minute,30), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int,t_minute:int>
 
@@ -108,7 +108,7 @@ Input [3]: [ss_sold_time_sk#1, ss_store_sk#3, t_time_sk#7]
 (18) Scan parquet default.store
 Output [2]: [s_store_sk#11, s_store_name#12]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_store_name), EqualTo(s_store_name,ese), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string>
 
@@ -154,7 +154,7 @@ Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#17]
 Results [1]: [count(1)#17 AS count(1)#18]
 
-(28) TakeOrderedAndProject
+(28) Sort [codegen id : 5]
 Input [1]: [count(1)#18]
-Arguments: 100, [count(1)#18 ASC NULLS FIRST], [count(1)#18]
+Arguments: [count(1)#18 ASC NULLS FIRST], true, 0
 

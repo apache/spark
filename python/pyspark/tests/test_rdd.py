@@ -733,25 +733,25 @@ class RDDTests(ReusedPySparkTestCase):
         keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
         msg = "Caught StopIteration thrown from user's code; failing the task"
 
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.reduce, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg,
-                                seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.reduce, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg,
+                               seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
 
         # these methods call the user function both in the driver and in the executor
         # the exception raised is different according to where the StopIteration happens
         # RuntimeError is raised if in the driver
         # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
-        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
-                                keyed_rdd.reduceByKeyLocally, stopit)
-        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
-                                seq_rdd.aggregate, 0, stopit, lambda *x: 1)
-        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
-                                seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
+                               keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
+                               seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
+                               seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
     def test_overwritten_global_func(self):
         # Regression test for SPARK-27000
@@ -768,7 +768,7 @@ class RDDTests(ReusedPySparkTestCase):
 
         rdd = self.sc.range(10).map(fail)
 
-        with self.assertRaisesRegexp(Exception, "local iterator error"):
+        with self.assertRaisesRegex(Exception, "local iterator error"):
             for _ in rdd.toLocalIterator():
                 pass
 
@@ -884,7 +884,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_rdd import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

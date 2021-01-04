@@ -58,7 +58,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **grouping_expression**
 
-    Specifies the critieria based on which the rows are grouped together. The grouping of rows is performed based on
+    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
     result values of the grouping expressions. A grouping expression may be a column alias, a column position
     or an expression.
 
@@ -269,7 +269,7 @@ INSERT INTO person VALUES
     (300, 'Mike', 80),
     (400, 'Dan', 50);
 
---Select the first row in cloumn age
+--Select the first row in column age
 SELECT FIRST(age) FROM person;
 +--------------------+
 | first(age, false)  |
@@ -277,7 +277,7 @@ SELECT FIRST(age) FROM person;
 | NULL               |
 +--------------------+
 
---Get the first row in cloumn `age` ignore nulls,last row in column `id` and sum of cloumn `id`.
+--Get the first row in column `age` ignore nulls,last row in column `id` and sum of column `id`.
 SELECT FIRST(age IGNORE NULLS), LAST(id), SUM(id) FROM person;
 +-------------------+------------------+----------+
 | first(age, true)  | last(id, false)  | sum(id)  |

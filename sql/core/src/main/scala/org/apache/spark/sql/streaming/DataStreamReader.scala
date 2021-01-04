@@ -24,12 +24,16 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
-import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -60,7 +64,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def schema(schema: StructType): DataStreamReader = {
-    this.userSpecifiedSchema = Option(schema)
+    this.userSpecifiedSchema = Option(CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
     this
   }
 
@@ -185,10 +189,18 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *
    * @since 2.0.0
    */
-  def load(): DataFrame = {
+  def load(): DataFrame = loadInternal(None)
+
+  private def loadInternal(path: Option[String]): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
+    }
+
+    val optionsWithPath = if (path.isEmpty) {
+      extraOptions
+    } else {
+      extraOptions + ("path" -> path.get)
     }
 
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).
@@ -200,7 +212,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       sparkSession,
       userSpecifiedSchema = userSpecifiedSchema,
       className = source,
-      options = extraOptions.toMap)
+      options = optionsWithPath.originalMap)
     val v1Relation = ds match {
       case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
       case _ => None
@@ -210,8 +222,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
       case provider: TableProvider if !provider.isInstanceOf[FileDataSourceV2] =>
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           source = provider, conf = sparkSession.sessionState.conf)
-        val options = sessionOptions ++ extraOptions
-        val dsOptions = new CaseInsensitiveStringMap(options.asJava)
+        val finalOptions = sessionOptions.filterKeys(!optionsWithPath.contains(_)).toMap ++
+            optionsWithPath.originalMap
+        val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
         val table = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
         import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
         table match {
@@ -219,8 +232,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
             Dataset.ofRows(
               sparkSession,
               StreamingRelationV2(
-                provider, source, table, dsOptions, table.schema.toAttributes, v1Relation)(
-                sparkSession))
+                Some(provider), source, table, dsOptions,
+                table.schema.toAttributes, None, None, v1Relation))
 
           // fallback to v1
           // TODO (SPARK-27483): we should move this fallback logic to an analyzer rule.
@@ -239,7 +252,13 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def load(path: String): DataFrame = {
-    option("path", path).load()
+    if (!sparkSession.sessionState.conf.legacyPathOptionBehavior &&
+        extraOptions.contains("path")) {
+      throw new AnalysisException("There is a 'path' option set and load() is called with a path" +
+        "parameter. Either remove the path option, or call load() without the parameter. " +
+        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+    }
+    loadInternal(Some(path))
   }
 
   /**
@@ -377,6 +396,27 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
+   * <li>`unescapedQuoteHandling` (default `STOP_AT_DELIMITER`): defines how the CsvParser
+   * will handle values with unescaped quotes.
+   *   <ul>
+   *     <li>`STOP_AT_CLOSING_QUOTE`: If unescaped quotes are found in the input, accumulate
+   *     the quote character and proceed parsing the value as a quoted value, until a closing
+   *     quote is found.</li>
+   *     <li>`BACK_TO_DELIMITER`: If unescaped quotes are found in the input, consider the value
+   *     as an unquoted value. This will make the parser accumulate all characters of the current
+   *     parsed value until the delimiter is found. If no delimiter is found in the value, the
+   *     parser will continue accumulating characters from the input until a delimiter or line
+   *     ending is found.</li>
+   *     <li>`STOP_AT_DELIMITER`: If unescaped quotes are found in the input, consider the value
+   *     as an unquoted value. This will make the parser accumulate all characters until the
+   *     delimiter or a line ending is found in the input.</li>
+   *     <li>`STOP_AT_DELIMITER`: If unescaped quotes are found in the input, the content parsed
+   *     for the given value will be skipped and the value set in nullValue will be produced
+   *     instead.</li>
+   *     <li>`RAISE_ERROR`: If unescaped quotes are found in the input, a TextParsingException
+   *     will be thrown.</li>
+   *   </ul>
+   * </li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
@@ -459,6 +499,23 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
+   * Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+   * support streaming mode.
+   * @param tableName The name of the table
+   * @since 3.1.0
+   */
+  def table(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    Dataset.ofRows(
+      sparkSession,
+      UnresolvedRelation(
+        identifier,
+        new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
+        isStreaming = true))
+  }
+
+  /**
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    * The text files must be encoded as UTF-8.
@@ -528,5 +585,5 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
   private var userSpecifiedSchema: Option[StructType] = None
 
-  private var extraOptions = new scala.collection.mutable.HashMap[String, String]
+  private var extraOptions = CaseInsensitiveMap[String](Map.empty)
 }

@@ -21,7 +21,7 @@
 PySpark Documentation
 =====================
 
-.. TODO(SPARK-32204): Add Binder integration at Live Notebook.
+|binder|_ | `GitHub <https://github.com/apache/spark>`_ | `Issues <https://issues.apache.org/jira/projects/SPARK/issues>`_ | |examples|_ | `Community <https://spark.apache.org/community.html>`_
 
 PySpark is an interface for Apache Spark in Python. It not only allows you to write
 Spark applications using Python APIs, but also provides the PySpark shell for
@@ -30,7 +30,7 @@ of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 (Machine Learning) and Spark Core.
 
 .. image:: ../../../docs/img/pyspark-components.png
-  :alt: PySpark Compoenents
+  :alt: PySpark Components
 
 **Spark SQL and DataFrame**
 

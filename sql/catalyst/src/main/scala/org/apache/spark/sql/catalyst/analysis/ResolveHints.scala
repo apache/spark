@@ -21,11 +21,11 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -50,10 +50,10 @@ object ResolveHints {
    *
    * This rule must happen before common table expressions.
    */
-  class ResolveJoinStrategyHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  object ResolveJoinStrategyHints extends Rule[LogicalPlan] {
     private val STRATEGY_HINT_NAMES = JoinStrategyHint.strategies.flatMap(_.hintAliases)
 
-    private val hintErrorHandler = conf.hintErrorHandler
+    private def hintErrorHandler = conf.hintErrorHandler
 
     def resolver: Resolver = conf.resolver
 
@@ -105,7 +105,7 @@ object ResolveHints {
 
       val newNode = CurrentOrigin.withOrigin(plan.origin) {
         plan match {
-          case ResolvedHint(u @ UnresolvedRelation(ident), hint)
+          case ResolvedHint(u @ UnresolvedRelation(ident, _, _), hint)
               if matchedIdentifierInHint(ident) =>
             ResolvedHint(u, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
@@ -113,7 +113,7 @@ object ResolveHints {
               if matchedIdentifierInHint(extractIdentifier(r)) =>
             ResolvedHint(r, createHintInfo(hintName).merge(hint, hintErrorHandler))
 
-          case UnresolvedRelation(ident) if matchedIdentifierInHint(ident) =>
+          case UnresolvedRelation(ident, _, _) if matchedIdentifierInHint(ident) =>
             ResolvedHint(plan, createHintInfo(hintName))
 
           case r: SubqueryAlias if matchedIdentifierInHint(extractIdentifier(r)) =>
@@ -153,8 +153,8 @@ object ResolveHints {
           val relationNamesInHint = h.parameters.map {
             case tableName: String => UnresolvedAttribute.parseAttributeName(tableName)
             case tableId: UnresolvedAttribute => tableId.nameParts
-            case unsupported => throw new AnalysisException("Join strategy hint parameter " +
-              s"should be an identifier or string but was $unsupported (${unsupported.getClass}")
+            case unsupported =>
+              throw QueryCompilationErrors.joinStrategyHintParameterNotSupportedError(unsupported)
           }.toSet
           val relationsInHintWithMatch = new mutable.HashSet[Seq[String]]
           val applied = applyJoinStrategyHint(
@@ -171,7 +171,9 @@ object ResolveHints {
   /**
    * COALESCE Hint accepts names "COALESCE", "REPARTITION", and "REPARTITION_BY_RANGE".
    */
-  class ResolveCoalesceHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  object ResolveCoalesceHints extends Rule[LogicalPlan] {
+
+    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
 
     /**
      * This function handles hints for "COALESCE" and "REPARTITION".
@@ -191,8 +193,7 @@ object ResolveHints {
            """.stripMargin)
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
-          throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
-            s"${invalidParams.mkString(", ")} found")
+          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
         RepartitionByExpression(
           partitionExprs.map(_.asInstanceOf[Expression]), hint.child, numPartitions)
@@ -205,7 +206,7 @@ object ResolveHints {
           Repartition(numPartitions, shuffle, hint.child)
         // The "COALESCE" hint (shuffle = false) must have a partition number only
         case _ if !shuffle =>
-          throw new AnalysisException(s"$hintName Hint expects a partition number as a parameter")
+          throw QueryCompilationErrors.invalidCoalesceHintParameterError(hintName)
 
         case param @ Seq(IntegerLiteral(numPartitions), _*) if shuffle =>
           createRepartitionByExpression(Some(numPartitions), param.tail)
@@ -227,8 +228,7 @@ object ResolveHints {
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
-          throw new AnalysisException(s"$hintName Hint parameter should include columns, but " +
-            s"${invalidParams.mkString(", ")} found")
+          throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)
         }
         val sortOrder = partitionExprs.map {
           case expr: SortOrder => expr
@@ -260,17 +260,13 @@ object ResolveHints {
     }
   }
 
-  object ResolveCoalesceHints {
-    val COALESCE_HINT_NAMES: Set[String] = Set("COALESCE", "REPARTITION", "REPARTITION_BY_RANGE")
-  }
-
   /**
    * Removes all the hints, used to remove invalid hints provided by the user.
    * This must be executed after all the other hint rules are executed.
    */
-  class RemoveAllHints(conf: SQLConf) extends Rule[LogicalPlan] {
+  class RemoveAllHints extends Rule[LogicalPlan] {
 
-    private val hintErrorHandler = conf.hintErrorHandler
+    private def hintErrorHandler = conf.hintErrorHandler
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case h: UnresolvedHint =>
@@ -284,7 +280,7 @@ object ResolveHints {
    * This is executed at the very beginning of the Analyzer to disable
    * the hint functionality.
    */
-  class DisableHints(conf: SQLConf) extends RemoveAllHints(conf: SQLConf) {
+  class DisableHints extends RemoveAllHints {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       if (conf.getConf(SQLConf.DISABLE_HINTS)) super.apply(plan) else plan
     }

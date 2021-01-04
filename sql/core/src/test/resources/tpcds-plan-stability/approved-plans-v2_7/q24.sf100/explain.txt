@@ -51,7 +51,7 @@
 (1) Scan parquet default.store
 Output [5]: [s_store_sk#1, s_store_name#2, s_market_id#3, s_state#4, s_zip#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
@@ -73,7 +73,7 @@ Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=
 (6) Scan parquet default.customer_address
 Output [4]: [ca_address_sk#7, ca_state#8, ca_zip#9, ca_country#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/customer_address]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_zip:string,ca_country:string>
 
@@ -100,8 +100,8 @@ Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, 
 (12) Scan parquet default.customer
 Output [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/customer]
-PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country), IsNotNull(c_current_addr_sk)]
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk), IsNotNull(c_birth_country)]
 ReadSchema: struct<c_customer_sk:int,c_current_addr_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (13) ColumnarToRow
@@ -109,7 +109,7 @@ Input [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name
 
 (14) Filter
 Input [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
-Condition : ((isnotnull(c_customer_sk#12) AND isnotnull(c_birth_country#16)) AND isnotnull(c_current_addr_sk#13))
+Condition : ((isnotnull(c_customer_sk#12) AND isnotnull(c_current_addr_sk#13)) AND isnotnull(c_birth_country#16))
 
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [2]: [ca_address_sk#7, upper(ca_country#10)]
@@ -127,7 +127,7 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] 
 (18) Scan parquet default.store_sales
 Output [5]: [ss_item_sk#18, ss_customer_sk#19, ss_store_sk#20, ss_ticket_number#21, ss_net_paid#22]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
@@ -150,7 +150,7 @@ Input [12]: [s_store_sk#1, s_store_name#2, s_state#4, ca_state#8, c_customer_sk#
 (23) Scan parquet default.item
 Output [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_color), EqualTo(i_color,pale), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
@@ -176,16 +176,16 @@ Input [14]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name
 
 (29) Exchange
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
-Arguments: hashpartitioning(cast(ss_item_sk#18 as bigint), cast(ss_ticket_number#21 as bigint), 5), true, [id=#30]
+Arguments: hashpartitioning(cast(ss_ticket_number#21 as bigint), cast(ss_item_sk#18 as bigint), 5), true, [id=#30]
 
 (30) Sort [codegen id : 6]
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
-Arguments: [cast(ss_item_sk#18 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#21 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(ss_ticket_number#21 as bigint) ASC NULLS FIRST, cast(ss_item_sk#18 as bigint) ASC NULLS FIRST], false, 0
 
 (31) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#31, sr_ticket_number#32]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store_returns]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
@@ -198,15 +198,15 @@ Condition : (isnotnull(sr_ticket_number#32) AND isnotnull(sr_item_sk#31))
 
 (34) Exchange
 Input [2]: [sr_item_sk#31, sr_ticket_number#32]
-Arguments: hashpartitioning(sr_item_sk#31, sr_ticket_number#32, 5), true, [id=#33]
+Arguments: hashpartitioning(sr_ticket_number#32, sr_item_sk#31, 5), true, [id=#33]
 
 (35) Sort [codegen id : 8]
 Input [2]: [sr_item_sk#31, sr_ticket_number#32]
-Arguments: [sr_item_sk#31 ASC NULLS FIRST, sr_ticket_number#32 ASC NULLS FIRST], false, 0
+Arguments: [sr_ticket_number#32 ASC NULLS FIRST, sr_item_sk#31 ASC NULLS FIRST], false, 0
 
 (36) SortMergeJoin [codegen id : 9]
-Left keys [2]: [cast(ss_item_sk#18 as bigint), cast(ss_ticket_number#21 as bigint)]
-Right keys [2]: [sr_item_sk#31, sr_ticket_number#32]
+Left keys [2]: [cast(ss_ticket_number#21 as bigint), cast(ss_item_sk#18 as bigint)]
+Right keys [2]: [sr_ticket_number#32, sr_item_sk#31]
 Join condition: None
 
 (37) Project [codegen id : 9]
@@ -319,7 +319,7 @@ Subquery:1 Hosting operator id = 44 Hosting Expression = Subquery scalar-subquer
 (48) Scan parquet default.store
 Output [5]: [s_store_sk#1, s_store_name#2, s_market_id#3, s_state#4, s_zip#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store]
+Location [not included in comparison]/{warehouse_dir}/store]
 PushedFilters: [IsNotNull(s_market_id), EqualTo(s_market_id,8), IsNotNull(s_store_sk), IsNotNull(s_zip)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_market_id:int,s_state:string,s_zip:string>
 
@@ -341,7 +341,7 @@ Arguments: HashedRelationBroadcastMode(List(input[3, string, true]),false), [id=
 (53) Scan parquet default.customer_address
 Output [4]: [ca_address_sk#7, ca_state#8, ca_zip#9, ca_country#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/customer_address]
+Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_country), IsNotNull(ca_zip)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_zip:string,ca_country:string>
 
@@ -368,8 +368,8 @@ Arguments: HashedRelationBroadcastMode(List(input[3, int, true], upper(input[5, 
 (59) Scan parquet default.customer
 Output [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/customer]
-PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_birth_country), IsNotNull(c_current_addr_sk)]
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_customer_sk), IsNotNull(c_current_addr_sk), IsNotNull(c_birth_country)]
 ReadSchema: struct<c_customer_sk:int,c_current_addr_sk:int,c_first_name:string,c_last_name:string,c_birth_country:string>
 
 (60) ColumnarToRow
@@ -377,7 +377,7 @@ Input [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name
 
 (61) Filter
 Input [5]: [c_customer_sk#12, c_current_addr_sk#13, c_first_name#14, c_last_name#15, c_birth_country#16]
-Condition : ((isnotnull(c_customer_sk#12) AND isnotnull(c_birth_country#16)) AND isnotnull(c_current_addr_sk#13))
+Condition : ((isnotnull(c_customer_sk#12) AND isnotnull(c_current_addr_sk#13)) AND isnotnull(c_birth_country#16))
 
 (62) BroadcastHashJoin [codegen id : 3]
 Left keys [2]: [ca_address_sk#7, upper(ca_country#10)]
@@ -395,7 +395,7 @@ Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] 
 (65) Scan parquet default.store_sales
 Output [5]: [ss_item_sk#18, ss_customer_sk#19, ss_store_sk#20, ss_ticket_number#21, ss_net_paid#22]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_net_paid:decimal(7,2)>
 
@@ -426,7 +426,7 @@ Arguments: [ss_item_sk#18 ASC NULLS FIRST], false, 0
 (72) Scan parquet default.item
 Output [6]: [i_item_sk#23, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_size:string,i_color:string,i_units:string,i_manager_id:int>
 
@@ -456,16 +456,16 @@ Input [14]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name
 
 (79) Exchange
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
-Arguments: hashpartitioning(cast(ss_item_sk#18 as bigint), cast(ss_ticket_number#21 as bigint), 5), true, [id=#55]
+Arguments: hashpartitioning(cast(ss_ticket_number#21 as bigint), cast(ss_item_sk#18 as bigint), 5), true, [id=#55]
 
 (80) Sort [codegen id : 9]
 Input [13]: [s_store_name#2, s_state#4, ca_state#8, c_first_name#14, c_last_name#15, ss_item_sk#18, ss_ticket_number#21, ss_net_paid#22, i_current_price#24, i_size#25, i_color#26, i_units#27, i_manager_id#28]
-Arguments: [cast(ss_item_sk#18 as bigint) ASC NULLS FIRST, cast(ss_ticket_number#21 as bigint) ASC NULLS FIRST], false, 0
+Arguments: [cast(ss_ticket_number#21 as bigint) ASC NULLS FIRST, cast(ss_item_sk#18 as bigint) ASC NULLS FIRST], false, 0
 
 (81) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#31, sr_ticket_number#32]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store_returns]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
@@ -478,15 +478,15 @@ Condition : (isnotnull(sr_ticket_number#32) AND isnotnull(sr_item_sk#31))
 
 (84) Exchange
 Input [2]: [sr_item_sk#31, sr_ticket_number#32]
-Arguments: hashpartitioning(sr_item_sk#31, sr_ticket_number#32, 5), true, [id=#56]
+Arguments: hashpartitioning(sr_ticket_number#32, sr_item_sk#31, 5), true, [id=#56]
 
 (85) Sort [codegen id : 11]
 Input [2]: [sr_item_sk#31, sr_ticket_number#32]
-Arguments: [sr_item_sk#31 ASC NULLS FIRST, sr_ticket_number#32 ASC NULLS FIRST], false, 0
+Arguments: [sr_ticket_number#32 ASC NULLS FIRST, sr_item_sk#31 ASC NULLS FIRST], false, 0
 
 (86) SortMergeJoin [codegen id : 12]
-Left keys [2]: [cast(ss_item_sk#18 as bigint), cast(ss_ticket_number#21 as bigint)]
-Right keys [2]: [sr_item_sk#31, sr_ticket_number#32]
+Left keys [2]: [cast(ss_ticket_number#21 as bigint), cast(ss_item_sk#18 as bigint)]
+Right keys [2]: [sr_ticket_number#32, sr_item_sk#31]
 Join condition: None
 
 (87) Project [codegen id : 12]

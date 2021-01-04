@@ -46,7 +46,7 @@ else
 fi
 
 # Check if --block-until-exit is set.
-# This is done for systems which block on the decomissioning script and on exit
+# This is done for systems which block on the decommissioning script and on exit
 # shut down the entire system (e.g. K8s).
 if [ "$1" == "--block-until-exit" ]; then
   shift

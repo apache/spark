@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
@@ -77,12 +78,14 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 
   protected val logicalPlan: LogicalPlan = {
     StreamingRelationV2(
-      MemoryStreamTableProvider,
+      Some(MemoryStreamTableProvider),
       "memory",
       new MemoryStreamTable(this),
       CaseInsensitiveStringMap.empty(),
       attributes,
-      None)(sqlContext.sparkSession)
+      None,
+      None,
+      None)
   }
 
   override def initialOffset(): OffsetV2 = {

@@ -36,12 +36,20 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
+abstract class CSVSuite
+  extends QueryTest
+  with SharedSparkSession
+  with TestCsvData
+  with CommonFileDataSourceSuite {
+
   import testImplicits._
+
+  override protected def dataSourceFormat = "csv"
 
   private val carsFile = "test-data/cars.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
@@ -1902,25 +1910,26 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
 
   test("SPARK-25387: bad input should not cause NPE") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
-    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+    val input = spark.createDataset(Seq("\u0001\u0000\u0001234"))
 
     checkAnswer(spark.read.schema(schema).csv(input), Row(null))
     checkAnswer(spark.read.option("multiLine", true).schema(schema).csv(input), Row(null))
-    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+    assert(spark.read.schema(schema).csv(input).collect().toSet == Set(Row(null)))
   }
 
   test("SPARK-31261: bad csv input with `columnNameCorruptRecord` should not cause NPE") {
     val schema = StructType(
       StructField("a", IntegerType) :: StructField("_corrupt_record", StringType) :: Nil)
-    val input = spark.createDataset(Seq("\u0000\u0000\u0001234"))
+    val input = spark.createDataset(Seq("\u0001\u0000\u0001234"))
 
     checkAnswer(
       spark.read
         .option("columnNameOfCorruptRecord", "_corrupt_record")
         .schema(schema)
         .csv(input),
-      Row(null, null))
-    assert(spark.read.csv(input).collect().toSet == Set(Row()))
+      Row(null, "\u0001\u0000\u0001234"))
+    assert(spark.read.schema(schema).csv(input).collect().toSet ==
+      Set(Row(null, "\u0001\u0000\u0001234")))
   }
 
   test("field names of inferred schema shouldn't compare to the first row") {
@@ -2366,6 +2375,17 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
     }
   }
 
+  test("SPARK-32614: don't treat rows starting with null char as comment") {
+    withTempPath { path =>
+      Seq("\u0000foo", "bar", "baz").toDS.write.text(path.getCanonicalPath)
+      val df = spark.read.format("csv")
+        .option("header", "false")
+        .option("inferSchema", "true")
+        .load(path.getCanonicalPath)
+      assert(df.count() == 3)
+    }
+  }
+
   test("case sensitivity of filters references") {
     Seq(true, false).foreach { filterPushdown =>
       withSQLConf(SQLConf.CSV_FILTER_PUSHDOWN_ENABLED.key -> filterPushdown.toString) {
@@ -2393,6 +2413,43 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
           }
         }
       }
+    }
+  }
+
+  test("SPARK-32810: CSV data source should be able to read files with " +
+    "escaped glob metacharacter in the paths") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // test CSV writer / reader without specifying schema
+      val csvTableName = "[abc]"
+      spark.range(3).coalesce(1).write.csv(s"$basePath/$csvTableName")
+      val readback = spark.read
+        .csv(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(csvTableName, """\\$1""")}")
+      assert(readback.collect sameElements Array(Row("0"), Row("1"), Row("2")))
+    }
+  }
+
+  test("SPARK-33566: configure UnescapedQuoteHandling to parse " +
+    "unescaped quotes and unescaped delimiter data correctly") {
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      val row1 = Row("""a,""b,c""", "xyz")
+      val row2 = Row("""a,b,c""", """x""yz""")
+      // Generate the test data, use `,` as delimiter and `"` as quotes, but they didn't escape.
+      Seq(
+        """c1,c2""",
+        s""""${row1.getString(0)}","${row1.getString(1)}"""",
+        s""""${row2.getString(0)}","${row2.getString(1)}"""")
+        .toDF().repartition(1).write.text(dataPath)
+      // Without configure UnescapedQuoteHandling to STOP_AT_CLOSING_QUOTE,
+      // the result will be Row(""""a,""b""", """c""""), Row("""a,b,c""", """"x""yz"""")
+      val result = spark.read
+        .option("inferSchema", "true")
+        .option("header", "true")
+        .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
+        .csv(dataPath).collect()
+      val exceptResults = Array(row1, row2)
+      assert(result.sameElements(exceptResults))
     }
   }
 }

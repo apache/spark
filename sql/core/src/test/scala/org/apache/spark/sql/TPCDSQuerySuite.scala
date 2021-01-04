@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.util.resourceToString
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * This test suite ensures all the TPC-DS queries can be successfully analyzed, optimized
  * and compiled without hitting the max iteration threshold.
  */
+@ExtendedSQLTest
 class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
 
   tpcdsQueries.foreach { name =>
@@ -62,6 +66,13 @@ class TPCDSQuerySuite extends BenchmarkQueryTest with TPCDSBase {
   }
 }
 
+@ExtendedSQLTest
 class TPCDSQueryWithStatsSuite extends TPCDSQuerySuite {
   override def injectStats: Boolean = true
+}
+
+@ExtendedSQLTest
+class TPCDSQueryANSISuite extends TPCDSQuerySuite {
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 }

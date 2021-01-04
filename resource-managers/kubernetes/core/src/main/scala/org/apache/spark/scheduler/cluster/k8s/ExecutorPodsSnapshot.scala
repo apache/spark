@@ -18,6 +18,9 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.deploy.k8s.Constants._
@@ -37,12 +40,22 @@ private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorP
 }
 
 object ExecutorPodsSnapshot extends Logging {
+  private var shouldCheckAllContainers: Boolean = _
+  private var sparkContainerName: String = _
 
   def apply(executorPods: Seq[Pod]): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
   }
 
   def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState])
+
+  def setShouldCheckAllContainers(watchAllContainers: Boolean): Unit = {
+    shouldCheckAllContainers = watchAllContainers
+  }
+
+  def setSparkContainerName(containerName: String): Unit = {
+    sparkContainerName = containerName
+  }
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
     executorPods.map { pod =>
@@ -59,7 +72,34 @@ object ExecutorPodsSnapshot extends Logging {
         case "pending" =>
           PodPending(pod)
         case "running" =>
-          PodRunning(pod)
+          // If we're checking all containers look for any non-zero exits
+          if (shouldCheckAllContainers &&
+            "Never" == pod.getSpec.getRestartPolicy &&
+            pod.getStatus.getContainerStatuses.stream
+              .map[ContainerStateTerminated](cs => cs.getState.getTerminated)
+              .anyMatch(t => t != null && t.getExitCode != 0)) {
+            PodFailed(pod)
+          } else {
+            // Otherwise look for the Spark container
+            val sparkContainerStatusOpt = pod.getStatus.getContainerStatuses.asScala
+              .find(_.getName() == sparkContainerName)
+            sparkContainerStatusOpt match {
+              case Some(sparkContainerStatus) =>
+                sparkContainerStatus.getState.getTerminated match {
+                  case t if t.getExitCode != 0 =>
+                    PodFailed(pod)
+                  case t if t.getExitCode == 0 =>
+                    PodSucceeded(pod)
+                  case _ =>
+                    PodRunning(pod)
+                }
+              // If we can't find the Spark container status, fall back to the pod status
+              case _ =>
+                logWarning(s"Unable to find container ${sparkContainerName} in pod ${pod} " +
+                  "defaulting to entire pod status (running).")
+                PodRunning(pod)
+            }
+          }
         case "failed" =>
           PodFailed(pod)
         case "succeeded" =>
@@ -79,7 +119,8 @@ object ExecutorPodsSnapshot extends Logging {
       (
         pod.getStatus == null ||
         pod.getStatus.getPhase == null ||
-        pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating"
+          (pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "terminating" &&
+           pod.getStatus.getPhase.toLowerCase(Locale.ROOT) != "running")
       ))
   }
 }

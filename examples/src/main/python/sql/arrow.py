@@ -21,6 +21,9 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/arrow.py
 """
 
+# NOTE that this file is imported in user guide in PySpark documentation.
+# The codes are referred via line numbers. See also `literalinclude` directive in Sphinx.
+
 from pyspark.sql import SparkSession
 from pyspark.sql.pandas.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
 
@@ -29,9 +32,8 @@ require_minimum_pyarrow_version()
 
 
 def dataframe_with_arrow_example(spark):
-    # $example on:dataframe_with_arrow$
-    import numpy as np
-    import pandas as pd
+    import numpy as np  # type: ignore[import]
+    import pandas as pd  # type: ignore[import]
 
     # Enable Arrow-based columnar data transfers
     spark.conf.set("spark.sql.execution.arrow.pyspark.enabled", "true")
@@ -44,12 +46,11 @@ def dataframe_with_arrow_example(spark):
 
     # Convert the Spark DataFrame back to a Pandas DataFrame using Arrow
     result_pdf = df.select("*").toPandas()
-    # $example off:dataframe_with_arrow$
+
     print("Pandas DataFrame result statistics:\n%s\n" % str(result_pdf.describe()))
 
 
 def ser_to_frame_pandas_udf_example(spark):
-    # $example on:ser_to_frame_pandas_udf$
     import pandas as pd
 
     from pyspark.sql.functions import pandas_udf
@@ -59,7 +60,7 @@ def ser_to_frame_pandas_udf_example(spark):
         s3['col2'] = s1 + s2.str.len()
         return s3
 
-    # Create a Spark DataFrame that has three columns including a sturct column.
+    # Create a Spark DataFrame that has three columns including a struct column.
     df = spark.createDataFrame(
         [[1, "a string", ("a nested string",)]],
         "long_col long, string_col string, struct_col struct<col1:string>")
@@ -75,11 +76,9 @@ def ser_to_frame_pandas_udf_example(spark):
     # |-- func(long_col, string_col, struct_col): struct (nullable = true)
     # |    |-- col1: string (nullable = true)
     # |    |-- col2: long (nullable = true)
-    # $example off:ser_to_frame_pandas_udf$$
 
 
 def ser_to_ser_pandas_udf_example(spark):
-    # $example on:ser_to_ser_pandas_udf$
     import pandas as pd
 
     from pyspark.sql.functions import col, pandas_udf
@@ -111,11 +110,9 @@ def ser_to_ser_pandas_udf_example(spark):
     # |                  4|
     # |                  9|
     # +-------------------+
-    # $example off:ser_to_ser_pandas_udf$
 
 
 def iter_ser_to_iter_ser_pandas_udf_example(spark):
-    # $example on:iter_ser_to_iter_ser_pandas_udf$
     from typing import Iterator
 
     import pandas as pd
@@ -139,11 +136,9 @@ def iter_ser_to_iter_ser_pandas_udf_example(spark):
     # |          3|
     # |          4|
     # +-----------+
-    # $example off:iter_ser_to_iter_ser_pandas_udf$
 
 
 def iter_sers_to_iter_ser_pandas_udf_example(spark):
-    # $example on:iter_sers_to_iter_ser_pandas_udf$
     from typing import Iterator, Tuple
 
     import pandas as pd
@@ -168,11 +163,9 @@ def iter_sers_to_iter_ser_pandas_udf_example(spark):
     # |                      4|
     # |                      9|
     # +-----------------------+
-    # $example off:iter_sers_to_iter_ser_pandas_udf$
 
 
 def ser_to_scalar_pandas_udf_example(spark):
-    # $example on:ser_to_scalar_pandas_udf$
     import pandas as pd
 
     from pyspark.sql.functions import pandas_udf
@@ -215,11 +208,9 @@ def ser_to_scalar_pandas_udf_example(spark):
     # |  2| 5.0|   6.0|
     # |  2|10.0|   6.0|
     # +---+----+------+
-    # $example off:ser_to_scalar_pandas_udf$
 
 
 def grouped_apply_in_pandas_example(spark):
-    # $example on:grouped_apply_in_pandas$
     df = spark.createDataFrame(
         [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ("id", "v"))
@@ -239,11 +230,9 @@ def grouped_apply_in_pandas_example(spark):
     # |  2|-1.0|
     # |  2| 4.0|
     # +---+----+
-    # $example off:grouped_apply_in_pandas$
 
 
 def map_in_pandas_example(spark):
-    # $example on:map_in_pandas$
     df = spark.createDataFrame([(1, 21), (2, 30)], ("id", "age"))
 
     def filter_func(iterator):
@@ -256,11 +245,9 @@ def map_in_pandas_example(spark):
     # +---+---+
     # |  1| 21|
     # +---+---+
-    # $example off:map_in_pandas$
 
 
 def cogrouped_apply_in_pandas_example(spark):
-    # $example on:cogrouped_apply_in_pandas$
     import pandas as pd
 
     df1 = spark.createDataFrame(
@@ -284,7 +271,6 @@ def cogrouped_apply_in_pandas_example(spark):
     # |20000101|  2|2.0|  y|
     # |20000102|  2|4.0|  y|
     # +--------+---+---+---+
-    # $example off:cogrouped_apply_in_pandas$
 
 
 if __name__ == "__main__":
@@ -299,7 +285,7 @@ if __name__ == "__main__":
     ser_to_frame_pandas_udf_example(spark)
     print("Running pandas_udf example: Series to Series")
     ser_to_ser_pandas_udf_example(spark)
-    print("Running pandas_udf example: Iterator of Series to Iterator of Seires")
+    print("Running pandas_udf example: Iterator of Series to Iterator of Series")
     iter_ser_to_iter_ser_pandas_udf_example(spark)
     print("Running pandas_udf example: Iterator of Multiple Series to Iterator of Series")
     iter_sers_to_iter_ser_pandas_udf_example(spark)

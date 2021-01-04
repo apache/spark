@@ -20,6 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -27,18 +28,16 @@ import java.util.concurrent.Future;
 
 import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
+
+import org.apache.spark.network.TransportContext;
+import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
-import org.apache.spark.network.client.TransportClientFactory;
-import org.apache.spark.network.shuffle.protocol.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
 import org.apache.spark.network.server.NoOpRpcHandler;
+import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TransportConf;
 
 /**
@@ -47,15 +46,12 @@ import org.apache.spark.network.util.TransportConf;
  * (via BlockTransferService), which has the downside of losing the data if we lose the executors.
  */
 public class ExternalBlockStoreClient extends BlockStoreClient {
-  private static final Logger logger = LoggerFactory.getLogger(ExternalBlockStoreClient.class);
+  private static final ErrorHandler PUSH_ERROR_HANDLER = new ErrorHandler.BlockPushErrorHandler();
 
   private final TransportConf conf;
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
   private final long registrationTimeoutMs;
-
-  protected volatile TransportClientFactory clientFactory;
-  protected String appId;
 
   /**
    * Creates an external shuffle client, with SASL optionally enabled. If SASL is not enabled,
@@ -70,10 +66,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
     this.registrationTimeoutMs = registrationTimeoutMs;
-  }
-
-  protected void checkInit() {
-    assert appId != null : "Called before init()";
   }
 
   /**
@@ -103,12 +95,12 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       int maxRetries = conf.maxIORetries();
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
-          (blockIds1, listener1) -> {
+          (inputBlockId, inputListener) -> {
             // Unless this client is closed.
             if (clientFactory != null) {
               TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
               new OneForOneBlockFetcher(client, appId, execId,
-                blockIds1, listener1, conf, downloadFileManager).start();
+                inputBlockId, inputListener, conf, downloadFileManager).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block fetch retries.");
             }
@@ -126,6 +118,72 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       for (String blockId : blockIds) {
         listener.onBlockFetchFailure(blockId, e);
       }
+    }
+  }
+
+  @Override
+  public void pushBlocks(
+      String host,
+      int port,
+      String[] blockIds,
+      ManagedBuffer[] buffers,
+      BlockFetchingListener listener) {
+    checkInit();
+    assert blockIds.length == buffers.length : "Number of block ids and buffers do not match.";
+
+    Map<String, ManagedBuffer> buffersWithId = new HashMap<>();
+    for (int i = 0; i < blockIds.length; i++) {
+      buffersWithId.put(blockIds[i], buffers[i]);
+    }
+    logger.debug("Push {} shuffle blocks to {}:{}", blockIds.length, host, port);
+    try {
+      RetryingBlockFetcher.BlockFetchStarter blockPushStarter =
+          (inputBlockId, inputListener) -> {
+            TransportClient client = clientFactory.createClient(host, port);
+            new OneForOneBlockPusher(client, appId, inputBlockId, inputListener, buffersWithId)
+              .start();
+          };
+      int maxRetries = conf.maxIORetries();
+      if (maxRetries > 0) {
+        new RetryingBlockFetcher(
+          conf, blockPushStarter, blockIds, listener, PUSH_ERROR_HANDLER).start();
+      } else {
+        blockPushStarter.createAndStart(blockIds, listener);
+      }
+    } catch (Exception e) {
+      logger.error("Exception while beginning pushBlocks", e);
+      for (String blockId : blockIds) {
+        listener.onBlockFetchFailure(blockId, e);
+      }
+    }
+  }
+
+  @Override
+  public void finalizeShuffleMerge(
+      String host,
+      int port,
+      int shuffleId,
+      MergeFinalizerListener listener) {
+    checkInit();
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
+      client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
+        @Override
+        public void onSuccess(ByteBuffer response) {
+          listener.onShuffleMergeSuccess(
+            (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response));
+        }
+
+        @Override
+        public void onFailure(Throwable e) {
+          listener.onShuffleMergeFailure(e);
+        }
+      });
+    } catch (Exception e) {
+      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
+        host, port, e);
+      listener.onShuffleMergeFailure(e);
     }
   }
 
@@ -175,8 +233,6 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
             " via external shuffle service from executor: " + execId, t);
           numRemovedBlocksFuture.complete(0);
-        } finally {
-          client.close();
         }
       }
 
@@ -185,50 +241,9 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         logger.warn("Error trying to remove RDD blocks " + Arrays.toString(blockIds) +
           " via external shuffle service from executor: " + execId, e);
         numRemovedBlocksFuture.complete(0);
-        client.close();
       }
     });
     return numRemovedBlocksFuture;
-  }
-
-  public void getHostLocalDirs(
-      String host,
-      int port,
-      String[] execIds,
-      CompletableFuture<Map<String, String[]>> hostLocalDirsCompletable) {
-    checkInit();
-    GetLocalDirsForExecutors getLocalDirsMessage = new GetLocalDirsForExecutors(appId, execIds);
-    try {
-      TransportClient client = clientFactory.createClient(host, port);
-      client.sendRpc(getLocalDirsMessage.toByteBuffer(), new RpcResponseCallback() {
-        @Override
-        public void onSuccess(ByteBuffer response) {
-          try {
-            BlockTransferMessage msgObj = BlockTransferMessage.Decoder.fromByteBuffer(response);
-            hostLocalDirsCompletable.complete(
-              ((LocalDirsForExecutors) msgObj).getLocalDirsByExec());
-          } catch (Throwable t) {
-            logger.warn("Error trying to get the host local dirs for " +
-              Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-              t.getCause());
-            hostLocalDirsCompletable.completeExceptionally(t);
-          } finally {
-            client.close();
-          }
-        }
-
-        @Override
-        public void onFailure(Throwable t) {
-          logger.warn("Error trying to get the host local dirs for " +
-            Arrays.toString(getLocalDirsMessage.execIds) + " via external shuffle service",
-            t.getCause());
-          hostLocalDirsCompletable.completeExceptionally(t);
-          client.close();
-        }
-      });
-    } catch (IOException | InterruptedException e) {
-      hostLocalDirsCompletable.completeExceptionally(e);
-    }
   }
 
   @Override

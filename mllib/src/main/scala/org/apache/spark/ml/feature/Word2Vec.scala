@@ -169,7 +169,8 @@ final class Word2Vec @Since("1.4.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
+    val input =
+      dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
     val wordVectors = new feature.Word2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))
@@ -284,27 +285,33 @@ class Word2VecModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    val vectors = wordVectors.getVectors
-      .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
-      .map(identity).toMap // mapValues doesn't return a serializable map (SI-7005)
-    val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
-    val d = $(vectorSize)
-    val emptyVec = Vectors.sparse(d, Array.emptyIntArray, Array.emptyDoubleArray)
-    val word2Vec = udf { sentence: Seq[String] =>
+
+    val bcModel = dataset.sparkSession.sparkContext.broadcast(this.wordVectors)
+    val size = $(vectorSize)
+    val emptyVec = Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
+    val transformer = udf { sentence: Seq[String] =>
       if (sentence.isEmpty) {
         emptyVec
       } else {
-        val sum = Vectors.zeros(d)
+        val wordIndices = bcModel.value.wordIndex
+        val wordVectors = bcModel.value.wordVectors
+        val array = Array.ofDim[Double](size)
+        var count = 0
         sentence.foreach { word =>
-          bVectors.value.get(word).foreach { v =>
-            BLAS.axpy(1.0, v, sum)
+          wordIndices.get(word).foreach { index =>
+            val offset = index * size
+            var i = 0
+            while (i < size) { array(i) += wordVectors(offset + i); i += 1 }
           }
+          count += 1
         }
-        BLAS.scal(1.0 / sentence.size, sum)
-        sum
+        val vec = Vectors.dense(array)
+        BLAS.scal(1.0 / count, vec)
+        vec
       }
     }
-    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))),
+
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)
   }
 

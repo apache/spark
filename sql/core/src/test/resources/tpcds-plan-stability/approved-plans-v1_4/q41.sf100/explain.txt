@@ -24,7 +24,7 @@ TakeOrderedAndProject (20)
 (1) Scan parquet default.item
 Output [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manufact_id), GreaterThanOrEqual(i_manufact_id,738), LessThanOrEqual(i_manufact_id,778), IsNotNull(i_manufact)]
 ReadSchema: struct<i_manufact_id:int,i_manufact:string,i_product_name:string>
 
@@ -42,7 +42,7 @@ Input [3]: [i_manufact_id#1, i_manufact#2, i_product_name#3]
 (5) Scan parquet default.item
 Output [5]: [i_category#4, i_manufact#2, i_size#5, i_color#6, i_units#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [Or(Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,powder),EqualTo(i_color,khaki)),Or(EqualTo(i_units,Ounce),EqualTo(i_units,Oz))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,brown),EqualTo(i_color,honeydew)),Or(EqualTo(i_units,Bunch),EqualTo(i_units,Ton))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,floral),EqualTo(i_color,deep)),Or(EqualTo(i_units,N/A),EqualTo(i_units,Dozen))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,light),EqualTo(i_color,cornflower)),Or(EqualTo(i_units,Box),EqualTo(i_units,Pound))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large)))))),Or(And(EqualTo(i_category,Women),Or(And(And(Or(EqualTo(i_color,midnight),EqualTo(i_color,snow)),Or(EqualTo(i_units,Pallet),EqualTo(i_units,Gross))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))),And(And(Or(EqualTo(i_color,cyan),EqualTo(i_color,papaya)),Or(EqualTo(i_units,Cup),EqualTo(i_units,Dram))),Or(EqualTo(i_size,N/A),EqualTo(i_size,small))))),And(EqualTo(i_category,Men),Or(And(And(Or(EqualTo(i_color,orange),EqualTo(i_color,frosted)),Or(EqualTo(i_units,Each),EqualTo(i_units,Tbl))),Or(EqualTo(i_size,petite),EqualTo(i_size,large))),And(And(Or(EqualTo(i_color,forest),EqualTo(i_color,ghost)),Or(EqualTo(i_units,Lb),EqualTo(i_units,Bundle))),Or(EqualTo(i_size,medium),EqualTo(i_size,extra large))))))), IsNotNull(i_manufact)]
 ReadSchema: struct<i_category:string,i_manufact:string,i_size:string,i_color:string,i_units:string>
 
@@ -73,19 +73,19 @@ Input [2]: [i_manufact#2, count#9]
 Keys [1]: [i_manufact#2]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#11]
-Results [3]: [count(1)#11 AS item_cnt#12, i_manufact#2 AS i_manufact#2#13, true AS alwaysTrue#14]
+Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#2 AS i_manufact#2#13]
 
 (12) Filter [codegen id : 2]
-Input [3]: [item_cnt#12, i_manufact#2#13, alwaysTrue#14]
-Condition : (if (isnull(alwaysTrue#14)) 0 else item_cnt#12 > 0)
+Input [2]: [item_cnt#12, i_manufact#2#13]
+Condition : (item_cnt#12 > 0)
 
 (13) Project [codegen id : 2]
 Output [1]: [i_manufact#2#13]
-Input [3]: [item_cnt#12, i_manufact#2#13, alwaysTrue#14]
+Input [2]: [item_cnt#12, i_manufact#2#13]
 
 (14) BroadcastExchange
 Input [1]: [i_manufact#2#13]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#14]
 
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_manufact#2]
@@ -105,7 +105,7 @@ Results [1]: [i_product_name#3]
 
 (18) Exchange
 Input [1]: [i_product_name#3]
-Arguments: hashpartitioning(i_product_name#3, 5), true, [id=#16]
+Arguments: hashpartitioning(i_product_name#3, 5), true, [id=#15]
 
 (19) HashAggregate [codegen id : 4]
 Input [1]: [i_product_name#3]

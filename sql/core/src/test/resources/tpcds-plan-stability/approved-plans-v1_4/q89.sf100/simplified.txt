@@ -1,24 +1,24 @@
-TakeOrderedAndProject [avg_monthly_sales,d_moy,i_brand,i_category,i_class,s_company_name,s_store_name,sum_sales]
+TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_class,i_brand,s_company_name,d_moy]
   WholeStageCodegen (7)
-    Project [avg_monthly_sales,d_moy,i_brand,i_category,i_class,s_company_name,s_store_name,sum_sales]
+    Project [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,sum_sales,avg_monthly_sales]
       Filter [avg_monthly_sales,sum_sales]
         InputAdapter
-          Window [_w0,i_brand,i_category,s_company_name,s_store_name]
+          Window [_w0,i_category,i_brand,s_store_name,s_company_name]
             WholeStageCodegen (6)
-              Sort [i_brand,i_category,s_company_name,s_store_name]
+              Sort [i_category,i_brand,s_store_name,s_company_name]
                 InputAdapter
-                  Exchange [i_brand,i_category,s_company_name,s_store_name] #1
+                  Exchange [i_category,i_brand,s_store_name,s_company_name] #1
                     WholeStageCodegen (5)
-                      HashAggregate [d_moy,i_brand,i_category,i_class,s_company_name,s_store_name,sum] [_w0,sum,sum(UnscaledValue(ss_sales_price)),sum_sales]
+                      HashAggregate [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,sum] [sum(UnscaledValue(ss_sales_price)),sum_sales,_w0,sum]
                         InputAdapter
-                          Exchange [d_moy,i_brand,i_category,i_class,s_company_name,s_store_name] #2
+                          Exchange [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy] #2
                             WholeStageCodegen (4)
-                              HashAggregate [d_moy,i_brand,i_category,i_class,s_company_name,s_store_name,ss_sales_price] [sum,sum]
-                                Project [d_moy,i_brand,i_category,i_class,s_company_name,s_store_name,ss_sales_price]
-                                  BroadcastHashJoin [s_store_sk,ss_store_sk]
-                                    Project [d_moy,i_brand,i_category,i_class,ss_sales_price,ss_store_sk]
-                                      BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
-                                        Project [i_brand,i_category,i_class,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                              HashAggregate [i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,ss_sales_price] [sum,sum]
+                                Project [i_brand,i_class,i_category,ss_sales_price,d_moy,s_store_name,s_company_name]
+                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                    Project [i_brand,i_class,i_category,ss_store_sk,ss_sales_price,d_moy]
+                                      BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                        Project [i_brand,i_class,i_category,ss_sold_date_sk,ss_store_sk,ss_sales_price]
                                           BroadcastHashJoin [i_item_sk,ss_item_sk]
                                             InputAdapter
                                               BroadcastExchange #3
@@ -26,23 +26,23 @@ TakeOrderedAndProject [avg_monthly_sales,d_moy,i_brand,i_category,i_class,s_comp
                                                   Filter [i_category,i_class,i_item_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.item [i_brand,i_category,i_class,i_item_sk]
+                                                        Scan parquet default.item [i_item_sk,i_brand,i_class,i_category]
                                             Filter [ss_item_sk,ss_sold_date_sk,ss_store_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.store_sales [ss_item_sk,ss_sales_price,ss_sold_date_sk,ss_store_sk]
+                                                  Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)
                                               Project [d_date_sk,d_moy]
-                                                Filter [d_date_sk,d_year]
+                                                Filter [d_year,d_date_sk]
                                                   ColumnarToRow
                                                     InputAdapter
-                                                      Scan parquet default.date_dim [d_date_sk,d_moy,d_year]
+                                                      Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
                                           Filter [s_store_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store [s_company_name,s_store_name,s_store_sk]
+                                                Scan parquet default.store [s_store_sk,s_store_name,s_company_name]

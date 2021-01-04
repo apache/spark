@@ -19,10 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 
 import scala.collection.JavaConverters._
 
-import org.apache.orc.mapreduce.OrcInputFormat
-
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
@@ -56,11 +53,6 @@ case class OrcScanBuilder(
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(schema, filters).foreach { f =>
-        // The pushed filters will be set in `hadoopConf`. After that, we can simply use the
-        // changed `hadoopConf` in executors.
-        OrcInputFormat.setSearchArgument(hadoopConf, f, schema.fieldNames)
-      }
       val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
       _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
     }

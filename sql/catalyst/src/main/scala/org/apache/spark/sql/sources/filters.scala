@@ -164,7 +164,7 @@ case class In(attribute: String, values: Array[Any]) extends Filter {
     var h = attribute.hashCode
     values.foreach { v =>
       h *= 41
-      h += v.hashCode()
+      h += (if (v != null) v.hashCode() else 0)
     }
     h
   }

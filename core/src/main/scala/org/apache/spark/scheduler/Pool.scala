@@ -59,6 +59,8 @@ private[spark] class Pool(
     }
   }
 
+  override def isSchedulable: Boolean = true
+
   override def addSchedulable(schedulable: Schedulable): Unit = {
     require(schedulable != null)
     schedulableQueue.add(schedulable)
@@ -105,7 +107,7 @@ private[spark] class Pool(
     val sortedSchedulableQueue =
       schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
-      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
+      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue.filter(_.isSchedulable)
     }
     sortedTaskSetQueue
   }

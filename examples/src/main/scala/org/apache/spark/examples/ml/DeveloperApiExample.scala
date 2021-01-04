@@ -41,7 +41,6 @@ object DeveloperApiExample {
       .builder
       .appName("DeveloperApiExample")
       .getOrCreate()
-    import spark.implicits._
 
     // Prepare training data.
     val training = spark.createDataFrame(Seq(

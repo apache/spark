@@ -216,6 +216,15 @@ class UISuite extends SparkFunSuite {
     assert(rewrittenURI === null)
   }
 
+  test("SPARK-33611: Avoid encoding twice on the query parameter of proxy rewrittenURI") {
+    val prefix = "/worker-id"
+    val target = "http://localhost:8081"
+    val path = "/worker-id/json"
+    val rewrittenURI =
+      JettyUtils.createProxyURI(prefix, target, path, "order%5B0%5D%5Bcolumn%5D=0")
+    assert(rewrittenURI.toString === "http://localhost:8081/json?order%5B0%5D%5Bcolumn%5D=0")
+  }
+
   test("verify rewriting location header for reverse proxy") {
     val clientRequest = mock(classOf[HttpServletRequest])
     var headerValue = "http://localhost:4040/jobs"

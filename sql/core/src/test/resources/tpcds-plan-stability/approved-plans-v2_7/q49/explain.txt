@@ -82,8 +82,8 @@ TakeOrderedAndProject (78)
 (1) Scan parquet default.web_sales
 Output [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/web_sales]
-PushedFilters: [IsNotNull(ws_net_paid), IsNotNull(ws_quantity), IsNotNull(ws_net_profit), GreaterThan(ws_net_profit,1.00), GreaterThan(ws_net_paid,0.00), GreaterThan(ws_quantity,0), IsNotNull(ws_order_number), IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+PushedFilters: [IsNotNull(ws_net_profit), IsNotNull(ws_net_paid), IsNotNull(ws_quantity), GreaterThan(ws_net_profit,1.00), GreaterThan(ws_net_paid,0.00), GreaterThan(ws_quantity,0), IsNotNull(ws_order_number), IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_order_number:int,ws_quantity:int,ws_net_paid:decimal(7,2),ws_net_profit:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 3]
@@ -91,7 +91,7 @@ Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, w
 
 (3) Filter [codegen id : 3]
 Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5, ws_net_profit#6]
-Condition : ((((((((isnotnull(ws_net_paid#5) AND isnotnull(ws_quantity#4)) AND isnotnull(ws_net_profit#6)) AND (ws_net_profit#6 > 1.00)) AND (ws_net_paid#5 > 0.00)) AND (ws_quantity#4 > 0)) AND isnotnull(ws_order_number#3)) AND isnotnull(ws_item_sk#2)) AND isnotnull(ws_sold_date_sk#1))
+Condition : ((((((((isnotnull(ws_net_profit#6) AND isnotnull(ws_net_paid#5)) AND isnotnull(ws_quantity#4)) AND (ws_net_profit#6 > 1.00)) AND (ws_net_paid#5 > 0.00)) AND (ws_quantity#4 > 0)) AND isnotnull(ws_order_number#3)) AND isnotnull(ws_item_sk#2)) AND isnotnull(ws_sold_date_sk#1))
 
 (4) Project [codegen id : 3]
 Output [5]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, ws_net_paid#5]
@@ -100,7 +100,7 @@ Input [6]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, w
 (5) Scan parquet default.web_returns
 Output [4]: [wr_item_sk#7, wr_order_number#8, wr_return_quantity#9, wr_return_amt#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/web_returns]
+Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_return_amt), GreaterThan(wr_return_amt,10000.00), IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
 ReadSchema: struct<wr_item_sk:bigint,wr_order_number:bigint,wr_return_quantity:int,wr_return_amt:decimal(7,2)>
 
@@ -127,7 +127,7 @@ Input [9]: [ws_sold_date_sk#1, ws_item_sk#2, ws_order_number#3, ws_quantity#4, w
 (11) Scan parquet default.date_dim
 Output [3]: [d_date_sk#12, d_year#13, d_moy#14]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,12), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -204,8 +204,8 @@ Input [5]: [item#33, return_ratio#34, currency_ratio#35, return_rank#37, currenc
 (28) Scan parquet default.catalog_sales
 Output [6]: [cs_sold_date_sk#40, cs_item_sk#41, cs_order_number#42, cs_quantity#43, cs_net_paid#44, cs_net_profit#45]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/catalog_sales]
-PushedFilters: [IsNotNull(cs_net_paid), IsNotNull(cs_quantity), IsNotNull(cs_net_profit), GreaterThan(cs_net_profit,1.00), GreaterThan(cs_net_paid,0.00), GreaterThan(cs_quantity,0), IsNotNull(cs_order_number), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+PushedFilters: [IsNotNull(cs_net_profit), IsNotNull(cs_net_paid), IsNotNull(cs_quantity), GreaterThan(cs_net_profit,1.00), GreaterThan(cs_net_paid,0.00), GreaterThan(cs_quantity,0), IsNotNull(cs_order_number), IsNotNull(cs_item_sk), IsNotNull(cs_sold_date_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_item_sk:int,cs_order_number:int,cs_quantity:int,cs_net_paid:decimal(7,2),cs_net_profit:decimal(7,2)>
 
 (29) ColumnarToRow [codegen id : 10]
@@ -213,7 +213,7 @@ Input [6]: [cs_sold_date_sk#40, cs_item_sk#41, cs_order_number#42, cs_quantity#4
 
 (30) Filter [codegen id : 10]
 Input [6]: [cs_sold_date_sk#40, cs_item_sk#41, cs_order_number#42, cs_quantity#43, cs_net_paid#44, cs_net_profit#45]
-Condition : ((((((((isnotnull(cs_net_paid#44) AND isnotnull(cs_quantity#43)) AND isnotnull(cs_net_profit#45)) AND (cs_net_profit#45 > 1.00)) AND (cs_net_paid#44 > 0.00)) AND (cs_quantity#43 > 0)) AND isnotnull(cs_order_number#42)) AND isnotnull(cs_item_sk#41)) AND isnotnull(cs_sold_date_sk#40))
+Condition : ((((((((isnotnull(cs_net_profit#45) AND isnotnull(cs_net_paid#44)) AND isnotnull(cs_quantity#43)) AND (cs_net_profit#45 > 1.00)) AND (cs_net_paid#44 > 0.00)) AND (cs_quantity#43 > 0)) AND isnotnull(cs_order_number#42)) AND isnotnull(cs_item_sk#41)) AND isnotnull(cs_sold_date_sk#40))
 
 (31) Project [codegen id : 10]
 Output [5]: [cs_sold_date_sk#40, cs_item_sk#41, cs_order_number#42, cs_quantity#43, cs_net_paid#44]
@@ -222,8 +222,8 @@ Input [6]: [cs_sold_date_sk#40, cs_item_sk#41, cs_order_number#42, cs_quantity#4
 (32) Scan parquet default.catalog_returns
 Output [4]: [cr_item_sk#46, cr_order_number#47, cr_return_quantity#48, cr_return_amount#49]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/catalog_returns]
-PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
+Location [not included in comparison]/{warehouse_dir}/catalog_returns]
+PushedFilters: [IsNotNull(cr_return_amount), GreaterThan(cr_return_amount,10000.00), IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int,cr_return_quantity:int,cr_return_amount:decimal(7,2)>
 
 (33) ColumnarToRow [codegen id : 8]
@@ -231,7 +231,7 @@ Input [4]: [cr_item_sk#46, cr_order_number#47, cr_return_quantity#48, cr_return_
 
 (34) Filter [codegen id : 8]
 Input [4]: [cr_item_sk#46, cr_order_number#47, cr_return_quantity#48, cr_return_amount#49]
-Condition : (((isnotnull(cr_return_amount#49) AND (cr_return_amount#49 > 10000.00)) AND isnotnull(cr_item_sk#46)) AND isnotnull(cr_order_number#47))
+Condition : (((isnotnull(cr_return_amount#49) AND (cr_return_amount#49 > 10000.00)) AND isnotnull(cr_order_number#47)) AND isnotnull(cr_item_sk#46))
 
 (35) BroadcastExchange
 Input [4]: [cr_item_sk#46, cr_order_number#47, cr_return_quantity#48, cr_return_amount#49]
@@ -307,8 +307,8 @@ Input [5]: [item#68, return_ratio#69, currency_ratio#70, return_rank#72, currenc
 (51) Scan parquet default.store_sales
 Output [6]: [ss_sold_date_sk#75, ss_item_sk#76, ss_ticket_number#77, ss_quantity#78, ss_net_paid#79, ss_net_profit#80]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store_sales]
-PushedFilters: [IsNotNull(ss_quantity), IsNotNull(ss_net_paid), IsNotNull(ss_net_profit), GreaterThan(ss_net_profit,1.00), GreaterThan(ss_net_paid,0.00), GreaterThan(ss_quantity,0), IsNotNull(ss_item_sk), IsNotNull(ss_ticket_number), IsNotNull(ss_sold_date_sk)]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_net_profit), IsNotNull(ss_net_paid), IsNotNull(ss_quantity), GreaterThan(ss_net_profit,1.00), GreaterThan(ss_net_paid,0.00), GreaterThan(ss_quantity,0), IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ticket_number:int,ss_quantity:int,ss_net_paid:decimal(7,2),ss_net_profit:decimal(7,2)>
 
 (52) ColumnarToRow [codegen id : 17]
@@ -316,7 +316,7 @@ Input [6]: [ss_sold_date_sk#75, ss_item_sk#76, ss_ticket_number#77, ss_quantity#
 
 (53) Filter [codegen id : 17]
 Input [6]: [ss_sold_date_sk#75, ss_item_sk#76, ss_ticket_number#77, ss_quantity#78, ss_net_paid#79, ss_net_profit#80]
-Condition : ((((((((isnotnull(ss_quantity#78) AND isnotnull(ss_net_paid#79)) AND isnotnull(ss_net_profit#80)) AND (ss_net_profit#80 > 1.00)) AND (ss_net_paid#79 > 0.00)) AND (ss_quantity#78 > 0)) AND isnotnull(ss_item_sk#76)) AND isnotnull(ss_ticket_number#77)) AND isnotnull(ss_sold_date_sk#75))
+Condition : ((((((((isnotnull(ss_net_profit#80) AND isnotnull(ss_net_paid#79)) AND isnotnull(ss_quantity#78)) AND (ss_net_profit#80 > 1.00)) AND (ss_net_paid#79 > 0.00)) AND (ss_quantity#78 > 0)) AND isnotnull(ss_ticket_number#77)) AND isnotnull(ss_item_sk#76)) AND isnotnull(ss_sold_date_sk#75))
 
 (54) Project [codegen id : 17]
 Output [5]: [ss_sold_date_sk#75, ss_item_sk#76, ss_ticket_number#77, ss_quantity#78, ss_net_paid#79]
@@ -325,8 +325,8 @@ Input [6]: [ss_sold_date_sk#75, ss_item_sk#76, ss_ticket_number#77, ss_quantity#
 (55) Scan parquet default.store_returns
 Output [4]: [sr_item_sk#81, sr_ticket_number#82, sr_return_quantity#83, sr_return_amt#84]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilitySuite/store_returns]
-PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_item_sk), IsNotNull(sr_ticket_number)]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PushedFilters: [IsNotNull(sr_return_amt), GreaterThan(sr_return_amt,10000.00), IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint,sr_return_quantity:int,sr_return_amt:decimal(7,2)>
 
 (56) ColumnarToRow [codegen id : 15]
@@ -334,7 +334,7 @@ Input [4]: [sr_item_sk#81, sr_ticket_number#82, sr_return_quantity#83, sr_return
 
 (57) Filter [codegen id : 15]
 Input [4]: [sr_item_sk#81, sr_ticket_number#82, sr_return_quantity#83, sr_return_amt#84]
-Condition : (((isnotnull(sr_return_amt#84) AND (sr_return_amt#84 > 10000.00)) AND isnotnull(sr_item_sk#81)) AND isnotnull(sr_ticket_number#82))
+Condition : (((isnotnull(sr_return_amt#84) AND (sr_return_amt#84 > 10000.00)) AND isnotnull(sr_ticket_number#82)) AND isnotnull(sr_item_sk#81))
 
 (58) BroadcastExchange
 Input [4]: [sr_item_sk#81, sr_ticket_number#82, sr_return_quantity#83, sr_return_amt#84]

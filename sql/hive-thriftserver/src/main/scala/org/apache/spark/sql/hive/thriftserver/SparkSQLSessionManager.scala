@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.concurrent.Executors
+import scala.util.control.NonFatal
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.SessionHandle
+import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.SQLConf
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
-  with ReflectedCompositeService {
+  with ReflectedCompositeService with Logging {
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
@@ -45,7 +45,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
   }
 
   override def openSession(
-      protocol: ThriftserverShimUtils.TProtocolVersion,
+      protocol: TProtocolVersion,
       username: String,
       passwd: String,
       ipAddress: String,
@@ -55,24 +55,35 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     val sessionHandle =
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
-    val session = super.getSession(sessionHandle)
-    HiveThriftServer2.eventManager.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
-      sqlContext
-    } else {
-      sqlContext.newSession()
+    try {
+      val session = super.getSession(sessionHandle)
+      HiveThriftServer2.eventManager.onSessionCreated(
+        session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+      val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
+        sqlContext
+      } else {
+        sqlContext.newSession()
+      }
+      ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
+      ctx.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
+      val hiveSessionState = session.getSessionState
+      setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
+      setConfMap(ctx, hiveSessionState.getHiveVariables)
+      if (sessionConf != null && sessionConf.containsKey("use:database")) {
+        ctx.sql(s"use ${sessionConf.get("use:database")}")
+      }
+      sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
+      sessionHandle
+    } catch {
+      case NonFatal(e) =>
+        try {
+          closeSession(sessionHandle)
+        } catch {
+          case NonFatal(inner) =>
+            logWarning("Error closing session", inner)
+        }
+        throw new HiveSQLException("Failed to open new session: " + e, e)
     }
-    ctx.setConf(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
-    ctx.setConf(SQLConf.DATETIME_JAVA8API_ENABLED, true)
-    val hiveSessionState = session.getSessionState
-    setConfMap(ctx, hiveSessionState.getOverriddenConfigurations)
-    setConfMap(ctx, hiveSessionState.getHiveVariables)
-    if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      ctx.sql(s"use ${sessionConf.get("use:database")}")
-    }
-    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
-    sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle): Unit = {

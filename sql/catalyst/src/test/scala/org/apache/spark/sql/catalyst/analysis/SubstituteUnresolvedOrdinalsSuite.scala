@@ -36,31 +36,35 @@ class SubstituteUnresolvedOrdinalsSuite extends AnalysisTest {
     // Tests order by ordinal, apply single rule.
     val plan = testRelation2.orderBy(Literal(1).asc, Literal(2).asc)
     comparePlans(
-      new SubstituteUnresolvedOrdinals(conf).apply(plan),
+      SubstituteUnresolvedOrdinals.apply(plan),
       testRelation2.orderBy(UnresolvedOrdinal(1).asc, UnresolvedOrdinal(2).asc))
 
     // Tests order by ordinal, do full analysis
     checkAnalysis(plan, testRelation2.orderBy(a.asc, b.asc))
 
     // order by ordinal can be turned off by config
-    comparePlans(
-      new SubstituteUnresolvedOrdinals(conf.copy(SQLConf.ORDER_BY_ORDINAL -> false)).apply(plan),
-      testRelation2.orderBy(Literal(1).asc, Literal(2).asc))
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "false") {
+      comparePlans(
+        SubstituteUnresolvedOrdinals.apply(plan),
+        testRelation2.orderBy(Literal(1).asc, Literal(2).asc))
+    }
   }
 
   test("group by ordinal") {
     // Tests group by ordinal, apply single rule.
     val plan2 = testRelation2.groupBy(Literal(1), Literal(2))('a, 'b)
     comparePlans(
-      new SubstituteUnresolvedOrdinals(conf).apply(plan2),
+      SubstituteUnresolvedOrdinals.apply(plan2),
       testRelation2.groupBy(UnresolvedOrdinal(1), UnresolvedOrdinal(2))('a, 'b))
 
     // Tests group by ordinal, do full analysis
     checkAnalysis(plan2, testRelation2.groupBy(a, b)(a, b))
 
     // group by ordinal can be turned off by config
-    comparePlans(
-      new SubstituteUnresolvedOrdinals(conf.copy(SQLConf.GROUP_BY_ORDINAL -> false)).apply(plan2),
-      testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
+    withSQLConf(SQLConf.GROUP_BY_ORDINAL.key -> "false") {
+      comparePlans(
+        SubstituteUnresolvedOrdinals.apply(plan2),
+        testRelation2.groupBy(Literal(1), Literal(2))('a, 'b))
+    }
   }
 }

@@ -29,7 +29,7 @@ function codeTabs() {
     $(this).addClass("tab-content");
 
     // Insert the tab bar
-    var tabBar = $('<ul class="nav nav-tabs" data-tabs="tabs"></ul>');
+    var tabBar = $('<ul class="nav nav-tabs mb-4" data-tabs="tabs" role="tablist"></ul>');
     $(this).before(tabBar);
 
     // Add each code sample to the tab bar:
@@ -50,12 +50,12 @@ function codeTabs() {
         var buttonLabel = ""
       }
       tabBar.append(
-        '<li><a class="tab_' + lang + '" href="#' + id + '">' + buttonLabel + '</a></li>'
+        '<li class="nav-item"><a class="nav-link tab_' + lang + '" href="#' + id + '" data-toggle="tab">' + buttonLabel + '</a></li>'
       );
     });
 
     codeSamples.first().addClass("active");
-    tabBar.children("li").first().addClass("active");
+    tabBar.children("li").first().children("a").first().addClass("active");
     counter++;
   });
   $("ul.nav-tabs a").click(function (e) {
@@ -94,4 +94,32 @@ $(function() {
   // Scroll now too in case we had opened the page on a hash, but wait a bit because some browsers
   // will try to do *their* initial scroll after running the onReady handler.
   $(window).on('load', function() { setTimeout(function() { maybeScrollToHash(); }, 25); });
+
+  // Make dropdown menus in nav bars show on hover instead of click
+  // using solution at https://webdesign.tutsplus.com/tutorials/how-
+  // to-make-the-bootstrap-navbar-dropdown-work-on-hover--cms-33840
+  const $dropdown = $(".dropdown");
+  const $dropdownToggle = $(".dropdown-toggle");
+  const $dropdownMenu = $(".dropdown-menu");
+  const showClass = "show";
+  $(window).on("load resize", function() {
+    if (this.matchMedia("(min-width: 768px)").matches) {
+      $dropdown.hover(
+        function() {
+          const $this = $(this);
+          $this.addClass(showClass);
+          $this.find($dropdownToggle).attr("aria-expanded", "true");
+          $this.find($dropdownMenu).addClass(showClass);
+        },
+        function() {
+          const $this = $(this);
+          $this.removeClass(showClass);
+          $this.find($dropdownToggle).attr("aria-expanded", "false");
+          $this.find($dropdownMenu).removeClass(showClass);
+        }
+      );
+    } else {
+      $dropdown.off("mouseenter mouseleave");
+    }
+  });
 });

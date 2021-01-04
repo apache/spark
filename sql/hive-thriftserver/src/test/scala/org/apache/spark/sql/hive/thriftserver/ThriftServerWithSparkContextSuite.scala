@@ -18,11 +18,13 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.SQLException
+import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hive.service.cli.HiveSQLException
 
-import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.types._
+import org.apache.spark.TaskKilled
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.sql.internal.SQLConf
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
@@ -55,50 +57,63 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
   test("Full stack traces as error message for jdbc or thrift client") {
     val sql = "select date_sub(date'2011-11-11', '1.2')"
-    val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+    withCLIServiceClient { client =>
+      val sessionHandle = client.openSession(user, "")
 
-    withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, "false")) {
-      withCLIServiceClient { client =>
-        val sessionHandle = client.openSession(user, "")
-        val e = intercept[HiveSQLException] {
-          client.executeStatement(sessionHandle, sql, confOverlay)
-        }
-        assert(e.getMessage
-          .contains("The second argument of 'date_sub' function needs to be an integer."))
-        assert(!e.getMessage
-          .contains("java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val e = intercept[HiveSQLException] {
+        client.executeStatement(
+          sessionHandle,
+          sql,
+          confOverlay)
       }
+
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(!e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
     }
 
-    withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, "true")) {
-      withCLIServiceClient { client =>
-        val sessionHandle = client.openSession(user, "")
-        val opHandle = client.executeStatementAsync(sessionHandle, sql, confOverlay)
-        var status = client.getOperationStatus(opHandle)
-        while (!status.getState.isTerminal) {
-          Thread.sleep(10)
-          status = client.getOperationStatus(opHandle)
-        }
-        val e = status.getOperationException
-
-        assert(e.getMessage
-          .contains("The second argument of 'date_sub' function needs to be an integer."))
-        assert(e.getMessage
-          .contains("java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    withJdbcStatement { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery(sql)
       }
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
     }
+  }
 
-    Seq("true", "false").foreach { value =>
-      withSQLConf((HiveUtils.HIVE_THRIFT_SERVER_ASYNC.key, value)) {
-        withJdbcStatement { statement =>
-          val e = intercept[SQLException] {
-            statement.executeQuery(sql)
+  test("SPARK-33526: Add config to control if cancel invoke interrupt task on thriftserver") {
+    withJdbcStatement { statement =>
+      val forceCancel = new AtomicBoolean(false)
+      val listener = new SparkListener {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          assert(taskEnd.reason.isInstanceOf[TaskKilled])
+          if (forceCancel.get()) {
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          } else {
+            // avoid accuracy, we check 2s instead of 3s.
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2000)
           }
-          assert(e.getMessage.contains(
-            "The second argument of 'date_sub' function needs to be an integer."))
-          assert(e.getMessage.contains(
-            "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
         }
+      }
+
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        Seq(true, false).foreach { force =>
+          statement.setQueryTimeout(0)
+          statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=$force")
+          statement.setQueryTimeout(1)
+          forceCancel.set(force)
+          val e = intercept[SQLException] {
+            statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+          }.getMessage
+          assert(e.contains("Query timed out"))
+        }
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
       }
     }
   }

@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
-import org.apache.spark.sql.execution.{ExplainUtils, UnaryExecNode}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.execution.{AliasAwareOutputPartitioning, ExplainUtils, UnaryExecNode}
 
 /**
  * Holds common logic for aggregate operators
  */
-trait BaseAggregateExec extends UnaryExecNode {
+trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning {
+  def requiredChildDistributionExpressions: Option[Seq[Expression]]
   def groupingExpressions: Seq[NamedExpression]
   def aggregateExpressions: Seq[AggregateExpression]
   def aggregateAttributes: Seq[Attribute]
@@ -81,4 +83,16 @@ trait BaseAggregateExec extends UnaryExecNode {
     // attributes of the child Aggregate, when the child Aggregate contains the subquery in
     // AggregateFunction. See SPARK-31620 for more details.
     AttributeSet(inputAggBufferAttributes.filterNot(child.output.contains))
+
+  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
+
+  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
+
+  override def requiredChildDistribution: List[Distribution] = {
+    requiredChildDistributionExpressions match {
+      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
+      case Some(exprs) => ClusteredDistribution(exprs) :: Nil
+      case None => UnspecifiedDistribution :: Nil
+    }
+  }
 }

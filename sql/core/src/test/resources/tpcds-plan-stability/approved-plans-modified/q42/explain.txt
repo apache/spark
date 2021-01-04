@@ -25,8 +25,8 @@ TakeOrderedAndProject (21)
 (1) Scan parquet default.date_dim
 Output [3]: [d_date_sk#1, d_year#2, d_moy#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/date_dim]
-PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), LessThanOrEqual(d_date_sk,2451179), GreaterThanOrEqual(d_date_sk,2451149), IsNotNull(d_date_sk)]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_moy), IsNotNull(d_year), EqualTo(d_moy,12), EqualTo(d_year,1998), GreaterThanOrEqual(d_date_sk,2451149), LessThanOrEqual(d_date_sk,2451179), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (2) ColumnarToRow [codegen id : 3]
@@ -34,7 +34,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 
 (3) Filter [codegen id : 3]
 Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
-Condition : ((((((isnotnull(d_moy#3) AND isnotnull(d_year#2)) AND (d_moy#3 = 12)) AND (d_year#2 = 1998)) AND (d_date_sk#1 <= 2451179)) AND (d_date_sk#1 >= 2451149)) AND isnotnull(d_date_sk#1))
+Condition : ((((((isnotnull(d_moy#3) AND isnotnull(d_year#2)) AND (d_moy#3 = 12)) AND (d_year#2 = 1998)) AND (d_date_sk#1 >= 2451149)) AND (d_date_sk#1 <= 2451179)) AND isnotnull(d_date_sk#1))
 
 (4) Project [codegen id : 3]
 Output [2]: [d_date_sk#1, d_year#2]
@@ -43,7 +43,7 @@ Input [3]: [d_date_sk#1, d_year#2, d_moy#3]
 (5) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#4, ss_item_sk#5, ss_ext_sales_price#6]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), GreaterThanOrEqual(ss_sold_date_sk,2451149), LessThanOrEqual(ss_sold_date_sk,2451179), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_ext_sales_price:decimal(7,2)>
 
@@ -70,7 +70,7 @@ Input [5]: [d_date_sk#1, d_year#2, ss_sold_date_sk#4, ss_item_sk#5, ss_ext_sales
 (11) Scan parquet default.item
 Output [4]: [i_item_sk#8, i_category_id#9, i_category#10, i_manager_id#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSModifiedPlanStabilitySuite/item]
+Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_manager_id), EqualTo(i_manager_id,1), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_category_id:int,i_category:string,i_manager_id:int>
 

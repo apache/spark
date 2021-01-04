@@ -25,7 +25,9 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
-  def this(seq: Seq[Any]) = this(seq.toArray)
+  // Specified this as`scala.collection.Seq` because seqOrArray can be
+  // `mutable.ArraySeq` in Scala 2.13
+  def this(seq: scala.collection.Seq[Any]) = this(seq.toArray)
   def this(list: java.util.List[Any]) = this(list.asScala.toSeq)
 
   // TODO: This is boxing.  We should specialize.
@@ -38,7 +40,9 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   def this(primitiveArray: Array[Boolean]) = this(primitiveArray.toSeq)
 
   def this(seqOrArray: Any) = this(seqOrArray match {
-    case seq: Seq[Any] => seq.toArray
+    // Specified this as`scala.collection.Seq` because seqOrArray can be
+    // `mutable.ArraySeq` in Scala 2.13
+    case seq: scala.collection.Seq[Any] => seq.toArray
     case array: Array[Any] => array  // array of objects, so no need to convert
     case array: Array[_] => array.toSeq.toArray[Any] // array of primitives, so box them
   })
@@ -116,7 +120,7 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
             if (!o2.isInstanceOf[Double] || ! java.lang.Double.isNaN(o2.asInstanceOf[Double])) {
               return false
             }
-          case _ => if (!o1.equals(o2)) {
+          case _ => if (o1.getClass != o2.getClass || o1 != o2) {
             return false
           }
         }

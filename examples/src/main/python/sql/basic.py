@@ -30,7 +30,7 @@ from pyspark.sql import Row
 
 # $example on:programmatic_schema$
 # Import data types
-from pyspark.sql.types import *
+from pyspark.sql.types import StringType, StructType, StructField
 # $example off:programmatic_schema$
 
 

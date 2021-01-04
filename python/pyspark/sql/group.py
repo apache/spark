@@ -17,11 +17,10 @@
 
 import sys
 
-from pyspark import since
 from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.pandas.group_ops import PandasGroupedOpsMixin
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 
 __all__ = ["GroupedData"]
 
@@ -59,7 +58,6 @@ class GroupedData(PandasGroupedOpsMixin):
         self._df = df
         self.sql_ctx = df.sql_ctx
 
-    @since(1.3)
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
@@ -81,12 +79,21 @@ class GroupedData(PandasGroupedOpsMixin):
 
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
 
-        .. note:: Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
-            in a single call to this function.
+        .. versionadded:: 1.3.0
 
-        :param exprs: a dict mapping from column name (string) to aggregate functions (string),
+        Parameters
+        ----------
+        exprs : dict
+            a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
 
+        Notes
+        -----
+        Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
+        in a single call to this function.
+
+        Examples
+        --------
         >>> gdf = df.groupBy(df.name)
         >>> sorted(gdf.agg({"*": "count"}).collect())
         [Row(name='Alice', count(1)=1), Row(name='Bob', count(1)=1)]
@@ -113,23 +120,32 @@ class GroupedData(PandasGroupedOpsMixin):
         return DataFrame(jdf, self.sql_ctx)
 
     @dfapi
-    @since(1.3)
     def count(self):
         """Counts the number of records for each group.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> sorted(df.groupBy(df.age).count().collect())
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
 
     @df_varargs_api
-    @since(1.3)
     def mean(self, *cols):
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().mean('age').collect()
         [Row(avg(age)=3.5)]
         >>> df3.groupBy().mean('age', 'height').collect()
@@ -137,14 +153,20 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    @since(1.3)
     def avg(self, *cols):
         """Computes average values for each numeric columns for each group.
 
         :func:`mean` is an alias for :func:`avg`.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().avg('age').collect()
         [Row(avg(age)=3.5)]
         >>> df3.groupBy().avg('age', 'height').collect()
@@ -152,10 +174,13 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    @since(1.3)
     def max(self, *cols):
         """Computes the max value for each numeric columns for each group.
 
+        .. versionadded:: 1.3.0
+
+        Examples
+        --------
         >>> df.groupBy().max('age').collect()
         [Row(max(age)=5)]
         >>> df3.groupBy().max('age', 'height').collect()
@@ -163,12 +188,18 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    @since(1.3)
     def min(self, *cols):
         """Computes the min value for each numeric column for each group.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().min('age').collect()
         [Row(min(age)=2)]
         >>> df3.groupBy().min('age', 'height').collect()
@@ -176,19 +207,24 @@ class GroupedData(PandasGroupedOpsMixin):
         """
 
     @df_varargs_api
-    @since(1.3)
     def sum(self, *cols):
         """Compute the sum for each numeric columns for each group.
 
-        :param cols: list of column names (string). Non-numeric columns are ignored.
+        .. versionadded:: 1.3.0
 
+        Parameters
+        ----------
+        cols : str
+            column names. Non-numeric columns are ignored.
+
+        Examples
+        --------
         >>> df.groupBy().sum('age').collect()
         [Row(sum(age)=7)]
         >>> df3.groupBy().sum('age', 'height').collect()
         [Row(sum(age)=7, sum(height)=165)]
         """
 
-    @since(1.6)
     def pivot(self, pivot_col, values=None):
         """
         Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
@@ -196,9 +232,17 @@ class GroupedData(PandasGroupedOpsMixin):
         of distinct values to pivot on, and one that does not. The latter is more concise but less
         efficient, because Spark needs to first compute the list of distinct values internally.
 
-        :param pivot_col: Name of the column to pivot.
-        :param values: List of values that will be translated to columns in the output DataFrame.
+        .. versionadded:: 1.6.0
 
+        Parameters
+        ----------
+        pivot_col : str
+            Name of the column to pivot.
+        values :
+            List of values that will be translated to columns in the output DataFrame.
+
+        Examples
+        --------
         # Compute the sum of earnings for each year by course with each course as a separate column
 
         >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()

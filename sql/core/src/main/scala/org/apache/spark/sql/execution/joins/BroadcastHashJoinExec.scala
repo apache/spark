@@ -146,7 +146,7 @@ case class BroadcastHashJoinExec(
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
         if (hashed == EmptyHashedRelation) {
           streamedIter
-        } else if (hashed == EmptyHashedRelationWithAllNullKeys) {
+        } else if (hashed == HashedRelationWithAllNullKeys) {
           Iterator.empty
         } else {
           val keyGenerator = UnsafeProjection.create(
@@ -228,7 +228,6 @@ case class BroadcastHashJoinExec(
     if (isNullAwareAntiJoin) {
       val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
       val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-      val (matched, _, _) = getJoinCondition(ctx, input)
       val numOutput = metricTerm(ctx, "numOutputRows")
 
       if (broadcastRelation.value == EmptyHashedRelation) {
@@ -237,26 +236,15 @@ case class BroadcastHashJoinExec(
            |$numOutput.add(1);
            |${consume(ctx, input)}
          """.stripMargin
-      } else if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
+      } else if (broadcastRelation.value == HashedRelationWithAllNullKeys) {
         s"""
            |// If the right side contains any all-null key, NAAJ simply returns Nothing.
          """.stripMargin
       } else {
-        val found = ctx.freshName("found")
         s"""
-           |boolean $found = false;
            |// generate join key for stream side
            |${keyEv.code}
-           |if ($anyNull) {
-           |  $found = true;
-           |} else {
-           |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-           |  if ($matched != null) {
-           |    $found = true;
-           |  }
-           |}
-           |
-           |if (!$found) {
+           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null) {
            |  $numOutput.add(1);
            |  ${consume(ctx, input)}
            |}

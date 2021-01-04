@@ -31,7 +31,7 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 try:
@@ -110,7 +110,7 @@ class Commit:
 # Under the hood, this runs a `git log` on that tag and parses the fields
 # from the command output to construct a list of Commit objects. Note that
 # because certain fields reside in the commit description and cannot be parsed
-# through the Github API itself, we need to do some intelligent regex parsing
+# through the GitHub API itself, we need to do some intelligent regex parsing
 # to extract those fields.
 #
 # This is written using Git 1.8.5.
@@ -140,7 +140,7 @@ def get_commits(tag):
             sys.exit("Unexpected format in commit: %s" % commit_digest)
         [_hash, author, title] = commit_digest.split(field_end_marker)
         # The PR number and github username is in the commit message
-        # itself and cannot be accessed through any Github API
+        # itself and cannot be accessed through any GitHub API
         pr_number = None
         match = re.search("Closes #([0-9]+) from ([^/\\s]+)/", commit_body)
         if match:
@@ -252,7 +252,7 @@ def nice_join(str_list):
         return ", ".join(str_list[:-1]) + ", and " + str_list[-1]
 
 
-# Return the full name of the specified user on Github
+# Return the full name of the specified user on GitHub
 # If the user doesn't exist, return None
 def get_github_name(author, github_client):
     if github_client:

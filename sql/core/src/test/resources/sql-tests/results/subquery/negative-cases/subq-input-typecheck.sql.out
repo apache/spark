@@ -64,7 +64,7 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2;
+Scalar subquery must return only one column, but got 2
 
 
 -- !query
@@ -79,7 +79,7 @@ FROM t1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Scalar subquery must return only one column, but got 2;
+Scalar subquery must return only one column, but got 2
 
 
 -- !query
@@ -100,7 +100,7 @@ number of columns in the output of subquery.
 Left side columns:
 [t1.`t1a`].
 Right side columns:
-[t2.`t2a`, t2.`t2b`].;
+[t2.`t2a`, t2.`t2b`].
 
 
 -- !query
@@ -121,7 +121,7 @@ number of columns in the output of subquery.
 Left side columns:
 [t1.`t1a`, t1.`t1b`].
 Right side columns:
-[t2.`t2a`].;
+[t2.`t2a`].
 
 
 -- !query
@@ -143,4 +143,4 @@ Mismatched columns:
 Left side:
 [double, string, string].
 Right side:
-[timestamp, string, bigint].;
+[timestamp, string, bigint].

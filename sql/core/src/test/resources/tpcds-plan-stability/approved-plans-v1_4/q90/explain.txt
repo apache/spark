@@ -1,60 +1,61 @@
 == Physical Plan ==
-TakeOrderedAndProject (50)
-+- * Project (49)
-   +- BroadcastNestedLoopJoin Inner BuildRight (48)
-      :- * HashAggregate (27)
-      :  +- Exchange (26)
-      :     +- * HashAggregate (25)
-      :        +- * Project (24)
-      :           +- * BroadcastHashJoin Inner BuildRight (23)
-      :              :- * Project (17)
-      :              :  +- * BroadcastHashJoin Inner BuildRight (16)
-      :              :     :- * Project (10)
-      :              :     :  +- * BroadcastHashJoin Inner BuildRight (9)
-      :              :     :     :- * Filter (3)
-      :              :     :     :  +- * ColumnarToRow (2)
-      :              :     :     :     +- Scan parquet default.web_sales (1)
-      :              :     :     +- BroadcastExchange (8)
-      :              :     :        +- * Project (7)
-      :              :     :           +- * Filter (6)
-      :              :     :              +- * ColumnarToRow (5)
-      :              :     :                 +- Scan parquet default.household_demographics (4)
-      :              :     +- BroadcastExchange (15)
-      :              :        +- * Project (14)
-      :              :           +- * Filter (13)
-      :              :              +- * ColumnarToRow (12)
-      :              :                 +- Scan parquet default.time_dim (11)
-      :              +- BroadcastExchange (22)
-      :                 +- * Project (21)
-      :                    +- * Filter (20)
-      :                       +- * ColumnarToRow (19)
-      :                          +- Scan parquet default.web_page (18)
-      +- BroadcastExchange (47)
-         +- * HashAggregate (46)
-            +- Exchange (45)
-               +- * HashAggregate (44)
-                  +- * Project (43)
-                     +- * BroadcastHashJoin Inner BuildRight (42)
-                        :- * Project (40)
-                        :  +- * BroadcastHashJoin Inner BuildRight (39)
-                        :     :- * Project (33)
-                        :     :  +- * BroadcastHashJoin Inner BuildRight (32)
-                        :     :     :- * Filter (30)
-                        :     :     :  +- * ColumnarToRow (29)
-                        :     :     :     +- Scan parquet default.web_sales (28)
-                        :     :     +- ReusedExchange (31)
-                        :     +- BroadcastExchange (38)
-                        :        +- * Project (37)
-                        :           +- * Filter (36)
-                        :              +- * ColumnarToRow (35)
-                        :                 +- Scan parquet default.time_dim (34)
-                        +- ReusedExchange (41)
+* Sort (51)
++- Exchange (50)
+   +- * Project (49)
+      +- BroadcastNestedLoopJoin Inner BuildRight (48)
+         :- * HashAggregate (27)
+         :  +- Exchange (26)
+         :     +- * HashAggregate (25)
+         :        +- * Project (24)
+         :           +- * BroadcastHashJoin Inner BuildRight (23)
+         :              :- * Project (17)
+         :              :  +- * BroadcastHashJoin Inner BuildRight (16)
+         :              :     :- * Project (10)
+         :              :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+         :              :     :     :- * Filter (3)
+         :              :     :     :  +- * ColumnarToRow (2)
+         :              :     :     :     +- Scan parquet default.web_sales (1)
+         :              :     :     +- BroadcastExchange (8)
+         :              :     :        +- * Project (7)
+         :              :     :           +- * Filter (6)
+         :              :     :              +- * ColumnarToRow (5)
+         :              :     :                 +- Scan parquet default.household_demographics (4)
+         :              :     +- BroadcastExchange (15)
+         :              :        +- * Project (14)
+         :              :           +- * Filter (13)
+         :              :              +- * ColumnarToRow (12)
+         :              :                 +- Scan parquet default.time_dim (11)
+         :              +- BroadcastExchange (22)
+         :                 +- * Project (21)
+         :                    +- * Filter (20)
+         :                       +- * ColumnarToRow (19)
+         :                          +- Scan parquet default.web_page (18)
+         +- BroadcastExchange (47)
+            +- * HashAggregate (46)
+               +- Exchange (45)
+                  +- * HashAggregate (44)
+                     +- * Project (43)
+                        +- * BroadcastHashJoin Inner BuildRight (42)
+                           :- * Project (40)
+                           :  +- * BroadcastHashJoin Inner BuildRight (39)
+                           :     :- * Project (33)
+                           :     :  +- * BroadcastHashJoin Inner BuildRight (32)
+                           :     :     :- * Filter (30)
+                           :     :     :  +- * ColumnarToRow (29)
+                           :     :     :     +- Scan parquet default.web_sales (28)
+                           :     :     +- ReusedExchange (31)
+                           :     +- BroadcastExchange (38)
+                           :        +- * Project (37)
+                           :           +- * Filter (36)
+                           :              +- * ColumnarToRow (35)
+                           :                 +- Scan parquet default.time_dim (34)
+                           +- ReusedExchange (41)
 
 
 (1) Scan parquet default.web_sales
 Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
@@ -68,7 +69,7 @@ Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AN
 (4) Scan parquet default.household_demographics
 Output [2]: [hd_demo_sk#4, hd_dep_count#5]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/household_demographics]
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
@@ -99,7 +100,7 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, hd_demo_sk#
 (11) Scan parquet default.time_dim
 Output [2]: [t_time_sk#7, t_hour#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/time_dim]
+Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
@@ -130,7 +131,7 @@ Input [3]: [ws_sold_time_sk#1, ws_web_page_sk#3, t_time_sk#7]
 (18) Scan parquet default.web_page
 Output [2]: [wp_web_page_sk#10, wp_char_count#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_page]
+Location [not included in comparison]/{warehouse_dir}/web_page]
 PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
 ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
 
@@ -179,7 +180,7 @@ Results [1]: [count(1)#16 AS amc#17]
 (28) Scan parquet default.web_sales
 Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
@@ -205,7 +206,7 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, hd_demo_sk#
 (34) Scan parquet default.time_dim
 Output [2]: [t_time_sk#7, t_hour#8]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilitySuite/time_dim]
+Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
@@ -274,7 +275,11 @@ Join condition: None
 Output [1]: [CheckOverflow((promote_precision(cast(amc#17 as decimal(15,4))) / promote_precision(cast(pmc#23 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#25]
 Input [2]: [amc#17, pmc#23]
 
-(50) TakeOrderedAndProject
+(50) Exchange
 Input [1]: [am_pm_ratio#25]
-Arguments: 100, [am_pm_ratio#25 ASC NULLS FIRST], [am_pm_ratio#25]
+Arguments: rangepartitioning(am_pm_ratio#25 ASC NULLS FIRST, 5), true, [id=#26]
+
+(51) Sort [codegen id : 12]
+Input [1]: [am_pm_ratio#25]
+Arguments: [am_pm_ratio#25 ASC NULLS FIRST], true, 0
 

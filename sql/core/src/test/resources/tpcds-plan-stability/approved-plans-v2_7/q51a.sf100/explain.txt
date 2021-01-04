@@ -84,7 +84,7 @@ TakeOrderedAndProject (80)
 (1) Scan parquet default.web_sales
 Output [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_sales_price#3]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/web_sales]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_item_sk), IsNotNull(ws_sold_date_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_sales_price:decimal(7,2)>
 
@@ -98,7 +98,7 @@ Condition : (isnotnull(ws_item_sk#2) AND isnotnull(ws_sold_date_sk#1))
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#4, d_date#5, d_month_seq#6]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_month_seq:int>
 
@@ -233,7 +233,7 @@ Arguments: [item_sk#12 ASC NULLS FIRST, d_date#5 ASC NULLS FIRST], false, 0
 (34) Scan parquet default.store_sales
 Output [3]: [ss_sold_date_sk#29, ss_item_sk#30, ss_sales_price#31]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_sales_price:decimal(7,2)>
 

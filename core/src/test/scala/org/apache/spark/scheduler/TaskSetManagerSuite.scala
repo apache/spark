@@ -41,7 +41,7 @@ import org.apache.spark.resource.TestResourceIDs._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock}
+import org.apache.spark.util.{AccumulatorV2, Clock, ManualClock, SystemClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -109,8 +109,11 @@ object FakeRackUtil {
  * a list of "live" executors and their hostnames for isExecutorAlive and hasExecutorsAliveOnHost
  * to work, and these are required for locality in TaskSetManager.
  */
-class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* execId, host */)
-  extends TaskSchedulerImpl(sc)
+class FakeTaskScheduler(
+    sc: SparkContext,
+    clock: Clock,
+    liveExecutors: (String, String)* /* execId, host */)
+  extends TaskSchedulerImpl(sc, sc.conf.get(config.TASK_MAX_FAILURES), clock = clock)
 {
   val startedTasks = new ArrayBuffer[Long]
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]
@@ -119,6 +122,10 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
   val speculativeTasks = new ArrayBuffer[Int]
 
   val executors = new mutable.HashMap[String, String]
+
+  def this(sc: SparkContext, liveExecutors: (String, String)*) = {
+    this(sc, new SystemClock, liveExecutors: _*)
+  }
 
   // this must be initialized before addExecutor
   override val defaultRackValue: Option[String] = Some("default")
@@ -370,19 +377,19 @@ class TaskSetManagerSuite
 
     // offers not accepted due to task set zombies are not delay schedule rejects
     manager.isZombie = true
-    val (taskDesciption, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
-    assert(taskDesciption.isEmpty)
+    val (taskDescription, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
+    assert(taskDescription.isEmpty)
     assert(delayReject === false)
     manager.isZombie = false
 
-    // offers not accepted due to blacklisting are not delay schedule rejects
+    // offers not accepted due to excludelist are not delay schedule rejects
     val tsmSpy = spy(manager)
-    val blacklist = mock(classOf[TaskSetBlacklist])
-    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
-    when(blacklist.isNodeBlacklistedForTaskSet(any())).thenReturn(true)
-    val (blacklistTask, blackListReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
-    assert(blacklistTask.isEmpty)
-    assert(blackListReject === false)
+    val excludelist = mock(classOf[TaskSetExcludelist])
+    when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
+    when(excludelist.isNodeExcludedForTaskSet(any())).thenReturn(true)
+    val (task, taskReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
+    assert(task.isEmpty)
+    assert(taskReject === false)
 
     // After another delay, we can go ahead and launch that task non-locally
     assert(manager.resourceOffer("exec2", "host2", ANY)._1.get.index === 3)
@@ -472,11 +479,11 @@ class TaskSetManagerSuite
     }
   }
 
-  test("executors should be blacklisted after task failure, in spite of locality preferences") {
+  test("executors should be excluded after task failure, in spite of locality preferences") {
     val rescheduleDelay = 300L
     val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true).
-      set(config.BLACKLIST_TIMEOUT_CONF, rescheduleDelay).
+      set(config.EXCLUDE_ON_FAILURE_ENABLED, true).
+      set(config.EXCLUDE_ON_FAILURE_TIMEOUT_CONF, rescheduleDelay).
       // don't wait to jump locality levels in this test
       set(config.LOCALITY_WAIT.key, "0")
 
@@ -488,11 +495,11 @@ class TaskSetManagerSuite
     val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
     val clock = new ManualClock
     clock.advance(1)
-    // We don't directly use the application blacklist, but its presence triggers blacklisting
+    // We don't directly use the application excludelist, but its presence triggers exclusion
     // within the taskset.
     val mockListenerBus = mock(classOf[LiveListenerBus])
-    val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
-    val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
+    val healthTrackerOpt = Some(new HealthTracker(mockListenerBus, conf, None, clock))
+    val manager = new TaskSetManager(sched, taskSet, 4, healthTrackerOpt, clock)
 
     {
       val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1
@@ -505,7 +512,7 @@ class TaskSetManagerSuite
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
-      // Ensure scheduling on exec1 fails after failure 1 due to blacklist
+      // Ensure scheduling on exec1 fails after failure 1 due to executor being excluded
       assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1.isEmpty)
       assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL)._1.isEmpty)
       assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL)._1.isEmpty)
@@ -525,7 +532,7 @@ class TaskSetManagerSuite
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
-      // Ensure scheduling on exec1.1 fails after failure 2 due to blacklist
+      // Ensure scheduling on exec1.1 fails after failure 2 due to executor being excluded
       assert(manager.resourceOffer("exec1.1", "host1", NODE_LOCAL)._1.isEmpty)
     }
 
@@ -541,12 +548,12 @@ class TaskSetManagerSuite
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
       assert(!sched.taskSetsFailed.contains(taskSet.id))
 
-      // Ensure scheduling on exec2 fails after failure 3 due to blacklist
+      // Ensure scheduling on exec2 fails after failure 3 due to executor being excluded
       assert(manager.resourceOffer("exec2", "host2", ANY)._1.isEmpty)
     }
 
-    // Despite advancing beyond the time for expiring executors from within the blacklist,
-    // we *never* expire from *within* the stage blacklist
+    // Despite advancing beyond the time for expiring executors from within the excludelist,
+    // we *never* expire from *within* the stage excludelist
     clock.advance(rescheduleDelay)
 
     {
@@ -674,8 +681,8 @@ class TaskSetManagerSuite
     assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
 
     // Decommission all executors on host0, to mimic CoarseGrainedSchedulerBackend.
-    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", true))
-    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", true))
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", Some(host0)))
+    sched.executorDecommission(exec1, ExecutorDecommissionInfo("test", Some(host0)))
 
     assert(manager.myLocalityLevels === Array(ANY))
   }
@@ -700,7 +707,7 @@ class TaskSetManagerSuite
     assert(manager.myLocalityLevels === Array(PROCESS_LOCAL, NODE_LOCAL, ANY))
 
     // Decommission the only executor (without the host) that the task is interested in running on.
-    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", false))
+    sched.executorDecommission(exec0, ExecutorDecommissionInfo("test", None))
 
     assert(manager.myLocalityLevels === Array(NODE_LOCAL, ANY))
   }
@@ -1315,7 +1322,7 @@ class TaskSetManagerSuite
 
   test("SPARK-19868: DagScheduler only notified of taskEnd when state is ready") {
     // dagScheduler.taskEnded() is async, so it may *seem* ok to call it before we've set all
-    // appropriate state, eg. isZombie.   However, this sets up a race that could go the wrong way.
+    // appropriate state, e.g. isZombie.   However, this sets up a race that could go the wrong way.
     // This is a super-focused regression test which checks the zombie state as soon as
     // dagScheduler.taskEnded() is called, to ensure we haven't introduced a race.
     sc = new SparkContext("local", "test")
@@ -1351,20 +1358,20 @@ class TaskSetManagerSuite
     assert(manager3.name === "TaskSet_1.1")
   }
 
-  test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +
+  test("don't update excludelist for shuffle-fetch failures, preemption, denied commits, " +
       "or killed tasks") {
     // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
     // and killed task.
     val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true)
+      set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
     val tsm = new TaskSetManager(sched, taskSet, 4)
-    // we need a spy so we can attach our mock blacklist
+    // we need a spy so we can attach our mock excludelist
     val tsmSpy = spy(tsm)
-    val blacklist = mock(classOf[TaskSetBlacklist])
-    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+    val excludelist = mock(classOf[TaskSetExcludelist])
+    when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
 
     // make some offers to our taskset, to get tasks we will fail
     val taskDescs = Seq(
@@ -1385,23 +1392,23 @@ class TaskSetManagerSuite
       TaskCommitDenied(0, 2, 0))
     tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED, TaskKilled("test"))
 
-    // Make sure that the blacklist ignored all of the task failures above, since they aren't
+    // Make sure that the excludelist ignored all of the task failures above, since they aren't
     // the fault of the executor where the task was running.
-    verify(blacklist, never())
-      .updateBlacklistForFailedTask(anyString(), anyString(), anyInt(), anyString())
+    verify(excludelist, never())
+      .updateExcludedForFailedTask(anyString(), anyString(), anyInt(), anyString())
   }
 
-  test("update application blacklist for shuffle-fetch") {
+  test("update application healthTracker for shuffle-fetch") {
     // Setup a taskset, and fail some one task for fetch failure.
     val conf = new SparkConf()
-      .set(config.BLACKLIST_ENABLED, true)
+      .set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
-      .set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
+      .set(config.EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED, true)
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
-    val blacklistTracker = new BlacklistTracker(sc, None)
-    val tsm = new TaskSetManager(sched, taskSet, 4, Some(blacklistTracker))
+    val healthTracker = new HealthTracker(sc, None)
+    val tsm = new TaskSetManager(sched, taskSet, 4, Some(healthTracker))
 
     // make some offers to our taskset, to get tasks we will fail
     val taskDescs = Seq(
@@ -1413,22 +1420,22 @@ class TaskSetManagerSuite
     }
     assert(taskDescs.size === 4)
 
-    assert(!blacklistTracker.isExecutorBlacklisted(taskDescs(0).executorId))
-    assert(!blacklistTracker.isNodeBlacklisted("host1"))
+    assert(!healthTracker.isExecutorExcluded(taskDescs(0).executorId))
+    assert(!healthTracker.isNodeExcluded("host1"))
 
     // Fail the task with fetch failure
     tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
       FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0L, 0, 0, "ignored"))
 
-    assert(blacklistTracker.isNodeBlacklisted("host1"))
+    assert(healthTracker.isNodeExcluded("host1"))
   }
 
-  test("update blacklist before adding pending task to avoid race condition") {
-    // When a task fails, it should apply the blacklist policy prior to
+  test("update healthTracker before adding pending task to avoid race condition") {
+    // When a task fails, it should apply the excludeOnFailure policy prior to
     // retrying the task otherwise there's a race condition where run on
     // the same executor that it was intended to be black listed from.
     val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true)
+      set(config.EXCLUDE_ON_FAILURE_ENABLED, true)
 
     // Create a task with two executors.
     sc = new SparkContext("local", "test", conf)
@@ -1441,8 +1448,8 @@ class TaskSetManagerSuite
 
     val clock = new ManualClock
     val mockListenerBus = mock(classOf[LiveListenerBus])
-    val blacklistTracker = new BlacklistTracker(mockListenerBus, conf, None, clock)
-    val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(blacklistTracker))
+    val healthTracker = new HealthTracker(mockListenerBus, conf, None, clock)
+    val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(healthTracker))
     val taskSetManagerSpy = spy(taskSetManager)
 
     val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)._1
@@ -1451,8 +1458,8 @@ class TaskSetManagerSuite
     when(taskSetManagerSpy.addPendingTask(anyInt(), anyBoolean(), anyBoolean())).thenAnswer(
       (invocationOnMock: InvocationOnMock) => {
         val task: Int = invocationOnMock.getArgument(0)
-        assert(taskSetManager.taskSetBlacklistHelperOpt.get.
-          isExecutorBlacklistedForTask(exec, task))
+        assert(taskSetManager.taskSetExcludelistHelperOpt.get.
+          isExecutorExcludedForTask(exec, task))
       }
     )
 
@@ -1761,7 +1768,6 @@ class TaskSetManagerSuite
   }
 
   test("TaskSetManager passes task resource along") {
-    import TestUtils._
 
     sc = new SparkContext("local", "test")
     sc.conf.set(TASK_GPU_ID.amountConf, "2")
@@ -1974,14 +1980,16 @@ class TaskSetManagerSuite
   test("SPARK-21040: Check speculative tasks are launched when an executor is decommissioned" +
     " and the tasks running on it cannot finish within EXECUTOR_DECOMMISSION_KILL_INTERVAL") {
     sc = new SparkContext("local", "test")
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    val clock = new ManualClock()
+    sched = new FakeTaskScheduler(sc, clock,
+      ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    sched.backend = mock(classOf[SchedulerBackend])
     val taskSet = FakeTask.createTaskSet(4)
     sc.conf.set(config.SPECULATION_ENABLED, true)
     sc.conf.set(config.SPECULATION_MULTIPLIER, 1.5)
     sc.conf.set(config.SPECULATION_QUANTILE, 0.5)
     sc.conf.set(config.EXECUTOR_DECOMMISSION_KILL_INTERVAL.key, "5s")
-    val clock = new ManualClock()
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val manager = sched.createTaskSetManager(taskSet, MAX_TASK_FAILURES)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
     }
@@ -2017,13 +2025,12 @@ class TaskSetManagerSuite
     assert(!manager.checkSpeculatableTasks(0))
     assert(sched.speculativeTasks.toSet === Set())
 
-    // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3)  will be added to
-    // executorDecommissionSpeculationTriggerTimeoutOpt
+    // decommission exec-2. All tasks running on exec-2 (i.e. TASK 2,3) will be now
+    // checked if they should be speculated.
     // (TASK 2 -> 15, TASK 3 -> 15)
-    manager.executorDecommission("exec2")
-    assert(manager.tidToExecutorKillTimeMapping.keySet === Set(2, 3))
-    assert(manager.tidToExecutorKillTimeMapping(2) === 15*1000)
-    assert(manager.tidToExecutorKillTimeMapping(3) === 15*1000)
+    sched.executorDecommission("exec2", ExecutorDecommissionInfo("decom", None))
+    assert(sched.getExecutorDecommissionState("exec2").map(_.startTime) ===
+      Some(clock.getTimeMillis()))
 
     assert(manager.checkSpeculatableTasks(0))
     // TASK 2 started at t=0s, so it can still finish before t=15s (Median task runtime = 10s)

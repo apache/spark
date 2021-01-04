@@ -24,13 +24,21 @@ import com.spotify.docker.client.messages.{ContainerConfig, HostConfig}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.SecureConnectionProvider
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., mariadb:10.5.8):
+ * {{{
+ *   MARIADB_DOCKER_IMAGE_NAME=mariadb:10.5.8
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.MariaDBKrbIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class MariaDBKrbIntegrationSuite extends DockerKrbJDBCIntegrationSuite {
   override protected val userName = s"mariadb/$dockerIp"
   override protected val keytabFileName = "mariadb.keytab"
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "mariadb:10.4"
+    override val imageName = sys.env.getOrElse("MARIADB_DOCKER_IMAGE_NAME", "mariadb:10.5")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )

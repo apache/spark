@@ -173,13 +173,13 @@ class QuantileSummaries(
       // Take the case of the sample `10` from `b`. In the original stream, it could have appeared
       // right after `0` (as expressed by `g=1`) or right before `20`, so `delta=99+0-1=98`.
       // In the GK algorithm's style of working in terms of maximum bounds, one can observe that the
-      // maximum additional uncertainty over samples comming from `b` is `max(g_a + delta_a) =
+      // maximum additional uncertainty over samples coming from `b` is `max(g_a + delta_a) =
       // floor(2 * eps_a * n_a)`. Likewise, additional uncertainty over samples from `a` is
       // `floor(2 * eps_b * n_b)`.
       // Only samples that interleave the other side are affected. That means that samples from
       // one side that are lesser (or greater) than all samples from the other side are just copied
-      // unmodifed.
-      // If the merging instances have different `relativeError`, the resulting instance will cary
+      // unmodified.
+      // If the merging instances have different `relativeError`, the resulting instance will carry
       // the largest one: `eps_ab = max(eps_a, eps_b)`.
       // The main invariant of the GK algorithm is kept:
       // `max(g_ab + delta_ab) <= floor(2 * eps_ab * (n_a + n_b))` since
@@ -254,7 +254,7 @@ class QuantileSummaries(
 
     // Target rank
     val rank = math.ceil(quantile * count).toLong
-    val targetError = relativeError * count
+    val targetError = sampled.map(s => s.delta + s.g).max / 2
     // Minimum rank at current sample
     var minRank = 0L
     var i = 0

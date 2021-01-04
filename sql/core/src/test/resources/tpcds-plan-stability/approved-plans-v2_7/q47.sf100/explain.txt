@@ -62,7 +62,7 @@ TakeOrderedAndProject (58)
 (1) Scan parquet default.store_sales
 Output [4]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_sales_price#4]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_sold_date_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
@@ -76,7 +76,7 @@ Condition : ((isnotnull(ss_item_sk#2) AND isnotnull(ss_sold_date_sk#1)) AND isno
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#5, d_year#6, d_moy#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [Or(Or(EqualTo(d_year,1999),And(EqualTo(d_year,1998),EqualTo(d_moy,12))),And(EqualTo(d_year,2000),EqualTo(d_moy,1))), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
@@ -103,8 +103,8 @@ Input [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_sales_price#4, d_
 (10) Scan parquet default.store
 Output [3]: [s_store_sk#9, s_store_name#10, s_company_name#11]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/store]
-PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_company_name), IsNotNull(s_store_name)]
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_store_name), IsNotNull(s_company_name)]
 ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_name:string>
 
 (11) ColumnarToRow [codegen id : 2]
@@ -112,7 +112,7 @@ Input [3]: [s_store_sk#9, s_store_name#10, s_company_name#11]
 
 (12) Filter [codegen id : 2]
 Input [3]: [s_store_sk#9, s_store_name#10, s_company_name#11]
-Condition : ((isnotnull(s_store_sk#9) AND isnotnull(s_company_name#11)) AND isnotnull(s_store_name#10))
+Condition : ((isnotnull(s_store_sk#9) AND isnotnull(s_store_name#10)) AND isnotnull(s_company_name#11))
 
 (13) BroadcastExchange
 Input [3]: [s_store_sk#9, s_store_name#10, s_company_name#11]
@@ -138,8 +138,8 @@ Arguments: [ss_item_sk#2 ASC NULLS FIRST], false, 0
 (18) Scan parquet default.item
 Output [3]: [i_item_sk#14, i_brand#15, i_category#16]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV2_7_PlanStabilityWithStatsSuite/item]
-PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_brand), IsNotNull(i_category)]
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk), IsNotNull(i_category), IsNotNull(i_brand)]
 ReadSchema: struct<i_item_sk:int,i_brand:string,i_category:string>
 
 (19) ColumnarToRow [codegen id : 5]
@@ -147,7 +147,7 @@ Input [3]: [i_item_sk#14, i_brand#15, i_category#16]
 
 (20) Filter [codegen id : 5]
 Input [3]: [i_item_sk#14, i_brand#15, i_category#16]
-Condition : ((isnotnull(i_item_sk#14) AND isnotnull(i_brand#15)) AND isnotnull(i_category#16))
+Condition : ((isnotnull(i_item_sk#14) AND isnotnull(i_category#16)) AND isnotnull(i_brand#15))
 
 (21) Exchange
 Input [3]: [i_item_sk#14, i_brand#15, i_category#16]
@@ -214,7 +214,7 @@ Arguments: [rank(d_year#6, d_moy#7) windowspecdefinition(i_category#16, i_brand#
 
 (35) Filter [codegen id : 12]
 Input [9]: [i_category#16, i_brand#15, s_store_name#10, s_company_name#11, d_year#6, d_moy#7, sum_sales#22, avg_monthly_sales#25, rn#27]
-Condition : (((((isnotnull(avg_monthly_sales#25) AND isnotnull(d_year#6)) AND (d_year#6 = 1999)) AND (avg_monthly_sales#25 > 0.000000)) AND (CASE WHEN (avg_monthly_sales#25 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)) AND isnotnull(rn#27))
+Condition : (((((isnotnull(d_year#6) AND isnotnull(avg_monthly_sales#25)) AND (d_year#6 = 1999)) AND (avg_monthly_sales#25 > 0.000000)) AND (CASE WHEN (avg_monthly_sales#25 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)) AND isnotnull(rn#27))
 
 (36) Exchange
 Input [9]: [i_category#16, i_brand#15, s_store_name#10, s_company_name#11, d_year#6, d_moy#7, sum_sales#22, avg_monthly_sales#25, rn#27]

@@ -63,7 +63,7 @@ See also https://github.com/sphinx-doc/sphinx/issues/7551.
 -->
 
 ```sh
-$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme
+$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
 ```
 
 ## Generating the Documentation HTML

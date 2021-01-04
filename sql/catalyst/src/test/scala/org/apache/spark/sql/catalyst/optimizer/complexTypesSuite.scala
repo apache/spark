@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
@@ -37,14 +37,15 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("collapse projections", FixedPoint(10),
-          CollapseProject) ::
+        CollapseProject) ::
       Batch("Constant Folding", FixedPoint(10),
-          NullPropagation,
-          ConstantFolding,
-          BooleanSimplification,
-          SimplifyConditionals,
-          SimplifyBinaryComparison,
-          SimplifyExtractValueOps) :: Nil
+         NullPropagation,
+         ConstantFolding,
+         BooleanSimplification,
+         SimplifyConditionals,
+         SimplifyBinaryComparison,
+         OptimizeUpdateFields,
+         SimplifyExtractValueOps) :: Nil
   }
 
   private val idAtt = ('id).long.notNull
@@ -453,60 +454,352 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     checkEvaluation(GetMapValue(mb0, Literal(Array[Byte](3, 4))), null)
   }
 
-  private val structAttr = 'struct1.struct('a.int)
+  private val structAttr = 'struct1.struct('a.int, 'b.int).withNullability(false)
   private val testStructRelation = LocalRelation(structAttr)
 
-  test("simplify GetStructField on WithFields that is not changing the attribute being extracted") {
-    val query = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 0, Some("a")) as "outerAtt")
-    val expected = testStructRelation.select(GetStructField('struct1, 0, Some("a")) as "outerAtt")
-    checkRule(query, expected)
+  private val nullableStructAttr = 'struct1.struct('a.int, 'b.int)
+  private val testNullableStructRelation = LocalRelation(nullableStructAttr)
+
+  test("simplify GetStructField on basic UpdateFields") {
+    def check(fieldOps: Seq[StructFieldsOperation], ordinal: Int, expected: Expression): Unit = {
+      def query(relation: LocalRelation): LogicalPlan =
+        relation.select(GetStructField(UpdateFields('struct1, fieldOps), ordinal).as("res"))
+
+      checkRule(
+        query(testStructRelation),
+        testStructRelation.select(expected.as("res")))
+
+      checkRule(
+        query(testNullableStructRelation),
+        testNullableStructRelation.select((expected match {
+          case expr: GetStructField => expr
+          case expr => If(IsNull('struct1), Literal(null, expr.dataType), expr)
+        }).as("res")))
+    }
+
+    // scalastyle:off line.size.limit
+
+    // add attribute, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("c", Literal(3)) :: Nil, 1, GetStructField('struct1, 1))
+    // add attribute, extract added attribute
+    check(WithField("c", Literal(3)) :: Nil, 2, Literal(3))
+
+    // replace attribute, extract an attribute from the original struct
+    check(WithField("a", Literal(1)) :: Nil, 1, GetStructField('struct1, 1))
+    check(WithField("b", Literal(2)) :: Nil, 0, GetStructField('struct1, 0))
+    // replace attribute, extract replaced attribute
+    check(WithField("a", Literal(1)) :: Nil, 0, Literal(1))
+    check(WithField("b", Literal(2)) :: Nil, 1, Literal(2))
+
+    // add multiple attributes, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil, 1, GetStructField('struct1, 1))
+    check(WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil, 1, GetStructField('struct1, 1))
+    // add multiple attributes, extract newly added attribute
+    check(WithField("c", Literal(3)) :: WithField("c", Literal(4)) :: Nil, 2, Literal(4))
+    check(WithField("c", Literal(4)) :: WithField("c", Literal(3)) :: Nil, 2, Literal(3))
+    check(WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil, 2, Literal(3))
+    check(WithField("c", Literal(3)) :: WithField("d", Literal(4)) :: Nil, 3, Literal(4))
+    check(WithField("d", Literal(4)) :: WithField("c", Literal(3)) :: Nil, 2, Literal(4))
+    check(WithField("d", Literal(4)) :: WithField("c", Literal(3)) :: Nil, 3, Literal(3))
+
+    // drop attribute, extract an attribute from the original struct
+    check(DropField("b") :: Nil, 0, GetStructField('struct1, 0))
+    check(DropField("a") :: Nil, 0, GetStructField('struct1, 1))
+
+    // drop attribute, add attribute, extract an attribute from the original struct
+    check(DropField("b") :: WithField("c", Literal(3)) :: Nil, 0, GetStructField('struct1, 0))
+    check(DropField("a") :: WithField("c", Literal(3)) :: Nil, 0, GetStructField('struct1, 1))
+    // drop attribute, add attribute, extract added attribute
+    check(DropField("b") :: WithField("c", Literal(3)) :: Nil, 1, Literal(3))
+    check(DropField("a") :: WithField("c", Literal(3)) :: Nil, 1, Literal(3))
+
+    // add attribute, drop attribute, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: DropField("a") :: Nil, 0, GetStructField('struct1, 1))
+    check(WithField("c", Literal(3)) :: DropField("b") :: Nil, 0, GetStructField('struct1, 0))
+    // add attribute, drop attribute, extract added attribute
+    check(WithField("c", Literal(3)) :: DropField("a") :: Nil, 1, Literal(3))
+    check(WithField("c", Literal(3)) :: DropField("b") :: Nil, 1, Literal(3))
+
+    // replace attribute, drop same attribute, extract an attribute from the original struct
+    check(WithField("b", Literal(3)) :: DropField("b") :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("a", Literal(3)) :: DropField("a") :: Nil, 0, GetStructField('struct1, 1))
+
+    // add attribute, drop same attribute, extract an attribute from the original struct
+    check(WithField("c", Literal(3)) :: DropField("c") :: Nil, 0, GetStructField('struct1, 0))
+    check(WithField("c", Literal(3)) :: DropField("c") :: Nil, 1, GetStructField('struct1, 1))
+
+    // replace attribute, drop another attribute, extract added attribute
+    check(WithField("b", Literal(3)) :: DropField("a") :: Nil, 0, Literal(3))
+    check(WithField("a", Literal(3)) :: DropField("b") :: Nil, 0, Literal(3))
+
+    // drop attribute, add same attribute, extract attribute from the original struct
+    check(DropField("b") :: WithField("b", Literal(3)) :: Nil, 0, GetStructField('struct1, 0))
+    check(DropField("a") :: WithField("a", Literal(3)) :: Nil, 0, GetStructField('struct1, 1))
+    // drop attribute, add same attribute, extract added attribute
+    check(DropField("b") :: WithField("b", Literal(3)) :: Nil, 1, Literal(3))
+    check(DropField("a") :: WithField("a", Literal(3)) :: Nil, 1, Literal(3))
+
+    // drop non-existent attribute, add same attribute, extract attribute from the original struct
+    check(DropField("c") :: WithField("c", Literal(3)) :: Nil, 0, GetStructField('struct1, 0))
+    check(DropField("c") :: WithField("c", Literal(3)) :: Nil, 1, GetStructField('struct1, 1))
+    // drop non-existent attribute, add same attribute, extract added attribute
+    check(DropField("c") :: WithField("c", Literal(3)) :: Nil, 2, Literal(3))
+
+    // scalastyle:on  line.size.limit
   }
 
-  test("simplify GetStructField on WithFields that is changing the attribute being extracted") {
-    val query = testStructRelation.select(
-      GetStructField(WithFields('struct1, Seq("b"), Seq(Literal(1))), 1, Some("b")) as "outerAtt")
-    val expected = testStructRelation.select(Literal(1) as "outerAtt")
-    checkRule(query, expected)
+  test("simplify GetStructField that is extracting a field nested inside a struct") {
+    val struct2 = 'struct2.struct('b.int)
+    val testStructRelation = LocalRelation(structAttr, struct2)
+    val testNullableStructRelation = LocalRelation(nullableStructAttr, struct2)
+
+    // if the field being extracted is from the same struct that UpdateFields is modifying,
+    // we can just return GetStructField in both the non-nullable and nullable struct scenario
+
+    def addFieldFromSameStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
+      relation.select(GetStructField(
+        UpdateFields('struct1, WithField("b", GetStructField('struct1, 0)) :: Nil), 1).as("res"))
+
+    checkRule(
+      addFieldFromSameStructAndThenExtractIt(testStructRelation),
+      testStructRelation.select(GetStructField('struct1, 0).as("res")))
+
+    checkRule(
+      addFieldFromSameStructAndThenExtractIt(testNullableStructRelation),
+      testNullableStructRelation.select(GetStructField('struct1, 0).as("res")))
+
+    // if the field being extracted is from a different struct than the one UpdateFields is
+    // modifying, we must return GetStructField wrapped in If(IsNull(struct), null, GetStructField)
+    // in the nullable struct scenario
+
+    def addFieldFromAnotherStructAndThenExtractIt(relation: LocalRelation): LogicalPlan =
+      relation.select(GetStructField(
+        UpdateFields('struct1, WithField("b", GetStructField('struct2, 0)) :: Nil), 1).as("res"))
+
+    checkRule(
+      addFieldFromAnotherStructAndThenExtractIt(testStructRelation),
+      testStructRelation.select(GetStructField('struct2, 0).as("res")))
+
+    checkRule(
+      addFieldFromAnotherStructAndThenExtractIt(testNullableStructRelation),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), GetStructField('struct2, 0)).as("res")))
   }
 
-  test(
-    "simplify GetStructField on WithFields that is changing the attribute being extracted twice") {
-    val query = testStructRelation
-      .select(GetStructField(WithFields('struct1, Seq("b", "b"), Seq(Literal(1), Literal(2))), 1,
-        Some("b")) as "outerAtt")
-    val expected = testStructRelation.select(Literal(2) as "outerAtt")
-    checkRule(query, expected)
+  test("simplify GetStructField on nested UpdateFields") {
+    def query(relation: LocalRelation, ordinal: Int): LogicalPlan = {
+      val nestedUpdateFields =
+        UpdateFields(
+          UpdateFields(
+            UpdateFields(
+              UpdateFields(
+                'struct1,
+                WithField("c", Literal(1)) :: Nil),
+              WithField("d", Literal(2)) :: Nil),
+            WithField("e", Literal(3)) :: Nil),
+          WithField("f", Literal(4)) :: Nil)
+
+      relation.select(GetStructField(nestedUpdateFields, ordinal) as "res")
+    }
+
+    // extract newly added field
+
+    checkRule(
+      query(testStructRelation, 5),
+      testStructRelation.select(Literal(4) as "res"))
+
+    checkRule(
+      query(testNullableStructRelation, 5),
+      testNullableStructRelation.select(
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(4)) as "res"))
+
+    // extract field from original struct
+
+    checkRule(
+      query(testStructRelation, 0),
+      testStructRelation.select(GetStructField('struct1, 0) as "res"))
+
+    checkRule(
+      query(testNullableStructRelation, 0),
+      testNullableStructRelation.select(GetStructField('struct1, 0) as "res"))
   }
 
-  test("collapse multiple GetStructField on the same WithFields") {
-    val query = testStructRelation
-      .select(WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2")
+  test("simplify multiple GetStructField on the same UpdateFields") {
+    def query(relation: LocalRelation): LogicalPlan = relation
+      .select(UpdateFields('struct1, WithField("b", Literal(2)) :: Nil) as "struct2")
       .select(
         GetStructField('struct2, 0, Some("a")) as "struct1A",
         GetStructField('struct2, 1, Some("b")) as "struct1B")
-    val expected = testStructRelation.select(
-      GetStructField('struct1, 0, Some("a")) as "struct1A",
-      Literal(2) as "struct1B")
-    checkRule(query, expected)
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation.select(
+        GetStructField('struct1, 0) as "struct1A",
+        Literal(2) as "struct1B"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation.select(
+        GetStructField('struct1, 0) as "struct1A",
+        If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "struct1B"))
   }
 
-  test("collapse multiple GetStructField on different WithFields") {
-    val query = testStructRelation
+  test("simplify multiple GetStructField on different UpdateFields") {
+    def query(relation: LocalRelation): LogicalPlan = relation
       .select(
-        WithFields('struct1, Seq("b"), Seq(Literal(2))) as "struct2",
-        WithFields('struct1, Seq("b"), Seq(Literal(3))) as "struct3")
+        UpdateFields('struct1, WithField("b", Literal(2)) :: Nil) as "struct2",
+        UpdateFields('struct1, WithField("b", Literal(3)) :: Nil) as "struct3")
       .select(
         GetStructField('struct2, 0, Some("a")) as "struct2A",
         GetStructField('struct2, 1, Some("b")) as "struct2B",
         GetStructField('struct3, 0, Some("a")) as "struct3A",
         GetStructField('struct3, 1, Some("b")) as "struct3B")
-    val expected = testStructRelation
-      .select(
-        GetStructField('struct1, 0, Some("a")) as "struct2A",
-        Literal(2) as "struct2B",
-        GetStructField('struct1, 0, Some("a")) as "struct3A",
-        Literal(3) as "struct3B")
+
+    checkRule(
+      query(testStructRelation),
+      testStructRelation
+        .select(
+          GetStructField('struct1, 0) as "struct2A",
+          Literal(2) as "struct2B",
+          GetStructField('struct1, 0) as "struct3A",
+          Literal(3) as "struct3B"))
+
+    checkRule(
+      query(testNullableStructRelation),
+      testNullableStructRelation
+        .select(
+          GetStructField('struct1, 0) as "struct2A",
+          If(IsNull('struct1), Literal(null, IntegerType), Literal(2)) as "struct2B",
+          GetStructField('struct1, 0) as "struct3A",
+          If(IsNull('struct1), Literal(null, IntegerType), Literal(3)) as "struct3B"))
+  }
+
+  test("simplify add multiple nested fields to non-nullable struct") {
+    // this scenario is possible if users add multiple nested columns to a non-nullable struct
+    // using the Column.withField API in a non-performant way
+    val structLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int.notNull)).notNull)
+
+    val query = {
+      val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
+        UpdateFields(GetStructField('a1, 0), Seq(WithField("b3", Literal(2)))))))
+
+      structLevel2.select(
+        UpdateFields(
+          addB3toA1A2,
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
+    }
+
+    val expected = structLevel2.select(
+      UpdateFields('a1, Seq(
+        // scalastyle:off line.size.limit
+        WithField("a2", UpdateFields(GetStructField('a1, 0), WithField("b3", 2) :: WithField("c3", 3) :: Nil))
+        // scalastyle:on line.size.limit
+      )).as("a1"))
+
+    checkRule(query, expected)
+  }
+
+  test("simplify add multiple nested fields to nullable struct") {
+    // this scenario is possible if users add multiple nested columns to a nullable struct
+    // using the Column.withField API in a non-performant way
+    val structLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int.notNull)))
+
+    val query = {
+      val addB3toA1A2 = UpdateFields('a1, Seq(WithField("a2",
+        UpdateFields(GetStructField('a1, 0), Seq(WithField("b3", Literal(2)))))))
+
+      structLevel2.select(
+        UpdateFields(
+          addB3toA1A2,
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(addB3toA1A2, 0), Seq(WithField("c3", Literal(3))))))).as("a1"))
+    }
+
+    val expected = {
+      val repeatedExpr = UpdateFields(GetStructField('a1, 0), WithField("b3", Literal(2)) :: Nil)
+      val repeatedExprDataType = StructType(Seq(
+        StructField("a3", IntegerType, nullable = false),
+        StructField("b3", IntegerType, nullable = false)))
+
+      structLevel2.select(
+        UpdateFields('a1, Seq(
+          WithField("a2", UpdateFields(
+            If(IsNull('a1), Literal(null, repeatedExprDataType), repeatedExpr),
+            WithField("c3", Literal(3)) :: Nil))
+        )).as("a1"))
+    }
+
+    checkRule(query, expected)
+  }
+
+  test("simplify drop multiple nested fields in non-nullable struct") {
+    // this scenario is possible if users drop multiple nested columns in a non-nullable struct
+    // using the Column.dropFields API in a non-performant way
+    val structLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int.notNull, 'b3.int.notNull, 'c3.int.notNull).notNull
+      ).notNull)
+
+    val query = {
+      val dropA1A2B = UpdateFields('a1, Seq(WithField("a2", UpdateFields(
+        GetStructField('a1, 0), Seq(DropField("b3"))))))
+
+      structLevel2.select(
+        UpdateFields(
+          dropA1A2B,
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
+    }
+
+    val expected = structLevel2.select(
+      UpdateFields('a1, Seq(
+        WithField("a2", UpdateFields(GetStructField('a1, 0), Seq(DropField("b3"), DropField("c3"))))
+      )).as("a1"))
+
+    checkRule(query, expected)
+  }
+
+  test("simplify drop multiple nested fields in nullable struct") {
+    // this scenario is possible if users drop multiple nested columns in a nullable struct
+    // using the Column.dropFields API in a non-performant way
+    val structLevel2 = LocalRelation(
+      'a1.struct(
+        'a2.struct('a3.int.notNull, 'b3.int.notNull, 'c3.int.notNull)
+      ))
+
+    val query = {
+      val dropA1A2B = UpdateFields('a1, Seq(WithField("a2", UpdateFields(
+        GetStructField('a1, 0), Seq(DropField("b3"))))))
+
+      structLevel2.select(
+        UpdateFields(
+          dropA1A2B,
+          Seq(WithField("a2", UpdateFields(
+            GetStructField(dropA1A2B, 0), Seq(DropField("c3")))))).as("a1"))
+    }
+
+    val expected = {
+      val repeatedExpr = UpdateFields(GetStructField('a1, 0), DropField("b3") :: Nil)
+      val repeatedExprDataType = StructType(Seq(
+        StructField("a3", IntegerType, nullable = false),
+        StructField("c3", IntegerType, nullable = false)))
+
+      structLevel2.select(
+        UpdateFields('a1, Seq(
+          WithField("a2", UpdateFields(
+            If(IsNull('a1), Literal(null, repeatedExprDataType), repeatedExpr),
+            DropField("c3") :: Nil))
+        )).as("a1"))
+    }
+
     checkRule(query, expected)
   }
 }

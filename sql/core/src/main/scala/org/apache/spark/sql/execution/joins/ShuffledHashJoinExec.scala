@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.joins
 
 import java.util.concurrent.TimeUnit._
 
-import scala.collection.mutable
-
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.util.collection.BitSet
+import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
 /**
  * Performs a hash join of two child relations by first shuffling the data using the join keys.
@@ -136,10 +134,10 @@ case class ShuffledHashJoinExec(
    * Full outer shuffled hash join with unique join keys:
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
-   *    A `BitSet` is used to track matched rows with key index.
+   *    A bit set is used to track matched rows with key index.
    * 2. Process rows from build side by iterating hash relation.
    *    Filter out rows from build side being matched already,
-   *    by checking key index from `BitSet`.
+   *    by checking key index from bit set.
    */
   private def fullOuterJoinWithUniqueKey(
       streamIter: Iterator[InternalRow],
@@ -150,9 +148,8 @@ case class ShuffledHashJoinExec(
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
-    // TODO(SPARK-32629):record metrics of extra BitSet/HashSet
-    // in full outer shuffled hash join
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
+    longMetric("buildDataSize") += matchedKeys.capacity / 8
 
     // Process stream side with looking up hash relation
     val streamResultIter = streamIter.map { srow =>
@@ -198,11 +195,11 @@ case class ShuffledHashJoinExec(
    * Full outer shuffled hash join with non-unique join keys:
    * 1. Process rows from stream side by looking up hash relation.
    *    Mark the matched rows from build side be looked up.
-   *    A `HashSet[Long]` is used to track matched rows with
+   *    A [[OpenHashSet]] (Long) is used to track matched rows with
    *    key index (Int) and value index (Int) together.
    * 2. Process rows from build side by iterating hash relation.
    *    Filter out rows from build side being matched already,
-   *    by checking key index and value index from `HashSet`.
+   *    by checking key index and value index from [[OpenHashSet]].
    *
    * The "value index" is defined as the index of the tuple in the chain
    * of tuples having the same key. For example, if certain key is found thrice,
@@ -218,9 +215,15 @@ case class ShuffledHashJoinExec(
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow,
       streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
-    // TODO(SPARK-32629):record metrics of extra BitSet/HashSet
-    // in full outer shuffled hash join
-    val matchedRows = new mutable.HashSet[Long]
+    val matchedRows = new OpenHashSet[Long]
+    TaskContext.get().addTaskCompletionListener[Unit](_ => {
+      // At the end of the task, update the task's memory usage for this
+      // [[OpenHashSet]] to track matched rows, which has two parts:
+      // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
+      val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
+      val dataEstimatedSize = matchedRows.capacity * 8
+      longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
+    })
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
       val rowIndex: Long = (keyIndex.toLong << 32) | valueIndex

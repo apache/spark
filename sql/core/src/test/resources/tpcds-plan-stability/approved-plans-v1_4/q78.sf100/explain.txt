@@ -74,7 +74,7 @@ TakeOrderedAndProject (70)
 (1) Scan parquet default.store_sales
 Output [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#4, ss_quantity#5, ss_wholesale_cost#6, ss_sales_price#7]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_sales]
+Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_ticket_number:int,ss_quantity:int,ss_wholesale_cost:decimal(7,2),ss_sales_price:decimal(7,2)>
 
@@ -96,7 +96,7 @@ Arguments: [cast(ss_ticket_number#4 as bigint) ASC NULLS FIRST, cast(ss_item_sk#
 (6) Scan parquet default.store_returns
 Output [2]: [sr_item_sk#9, sr_ticket_number#10]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/store_returns]
+Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk)]
 ReadSchema: struct<sr_item_sk:bigint,sr_ticket_number:bigint>
 
@@ -131,7 +131,7 @@ Input [9]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#
 (14) Scan parquet default.date_dim
 Output [2]: [d_date_sk#12, d_year#13]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/date_dim]
+Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
@@ -180,7 +180,7 @@ Arguments: [ss_sold_year#25 ASC NULLS FIRST, ss_item_sk#2 ASC NULLS FIRST, ss_cu
 (24) Scan parquet default.catalog_sales
 Output [7]: [cs_sold_date_sk#29, cs_bill_customer_sk#30, cs_item_sk#31, cs_order_number#32, cs_quantity#33, cs_wholesale_cost#34, cs_sales_price#35]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/catalog_sales]
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
 PushedFilters: [IsNotNull(cs_sold_date_sk), IsNotNull(cs_item_sk), IsNotNull(cs_bill_customer_sk)]
 ReadSchema: struct<cs_sold_date_sk:int,cs_bill_customer_sk:int,cs_item_sk:int,cs_order_number:int,cs_quantity:int,cs_wholesale_cost:decimal(7,2),cs_sales_price:decimal(7,2)>
 
@@ -202,7 +202,7 @@ Arguments: [cs_order_number#32 ASC NULLS FIRST, cs_item_sk#31 ASC NULLS FIRST], 
 (29) Scan parquet default.catalog_returns
 Output [2]: [cr_item_sk#37, cr_order_number#38]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/catalog_returns]
+Location [not included in comparison]/{warehouse_dir}/catalog_returns]
 PushedFilters: [IsNotNull(cr_order_number), IsNotNull(cr_item_sk)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int>
 
@@ -284,8 +284,8 @@ Input [12]: [ss_sold_year#25, ss_item_sk#2, ss_customer_sk#3, ss_qty#26, ss_wc#2
 (47) Scan parquet default.web_sales
 Output [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/web_sales]
-PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_bill_customer_sk), IsNotNull(ws_item_sk)]
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk), IsNotNull(ws_bill_customer_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_bill_customer_sk:int,ws_order_number:int,ws_quantity:int,ws_wholesale_cost:decimal(7,2),ws_sales_price:decimal(7,2)>
 
 (48) ColumnarToRow [codegen id : 16]
@@ -293,7 +293,7 @@ Input [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_
 
 (49) Filter [codegen id : 16]
 Input [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
-Condition : ((isnotnull(ws_sold_date_sk#55) AND isnotnull(ws_bill_customer_sk#57)) AND isnotnull(ws_item_sk#56))
+Condition : ((isnotnull(ws_sold_date_sk#55) AND isnotnull(ws_item_sk#56)) AND isnotnull(ws_bill_customer_sk#57))
 
 (50) Exchange
 Input [7]: [ws_sold_date_sk#55, ws_item_sk#56, ws_bill_customer_sk#57, ws_order_number#58, ws_quantity#59, ws_wholesale_cost#60, ws_sales_price#61]
@@ -306,7 +306,7 @@ Arguments: [cast(ws_order_number#58 as bigint) ASC NULLS FIRST, cast(ws_item_sk#
 (52) Scan parquet default.web_returns
 Output [2]: [wr_item_sk#63, wr_order_number#64]
 Batched: true
-Location: InMemoryFileIndex [file:/Users/yi.wu/IdeaProjects/spark/sql/core/spark-warehouse/org.apache.spark.sql.TPCDSV1_4_PlanStabilityWithStatsSuite/web_returns]
+Location [not included in comparison]/{warehouse_dir}/web_returns]
 PushedFilters: [IsNotNull(wr_order_number), IsNotNull(wr_item_sk)]
 ReadSchema: struct<wr_item_sk:bigint,wr_order_number:bigint>
 
@@ -382,10 +382,10 @@ Right keys [3]: [ws_sold_year#76, ws_item_sk#56, ws_customer_sk#77]
 Join condition: None
 
 (69) Project [codegen id : 23]
-Output [12]: [round((cast(ss_qty#26 as double) / cast(coalesce((ws_qty#78 + cs_qty#52), 1) as double)), 2) AS ratio#81, ss_qty#26 AS store_qty#82, ss_wc#27 AS store_wholesale_cost#83, ss_sp#28 AS store_sales_price#84, (coalesce(ws_qty#78, 0) + coalesce(cs_qty#52, 0)) AS other_chan_qty#85, CheckOverflow((promote_precision(cast(coalesce(ws_wc#79, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_wc#53, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_wholesale_cost#86, CheckOverflow((promote_precision(cast(coalesce(ws_sp#80, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_sp#54, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_sales_price#87, ss_sp#28, ss_qty#26, ws_qty#78, ss_wc#27, cs_qty#52]
+Output [12]: [round((cast(ss_qty#26 as double) / cast(coalesce((ws_qty#78 + cs_qty#52), 1) as double)), 2) AS ratio#81, ss_qty#26 AS store_qty#82, ss_wc#27 AS store_wholesale_cost#83, ss_sp#28 AS store_sales_price#84, (coalesce(ws_qty#78, 0) + coalesce(cs_qty#52, 0)) AS other_chan_qty#85, CheckOverflow((promote_precision(cast(coalesce(ws_wc#79, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_wc#53, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_wholesale_cost#86, CheckOverflow((promote_precision(cast(coalesce(ws_sp#80, 0.00) as decimal(18,2))) + promote_precision(cast(coalesce(cs_sp#54, 0.00) as decimal(18,2)))), DecimalType(18,2), true) AS other_chan_sales_price#87, ss_qty#26, ss_wc#27, ss_sp#28, ws_qty#78, cs_qty#52]
 Input [15]: [ss_sold_year#25, ss_item_sk#2, ss_customer_sk#3, ss_qty#26, ss_wc#27, ss_sp#28, cs_qty#52, cs_wc#53, cs_sp#54, ws_sold_year#76, ws_item_sk#56, ws_customer_sk#77, ws_qty#78, ws_wc#79, ws_sp#80]
 
 (70) TakeOrderedAndProject
-Input [12]: [ratio#81, store_qty#82, store_wholesale_cost#83, store_sales_price#84, other_chan_qty#85, other_chan_wholesale_cost#86, other_chan_sales_price#87, ss_sp#28, ss_qty#26, ws_qty#78, ss_wc#27, cs_qty#52]
+Input [12]: [ratio#81, store_qty#82, store_wholesale_cost#83, store_sales_price#84, other_chan_qty#85, other_chan_wholesale_cost#86, other_chan_sales_price#87, ss_qty#26, ss_wc#27, ss_sp#28, ws_qty#78, cs_qty#52]
 Arguments: 100, [ratio#81 ASC NULLS FIRST, ss_qty#26 DESC NULLS LAST, ss_wc#27 DESC NULLS LAST, ss_sp#28 DESC NULLS LAST, other_chan_qty#85 ASC NULLS FIRST, other_chan_wholesale_cost#86 ASC NULLS FIRST, other_chan_sales_price#87 ASC NULLS FIRST, round((cast(ss_qty#26 as double) / cast(coalesce((ws_qty#78 + cs_qty#52), 1) as double)), 2) ASC NULLS FIRST], [ratio#81, store_qty#82, store_wholesale_cost#83, store_sales_price#84, other_chan_qty#85, other_chan_wholesale_cost#86, other_chan_sales_price#87]
 
