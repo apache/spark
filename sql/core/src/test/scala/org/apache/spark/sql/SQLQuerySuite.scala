@@ -26,7 +26,7 @@ import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, ConvertToLocalRelation, NestedColumnAliasingSuite, ReorderAssociativeOperator}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -3757,6 +3757,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     })
+  }
+
+  test("SPARK-33945: handles a random seed consisting of an expr tree") {
+    val excludedRules = Seq(ConstantFolding, ReorderAssociativeOperator).map(_.ruleName)
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> excludedRules.mkString(",")) {
+      Seq("rand", "randn").foreach { f =>
+        // Just checks if a query works correctly
+        sql(s"SELECT $f(1 + 1)").collect()
+
+        val msg = intercept[AnalysisException] {
+          sql(s"SELECT $f(id + 1) FROM range(0, 3)").collect()
+        }.getMessage
+        assert(msg.contains("must be an integer, long, or null constant"))
+      }
+    }
   }
 }
 
