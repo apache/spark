@@ -675,15 +675,13 @@ object LikeSimplification extends Rule[LogicalPlan] {
     if (replacements.isEmpty) {
       multi
     } else {
-      val replaceExpressions = replacements.asInstanceOf[Seq[Expression]]
-      val remains = remainPatterns.asInstanceOf[Seq[UTF8String]]
       multi match {
-        case l: LikeAll => And(replaceExpressions.reduceLeft(And), l.copy(patterns = remains))
+        case l: LikeAll => And(replacements.reduceLeft(And), l.copy(patterns = remainPatterns))
         case l: NotLikeAll =>
-          And(replaceExpressions.map(Not(_)).reduceLeft(And), l.copy(patterns = remains))
-        case l: LikeAny => Or(replaceExpressions.reduceLeft(Or), l.copy(patterns = remains))
+          And(replacements.map(Not(_)).reduceLeft(And), l.copy(patterns = remainPatterns))
+        case l: LikeAny => Or(replacements.reduceLeft(Or), l.copy(patterns = remainPatterns))
         case l: NotLikeAny =>
-          Or(replaceExpressions.map(Not(_)).reduceLeft(Or), l.copy(patterns = remains))
+          Or(replacements.map(Not(_)).reduceLeft(Or), l.copy(patterns = remainPatterns))
         case _ => throw QueryCompilationErrors.cannotSimplifyMultiLikeError(multi)
       }
     }
