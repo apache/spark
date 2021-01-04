@@ -989,12 +989,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
@@ -1166,7 +1166,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
               ResolvedView(ident, isTemp = false)
             case table =>
-              ResolvedTable(catalog.asTableCatalog, ident, table)
+              ResolvedTable.create(catalog.asTableCatalog, ident, table)
           }
         case _ => None
       }
