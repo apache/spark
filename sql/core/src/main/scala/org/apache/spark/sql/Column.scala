@@ -165,7 +165,7 @@ class Column(val expr: Expression) extends Logging {
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
 
-  private def existsUnresolvedExpr(expr: Expression): Boolean = {
+  private def existsUnresolvedExtractValue(expr: Expression): Boolean = {
     expr.find {_.isInstanceOf[UnresolvedExtractValue]}.isDefined
   }
 
@@ -193,7 +193,7 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case _ if existsUnresolvedExpr(expr) => UnresolvedAlias(expr)
+        case _ if existsUnresolvedExtractValue(expr) => UnresolvedAlias(expr)
         case _ => Alias(expr, toPrettySQL(expr))()
       }
 
@@ -203,7 +203,7 @@ class Column(val expr: Expression) extends Logging {
     // Wait until the struct is resolved. This will generate a nicer looking alias.
     case struct: CreateNamedStruct => UnresolvedAlias(struct)
 
-    case expr: Expression if existsUnresolvedExpr(expr) => UnresolvedAlias(expr)
+    case expr: Expression if existsUnresolvedExtractValue(expr) => UnresolvedAlias(expr)
     case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
