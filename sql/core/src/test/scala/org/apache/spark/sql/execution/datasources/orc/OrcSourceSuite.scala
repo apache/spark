@@ -598,7 +598,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   test("SPARK-33978: Write and read a file with ZSTD compression") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
-      spark.range(3).toDF().write.option("compression", "zstd").orc(path)
+      spark.range(3).write.option("compression", "zstd").orc(path)
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
     }
   }
