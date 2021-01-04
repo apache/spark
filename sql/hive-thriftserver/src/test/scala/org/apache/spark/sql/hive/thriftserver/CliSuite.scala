@@ -585,13 +585,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute)("/*/* multi-level bracketed*/ SELECT 'test';" -> "test")
   }
 
-  test("SPARK-33100: test statements with hint in bracketed comment in spark-sql") {
+  test("SPARK-33100: test sql statements with hint in bracketed comment") {
     runCliWithin(2.minute)(
-      "CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES(1, 2), (2, 3), (3, 4), (4, 5), (5, 6)" +
-        " AS t(key, val);"
-        -> "",
-      "EXPLAIN EXTENDED SELECT /*+ broadcast(t) */ a.* FROM t a JOIN t b ON a.key=b.val;"
-        -> "'UnresolvedHint broadcast, ['t]"
+      "CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES(1, 2) AS t(k, v);" -> "",
+      "EXPLAIN EXTENDED SELECT /*+ broadcast(t) */ * from t;" -> "ResolvedHint (strategy=broadcast)"
     )
   }
 }
