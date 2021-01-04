@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Dataset, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
@@ -437,6 +437,21 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       assert(!spark.catalog.isCached(t))
       sql(s"CACHE TABLE $t")
       assert(spark.catalog.isCached(t))
+    }
+  }
+
+  test("SPARK-33950: refresh cache after partition dropping") {
+    withTable("t") {
+      sql(s"CREATE TABLE t (id int, part int) USING hive PARTITIONED BY (part)")
+      sql("INSERT INTO t PARTITION (part=0) SELECT 0")
+      sql("INSERT INTO t PARTITION (part=1) SELECT 1")
+      assert(!spark.catalog.isCached("t"))
+      sql("CACHE TABLE t")
+      assert(spark.catalog.isCached("t"))
+      checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(1, 1)))
+      sql("ALTER TABLE t DROP PARTITION (part=0)")
+      assert(spark.catalog.isCached("t"))
+      checkAnswer(sql("SELECT * FROM t"), Seq(Row(1, 1)))
     }
   }
 }
