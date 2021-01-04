@@ -165,11 +165,7 @@ private[spark] object DependencyUtils extends Logging {
       ivyRepoPath: Option[String],
       ivySettingsPath: Option[String]): Seq[String] = {
     val exclusions: Seq[String] =
-      if (packagesExclusions.nonEmpty) {
-        packagesExclusions.map(_.split(",")).get
-      } else {
-        Nil
-      }
+      packagesExclusions.map(_.split(",")).getOrElse[Seq[String]](Nil)
     // Create the IvySettings, either load from file or build defaults
     val ivySettings = ivySettingsPath match {
       case Some(path) =>
@@ -179,7 +175,7 @@ private[spark] object DependencyUtils extends Logging {
         SparkSubmitUtils.buildIvySettings(repositories, ivyRepoPath)
     }
 
-    SparkSubmitUtils.resolveMavenCoordinates(packages.get, ivySettings,
+    SparkSubmitUtils.resolveMavenCoordinates(packages.orNull, ivySettings,
       transitive = packagesTransitive, exclusions = exclusions)
   }
 
