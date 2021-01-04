@@ -27,8 +27,6 @@ import org.apache.spark.sql.internal.SQLConf
  * The class contains tests for the `SHOW NAMESPACES` command to check V2 table catalogs.
  */
 class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSuiteBase {
-  override protected def topNamespaces(ns: Seq[String]): Seq[String] = ns
-
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat_no_namespace", classOf[BasicInMemoryTableCatalog].getName)
 
@@ -62,7 +60,9 @@ class ShowNamespacesSuite extends command.ShowNamespacesSuiteBase with CommandSu
         withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
           sql(s"CREATE NAMESPACE $catalog.AAA")
           sql(s"CREATE NAMESPACE $catalog.bbb")
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq("AAA", "bbb")))
+          runShowNamespacesSql(
+            s"SHOW NAMESPACES IN $catalog",
+            Seq("AAA", "bbb") ++ builtinTopNamespaces)
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("AAA"))
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("AAA"))
         }

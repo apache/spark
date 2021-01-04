@@ -31,7 +31,9 @@ class ShowNamespacesSuite extends v1.ShowNamespacesSuiteBase with CommandSuiteBa
         withNamespace(s"$catalog.AAA", s"$catalog.bbb") {
           sql(s"CREATE NAMESPACE $catalog.AAA")
           sql(s"CREATE NAMESPACE $catalog.bbb")
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq("aaa", "bbb")))
+          runShowNamespacesSql(
+            s"SHOW NAMESPACES IN $catalog",
+            Seq("aaa", "bbb") ++ builtinTopNamespaces)
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq("aaa"))
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq("aaa"))
         }

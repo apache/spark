@@ -40,13 +40,13 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
     checkAnswer(df, expected.map(Row(_)))
   }
 
-  protected def topNamespaces(ns: Seq[String]): Seq[String]
+  protected def builtinTopNamespaces: Seq[String] = Seq.empty
 
   test("default namespace") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
-      runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq.empty))
+      runShowNamespacesSql("SHOW NAMESPACES", builtinTopNamespaces)
     }
-    runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq.empty))
+    runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", builtinTopNamespaces)
   }
 
   test("at the top level") {
@@ -54,7 +54,9 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       sql(s"CREATE DATABASE $catalog.ns1")
       sql(s"CREATE NAMESPACE $catalog.ns2")
 
-      runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq("ns1", "ns2")))
+      runShowNamespacesSql(
+        s"SHOW NAMESPACES IN $catalog",
+        Seq("ns1", "ns2") ++ builtinTopNamespaces)
     }
   }
 
@@ -84,13 +86,13 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   test("show root namespaces with the default catalog") {
     withSQLConf(SQLConf.DEFAULT_CATALOG.key -> catalog) {
-      runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq.empty))
+      runShowNamespacesSql("SHOW NAMESPACES", builtinTopNamespaces)
 
       withNamespace("ns1", "ns2") {
         sql(s"CREATE NAMESPACE ns1")
         sql(s"CREATE NAMESPACE ns2")
 
-        runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns1", "ns2")))
+        runShowNamespacesSql("SHOW NAMESPACES", Seq("ns1", "ns2") ++ builtinTopNamespaces)
         runShowNamespacesSql("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
       }
     }
@@ -116,11 +118,11 @@ trait ShowNamespacesSuiteBase extends QueryTest with DDLCommandTestUtils {
       withNamespace(s"$catalog.ns") {
         sql(s"CREATE NAMESPACE $catalog.ns")
         sql(s"USE $catalog")
-        runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns")))
+        runShowNamespacesSql("SHOW NAMESPACES", Seq("ns") ++ builtinTopNamespaces)
 
         sql("USE ns")
         // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
-        runShowNamespacesSql("SHOW NAMESPACES", topNamespaces(Seq("ns")))
+        runShowNamespacesSql("SHOW NAMESPACES", Seq("ns") ++ builtinTopNamespaces)
       }
     } finally {
       spark.sessionState.catalogManager.reset()

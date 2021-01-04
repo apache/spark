@@ -30,9 +30,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowNamespacesSuite`
  */
 trait ShowNamespacesSuiteBase extends command.ShowNamespacesSuiteBase {
-  override protected def topNamespaces(ns: Seq[String]): Seq[String] = {
-    ns :+ "default"
-  }
+  override protected def builtinTopNamespaces: Seq[String] = Seq("default")
 
   test("IN namespace doesn't exist") {
     val errMsg = intercept[AnalysisException] {
@@ -50,7 +48,9 @@ class ShowNamespacesSuite extends ShowNamespacesSuiteBase with CommandSuiteBase 
           sql(s"CREATE NAMESPACE $catalog.AAA")
           sql(s"CREATE NAMESPACE $catalog.bbb")
           val expected = if (caseSensitive) "AAA" else "aaa"
-          runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog", topNamespaces(Seq(expected, "bbb")))
+          runShowNamespacesSql(
+            s"SHOW NAMESPACES IN $catalog",
+            Seq(expected, "bbb") ++ builtinTopNamespaces)
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'AAA'", Seq(expected))
           runShowNamespacesSql(s"SHOW NAMESPACES IN $catalog LIKE 'aaa'", Seq(expected))
         }
