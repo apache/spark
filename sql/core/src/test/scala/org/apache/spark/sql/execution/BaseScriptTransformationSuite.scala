@@ -471,7 +471,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-33934: Check default execute command wrapper") {
+  test("SPARK-33934: Add SparkFile's root dir to env property PATH") {
     assume(TestUtils.testCommandAvailable("python"))
     val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
     withTempView("v") {

@@ -73,8 +73,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
       .directory(new File(SparkFiles.getRootDirectory()))
-    val path = SparkFiles.getRootDirectory() + File.pathSeparator +
-      System.getenv("PATH")
+    val path = System.getenv("PATH") + File.pathSeparator +
+      SparkFiles.getRootDirectory()
     builder.environment().put("PATH", path)
 
     val proc = builder.start()
