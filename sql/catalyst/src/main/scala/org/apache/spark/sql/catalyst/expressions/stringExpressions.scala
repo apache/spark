@@ -936,19 +936,19 @@ object Trim {
            SparkSQL
       > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
        parkSQ
-      > SELECT _FUNC_('SL' FROM encode('SSparkSQLS', 'utf-8'));
+      > SELECT _FUNC_(encode('SL', 'utf-8') FROM encode('SSparkSQLS', 'utf-8'));
        parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
        parkSQ
-      > SELECT _FUNC_(BOTH 'SL' FROM encode('SSparkSQLS', 'utf-8'));
+      > SELECT _FUNC_(BOTH encode('SL', 'utf-8') FROM encode('SSparkSQLS', 'utf-8'));
        parkSQ
       > SELECT _FUNC_(LEADING 'SL' FROM 'SSparkSQLS');
        parkSQLS
-      > SELECT _FUNC_(LEADING 'SL' FROM encode('SSparkSQLS', 'utf-8'));
+      > SELECT _FUNC_(LEADING encode('SL', 'utf-8') FROM encode('SSparkSQLS', 'utf-8'));
        parkSQLS
       > SELECT _FUNC_(TRAILING 'SL' FROM 'SSparkSQLS');
        SSparkSQ
-      > SELECT _FUNC_(TRAILING 'SL' FROM encode('SSparkSQLS', 'utf-8'));
+      > SELECT _FUNC_(TRAILING encode('SL', 'utf-8') FROM encode('SSparkSQLS', 'utf-8'));
        SSparkSQ
   """,
   since = "1.5.0",

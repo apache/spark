@@ -66,16 +66,17 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
-  // If worker decommissioning is enabled register a handler on PWR to shutdown.
+  // If worker decommissioning is enabled register a handler on the configured signal to shutdown.
   if (conf.get(config.DECOMMISSION_ENABLED)) {
-    logInfo("Registering SIGPWR handler to trigger decommissioning.")
-    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
+    val signal = conf.get(config.Worker.WORKER_DECOMMISSION_SIGNAL)
+    logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
+    SignalUtils.register(signal, s"Failed to register SIG$signal handler - " +
       "disabling worker decommission feature.") {
-       self.send(WorkerSigPWRReceived)
+       self.send(WorkerDecommissionSigReceived)
        true
     }
   } else {
-    logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
+    logInfo("Worker decommissioning not enabled.")
   }
 
   // A scheduled executor used to send messages at the specified time.
@@ -682,7 +683,7 @@ private[deploy] class Worker(
     case DecommissionWorker =>
       decommissionSelf()
 
-    case WorkerSigPWRReceived =>
+    case WorkerDecommissionSigReceived =>
       decommissionSelf()
       // Tell the Master that we are starting decommissioning
       // so it stops trying to launch executor/driver on us

@@ -797,7 +797,8 @@ case class HiveTableRelation(
     },
     partitionCols = partitionCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
-    }
+    },
+    tableStats = None
   )
 
   override def computeStats(): Statistics = {
