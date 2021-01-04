@@ -587,12 +587,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("SPARK-33100: test sql statements with hint in bracketed comment") {
     runCliWithin(2.minute)(
-      "CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES(1, 2) AS t(k, v);"
+      "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2) AS t1(k, v);"
         -> "",
-      "EXPLAIN EXTENDED SELECT /*+ broadcast(t) */ * from t;"
-        -> "ResolvedHint (strategy=broadcast)",
-      "EXPLAIN EXTENDED SELECT /* + broadcast(t) */ * from t;"
-        -> "ResolvedHint (strategy=broadcast)"
+      "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1) AS t2(k, v);"
+        -> "",
+      "EXPLAIN EXTENDED SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+        -> "SortMergeJoin",
+      "EXPLAIN EXTENDED SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+        -> "BroadcastHashJoin"
     )
   }
 }
