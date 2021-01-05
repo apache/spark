@@ -196,7 +196,7 @@ if (isEmpty != 0) {
         outputs <- list()
         for (i in seq_len(length(data))) {
           # Timing reading input data for execution
-          inputElap <- elapsedSecs()
+          computeStart <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],
                       colNames, computeFunc, data[[i]])
           computeElap <- elapsedSecs()
@@ -206,7 +206,7 @@ if (isEmpty != 0) {
             outputResult(serializer, output, outputCon)
           }
           outputElap <- elapsedSecs()
-          computeInputElapsDiff <-  computeInputElapsDiff + (computeElap - inputElap)
+          computeInputElapsDiff <- computeInputElapsDiff + (computeElap - computeStart)
           outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
         }
 
