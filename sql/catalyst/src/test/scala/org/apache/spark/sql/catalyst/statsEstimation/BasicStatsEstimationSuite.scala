@@ -134,6 +134,13 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics.DUMMY)
   }
 
+  test("SPARK-33954: Some operator missing rowCount when enable CBO") {
+    checkStats(
+      plan.repartition(10),
+      expectedStatsCboOn = Statistics(sizeInBytes = 120, rowCount = Some(10)),
+      expectedStatsCboOff = Statistics(sizeInBytes = 120))
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,

@@ -680,13 +680,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = false, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = true, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = false, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = true, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = true, purge = false))
   }
 
   test("drop view") {

@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
@@ -154,13 +154,54 @@ class DataSourceV2SQLSuite
       Array("Table Properties", "[bar=baz]", "")))
   }
 
-  test("Describe column is not supported for v2 catalog") {
-    withTable("testcat.tbl") {
-      spark.sql("CREATE TABLE testcat.tbl (id bigint) USING foo")
-      val ex = intercept[AnalysisException] {
-        spark.sql("DESCRIBE testcat.tbl id")
+  test("Describe column for v2 catalog") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string COMMENT 'hello') USING foo")
+      val df1 = sql(s"DESCRIBE $t id")
+      assert(df1.schema.map(field => (field.name, field.dataType))
+        === Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(df1.collect === Seq(
+        Row("col_name", "id"),
+        Row("data_type", "bigint"),
+        Row("comment", "NULL")))
+      val df2 = sql(s"DESCRIBE $t data")
+      assert(df2.schema.map(field => (field.name, field.dataType))
+        === Seq(("info_name", StringType), ("info_value", StringType)))
+      assert(df2.collect === Seq(
+        Row("col_name", "data"),
+        Row("data_type", "string"),
+        Row("comment", "hello")))
+
+      assertAnalysisError(
+        s"DESCRIBE $t invalid_col",
+        "cannot resolve '`invalid_col`' given input columns: [testcat.tbl.data, testcat.tbl.id]")
+    }
+  }
+
+  test("Describe column for v2 catalog should work with qualified columns") {
+    val t = "testcat.ns.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint) USING foo")
+      Seq("testcat.ns.tbl.id", "ns.tbl.id", "tbl.id", "id").foreach { col =>
+        val df = sql(s"DESCRIBE $t $col")
+        assert(df.schema.map(field => (field.name, field.dataType))
+          === Seq(("info_name", StringType), ("info_value", StringType)))
+        assert(df.collect === Seq(
+          Row("col_name", "id"),
+          Row("data_type", "bigint"),
+          Row("comment", "NULL")))
       }
-      assert(ex.message.contains("Describing columns is not supported for v2 tables"))
+    }
+  }
+
+  test("Describing nested column for v2 catalog is not supported") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (d struct<a: INT, b: INT>) USING foo")
+      assertAnalysisError(
+        s"describe $t d.a",
+        "DESC TABLE COLUMN does not support nested column")
     }
   }
 
@@ -948,26 +989,6 @@ class DataSourceV2SQLSuite
 
     assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
       " only SessionCatalog supports this command."))
-  }
-
-  private def runShowTablesSql(
-      sqlText: String,
-      expected: Seq[Row],
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-    } else {
-      new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-    }
-
-    val df = spark.sql(sqlText)
-    assert(df.schema === schema)
-    assert(expected === df.collect())
   }
 
   test("CreateNameSpace: basic tests") {

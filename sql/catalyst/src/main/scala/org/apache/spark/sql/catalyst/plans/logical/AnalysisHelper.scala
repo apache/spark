@@ -133,6 +133,15 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     }
   }
 
+  override def transformUpWithNewOutput(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],
+      skipCond: LogicalPlan => Boolean,
+      canGetOutput: LogicalPlan => Boolean): LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      super.transformUpWithNewOutput(rule, skipCond, canGetOutput)
+    }
+  }
+
   /**
    * Recursively transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.

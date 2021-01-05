@@ -34,7 +34,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case r @ AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs, _) =>
       val partitionSchema = table.partitionSchema()
       r.copy(parts = resolvePartitionSpecs(
         table.name,
@@ -43,7 +43,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs, _, _) =>
       val partitionSchema = table.partitionSchema()
       r.copy(parts = resolvePartitionSpecs(
         table.name,
@@ -52,7 +52,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableRenamePartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), from, to) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
       val partitionSchema = table.partitionSchema()
       val Seq(resolvedFrom, resolvedTo) = resolvePartitionSpecs(
         table.name,
@@ -61,7 +61,8 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames))
       r.copy(from = resolvedFrom, to = resolvedTo)
 
-    case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
+    case r @ ShowPartitions(
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs) =>
       r.copy(pattern = resolvePartitionSpecs(
         table.name,
         partSpecs.toSeq,
