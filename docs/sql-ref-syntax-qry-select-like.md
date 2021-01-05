@@ -151,7 +151,7 @@ SELECT * FROM person WHERE name NOT LIKE ALL ('%an%', '%an');
 +---+----+----+
 
 SELECT * FROM person WHERE name NOT LIKE ANY ('%an%', '%an');
-+---+------+---+
++---+------+----+
 | id|  name| age|
 +---+------+----+
 |100|  John|  30|
@@ -161,7 +161,7 @@ SELECT * FROM person WHERE name NOT LIKE ANY ('%an%', '%an');
 +---+------+----+
 
 SELECT * FROM person WHERE name NOT LIKE SOME ('%an%', '%an');
-+---+------+---+
++---+------+----+
 | id|  name| age|
 +---+------+----+
 |100|  John|  30|
