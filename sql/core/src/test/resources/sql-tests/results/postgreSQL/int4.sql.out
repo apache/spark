@@ -7,8 +7,7 @@ CREATE TABLE INT4_TBL(f1 int) USING parquet
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`int4_tbl`'). The associated location('file:/Users/cathy/Desktop/code/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/int4_tbl') already exists.
+
 
 
 -- !query
@@ -16,8 +15,7 @@ INSERT INTO INT4_TBL VALUES (int(trim('   0  ')))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: INT4_TBL
+
 
 
 -- !query
@@ -25,8 +23,7 @@ INSERT INTO INT4_TBL VALUES (int(trim('123456     ')))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: INT4_TBL
+
 
 
 -- !query
@@ -34,8 +31,7 @@ INSERT INTO INT4_TBL VALUES (int(trim('    -123456')))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: INT4_TBL
+
 
 
 -- !query
@@ -43,8 +39,7 @@ INSERT INTO INT4_TBL VALUES (int('2147483647'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: INT4_TBL
+
 
 
 -- !query
@@ -52,143 +47,151 @@ INSERT INTO INT4_TBL VALUES (int('-2147483647'))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: INT4_TBL
+
 
 
 -- !query
 SELECT '' AS five, * FROM INT4_TBL
 -- !query schema
-struct<>
+struct<five:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 26
+	-123456
+	-2147483647
+	0
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> smallint('0')
 -- !query schema
-struct<>
+struct<four:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 28
+	-123456
+	-2147483647
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS four, i.* FROM INT4_TBL i WHERE i.f1 <> int('0')
 -- !query schema
-struct<>
+struct<four:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 28
+	-123456
+	-2147483647
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = smallint('0')
 -- !query schema
-struct<>
+struct<one:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	0
 
 
 -- !query
 SELECT '' AS one, i.* FROM INT4_TBL i WHERE i.f1 = int('0')
 -- !query schema
-struct<>
+struct<one:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	0
 
 
 -- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < smallint('0')
 -- !query schema
-struct<>
+struct<two:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	-123456
+	-2147483647
 
 
 -- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 < int('0')
 -- !query schema
-struct<>
+struct<two:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	-123456
+	-2147483647
 
 
 -- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= smallint('0')
 -- !query schema
-struct<>
+struct<three:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 29
+	-123456
+	-2147483647
+	0
 
 
 -- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 <= int('0')
 -- !query schema
-struct<>
+struct<three:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 29
+	-123456
+	-2147483647
+	0
 
 
 -- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > smallint('0')
 -- !query schema
-struct<>
+struct<two:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS two, i.* FROM INT4_TBL i WHERE i.f1 > int('0')
 -- !query schema
-struct<>
+struct<two:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= smallint('0')
 -- !query schema
-struct<>
+struct<three:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 29
+	0
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE i.f1 >= int('0')
 -- !query schema
-struct<>
+struct<three:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 29
+	0
+	123456
+	2147483647
 
 
 -- !query
 SELECT '' AS one, i.* FROM INT4_TBL i WHERE (i.f1 % smallint('2')) = smallint('1')
 -- !query schema
-struct<>
+struct<one:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 27
+	2147483647
 
 
 -- !query
 SELECT '' AS three, i.* FROM INT4_TBL i WHERE (i.f1 % int('2')) = smallint('0')
 -- !query schema
-struct<>
+struct<three:string,f1:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 29
+	-123456
+	0
+	123456
 
 
 -- !query
@@ -196,18 +199,19 @@ SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 * smallint('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+	-123456	-246912
+	0	0
+	123456	246912
 
 
 -- !query
@@ -215,18 +219,19 @@ SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 * int('2') AS x FROM INT4_TBL i
 WHERE abs(f1) < 1073741824
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+	-123456	-246912
+	0	0
+	123456	246912
 
 
 -- !query
@@ -234,18 +239,20 @@ SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 + smallint('2') AS x FROM INT4_TBL i
 WHERE f1 < 2147483646
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+	-123456	-123454
+	-2147483647	-2147483645
+	0	2
+	123456	123458
 
 
 -- !query
@@ -253,18 +260,20 @@ SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 + int('2') AS x FROM INT4_TBL i
 WHERE f1 < 2147483646
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+	-123456	-123454
+	-2147483647	-2147483645
+	0	2
+	123456	123458
 
 
 -- !query
@@ -272,18 +281,20 @@ SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 - smallint('2') AS x FROM INT4_TBL i
 WHERE f1 > -2147483647
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+	-123456	-123458
+	0	-2
+	123456	123454
+	2147483647	2147483645
 
 
 -- !query
@@ -291,36 +302,44 @@ SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+java.lang.ArithmeticException
+integer overflow
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 - int('2') AS x FROM INT4_TBL i
 WHERE f1 > -2147483647
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:int>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+	-123456	-123458
+	0	-2
+	123456	123454
+	2147483647	2147483645
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 / smallint('2') AS x FROM INT4_TBL i
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 56
+	-123456	-61728.0
+	-2147483647	-1.0737418235E9
+	0	0.0
+	123456	61728.0
+	2147483647	1.0737418235E9
 
 
 -- !query
 SELECT '' AS five, i.f1, i.f1 / int('2') AS x FROM INT4_TBL i
 -- !query schema
-struct<>
+struct<five:string,f1:int,x:double>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 51
+	-123456	-61728.0
+	-2147483647	-1.0737418235E9
+	0	0.0
+	123456	61728.0
+	2147483647	1.0737418235E9
 
 
 -- !query
@@ -490,5 +509,4 @@ DROP TABLE INT4_TBL
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: INT4_TBL; line 1 pos 0
+

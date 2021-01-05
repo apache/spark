@@ -62,35 +62,54 @@ create table char_tbl2 using parquet as select * from char_tbl
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`char_tbl2`'). The associated location('file:/Users/cathy/Desktop/code/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/char_tbl2') already exists.
+
 
 
 -- !query
 show create table char_tbl2
 -- !query schema
-struct<>
+struct<createtab_stmt:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or permanent view not found: char_tbl2; line 1 pos 0
+CREATE TABLE `default`.`char_tbl2` (
+  `c` CHAR(5),
+  `v` VARCHAR(6))
+USING parquet
 
 
 -- !query
 desc formatted char_tbl2
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl2; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl2           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl2
 
 
 -- !query
 desc formatted char_tbl2 c
 -- !query schema
-struct<>
+struct<info_name:string,info_value:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl2; line 1 pos 0
+col_name	c
+data_type	char(5)
+comment	NULL
+min	NULL
+max	NULL
+num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
+histogram	NULL
 
 
 -- !query
@@ -211,17 +230,26 @@ alter table char_tbl rename to char_tbl1
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not rename the managed table('`default`.`char_tbl`'). The associated location('file:/Users/cathy/Desktop/code/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/char_tbl1') already exists.
+
 
 
 -- !query
 desc formatted char_tbl1
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl1; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl1           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl1
 
 
 -- !query
@@ -230,7 +258,7 @@ alter table char_tbl1 change column c type char(6)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: char_tbl1
+ALTER TABLE CHANGE COLUMN is not supported for changing column 'c' with type 'CharType(5)' to 'c' with type 'CharType(6)'
 
 
 -- !query
@@ -238,17 +266,26 @@ alter table char_tbl1 change column c type char(5)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_tbl1
+
 
 
 -- !query
 desc formatted char_tbl1
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl1; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl1           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl1
 
 
 -- !query
@@ -256,17 +293,27 @@ alter table char_tbl1 add columns (d char(5))
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_tbl1
+
 
 
 -- !query
 desc formatted char_tbl1
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl1; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+d                   	char(5)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl1           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl1
 
 
 -- !query
@@ -274,8 +321,7 @@ alter view char_view as select * from char_tbl2
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl2; line 1 pos 38
+
 
 
 -- !query
@@ -293,8 +339,8 @@ Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	VIEW                	                    
-View Text           	select * from char_tbl	                    
-View Original Text  	select * from char_tbl	                    
+View Text           	select * from char_tbl2	                    
+View Original Text  	select * from char_tbl2	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
@@ -305,17 +351,28 @@ alter table char_tbl1 SET TBLPROPERTIES('yes'='no')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_tbl1
+
 
 
 -- !query
 desc formatted char_tbl1
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl1; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+d                   	char(5)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl1           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Table Properties    	[yes=no]            	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl1
 
 
 -- !query
@@ -341,8 +398,8 @@ Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	VIEW                	                    
-View Text           	select * from char_tbl	                    
-View Original Text  	select * from char_tbl	                    
+View Text           	select * from char_tbl2	                    
+View Original Text  	select * from char_tbl2	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[], yes=no]
@@ -353,17 +410,27 @@ alter table char_tbl1 UNSET TBLPROPERTIES('yes')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_tbl1
+
 
 
 -- !query
 desc formatted char_tbl1
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl1; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+d                   	char(5)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl1           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl1
 
 
 -- !query
@@ -389,8 +456,8 @@ Created Time [not included in comparison]
 Last Access [not included in comparison]
 Created By [not included in comparison]
 Type                	VIEW                	                    
-View Text           	select * from char_tbl	                    
-View Original Text  	select * from char_tbl	                    
+View Text           	select * from char_tbl2	                    
+View Original Text  	select * from char_tbl2	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[c, v]              	                    
 Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=c, view.query.out.col.1=v, view.query.out.numCols=2, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
@@ -401,17 +468,28 @@ alter table char_tbl1 SET SERDEPROPERTIES('yes'='no')
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_tbl1; line 1 pos 12
+
 
 
 -- !query
 desc formatted char_tbl1
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_tbl1; line 1 pos 0
+c                   	char(5)             	                    
+v                   	varchar(6)          	                    
+d                   	char(5)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_tbl1           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_tbl1	                    
+Storage Properties  	[yes=no]
 
 
 -- !query
@@ -419,17 +497,33 @@ create table char_part(c1 char(5), c2 char(2), v1 varchar(6), v2 varchar(2)) usi
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Can not create the managed table('`default`.`char_part`'). The associated location('file:/Users/cathy/Desktop/code/spark/sql/core/spark-warehouse/org.apache.spark.sql.SQLQueryTestSuite/char_part') already exists.
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 0
+c1                  	char(5)             	                    
+v1                  	varchar(6)          	                    
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_part           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_part	                    
+Partition Provider  	Catalog
 
 
 -- !query
@@ -437,17 +531,33 @@ alter table char_part add partition (v2='ke', c2='nt') location 'loc1'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 12
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 0
+c1                  	char(5)             	                    
+v1                  	varchar(6)          	                    
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_part           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_part	                    
+Partition Provider  	Catalog
 
 
 -- !query
@@ -456,16 +566,33 @@ alter table char_part partition (v2='ke') rename to partition (v2='nt')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 12
+Partition spec is invalid. The spec (v2) must match the partition spec (v2, c2) defined in table '`default`.`char_part`'
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 0
+c1                  	char(5)             	                    
+v1                  	varchar(6)          	                    
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_part           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_part	                    
+Partition Provider  	Catalog
 
 
 -- !query
@@ -473,17 +600,33 @@ alter table char_part partition (v2='ke', c2='nt') set location 'loc2'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-ALTER TABLE SET LOCATION does not support partition for v2 tables.
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 0
+c1                  	char(5)             	                    
+v1                  	varchar(6)          	                    
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_part           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_part	                    
+Partition Provider  	Catalog
 
 
 -- !query
@@ -491,14 +634,30 @@ MSCK REPAIR TABLE char_part
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table not found: char_part; line 1 pos 18
+
 
 
 -- !query
 desc formatted char_part
 -- !query schema
-struct<>
+struct<col_name:string,data_type:string,comment:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: char_part; line 1 pos 0
+c1                  	char(5)             	                    
+v1                  	varchar(6)          	                    
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+# Partition Information	                    	                    
+# col_name          	data_type           	comment             
+v2                  	varchar(2)          	                    
+c2                  	char(2)             	                    
+                    	                    	                    
+# Detailed Table Information	                    	                    
+Database            	default             	                    
+Table               	char_part           	                    
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type                	MANAGED             	                    
+Provider            	parquet             	                    
+Location [not included in comparison]/{warehouse_dir}/char_part	                    
+Partition Provider  	Catalog
