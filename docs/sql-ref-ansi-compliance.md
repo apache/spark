@@ -156,6 +156,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `make_date`: This function should fail with an exception if the result date is invalid.
   - `make_timestamp`: This function should fail with an exception if the result timestamp is invalid.
   - `make_interval`:  This function should fail with an exception if the result interval is invalid.
+  - `next_day`: This function throws `IllegalArgumentException` if input is not a valid day of week.
 
 ### SQL Operators
 
