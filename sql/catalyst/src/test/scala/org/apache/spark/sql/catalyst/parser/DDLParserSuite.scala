@@ -1103,26 +1103,40 @@ class DDLParserSuite extends AnalysisTest {
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc.xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("abc.xyz")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc", "xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("abc", "xyz")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("a.b", "x.y"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("a.b", "x.y")),
+        isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = true))
 
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
@@ -1791,40 +1805,6 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER NAMESPACE a.b.c SET LOCATION '/home/user/db'"),
       AlterNamespaceSetLocation(
         UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
-  }
-
-  test("show databases: basic") {
-    comparePlans(
-      parsePlan("SHOW DATABASES"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
-  }
-
-  test("show databases: FROM/IN operator is not allowed") {
-    def verify(sql: String): Unit = {
-      val exc = intercept[ParseException] { parsePlan(sql) }
-      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
-    }
-
-    verify("SHOW DATABASES FROM testcat.ns1.ns2")
-    verify("SHOW DATABASES IN testcat.ns1.ns2")
-  }
-
-  test("show namespaces") {
-    comparePlans(
-      parsePlan("SHOW NAMESPACES"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
   }
 
   test("analyze table statistics") {

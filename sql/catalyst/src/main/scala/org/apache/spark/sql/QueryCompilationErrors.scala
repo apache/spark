@@ -500,4 +500,8 @@ object QueryCompilationErrors {
   def commandNotSupportNestedColumnError(command: String, quoted: String): Throwable = {
     new AnalysisException(s"$command does not support nested column: $quoted")
   }
+
+  def columnDoesNotExistError(colName: String): Throwable = {
+    new AnalysisException(s"Column $colName does not exist")
+  }
 }
