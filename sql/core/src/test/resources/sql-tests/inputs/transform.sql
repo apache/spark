@@ -190,89 +190,89 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp;
 
-SELECT TRANSFORM (b, a, CAST(c AS STRING))
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b, a, CAST(c AS STRING))
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM (1, 2, 3)
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(1, 2, 3)
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
 SELECT TRANSFORM(1, 2)
-USING 'cat' AS (a INT, b INT)
+  USING 'cat' AS (a INT, b INT)
 FROM script_trans
 LIMIT 1;
 
-SELECT TRANSFORM (
-b AS d5, a,
-CASE
-  WHEN c > 100 THEN 1
-  WHEN c < 100 THEN 2
-ELSE 3 END)
-USING 'cat' AS (a, b,  c)
+SELECT TRANSFORM(
+  b AS d5, a,
+  CASE
+    WHEN c > 100 THEN 1
+    WHEN c < 100 THEN 2
+  ELSE 3 END)
+  USING 'cat' AS (a, b,  c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM (b, a, c + 1)
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b, a, c + 1)
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM (*)
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(*)
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4;
 
-SELECT TRANSFORM (b AS d, MAX(a) as max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b AS d, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b;
 
-SELECT TRANSFORM (b AS d, MAX(a) FILTER (WHERE a > 3) AS max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a,b,c)
+SELECT TRANSFORM(b AS d, MAX(a) FILTER (WHERE a > 3) AS max_a, CAST(SUM(c) AS STRING))
+  USING 'cat' AS (a,b,c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b;
 
-SELECT TRANSFORM (b, MAX(a) as max_a, CAST(sum(c) AS STRING))
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b, MAX(a) as max_a, CAST(sum(c) AS STRING))
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 2
 GROUP BY b;
 
-SELECT TRANSFORM (b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b
 HAVING max_a > 0;
 
-SELECT TRANSFORM (b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING))
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 GROUP BY b
 HAVING max(a) > 1;
 
-SELECT TRANSFORM (b, MAX(a) OVER w as max_a, CAST(SUM(c) OVER w AS STRING))
-USING 'cat' AS (a, b, c)
+SELECT TRANSFORM(b, MAX(a) OVER w as max_a, CAST(SUM(c) OVER w AS STRING))
+  USING 'cat' AS (a, b, c)
 FROM script_trans
 WHERE a <= 4
 WINDOW w AS (PARTITION BY b ORDER BY a);
 
-set spark.sql.legacy.bucketedTableScan.outputOrdering=true;
+SET spark.sql.legacy.bucketedTableScan.outputOrdering=true;
 
-SELECT TRANSFORM (MAX(a) as max_a, CAST(SUM(c) AS STRING))
-USING 'cat' AS (a, b)
+SELECT TRANSFORM(MAX(a) as max_a, CAST(SUM(c) AS STRING))
+  USING 'cat' AS (a, b)
 FROM script_trans
 WHERE a <= 4
 HAVING max(a) > 1;
 
-SELECT TRANSFORM (b, MAX(a) as max_a, CAST(SUM(c) AS STRING), myCol, myCol2)
-USING 'cat' AS (a, b, c, d, e)
+SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING), myCol, myCol2)
+  USING 'cat' AS (a, b, c, d, e)
 FROM script_trans
 LATERAL VIEW explode(array(array(1,2,3))) myTable AS myCol
 LATERAL VIEW explode(myTable.myCol) myTable2 AS myCol2
@@ -281,15 +281,18 @@ GROUP BY b, myCol, myCol2
 HAVING max(a) > 1;
 
 
-FROM
-(FROM script_trans SELECT TRANSFORM(a, b) USING 'cat' AS (`a` INT, b STRING)) t
+FROM(
+  FROM script_trans
+  SELECT TRANSFORM(a, b)
+    USING 'cat' AS (`a` INT, b STRING)
+) t
 SELECT a + 1;
 
-FROM
-(SELECT TRANSFORM(a, SUM(b) b)
-USING 'cat' AS (`a` INT, b STRING)
-FROM script_trans
-GROUP BY a
+FROM(
+  SELECT TRANSFORM(a, SUM(b) b)
+    USING 'cat' AS (`a` INT, b STRING)
+  FROM script_trans
+  GROUP BY a
 ) t
 SELECT (b + 1) AS result
 ORDER BY result;
@@ -298,5 +301,10 @@ MAP k / 10 USING 'cat' AS (one) FROM (SELECT 10 AS k);
 
 FROM (SELECT 1 AS key, 100 AS value) src
 MAP src.*, src.key, CAST(src.key / 10 AS INT), CAST(src.key % 10 AS INT), src.value
-USING 'cat' AS (k, v, tkey, ten, one, tvalue);
+  USING 'cat' AS (k, v, tkey, ten, one, tvalue);
 
+SET spark.sql.parser.quotedRegexColumnNames=true;
+
+SELECT TRANSFORM(`(a|b)?+.+`)
+ USING 'cat' AS (c)
+FROM script_trans;
