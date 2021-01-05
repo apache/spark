@@ -338,4 +338,25 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "SELECT \"legal 'string b\";select 22222 + 1;".stripMargin -> "22223"
     )
   }
+
+  test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
+    runCliWithin(4.minute)(
+      "/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
+      "SELECT 'test'; -- SELECT 'test';" -> "",
+      "SELECT 'test'; /* SELECT 'test';*/;" -> "",
+      "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
+      "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
+      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+    )
+  }
+
+  test("SPARK-33100: test sql statements with hint in bracketed comment") {
+    runCliWithin(2.minute)(
+      "CREATE TEMPORARY VIEW t AS SELECT * FROM VALUES(1, 2) AS t(k, v);" -> "",
+      "EXPLAIN EXTENDED SELECT /*+ broadcast(t) */ * from t;"
+        -> "ResolvedHint (strategy=broadcast)"
+    )
+  }
 }
