@@ -573,7 +573,7 @@ private[spark] class TaskSetManager(
       sched.taskSetFinished(this)
       if (tasksSuccessful == numTasks) {
         val broadcastId = taskSet.tasks.head match {
-          case resultTask: ResultTask[Any, Any] =>
+          case resultTask: ResultTask[_, _] =>
             resultTask.taskBinary.id
           case shuffleMapTask: ShuffleMapTask =>
             shuffleMapTask.taskBinary.id
