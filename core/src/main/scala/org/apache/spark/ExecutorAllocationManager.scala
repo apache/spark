@@ -798,7 +798,9 @@ private[spark] class ExecutorAllocationManager(
         }
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
-          stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
+          if (stageAttemptToNumSpeculativeTasks.contains(stageAttempt)) {
+            stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
+          }
         }
 
         taskEnd.reason match {
