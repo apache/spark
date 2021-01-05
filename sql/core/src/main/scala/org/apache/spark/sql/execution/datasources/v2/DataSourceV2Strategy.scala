@@ -368,11 +368,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         invalidateCache(r, recacheTable = true)) :: Nil
 
     case AlterTableRenamePartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
       AlterTableRenamePartitionExec(
         table,
         Seq(from).asResolvedPartitionSpecs.head,
-        Seq(to).asResolvedPartitionSpecs.head) :: Nil
+        Seq(to).asResolvedPartitionSpecs.head,
+        invalidateCache(r, recacheTable = true)) :: Nil
 
     case AlterTableRecoverPartitions(_: ResolvedTable) =>
       throw new AnalysisException(
