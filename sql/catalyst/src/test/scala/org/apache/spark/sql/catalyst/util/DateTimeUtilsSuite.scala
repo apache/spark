@@ -211,17 +211,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015-03-18T12:03:17GMT-01:00", expected)
       checkStringToTimestamp("2015-03-18T12:03:17-0100", expected)
 
-      zoneId = getZoneId("+07:30")
+      zoneId = getZoneId("07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
-      checkStringToTimestamp("2015-03-18T12:03:17+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17 GMT+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17+0730", expected)
+      checkStringToTimestamp("2015-03-18T12:03:1707:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17 GMT07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:170730", expected)
 
-      zoneId = getZoneId("+07:03")
+      zoneId = getZoneId("07:03")
       expected = Option(date(2015, 3, 18, 12, 3, 17, zid = zoneId))
-      checkStringToTimestamp("2015-03-18T12:03:17+07:03", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17GMT+07:03", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17+0703", expected)
+      checkStringToTimestamp("2015-03-18T12:03:1707:03", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17GMT07:03", expected)
+      checkStringToTimestamp("2015-03-18T12:03:170703", expected)
 
       // tests for the string including milliseconds.
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zid))
@@ -242,42 +242,43 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015-03-18T12:03:17.123 GMT-01:00", expected)
       checkStringToTimestamp("2015-03-18T12:03:17.123-0100", expected)
 
-      zoneId = getZoneId("+07:30")
+      zoneId = getZoneId("07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
-      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123 GMT+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123+0730", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.12307:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123 GMT07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.1230730", expected)
 
-      zoneId = getZoneId("+07:30")
+      zoneId = getZoneId("07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123000, zid = zoneId))
-      checkStringToTimestamp("2015-03-18T12:03:17.123+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123GMT+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123+0730", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.12307:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123GMT07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.1230730", expected)
+
 
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123121, zid = zoneId))
-      checkStringToTimestamp("2015-03-18T12:03:17.123121+7:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123121 GMT+0730", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.1231217:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123121 GMT0730", expected)
 
-      zoneId = getZoneId("+07:30")
+      zoneId = getZoneId("07:30")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123120, zid = zoneId))
-      checkStringToTimestamp("2015-03-18T12:03:17.12312+7:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.12312 UT+07:30", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.12312+0730", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123127:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.12312 UT07:30", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123120730", expected)
 
       expected = Option(time(18, 12, 15, zid = zid))
       checkStringToTimestamp("18:12:15", expected)
 
-      zoneId = getZoneId("+07:30")
+      zoneId = getZoneId("07:30")
       expected = Option(time(18, 12, 15, 123120, zid = zoneId))
-      checkStringToTimestamp("T18:12:15.12312+7:30", expected)
-      checkStringToTimestamp("T18:12:15.12312 UTC+07:30", expected)
-      checkStringToTimestamp("T18:12:15.12312+0730", expected)
+      checkStringToTimestamp("T18:12:15.123127:30", expected)
+      checkStringToTimestamp("T18:12:15.12312 UTC07:30", expected)
+      checkStringToTimestamp("T18:12:15.123120730", expected)
 
-      zoneId = getZoneId("+07:30")
+      zoneId = getZoneId("07:30")
       expected = Option(time(18, 12, 15, 123120, zid = zoneId))
-      checkStringToTimestamp("18:12:15.12312+7:30", expected)
-      checkStringToTimestamp("18:12:15.12312 GMT+07:30", expected)
-      checkStringToTimestamp("18:12:15.12312+0730", expected)
+      checkStringToTimestamp("18:12:15.123127:30", expected)
+      checkStringToTimestamp("18:12:15.12312 GMT07:30", expected)
+      checkStringToTimestamp("18:12:15.123120730", expected)
 
       expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, zid = zid))
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
@@ -308,9 +309,9 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
       // Truncating the fractional seconds
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = UTC))
-      checkStringToTimestamp("2015-03-18T12:03:17.123456789+0:00", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123456789 UTC+0", expected)
-      checkStringToTimestamp("2015-03-18T12:03:17.123456789GMT+00:00", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.1234567890:00", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123456789 UTC0", expected)
+      checkStringToTimestamp("2015-03-18T12:03:17.123456789GMT00:00", expected)
 
       zoneId = getZoneId("Europe/Moscow")
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = zoneId))
@@ -801,17 +802,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
       assert(convertSpecialTimestamp("Epoch", zoneId).get === 0)
       val now = instantToMicros(Instant.now())
-      convertSpecialTimestamp("NOW", zoneId).get should be(now +- tolerance)
+      convertSpecialTimestamp("NOW", zoneId).get should be(now - tolerance)
       assert(convertSpecialTimestamp("now UTC", zoneId) === None)
       val localToday = LocalDateTime.now(zoneId)
         .`with`(LocalTime.MIDNIGHT)
         .atZone(zoneId)
       val yesterday = instantToMicros(localToday.minusDays(1).toInstant)
-      convertSpecialTimestamp(" Yesterday", zoneId).get should be(yesterday +- tolerance)
+      convertSpecialTimestamp(" Yesterday", zoneId).get should be(yesterday - tolerance)
       val today = instantToMicros(localToday.toInstant)
-      convertSpecialTimestamp("Today ", zoneId).get should be(today +- tolerance)
+      convertSpecialTimestamp("Today ", zoneId).get should be(today - tolerance)
       val tomorrow = instantToMicros(localToday.plusDays(1).toInstant)
-      convertSpecialTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow +- tolerance)
+      convertSpecialTimestamp(" tomorrow CET ", zoneId).get should be(tomorrow - tolerance)
     }
   }
 
@@ -1043,4 +1044,49 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
     assert(e.getMessage === "Got the unexpected unit 'SECS'.")
   }
+
+  test("ceilTimestamp") {
+      def testCeil(
+                    level: Int,
+                    expected: String,
+                    inputTS: SQLTimestamp,
+                    zoneId: ZoneId = ZoneId.systemDefault()): Unit = {
+          val ceilTS =
+              DateTimeUtils.ceilTimestamp(inputTS, level, zoneId)
+          val expectedTS =
+              DateTimeUtils.stringToTimestamp(UTF8String.fromString(expected), zoneId)
+          assert(ceilTS === expectedTS.get)
+        }
+
+        val defaultInputTS =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-05T09:32:05.359"),
+              ZoneId.systemDefault())
+      val defaultInputTS1 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-31T20:32:05.359"),
+              ZoneId.systemDefault())
+      val defaultInputTS2 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-04-01T02:32:05.359"),
+              ZoneId.systemDefault())
+      val defaultInputTS3 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-30T02:32:05.359"),
+              ZoneId.systemDefault())
+      val defaultInputTS4 =
+          DateTimeUtils.stringToTimestamp(UTF8String.fromString("2015-03-29T02:32:05.359"),
+              ZoneId.systemDefault())
+
+        testCeil(DateTimeUtils.TRUNC_TO_YEAR, "2016-01-01T00:00:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_MONTH, "2015-04-01T00:00:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_DAY, "2015-03-06T00:00:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_HOUR, "2015-03-05T10:00:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_MINUTE, "2015-03-05T09:33:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_SECOND, "2015-03-05T09:32:06", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-09T00:00:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_WEEK, "2015-04-06T00:00:00", defaultInputTS1.get)
+      testCeil(DateTimeUtils.TRUNC_TO_WEEK, "2015-04-06T00:00:00", defaultInputTS2.get)
+      testCeil(DateTimeUtils.TRUNC_TO_WEEK, "2015-04-06T00:00:00", defaultInputTS3.get)
+      testCeil(DateTimeUtils.TRUNC_TO_WEEK, "2015-03-30T00:00:00", defaultInputTS4.get)
+      testCeil(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS.get)
+      testCeil(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", defaultInputTS1.get)
+      testCeil(DateTimeUtils.TRUNC_TO_QUARTER, "2015-07-01T00:00:00", defaultInputTS2.get)
+    }
 }
