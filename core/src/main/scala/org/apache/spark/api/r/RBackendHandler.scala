@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.handler.timeout.ReadTimeoutException
+import scala.language.existentials
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
