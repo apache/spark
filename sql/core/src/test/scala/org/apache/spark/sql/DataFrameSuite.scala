@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.runtime.universe.TypeTag
@@ -2612,6 +2612,21 @@ class DataFrameSuite extends QueryTest
     val l = c.select("col2")
     val df = l.join(r, $"col2" === $"col4", "LeftOuter")
     checkAnswer(df, Row("2", "2"))
+  }
+
+  test("SPARK-33989: Strip auto-generated cast when resolving UnresolvedAlias") {
+    Seq("SELECT id == null FROM VALUES(1) AS t(id)",
+      "SELECT floor(1)",
+      "SELECT split(struct(c1, c2).c1, ',') FROM VALUES(1, 2) AS t(c1, c2)").foreach { sqlStr =>
+      assert(!sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
+    }
+
+    Seq("SELECT id == CAST(null AS int) FROM VALUES(1) AS t(id)",
+      "SELECT floor(CAST(1 AS double))",
+      "SELECT split(CAST(struct(c1, c2).c1 AS string), ',') FROM VALUES(1, 2) AS t(c1, c2)"
+    ).foreach { sqlStr =>
+      assert(sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
+    }
   }
 }
 
