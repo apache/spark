@@ -536,6 +536,7 @@ case class AlterTableRenamePartitionCommand(
 
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     Seq.empty[Row]
   }
 

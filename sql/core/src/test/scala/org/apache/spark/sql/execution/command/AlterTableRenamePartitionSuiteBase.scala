@@ -173,9 +173,9 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"CACHE TABLE $t")
       assert(spark.catalog.isCached(t))
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
-      sql(s"ALTER TABLE $t RENAME PARTITION (part=0) TO PARTITION (part=2)")
+      sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=2)")
       assert(spark.catalog.isCached(t))
-      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 2), Row(1, 1)))
     }
   }
 }
