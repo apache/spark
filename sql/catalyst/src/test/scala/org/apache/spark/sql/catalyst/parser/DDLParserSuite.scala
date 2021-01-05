@@ -1103,26 +1103,40 @@ class DDLParserSuite extends AnalysisTest {
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc.xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("abc.xyz")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc", "xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("abc", "xyz")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("a.b", "x.y"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("a.b", "x.y")),
+        isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = true))
 
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))

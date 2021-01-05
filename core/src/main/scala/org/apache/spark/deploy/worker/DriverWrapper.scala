@@ -19,8 +19,6 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{config, Logging}
@@ -86,14 +84,14 @@ object DriverWrapper extends Logging {
       ivyProperties.ivyRepoPath, Option(ivyProperties.ivySettingsPath))
     val jars = {
       val jarsProp = sys.props.get(config.JARS.key).orNull
-      if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        DependencyUtils.mergeFileLists(jarsProp, resolvedMavenCoordinates)
+      if (resolvedMavenCoordinates.nonEmpty) {
+        DependencyUtils.mergeFileLists(jarsProp,
+          DependencyUtils.mergeFileLists(resolvedMavenCoordinates: _*))
       } else {
         jarsProp
       }
     }
-    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf,
-      secMgr)
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf)
     DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }

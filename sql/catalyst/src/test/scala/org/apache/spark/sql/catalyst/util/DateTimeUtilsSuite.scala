@@ -675,4 +675,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
   }
+
+  test("parsing day of week") {
+    assert(getDayOfWeekFromString(UTF8String.fromString("THU")) == 0)
+    assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
+    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
+    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
+  }
 }

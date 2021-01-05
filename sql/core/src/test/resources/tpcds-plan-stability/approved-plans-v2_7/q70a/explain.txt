@@ -1,68 +1,64 @@
 == Physical Plan ==
-TakeOrderedAndProject (64)
-+- * Project (63)
-   +- Window (62)
-      +- * Sort (61)
-         +- Exchange (60)
-            +- * HashAggregate (59)
-               +- Exchange (58)
-                  +- * HashAggregate (57)
-                     +- Union (56)
-                        :- * HashAggregate (50)
-                        :  +- Exchange (49)
-                        :     +- * HashAggregate (48)
-                        :        +- Union (47)
-                        :           :- * HashAggregate (41)
-                        :           :  +- Exchange (40)
-                        :           :     +- * HashAggregate (39)
-                        :           :        +- * Project (38)
-                        :           :           +- * BroadcastHashJoin Inner BuildRight (37)
-                        :           :              :- * Project (10)
-                        :           :              :  +- * BroadcastHashJoin Inner BuildRight (9)
-                        :           :              :     :- * Filter (3)
-                        :           :              :     :  +- * ColumnarToRow (2)
-                        :           :              :     :     +- Scan parquet default.store_sales (1)
-                        :           :              :     +- BroadcastExchange (8)
-                        :           :              :        +- * Project (7)
-                        :           :              :           +- * Filter (6)
-                        :           :              :              +- * ColumnarToRow (5)
-                        :           :              :                 +- Scan parquet default.date_dim (4)
-                        :           :              +- BroadcastExchange (36)
-                        :           :                 +- * BroadcastHashJoin LeftSemi BuildRight (35)
-                        :           :                    :- * Filter (13)
-                        :           :                    :  +- * ColumnarToRow (12)
-                        :           :                    :     +- Scan parquet default.store (11)
-                        :           :                    +- BroadcastExchange (34)
-                        :           :                       +- * Project (33)
-                        :           :                          +- * Filter (32)
-                        :           :                             +- Window (31)
-                        :           :                                +- * Sort (30)
-                        :           :                                   +- Exchange (29)
-                        :           :                                      +- * HashAggregate (28)
-                        :           :                                         +- Exchange (27)
-                        :           :                                            +- * HashAggregate (26)
-                        :           :                                               +- * Project (25)
-                        :           :                                                  +- * BroadcastHashJoin Inner BuildRight (24)
-                        :           :                                                     :- * Project (22)
-                        :           :                                                     :  +- * BroadcastHashJoin Inner BuildRight (21)
-                        :           :                                                     :     :- * Filter (16)
-                        :           :                                                     :     :  +- * ColumnarToRow (15)
-                        :           :                                                     :     :     +- Scan parquet default.store_sales (14)
-                        :           :                                                     :     +- BroadcastExchange (20)
-                        :           :                                                     :        +- * Filter (19)
-                        :           :                                                     :           +- * ColumnarToRow (18)
-                        :           :                                                     :              +- Scan parquet default.store (17)
-                        :           :                                                     +- ReusedExchange (23)
-                        :           +- * HashAggregate (46)
-                        :              +- Exchange (45)
-                        :                 +- * HashAggregate (44)
-                        :                    +- * HashAggregate (43)
-                        :                       +- ReusedExchange (42)
-                        +- * HashAggregate (55)
-                           +- Exchange (54)
-                              +- * HashAggregate (53)
-                                 +- * HashAggregate (52)
-                                    +- ReusedExchange (51)
+TakeOrderedAndProject (60)
++- * Project (59)
+   +- Window (58)
+      +- * Sort (57)
+         +- Exchange (56)
+            +- * HashAggregate (55)
+               +- Exchange (54)
+                  +- * HashAggregate (53)
+                     +- Union (52)
+                        :- * HashAggregate (41)
+                        :  +- Exchange (40)
+                        :     +- * HashAggregate (39)
+                        :        +- * Project (38)
+                        :           +- * BroadcastHashJoin Inner BuildRight (37)
+                        :              :- * Project (10)
+                        :              :  +- * BroadcastHashJoin Inner BuildRight (9)
+                        :              :     :- * Filter (3)
+                        :              :     :  +- * ColumnarToRow (2)
+                        :              :     :     +- Scan parquet default.store_sales (1)
+                        :              :     +- BroadcastExchange (8)
+                        :              :        +- * Project (7)
+                        :              :           +- * Filter (6)
+                        :              :              +- * ColumnarToRow (5)
+                        :              :                 +- Scan parquet default.date_dim (4)
+                        :              +- BroadcastExchange (36)
+                        :                 +- * BroadcastHashJoin LeftSemi BuildRight (35)
+                        :                    :- * Filter (13)
+                        :                    :  +- * ColumnarToRow (12)
+                        :                    :     +- Scan parquet default.store (11)
+                        :                    +- BroadcastExchange (34)
+                        :                       +- * Project (33)
+                        :                          +- * Filter (32)
+                        :                             +- Window (31)
+                        :                                +- * Sort (30)
+                        :                                   +- Exchange (29)
+                        :                                      +- * HashAggregate (28)
+                        :                                         +- Exchange (27)
+                        :                                            +- * HashAggregate (26)
+                        :                                               +- * Project (25)
+                        :                                                  +- * BroadcastHashJoin Inner BuildRight (24)
+                        :                                                     :- * Project (22)
+                        :                                                     :  +- * BroadcastHashJoin Inner BuildRight (21)
+                        :                                                     :     :- * Filter (16)
+                        :                                                     :     :  +- * ColumnarToRow (15)
+                        :                                                     :     :     +- Scan parquet default.store_sales (14)
+                        :                                                     :     +- BroadcastExchange (20)
+                        :                                                     :        +- * Filter (19)
+                        :                                                     :           +- * ColumnarToRow (18)
+                        :                                                     :              +- Scan parquet default.store (17)
+                        :                                                     +- ReusedExchange (23)
+                        :- * HashAggregate (46)
+                        :  +- Exchange (45)
+                        :     +- * HashAggregate (44)
+                        :        +- * HashAggregate (43)
+                        :           +- ReusedExchange (42)
+                        +- * HashAggregate (51)
+                           +- Exchange (50)
+                              +- * HashAggregate (49)
+                                 +- * HashAggregate (48)
+                                    +- ReusedExchange (47)
 
 
 (1) Scan parquet default.store_sales
@@ -186,7 +182,7 @@ Results [2]: [s_state#9, sum#12]
 
 (27) Exchange
 Input [2]: [s_state#9, sum#12]
-Arguments: hashpartitioning(s_state#9, 5), true, [id=#13]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (28) HashAggregate [codegen id : 5]
 Input [2]: [s_state#9, sum#12]
@@ -197,7 +193,7 @@ Results [3]: [s_state#9 AS s_state#15, s_state#9, MakeDecimal(sum(UnscaledValue(
 
 (29) Exchange
 Input [3]: [s_state#15, s_state#9, _w2#16]
-Arguments: hashpartitioning(s_state#9, 5), true, [id=#17]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (30) Sort [codegen id : 6]
 Input [3]: [s_state#15, s_state#9, _w2#16]
@@ -246,7 +242,7 @@ Results [3]: [s_state#9, s_county#8, sum#22]
 
 (40) Exchange
 Input [3]: [s_state#9, s_county#8, sum#22]
-Arguments: hashpartitioning(s_state#9, s_county#8, 5), true, [id=#23]
+Arguments: hashpartitioning(s_state#9, s_county#8, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (41) HashAggregate [codegen id : 10]
 Input [3]: [s_state#9, s_county#8, sum#22]
@@ -274,7 +270,7 @@ Results [3]: [s_state#9, sum#34, isEmpty#35]
 
 (45) Exchange
 Input [3]: [s_state#9, sum#34, isEmpty#35]
-Arguments: hashpartitioning(s_state#9, 5), true, [id=#36]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#36]
 
 (46) HashAggregate [codegen id : 21]
 Input [3]: [s_state#9, sum#34, isEmpty#35]
@@ -283,91 +279,71 @@ Functions [1]: [sum(total_sum#31)]
 Aggregate Attributes [1]: [sum(total_sum#31)#37]
 Results [6]: [sum(total_sum#31)#37 AS total_sum#38, s_state#9, null AS s_county#39, 0 AS g_state#40, 1 AS g_county#41, 1 AS lochierarchy#42]
 
-(47) Union
+(47) ReusedExchange [Reuses operator id: 40]
+Output [3]: [s_state#9, s_county#8, sum#43]
 
-(48) HashAggregate [codegen id : 22]
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Functions: []
-Aggregate Attributes: []
-Results [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-
-(49) Exchange
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Arguments: hashpartitioning(total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28, 5), true, [id=#43]
-
-(50) HashAggregate [codegen id : 23]
-Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Functions: []
-Aggregate Attributes: []
-Results [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-
-(51) ReusedExchange [Reuses operator id: 40]
-Output [3]: [s_state#9, s_county#8, sum#44]
-
-(52) HashAggregate [codegen id : 33]
-Input [3]: [s_state#9, s_county#8, sum#44]
+(48) HashAggregate [codegen id : 31]
+Input [3]: [s_state#9, s_county#8, sum#43]
 Keys [2]: [s_state#9, s_county#8]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#45]
-Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#45,17,2) AS total_sum#31]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#44]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#44,17,2) AS total_sum#31]
 
-(53) HashAggregate [codegen id : 33]
+(49) HashAggregate [codegen id : 31]
 Input [1]: [total_sum#31]
 Keys: []
 Functions [1]: [partial_sum(total_sum#31)]
-Aggregate Attributes [2]: [sum#46, isEmpty#47]
-Results [2]: [sum#48, isEmpty#49]
+Aggregate Attributes [2]: [sum#45, isEmpty#46]
+Results [2]: [sum#47, isEmpty#48]
 
-(54) Exchange
-Input [2]: [sum#48, isEmpty#49]
-Arguments: SinglePartition, true, [id=#50]
+(50) Exchange
+Input [2]: [sum#47, isEmpty#48]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#49]
 
-(55) HashAggregate [codegen id : 34]
-Input [2]: [sum#48, isEmpty#49]
+(51) HashAggregate [codegen id : 32]
+Input [2]: [sum#47, isEmpty#48]
 Keys: []
 Functions [1]: [sum(total_sum#31)]
-Aggregate Attributes [1]: [sum(total_sum#31)#51]
-Results [6]: [sum(total_sum#31)#51 AS total_sum#52, null AS s_state#53, null AS s_county#54, 1 AS g_state#55, 1 AS g_county#56, 2 AS lochierarchy#57]
+Aggregate Attributes [1]: [sum(total_sum#31)#50]
+Results [6]: [sum(total_sum#31)#50 AS total_sum#51, null AS s_state#52, null AS s_county#53, 1 AS g_state#54, 1 AS g_county#55, 2 AS lochierarchy#56]
 
-(56) Union
+(52) Union
 
-(57) HashAggregate [codegen id : 35]
+(53) HashAggregate [codegen id : 33]
 Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
 Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
 Functions: []
 Aggregate Attributes: []
 Results [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
 
-(58) Exchange
+(54) Exchange
 Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
-Arguments: hashpartitioning(total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28, 5), true, [id=#58]
+Arguments: hashpartitioning(total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28, 5), ENSURE_REQUIREMENTS, [id=#57]
 
-(59) HashAggregate [codegen id : 36]
+(55) HashAggregate [codegen id : 34]
 Input [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
 Keys [6]: [total_sum#25, s_state#9, s_county#8, g_state#26, g_county#27, lochierarchy#28]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, CASE WHEN (g_county#27 = 0) THEN s_state#9 END AS _w0#59]
+Results [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, CASE WHEN (g_county#27 = 0) THEN s_state#9 END AS _w0#58]
 
-(60) Exchange
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59]
-Arguments: hashpartitioning(lochierarchy#28, _w0#59, 5), true, [id=#60]
+(56) Exchange
+Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#58]
+Arguments: hashpartitioning(lochierarchy#28, _w0#58, 5), ENSURE_REQUIREMENTS, [id=#59]
 
-(61) Sort [codegen id : 37]
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59]
-Arguments: [lochierarchy#28 ASC NULLS FIRST, _w0#59 ASC NULLS FIRST, total_sum#25 DESC NULLS LAST], false, 0
+(57) Sort [codegen id : 35]
+Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#58]
+Arguments: [lochierarchy#28 ASC NULLS FIRST, _w0#58 ASC NULLS FIRST, total_sum#25 DESC NULLS LAST], false, 0
 
-(62) Window
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59]
-Arguments: [rank(total_sum#25) windowspecdefinition(lochierarchy#28, _w0#59, total_sum#25 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#61], [lochierarchy#28, _w0#59], [total_sum#25 DESC NULLS LAST]
+(58) Window
+Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#58]
+Arguments: [rank(total_sum#25) windowspecdefinition(lochierarchy#28, _w0#58, total_sum#25 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#60], [lochierarchy#28, _w0#58], [total_sum#25 DESC NULLS LAST]
 
-(63) Project [codegen id : 38]
-Output [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#61]
-Input [6]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#59, rank_within_parent#61]
+(59) Project [codegen id : 36]
+Output [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#60]
+Input [6]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, _w0#58, rank_within_parent#60]
 
-(64) TakeOrderedAndProject
-Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#61]
-Arguments: 100, [lochierarchy#28 DESC NULLS LAST, CASE WHEN (lochierarchy#28 = 0) THEN s_state#9 END ASC NULLS FIRST, rank_within_parent#61 ASC NULLS FIRST], [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#61]
+(60) TakeOrderedAndProject
+Input [5]: [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#60]
+Arguments: 100, [lochierarchy#28 DESC NULLS LAST, CASE WHEN (lochierarchy#28 = 0) THEN s_state#9 END ASC NULLS FIRST, rank_within_parent#60 ASC NULLS FIRST], [total_sum#25, s_state#9, s_county#8, lochierarchy#28, rank_within_parent#60]
 

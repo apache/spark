@@ -451,6 +451,21 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         Seq(Row("char(5)"), Row("varchar(3)")))
     }
   }
+
+  test("SPARK-33992: char/varchar resolution in correlated sub query") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql("INSERT INTO t1 VALUES ('c', 'b')")
+      sql("INSERT INTO t2 VALUES ('a', 'b')")
+
+      checkAnswer(sql(
+        """
+          |SELECT v FROM t1
+          |WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
+        Row("c"))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
@@ -547,6 +562,21 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       val df2 = spark.sql("select testchar2('abc')")
       checkAnswer(df2, Row("abc"))
       assert(df2.schema.head.dataType === StringType)
+    }
+  }
+
+  test("invalidate char/varchar in spark.readStream.schema") {
+    failWithInvalidCharUsage(spark.readStream.schema(new StructType().add("id", CharType(5))))
+    failWithInvalidCharUsage(spark.readStream.schema("id char(5)"))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      withTempPath { dir =>
+        spark.range(2).write.save(dir.toString)
+        val df1 = spark.readStream.schema(new StructType().add("id", CharType(5)))
+          .load(dir.toString)
+        assert(df1.schema.map(_.dataType) == Seq(StringType))
+        val df2 = spark.readStream.schema("id char(5)").load(dir.toString)
+        assert(df2.schema.map(_.dataType) == Seq(StringType))
+      }
     }
   }
 }

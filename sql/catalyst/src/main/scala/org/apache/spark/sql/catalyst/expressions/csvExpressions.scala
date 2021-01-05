@@ -51,7 +51,8 @@ case class CsvToStructs(
     schema: StructType,
     options: Map[String, String],
     child: Expression,
-    timeZoneId: Option[String] = None)
+    timeZoneId: Option[String] = None,
+    requiredSchema: Option[StructType] = None)
   extends UnaryExpression
     with TimeZoneAwareExpression
     with CodegenFallback
@@ -113,7 +114,12 @@ case class CsvToStructs(
 
     val actualSchema =
       StructType(nullableSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-    val rawParser = new UnivocityParser(actualSchema, actualSchema, parsedOptions)
+    val actualRequiredSchema =
+      StructType(requiredSchema.map(_.asNullable).getOrElse(nullableSchema)
+        .filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+    val rawParser = new UnivocityParser(actualSchema,
+      actualRequiredSchema,
+      parsedOptions)
     new FailureSafeParser[String](
       input => rawParser.parse(input),
       mode,
@@ -121,7 +127,7 @@ case class CsvToStructs(
       parsedOptions.columnNameOfCorruptRecord)
   }
 
-  override def dataType: DataType = nullableSchema
+  override def dataType: DataType = requiredSchema.getOrElse(schema).asNullable
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression = {
     copy(timeZoneId = Option(timeZoneId))

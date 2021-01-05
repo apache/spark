@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
@@ -219,7 +220,8 @@ case class CreateViewCommand(
       throw new AnalysisException(
         "It is not allowed to create a persisted view from the Dataset API")
     }
-    val aliasedSchema = aliasPlan(session, analyzedPlan).schema
+    val aliasedSchema = CharVarcharUtils.getRawSchema(
+      aliasPlan(session, analyzedPlan).schema)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan, aliasedSchema.fieldNames)
 
@@ -293,8 +295,9 @@ case class AlterViewAsCommand(
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 
+    val newSchema = CharVarcharUtils.getRawSchema(analyzedPlan.schema)
     val updatedViewMeta = viewMeta.copy(
-      schema = analyzedPlan.schema,
+      schema = newSchema,
       properties = newProperties,
       viewOriginalText = Some(originalText),
       viewText = Some(originalText))

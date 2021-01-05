@@ -215,6 +215,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
+
+          case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
+            failAnalysis(
+              s"Input argument to ${e.prettyName} must be a constant.")
         }
 
         operator match {
@@ -595,14 +599,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // no validation needed for set and remove property
             }
 
-          case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
-            checkAlterTablePartition(table, parts)
+          case AlterTableAddPartition(r: ResolvedTable, parts, _) =>
+            checkAlterTablePartition(r.table, parts)
 
-          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _) =>
-            checkAlterTablePartition(table, parts)
+          case AlterTableDropPartition(r: ResolvedTable, parts, _, _) =>
+            checkAlterTablePartition(r.table, parts)
 
-          case AlterTableRenamePartition(ResolvedTable(_, _, table), from, _) =>
-            checkAlterTablePartition(table, Seq(from))
+          case AlterTableRenamePartition(r: ResolvedTable, from, _) =>
+            checkAlterTablePartition(r.table, Seq(from))
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
 
@@ -1043,7 +1047,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     case ShowPartitions(rt: ResolvedTable, _)
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
       failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
-    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement), _)
+    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _)
         if partTable.partitionSchema().isEmpty =>
       failAnalysis(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")

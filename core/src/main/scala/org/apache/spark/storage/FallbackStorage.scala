@@ -158,7 +158,7 @@ object FallbackStorage extends Logging {
         val name = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID).name
         val dataFile = new Path(fallbackPath, s"$appId/$shuffleId/$name")
         val f = fallbackFileSystem.open(dataFile)
-        val size = nextOffset - 1 - offset
+        val size = nextOffset - offset
         logDebug(s"To byte array $size")
         val array = new Array[Byte](size.toInt)
         val startTimeNs = System.nanoTime()
