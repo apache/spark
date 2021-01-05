@@ -21,14 +21,14 @@ license: |
 
 ### Description
 
-A LIKE predicate is used to search for a specific pattern. LIKE predicate also supports multiple patterns with predicate quantifiers include `SOME`, `ANY`, `ALL`.
+A LIKE predicate is used to search for a specific pattern. LIKE predicate also supports multiple patterns with predicate quantifiers include `ANY`, `SOME` and `ALL`.
 
 ### Syntax
 
 ```sql
 [ NOT ] { LIKE search_pattern [ ESCAPE esc_char ] | [ RLIKE | REGEXP ] regex_pattern }
 
-[ NOT ] { LIKE predicate_quantifiers ( search_pattern [ , ... ]) }
+[ NOT ] { LIKE quantifiers ( search_pattern [ , ... ]) }
 ```
 
 ### Parameters
@@ -48,9 +48,9 @@ A LIKE predicate is used to search for a specific pattern. LIKE predicate also s
 
     Specifies a regular expression search pattern to be searched by the `RLIKE` or `REGEXP` clause.
     
-* **predicate_quantifiers**
+* **quantifiers**
 
-    Specifies the predicate quantifiers include `SOME`, `ANY`, `ALL`. `ANY` or `SOME` means if one of the patterns matches the input, then return true; `ALL` means if all the patterns matches the input, then return true.
+    Specifies the predicate quantifiers include `ANY`, `SOME` and `ALL`. `ANY` or `SOME` means if one of the patterns matches the input, then return true; `ALL` means if all the patterns matches the input, then return true.
 
 ### Examples
 
