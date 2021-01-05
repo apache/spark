@@ -714,7 +714,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val withProject = if (aggregationClause == null && havingClause != null) {
       if (conf.getConf(SQLConf.LEGACY_HAVING_WITHOUT_GROUP_BY_AS_WHERE)) {
         // If the legacy conf is set, treat HAVING without GROUP BY as WHERE.
-        withHavingClause(havingClause, createProject())
+        val predicate = expression(havingClause.booleanExpression) match {
+          case p: Predicate => p
+          case e => Cast(e, BooleanType)
+        }
+        Filter(predicate, createProject())
       } else {
         // According to SQL standard, HAVING without GROUP BY means global aggregate.
         withHavingClause(havingClause, Aggregate(Nil, namedExpressions, withFilter))
