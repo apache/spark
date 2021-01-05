@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.optimizer.JoinReorderDP.JoinPlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -384,5 +385,19 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
   private def outputsOf(plans: LogicalPlan*): Seq[Attribute] = {
     plans.map(_.output).reduce(_ ++ _)
+  }
+
+  test("SPARK-33935: betterThan should be consistent") {
+    val plan1 = JoinPlan(null, null, null, Cost(300, 80))
+    val plan2 = JoinPlan(null, null, null, Cost(500, 30))
+
+    // cost1 = 300*0.7 + 80*0.3 = 234
+    // cost2 = 500*0.7 + 30*0.3 = 359
+
+    assert(!plan1.betterThan(plan1, conf))
+    assert(!plan2.betterThan(plan2, conf))
+
+    assert(plan1.betterThan(plan2, conf))
+    assert(!plan2.betterThan(plan1, conf))
   }
 }
