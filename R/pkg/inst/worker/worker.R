@@ -204,17 +204,18 @@ if (isEmpty != 0) {
             outputs[[length(outputs) + 1L]] <- output
           } else {
             outputResult(serializer, output, outputCon)
+            outputComputeElapsDiff <- outputComputeElapsDiff + (elapsedSecs() - computeElap)
           }
-          outputElap <- elapsedSecs()
           computeInputElapsDiff <- computeInputElapsDiff + (computeElap - computeStart)
-          outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
         }
 
         if (serializer == "arrow") {
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
           # rbind.fill might be an alternative to make it faster if plyr is installed.
+          outputStart <- elapsedSecs()
           combined <- do.call("rbind", outputs)
           SparkR:::writeSerializeInArrow(outputCon, combined)
+          outputComputeElapsDiff <- elapsedSecs() - outputStart
         }
       }
     } else {
