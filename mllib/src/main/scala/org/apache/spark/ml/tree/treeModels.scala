@@ -469,13 +469,15 @@ private[ml] object EnsembleModelReadWrite {
           instance.treeWeights(treeID))
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
-    sql.createDataFrame(treesMetadataWeights).toDF("treeID", "metadata", "weights")
+    sql.createDataFrame(treesMetadataWeights)
+      .toDF("treeID", "metadata", "weights")
+      .repartition(1)
       .write.parquet(treesMetadataPath)
     val dataPath = new Path(path, "data").toString
     val nodeDataRDD = sql.sparkContext.parallelize(instance.trees.zipWithIndex).flatMap {
       case (tree, treeID) => EnsembleNodeData.build(tree, treeID)
     }
-    sql.createDataFrame(nodeDataRDD).write.parquet(dataPath)
+    sql.createDataFrame(nodeDataRDD).repartition(1).write.parquet(dataPath)
   }
 
   /**
