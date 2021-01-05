@@ -3856,7 +3856,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     assert(unions.size == 1)
-
   }
 }
 
