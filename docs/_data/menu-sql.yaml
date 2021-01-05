@@ -188,8 +188,6 @@
                   url: sql-ref-syntax-qry-select-lateral-view.html
                 - text: PIVOT Clause
                   url: sql-ref-syntax-qry-select-pivot.html
-                - text: Regex Column Names
-                  url: sql-ref-syntax-qry-select-regex-column.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements

@@ -49,5 +49,4 @@ ability to generate logical and physical plan for a given query using
   * [CASE Clause](sql-ref-syntax-qry-select-case.html)
   * [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
   * [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)
-  * [Regex Column Names](sql-ref-syntax-qry-select-regex-column.html)
 * [EXPLAIN Statement](sql-ref-syntax-qry-explain.html)
