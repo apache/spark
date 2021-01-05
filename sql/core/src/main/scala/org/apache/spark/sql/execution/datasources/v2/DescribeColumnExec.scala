@@ -20,17 +20,12 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.Attribute
 
 case class DescribeColumnExec(
     override val output: Seq[Attribute],
     column: Attribute,
     isExtended: Boolean) extends V2CommandExec {
-  private val toRow = {
-    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
-  }
 
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
@@ -48,9 +43,5 @@ case class DescribeColumnExec(
     // TODO: The extended description (isExtended = true) can be added here.
 
     rows.toSeq
-  }
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
   }
 }
