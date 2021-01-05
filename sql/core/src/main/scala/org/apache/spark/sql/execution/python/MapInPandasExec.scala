@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{ContextAwareIterator, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -61,15 +61,16 @@ case class MapInPandasExec(
       val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
       val outputTypes = child.schema
 
+      val context = TaskContext.get()
+      val contextAwareIterator = new ContextAwareIterator(context, inputIter)
+
       // Here we wrap it via another row so that Python sides understand it
       // as a DataFrame.
-      val wrappedIter = inputIter.map(InternalRow(_))
+      val wrappedIter = contextAwareIterator.map(InternalRow(_))
 
       // DO NOT use iter.grouped(). See BatchIterator.
       val batchIter =
         if (batchSize > 0) new BatchIterator(wrappedIter, batchSize) else Iterator(wrappedIter)
-
-      val context = TaskContext.get()
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc,

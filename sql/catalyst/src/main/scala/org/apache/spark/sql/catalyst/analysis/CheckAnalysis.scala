@@ -215,6 +215,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
+
+          case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
+            failAnalysis(
+              s"Input argument to ${e.prettyName} must be a constant.")
         }
 
         operator match {
@@ -523,7 +527,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 TypeUtils.failWithIntervalType(add.dataType())
                 colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
               case update: UpdateColumnType =>
-                val field = findField("update", update.fieldNames)
+                val field = {
+                  val f = findField("update", update.fieldNames)
+                  CharVarcharUtils.getRawType(f.metadata)
+                    .map(dt => f.copy(dataType = dt))
+                    .getOrElse(f)
+                }
                 val fieldName = update.fieldNames.quoted
                 update.newDataType match {
                   case _: StructType =>
@@ -544,7 +553,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   case _ =>
                     // update is okay
                 }
-                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+
+                // We don't need to handle nested types here which shall fail before
+                def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+                  case (CharType(l1), CharType(l2)) => l1 == l2
+                  case (CharType(l1), VarcharType(l2)) => l1 <= l2
+                  case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                  case _ => Cast.canUpCast(from, to)
+                }
+
+                if (!canAlterColumnType(field.dataType, update.newDataType)) {
                   alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
@@ -581,11 +599,14 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // no validation needed for set and remove property
             }
 
-          case AlterTableAddPartition(ResolvedTable(_, _, table), parts, _) =>
-            checkAlterTablePartition(table, parts)
+          case AlterTableAddPartition(r: ResolvedTable, parts, _) =>
+            checkAlterTablePartition(r.table, parts)
 
-          case AlterTableDropPartition(ResolvedTable(_, _, table), parts, _, _) =>
-            checkAlterTablePartition(table, parts)
+          case AlterTableDropPartition(r: ResolvedTable, parts, _, _) =>
+            checkAlterTablePartition(r.table, parts)
+
+          case AlterTableRenamePartition(r: ResolvedTable, from, _) =>
+            checkAlterTablePartition(r.table, Seq(from))
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
 
@@ -1026,7 +1047,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     case ShowPartitions(rt: ResolvedTable, _)
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
       failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
-    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement), _)
+    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _)
         if partTable.partitionSchema().isEmpty =>
       failAnalysis(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")

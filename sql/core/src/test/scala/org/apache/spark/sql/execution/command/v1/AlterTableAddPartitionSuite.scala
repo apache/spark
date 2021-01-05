@@ -17,24 +17,34 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. ADD PARTITION` command that
+ * check V1 table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite`
+ *   - V1 Hive External catalog:
+ *     `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
+ */
 trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuiteBase {
-  override protected def checkLocation(
-      t: String,
-      spec: TablePartitionSpec,
-      expected: String): Unit = {
-    val tablePath = t.split('.')
-    val tableName = tablePath.last
-    val ns = tablePath.init.mkString(".")
-    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
-    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
-      .select("information")
-      .first().getString(0)
-    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
-    assert(location.endsWith(expected))
+  test("empty string as partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
+      }.getMessage
+      assert(errMsg.contains("Partition spec is invalid. " +
+        "The spec ([p1=]) contains an empty partition column value"))
+    }
   }
 }
 
+/**
+ * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
+ * V1 In-Memory table catalog.
+ */
 class AlterTableAddPartitionSuite extends AlterTableAddPartitionSuiteBase with CommandSuiteBase

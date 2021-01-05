@@ -694,32 +694,6 @@ class DDLParserSuite extends AnalysisTest {
     }
   }
 
-  test("drop table") {
-    parseCompare("DROP TABLE testcat.ns1.ns2.tbl",
-      DropTable(
-        UnresolvedTableOrView(Seq("testcat", "ns1", "ns2", "tbl"), "DROP TABLE"),
-        ifExists = false,
-        purge = false))
-    parseCompare(s"DROP TABLE db.tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS db.tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("db", "tab"), "DROP TABLE"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = false))
-    parseCompare(s"DROP TABLE IF EXISTS tab",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = false))
-    parseCompare(s"DROP TABLE tab PURGE",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = false, purge = true))
-    parseCompare(s"DROP TABLE IF EXISTS tab PURGE",
-      DropTable(
-        UnresolvedTableOrView(Seq("tab"), "DROP TABLE"), ifExists = true, purge = true))
-  }
-
   test("drop view") {
     val cmd = "DROP VIEW"
     val hint = Some("Please use DROP TABLE instead.")
@@ -1129,26 +1103,40 @@ class DDLParserSuite extends AnalysisTest {
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc.xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("abc.xyz")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("abc", "xyz"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("abc", "xyz")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("a.b", "x.y"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("a.b", "x.y")),
+        isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Seq("col"), isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedAttribute(Seq("col")),
+        isExtended = true))
 
     val caught = intercept[AnalysisException](
       parsePlan("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col"))
@@ -1819,40 +1807,6 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedNamespace(Seq("a", "b", "c")), "/home/user/db"))
   }
 
-  test("show databases: basic") {
-    comparePlans(
-      parsePlan("SHOW DATABASES"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW DATABASES LIKE 'defau*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), Some("defau*")))
-  }
-
-  test("show databases: FROM/IN operator is not allowed") {
-    def verify(sql: String): Unit = {
-      val exc = intercept[ParseException] { parsePlan(sql) }
-      assert(exc.getMessage.contains("FROM/IN operator is not allowed in SHOW DATABASES"))
-    }
-
-    verify("SHOW DATABASES FROM testcat.ns1.ns2")
-    verify("SHOW DATABASES IN testcat.ns1.ns2")
-  }
-
-  test("show namespaces") {
-    comparePlans(
-      parsePlan("SHOW NAMESPACES"),
-      ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES FROM testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1.ns2"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1", "ns2")), None))
-    comparePlans(
-      parsePlan("SHOW NAMESPACES IN testcat.ns1 LIKE '*pattern*'"),
-      ShowNamespaces(UnresolvedNamespace(Seq("testcat", "ns1")), Some("*pattern*")))
-  }
-
   test("analyze table statistics") {
     comparePlans(parsePlan("analyze table a.b.c compute statistics"),
       AnalyzeTable(
@@ -2097,32 +2051,6 @@ class DDLParserSuite extends AnalysisTest {
         |(dt='2008-08-08', country='us') PARTITION
         |(dt='2009-09-09', country='uk')
       """.stripMargin)
-  }
-
-  test("alter table: rename partition") {
-    val sql1 =
-      """
-        |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-        |RENAME TO PARTITION (dt='2008-09-09', country='uk')
-      """.stripMargin
-    val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableRenamePartitionStatement(
-      Seq("table_name"),
-      Map("dt" -> "2008-08-08", "country" -> "us"),
-      Map("dt" -> "2008-09-09", "country" -> "uk"))
-    comparePlans(parsed1, expected1)
-
-    val sql2 =
-      """
-        |ALTER TABLE a.b.c PARTITION (ds='2017-06-10')
-        |RENAME TO PARTITION (ds='2018-06-10')
-      """.stripMargin
-    val parsed2 = parsePlan(sql2)
-    val expected2 = AlterTableRenamePartitionStatement(
-      Seq("a", "b", "c"),
-      Map("ds" -> "2017-06-10"),
-      Map("ds" -> "2018-06-10"))
-    comparePlans(parsed2, expected2)
   }
 
   test("show current namespace") {

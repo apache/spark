@@ -17,10 +17,21 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructType}
 
+/**
+ * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * specific test suites:
+ *
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.ShowPartitionsSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
+ */
 trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW PARTITIONS"
   // Gets the schema of `SHOW PARTITIONS`
@@ -42,22 +53,14 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
     sql(s"ALTER TABLE $table ADD PARTITION(year = 2016, month = 3)")
   }
 
-  protected def createWideTable(table: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $table (
-      |  price int, qty int,
-      |  year int, month int, hour int, minute int, sec int, extra int)
-      |$defaultUsing
-      |PARTITIONED BY (year, month, hour, minute, sec, extra)
-      |""".stripMargin)
-    sql(s"""
-      |INSERT INTO $table
-      |PARTITION(year = 2016, month = 3, hour = 10, minute = 10, sec = 10, extra = 1) SELECT 3, 3
-      |""".stripMargin)
-    sql(s"""
-      |ALTER TABLE $table
-      |ADD PARTITION(year = 2016, month = 4, hour = 10, minute = 10, sec = 10, extra = 1)
-      |""".stripMargin)
+  protected def createNullPartTable(table: String, format: String): Unit = {
+    import testImplicits._
+    val df = Seq((0, ""), (1, null)).toDF("a", "part")
+    df.write
+      .partitionBy("part")
+      .format(format)
+      .mode(SaveMode.Overwrite)
+      .saveAsTable(table)
   }
 
   test("show partitions of non-partitioned table") {

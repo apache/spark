@@ -643,6 +643,11 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(!catalog.tableExists(testIdent))
   }
 
+  test("purgeTable") {
+    val catalog = newCatalog()
+    intercept[UnsupportedOperationException](catalog.purgeTable(testIdent))
+  }
+
   test("renameTable") {
     val catalog = newCatalog()
 

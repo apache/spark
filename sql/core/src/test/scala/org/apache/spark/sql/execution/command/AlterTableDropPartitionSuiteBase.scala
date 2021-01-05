@@ -17,10 +17,24 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. DROP PARTITION` command that
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
+ * located in more specific test suites:
+ *
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableDropPartitionSuite`
+ *   - V1 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuiteBase`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite`
+ */
 trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. DROP PARTITION"
 
@@ -128,6 +142,32 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
       checkPartitions(t)
+    }
+  }
+
+  test("SPARK-33990: don not return data from dropped partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
+      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
+    }
+  }
+
+  test("SPARK-33950, SPARK-33987: refresh cache after partition dropping") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      assert(!spark.catalog.isCached(t))
+      sql(s"CACHE TABLE $t")
+      assert(spark.catalog.isCached(t))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
+      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      assert(spark.catalog.isCached(t))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
     }
   }
 }

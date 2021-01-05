@@ -1631,7 +1631,7 @@ class SparkContext(config: SparkConf) extends Logging {
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
       Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
-        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
+        hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     } else if (
       isArchive &&
@@ -1643,7 +1643,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
       val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
-        env.securityManager, hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
+        hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(
         SparkFiles.getRootDirectory(),
         if (uri.getFragment != null) uri.getFragment else source.getName)
@@ -1929,7 +1929,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
-    def addLocalJarFile(file: File): String = {
+    def addLocalJarFile(file: File): Seq[String] = {
       try {
         if (!file.exists()) {
           throw new FileNotFoundException(s"Jar ${file.getAbsolutePath} not found")
@@ -1938,15 +1938,15 @@ class SparkContext(config: SparkConf) extends Logging {
           throw new IllegalArgumentException(
             s"Directory ${file.getAbsoluteFile} is not allowed for addJar")
         }
-        env.rpcEnv.fileServer.addJar(file)
+        Seq(env.rpcEnv.fileServer.addJar(file))
       } catch {
         case NonFatal(e) =>
           logError(s"Failed to add $path to Spark environment", e)
-          null
+          Nil
       }
     }
 
-    def checkRemoteJarFile(path: String): String = {
+    def checkRemoteJarFile(path: String): Seq[String] = {
       val hadoopPath = new Path(path)
       val scheme = hadoopPath.toUri.getScheme
       if (!Array("http", "https", "ftp").contains(scheme)) {
@@ -1959,28 +1959,29 @@ class SparkContext(config: SparkConf) extends Logging {
             throw new IllegalArgumentException(
               s"Directory ${path} is not allowed for addJar")
           }
-          path
+          Seq(path)
         } catch {
           case NonFatal(e) =>
             logError(s"Failed to add $path to Spark environment", e)
-            null
+            Nil
         }
       } else {
-        path
+        Seq(path)
       }
     }
 
     if (path == null || path.isEmpty) {
       logWarning("null or empty path specified as parameter to addJar")
     } else {
-      val key = if (path.contains("\\") && Utils.isWindows) {
+      val (keys, scheme) = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
-        addLocalJarFile(new File(path))
+        (addLocalJarFile(new File(path)), "local")
       } else {
         val uri = new Path(path).toUri
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies
         Utils.validateURL(uri)
-        uri.getScheme match {
+        val uriScheme = uri.getScheme
+        val jarPaths = uriScheme match {
           // A JAR file which exists only on the driver node
           case null =>
             // SPARK-22585 path without schema is not url encoded
@@ -1988,18 +1989,28 @@ class SparkContext(config: SparkConf) extends Logging {
           // A JAR file which exists only on the driver node
           case "file" => addLocalJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
-          case "local" => "file:" + uri.getPath
+          case "local" => Seq("file:" + uri.getPath)
+          case "ivy" =>
+            // Since `new Path(path).toUri` will lose query information,
+            // so here we use `URI.create(path)`
+            DependencyUtils.resolveMavenDependencies(URI.create(path))
+              .flatMap(jar => addLocalJarFile(new File(jar)))
           case _ => checkRemoteJarFile(path)
         }
+        (jarPaths, uriScheme)
       }
-      if (key != null) {
+      if (keys.nonEmpty) {
         val timestamp = if (addedOnSubmit) startTime else System.currentTimeMillis
-        if (addedJars.putIfAbsent(key, timestamp).isEmpty) {
-          logInfo(s"Added JAR $path at $key with timestamp $timestamp")
+        val (added, existed) = keys.partition(addedJars.putIfAbsent(_, timestamp).isEmpty)
+        if (added.nonEmpty) {
+          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
+          logInfo(s"Added $jarMessage $path at ${added.mkString(",")} with timestamp $timestamp")
           postEnvironmentUpdate()
-        } else {
-          logWarning(s"The jar $path has been added already. Overwriting of added jars " +
-            "is not supported in the current version.")
+        }
+        if (existed.nonEmpty) {
+          val jarMessage = if (scheme != "ivy") "JAR" else "dependency jars of Ivy URI"
+          logInfo(s"The $jarMessage $path at ${existed.mkString(",")} has been added already." +
+            " Overwriting of added jar is not supported in the current version.")
         }
       }
     }

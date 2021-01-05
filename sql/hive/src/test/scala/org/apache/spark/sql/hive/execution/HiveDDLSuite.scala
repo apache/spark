@@ -159,14 +159,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testChangeColumn(isDatasourceTable = false)
   }
 
-  test("alter table: rename partition") {
-    testRenamePartitions(isDatasourceTable = false)
-  }
-
-  test("drop table") {
-    testDropTable(isDatasourceTable = false)
-  }
-
   test("alter datasource table add columns - orc") {
     testAddColumn("orc")
   }
@@ -896,8 +888,9 @@ class HiveDDLSuite
           s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
           s"$oldViewName is a view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table.")
 
-        assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')",
+          s"$oldViewName is a view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table.")
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
@@ -2895,6 +2888,20 @@ class HiveDDLSuite
             assert(table.storage.serde === Some(expectedSerde.get.serde.get))
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-33844: Insert overwrite directory should check schema too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[AnalysisException] {
+          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+        }.getMessage
+        assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
+          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
       }
     }
   }
