@@ -426,8 +426,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
   }
 
   test("SPARK-33933: AQE broadcast should not timeout with slow map tasks") {
-    val broadcastTimeoutInSec = 5
-    val df = spark.sparkContext.parallelize(Range(0, 1000), 1000)
+    val broadcastTimeoutInSec = 1
+    val df = spark.sparkContext.parallelize(Range(0, 100), 100)
       .flatMap(x => {
         Thread.sleep(20)
         for (i <- Range(0, 100)) yield (x % 26, x % 10)
