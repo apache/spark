@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 object Cast {
 
   /**
-   * A tag to decide if a CAST if generated during analysis.
+   * A tag to decide if a CAST is generated during analysis.
    */
   val AUTO_GENERATED_TAG = new TreeNodeTag[Boolean]("auto-generated-cast")
 
@@ -1739,12 +1739,19 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       """
   }
 
-  override def sql: String = dataType match {
-    // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL, this
-    // type of casting can only be introduced by the analyzer, and can be omitted when converting
-    // back to SQL query string.
-    case _: ArrayType | _: MapType | _: StructType => child.sql
-    case _ => s"CAST(${child.sql} AS ${dataType.sql})"
+  override def sql: String = {
+    // Strip auto-generated cast to make name look better
+    if (getTagValue(Cast.AUTO_GENERATED_TAG).getOrElse(true)) {
+      child.sql
+    } else {
+      dataType match {
+        // HiveQL doesn't allow casting to complex types. For logical plans translated from HiveQL,
+        // this type of casting can only be introduced by the analyzer, and can be omitted when
+        // converting back to SQL query string.
+        case _: ArrayType | _: MapType | _: StructType => child.sql
+        case _ => s"CAST(${child.sql} AS ${dataType.sql})"
+      }
+    }
   }
 }
 
