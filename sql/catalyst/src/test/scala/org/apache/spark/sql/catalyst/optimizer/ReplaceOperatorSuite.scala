@@ -191,6 +191,30 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-34014: Ignore Distinct if it is the right child of a left semi join") {
+    val x = LocalRelation('x1.int, 'x2.int)
+    val y = LocalRelation('y1.int, 'y2.int)
+
+    val query = x.join(Distinct(y), LeftSemi, Some('x1 === 'y1))
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = x.join(y, LeftSemi, Some('x1 === 'y1)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-34014: Ignore Distinct if it is the right child of a left anti join") {
+    val x = LocalRelation('x1.int, 'x2.int)
+    val y = LocalRelation('y1.int, 'y2.int)
+
+    val query = x.join(Distinct(y), LeftAnti, Some('x1 === 'y1))
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = x.join(y, LeftAnti, Some('x1 === 'y1)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("replace batch Deduplicate with Aggregate") {
     val input = LocalRelation('a.int, 'b.int)
     val attrA = input.output(0)
