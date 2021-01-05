@@ -130,7 +130,10 @@ private[spark] object HiveUtils extends Logging {
 
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
-      "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
+      "ORC tables created by using the HiveQL syntax, instead of Hive serde." +
+      "Enabling this parameter will cause insert overwrite when reading the table," +
+      "and the file format of this table is ORC This error will be thrown[], " +
+      "Users can set spark.sql.hive.convertMetastoreOrc=false to solve this error.")
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
