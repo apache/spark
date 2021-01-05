@@ -211,8 +211,9 @@ abstract class UnaryNode extends LogicalPlan {
     }
 
     // Equality between aliases for the same expression
-    aliasMap.values.foreach(_.combinations(2).map {
-      case Seq(a1, a2) => EqualNullSafe(a1.toAttribute, a2.toAttribute)
+    aliasMap.values.foreach(_.combinations(2).foreach {
+      case Seq(a1, a2) =>
+        allConstraints += EqualNullSafe(a1.toAttribute, a2.toAttribute)
     })
 
     /**
