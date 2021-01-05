@@ -2150,9 +2150,6 @@ class Analyzer(override val catalogManager: CatalogManager)
                         lead.copy(ignoreNulls = ignoreNulls)
                       case lag: Lag =>
                         lag.copy(ignoreNulls = ignoreNulls)
-                      case _ =>
-                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-                          owf.prettyName, "IGNORE NULLS")
                     }
                   } else {
                     owf
