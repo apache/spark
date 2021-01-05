@@ -161,6 +161,15 @@ abstract class StreamExecution(
   @volatile
   var availableOffsets = new StreamProgress
 
+  /**
+   * Tracks the latest offsets for each input source.
+   * Only the scheduler thread should modify this field, and only in atomic steps.
+   * Other threads should make a shallow copy if they are going to access this field more than
+   * once, since the field's value may change at any time.
+   */
+  @volatile
+  var latestOffsets = new StreamProgress
+
   @volatile
   var sinkCommitProgress: Option[StreamWriterCommitProgress] = None
 

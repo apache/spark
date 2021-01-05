@@ -46,7 +46,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
     val offsetRanges = ranges.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
-    if (minPartitions.isEmpty || offsetRanges.size > minPartitions.get) {
+    if (minPartitions.isEmpty || offsetRanges.size >= minPartitions.get) {
       // Assign preferred executor locations to each range such that the same topic-partition is
       // preferentially read from the same executor and the KafkaConsumer can be reused.
       offsetRanges.map { range =>

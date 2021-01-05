@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.io.File
+import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -34,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
 import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.util.DependencyUtils
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -159,6 +161,13 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
     }
   }
 
+  def resolveJars(path: URI): Seq[String] = {
+    path.getScheme match {
+      case "ivy" => DependencyUtils.resolveMavenDependencies(path)
+      case _ => path.toString :: Nil
+    }
+  }
+
   /**
    * Add a jar path to [[SparkContext]] and the classloader.
    *
@@ -167,16 +176,19 @@ class SessionResourceLoader(session: SparkSession) extends FunctionResourceLoade
    * [[SessionState]].
    */
   def addJar(path: String): Unit = {
-    session.sparkContext.addJar(path)
-    val uri = new Path(path).toUri
-    val jarURL = if (uri.getScheme == null) {
-      // `path` is a local file path without a URL scheme
-      new File(path).toURI.toURL
-    } else {
-      // `path` is a URL with a scheme
-      uri.toURL
+    val uri = URI.create(path)
+    resolveJars(uri).foreach { p =>
+      session.sparkContext.addJar(p)
+      val uri = new Path(p).toUri
+      val jarURL = if (uri.getScheme == null) {
+        // `path` is a local file path without a URL scheme
+        new File(p).toURI.toURL
+      } else {
+        // `path` is a URL with a scheme
+        uri.toURL
+      }
+      session.sharedState.jarClassLoader.addURL(jarURL)
     }
-    session.sharedState.jarClassLoader.addURL(jarURL)
     Thread.currentThread().setContextClassLoader(session.sharedState.jarClassLoader)
   }
 }

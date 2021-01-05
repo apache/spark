@@ -356,6 +356,26 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("char type comparison: partition pruning") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 VARCHAR(5)) USING $format PARTITIONED BY (c1, c2)")
+      sql("INSERT INTO t VALUES (1, 'a', 'a')")
+      Seq(("c1 = 'a'", true),
+        ("'a' = c1", true),
+        ("c1 = 'a  '", true),
+        ("c1 > 'a'", false),
+        ("c1 IN ('a', 'b')", true),
+        ("c2 = 'a  '", false),
+        ("c2 = 'a'", true),
+        ("c2 IN ('a', 'b')", true)).foreach { case (con, res) =>
+        val df = spark.table("t")
+        withClue(con) {
+          checkAnswer(df.where(con), df.where(res.toString))
+        }
+      }
+    }
+  }
+
   test("char type comparison: join") {
     withTable("t1", "t2") {
       sql(s"CREATE TABLE t1(c CHAR(2)) USING $format")
@@ -421,6 +441,29 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ("c1 = c2", true),
         ("c1 < c2", false),
         ("c1 IN (c2)", true)))
+    }
+  }
+
+  test("SPARK-33892: DESCRIBE TABLE w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      checkAnswer(sql("desc t").selectExpr("data_type").where("data_type like '%char%'"),
+        Seq(Row("char(5)"), Row("varchar(3)")))
+    }
+  }
+
+  test("SPARK-33992: char/varchar resolution in correlated sub query") {
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql(s"CREATE TABLE t2(v VARCHAR(3), c CHAR(5)) USING $format")
+      sql("INSERT INTO t1 VALUES ('c', 'b')")
+      sql("INSERT INTO t2 VALUES ('a', 'b')")
+
+      checkAnswer(sql(
+        """
+          |SELECT v FROM t1
+          |WHERE 'a' IN (SELECT v FROM t2 WHERE t1.c = t2.c )""".stripMargin),
+        Row("c"))
     }
   }
 }
@@ -521,12 +564,103 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       assert(df2.schema.head.dataType === StringType)
     }
   }
+
+  test("invalidate char/varchar in spark.readStream.schema") {
+    failWithInvalidCharUsage(spark.readStream.schema(new StructType().add("id", CharType(5))))
+    failWithInvalidCharUsage(spark.readStream.schema("id char(5)"))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      withTempPath { dir =>
+        spark.range(2).write.save(dir.toString)
+        val df1 = spark.readStream.schema(new StructType().add("id", CharType(5)))
+          .load(dir.toString)
+        assert(df1.schema.map(_.dataType) == Seq(StringType))
+        val df2 = spark.readStream.schema("id char(5)").load(dir.toString)
+        assert(df2.schema.map(_.dataType) == Seq(StringType))
+      }
+    }
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
   override def format: String = "parquet"
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+  }
+
+  test("create table w/ location and fit length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val df = sql("select * from t")
+          checkAnswer(sql("select * from t"), Row("12"))
+        }
+      }
+    }
+  }
+
+  test("create table w/ location and over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val e = intercept[SparkException] { sql("select * from t").collect() }
+          assert(e.getCause.getMessage.contains(
+            s"input string of length 6 exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
+  }
+
+  test("alter table set location w/ fit length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
+          sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          checkAnswer(spark.table("t"), Row("12"))
+        }
+      }
+    }
+  }
+
+  test("alter table set location w/ over length values") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format")
+          sql(s"ALTER TABLE t SET LOCATION '$dir'")
+          val e = intercept[SparkException] { spark.table("t").collect() }
+          assert(e.getCause.getMessage.contains(
+            s"input string of length 6 exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
+  }
+
+  // TODO(SPARK-33875): Move these tests to super after DESCRIBE COLUMN v2 implemented
+  test("SPARK-33892: DESCRIBE COLUMN w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      checkAnswer(sql("desc t v").selectExpr("info_value").where("info_value like '%char%'"),
+        Row("varchar(3)"))
+      checkAnswer(sql("desc t c").selectExpr("info_value").where("info_value like '%char%'"),
+        Row("char(5)"))
+    }
+  }
+
+  // TODO(SPARK-33898): Move these tests to super after SHOW CREATE TABLE for v2 implemented
+  test("SPARK-33892: SHOW CREATE TABLE w/ char/varchar") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(5)) USING $format")
+      val rest = sql("SHOW CREATE TABLE t").head().getString(0)
+      assert(rest.contains("VARCHAR(3)"))
+      assert(rest.contains("CHAR(5)"))
+    }
   }
 }
 

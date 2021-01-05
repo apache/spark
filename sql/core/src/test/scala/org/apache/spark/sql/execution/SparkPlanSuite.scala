@@ -89,9 +89,9 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     assert(LocalTableScanExec(Nil, Nil).execute().getNumPartitions == 0)
   }
 
-  test("SPARK-33617: spark.sql.default.parallelism effective for LocalTableScan") {
+  test("SPARK-33617: change default parallelism of LocalTableScan") {
     Seq(1, 4).foreach { minPartitionNum =>
-      withSQLConf(SQLConf.DEFAULT_PARALLELISM.key -> minPartitionNum.toString) {
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> minPartitionNum.toString) {
         val df = spark.sql("SELECT * FROM VALUES (1), (2), (3), (4), (5), (6), (7), (8)")
         assert(df.rdd.partitions.length === minPartitionNum)
       }

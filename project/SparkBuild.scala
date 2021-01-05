@@ -23,7 +23,7 @@ import java.util.Locale
 import scala.io.Source
 import scala.util.Properties
 import scala.collection.JavaConverters._
-import scala.collection.mutable.Stack
+import scala.collection.mutable.ListBuffer
 
 import sbt._
 import sbt.Classpaths.publishTask
@@ -238,7 +238,15 @@ object SparkBuild extends PomBuild {
           "-Wconf:cat=other-match-analysis&site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv",
           "-Wconf:cat=other-pure-statement&site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.<local OutputCommitCoordinatorSuite>.futureAction:wv",
-          "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv"
+          "-Wconf:cat=other-pure-statement&site=org.apache.spark.sql.streaming.sources.StreamingDataSourceV2Suite.testPositiveCase.\\$anonfun:wv",
+          // SPARK-33775 Suppress compilation warnings that contain the following contents.
+          // TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after
+          //  fixed.
+          "-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s",
+          "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
+          "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
+          "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
+          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
         )
       }
     }
@@ -394,6 +402,8 @@ object SparkBuild extends PomBuild {
   // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   enable(KubernetesIntegrationTests.settings)(kubernetesIntegrationTests)
+
+  enable(YARN.settings)(yarn)
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
@@ -654,7 +664,21 @@ object DependencyOverrides {
  */
 object ExcludedDependencies {
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
+    // SPARK-33705: Due to sbt compiler issues, it brings exclusions defined in maven pom back to
+    // the classpath directly and assemble test scope artifacts to assembly/target/scala-xx/jars,
+    // which is also will be added to the classpath of some unit tests that will build a subprocess
+    // to run `spark-submit`, e.g. HiveThriftServer2Test.
+    //
+    // These artifacts are for the jersey-1 API but Spark use jersey-2 ones, so it cause test
+    // flakiness w/ jar conflicts issues.
+    //
+    // Also jersey-1 is only used by yarn module(see resource-managers/yarn/pom.xml) for testing
+    // purpose only. Here we exclude them from the whole project scope and add them w/ yarn only.
+    excludeDependencies ++= Seq(
+      ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -755,6 +779,15 @@ object Hive {
     // in order to generate golden files.  This is only required for developers who are adding new
     // new query tests.
     fullClasspath in Test := (fullClasspath in Test).value.filterNot { f => f.toString.contains("jcl-over") }
+  )
+}
+
+object YARN {
+  lazy val settings = Seq(
+    excludeDependencies --= Seq(
+      ExclusionRule(organization = "com.sun.jersey"),
+      ExclusionRule("javax.servlet", "javax.servlet-api"),
+      ExclusionRule("javax.ws.rs", "jsr311-api"))
   )
 }
 
@@ -925,18 +958,24 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
-    javacOptions in (JavaUnidoc, unidoc) := Seq(
-      "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
-      "-public",
-      "-noqualifier", "java.lang",
-      "-tag", """example:a:Example\:""",
-      "-tag", """note:a:Note\:""",
-      "-tag", "group:X",
-      "-tag", "tparam:X",
-      "-tag", "constructor:X",
-      "-tag", "todo:X",
-      "-tag", "groupname:X"
-    ),
+    javacOptions in (JavaUnidoc, unidoc) := {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major == 1) major = versionParts(1).toInt
+
+      Seq(
+        "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
+        "-public",
+        "-noqualifier", "java.lang",
+        "-tag", """example:a:Example\:""",
+        "-tag", """note:a:Note\:""",
+        "-tag", "group:X",
+        "-tag", "tparam:X",
+        "-tag", "constructor:X",
+        "-tag", "todo:X",
+        "-tag", "groupname:X",
+      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+    },
 
     // Use GitHub repository for Scaladoc source links
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
@@ -1076,14 +1115,14 @@ object TestSettings {
         // Because File.mkdirs() can fail if multiple callers are trying to create the same
         // parent directory, this code tries to create parents one at a time, and avoids
         // failures when the directories have been created by somebody else.
-        val stack = new Stack[File]()
+        val stack = new ListBuffer[File]()
         while (!dir.isDirectory()) {
-          stack.push(dir)
+          stack.prepend(dir)
           dir = dir.getParentFile()
         }
 
         while (stack.nonEmpty) {
-          val d = stack.pop()
+          val d = stack.remove(0)
           require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
         }
       }
