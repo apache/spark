@@ -3557,7 +3557,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       } else {
         DescribeColumn(
           relation,
-          ctx.describeColName.nameParts.asScala.map(_.getText).toSeq,
+          UnresolvedAttribute(ctx.describeColName.nameParts.asScala.map(_.getText).toSeq),
           isExtended)
       }
     } else {

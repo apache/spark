@@ -29,7 +29,8 @@ case class AlterTableDropPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfNotExists: Boolean,
-    purge: Boolean) extends V2CommandExec {
+    purge: Boolean,
+    refreshCache: () => Unit) extends V2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
@@ -43,8 +44,8 @@ case class AlterTableDropPartitionExec(
         table.name(), notExistsPartIdents, table.partitionSchema())
     }
 
-    existsPartIdents match {
-      case Seq() => // Nothing will be done
+    val isTableAltered = existsPartIdents match {
+      case Seq() => false // Nothing will be done
       case Seq(partIdent) =>
         if (purge) table.purgePartition(partIdent) else table.dropPartition(partIdent)
       case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
@@ -55,6 +56,7 @@ case class AlterTableDropPartitionExec(
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")
     }
+    if (isTableAltered) refreshCache()
     Seq.empty
   }
 }

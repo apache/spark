@@ -989,12 +989,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
@@ -1166,7 +1166,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
               ResolvedView(ident, isTemp = false)
             case table =>
-              ResolvedTable(catalog.asTableCatalog, ident, table)
+              ResolvedTable.create(catalog.asTableCatalog, ident, table)
           }
         case _ => None
       }
@@ -2120,24 +2120,30 @@ class Analyzer(override val catalogManager: CatalogManager)
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
-                  if (isDistinct || filter.isDefined) {
-                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                      wf.prettyName)
+                  if (isDistinct) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      wf.prettyName, "DISTINCT")
+                  } else if (filter.isDefined) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      wf.prettyName, "FILTER clause")
                   } else if (ignoreNulls) {
                     wf match {
                       case nthValue: NthValue =>
                         nthValue.copy(ignoreNulls = ignoreNulls)
                       case _ =>
-                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
-                          wf.prettyName)
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          wf.prettyName, "IGNORE NULLS")
                     }
                   } else {
                     wf
                   }
                 case owf: FrameLessOffsetWindowFunction =>
-                  if (isDistinct || filter.isDefined) {
-                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                      owf.prettyName)
+                  if (isDistinct) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      owf.prettyName, "DISTINCT")
+                  } else if (filter.isDefined) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      owf.prettyName, "FILTER clause")
                   } else if (ignoreNulls) {
                     owf match {
                       case lead: Lead =>
@@ -2145,8 +2151,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                       case lag: Lag =>
                         lag.copy(ignoreNulls = ignoreNulls)
                       case _ =>
-                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
-                          owf.prettyName)
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          owf.prettyName, "IGNORE NULLS")
                     }
                   } else {
                     owf
@@ -2161,20 +2167,23 @@ class Analyzer(override val catalogManager: CatalogManager)
                       case first: First => first.copy(ignoreNulls = ignoreNulls)
                       case last: Last => last.copy(ignoreNulls = ignoreNulls)
                       case _ =>
-                        throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
-                          agg.prettyName)
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          agg.prettyName, "IGNORE NULLS")
                     }
                     AggregateExpression(aggFunc, Complete, isDistinct, filter)
                   } else {
                     AggregateExpression(agg, Complete, isDistinct, filter)
                   }
                 // This function is not an aggregate function, just return the resolved one.
-                case other if (isDistinct || filter.isDefined) =>
-                  throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                    other.prettyName)
-                case other if (ignoreNulls) =>
-                  throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(
-                    other.prettyName)
+                case other if isDistinct =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "DISTINCT")
+                case other if filter.isDefined =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "FILTER clause")
+                case other if ignoreNulls =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "IGNORE NULLS")
                 case e: String2TrimExpression if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
                     log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +

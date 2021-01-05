@@ -344,7 +344,7 @@ class Word2VecModel private[ml] (
 @Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
-  private case class Data(word: String, vector: Array[Float])
+  private[Word2VecModel] case class Data(word: String, vector: Array[Float])
 
   private[Word2VecModel]
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
