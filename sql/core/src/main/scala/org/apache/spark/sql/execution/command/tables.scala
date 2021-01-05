@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -764,13 +765,13 @@ case class DescribeColumnCommand(
     val colName = UnresolvedAttribute(colNameParts).name
     val field = {
       relation.resolve(colNameParts, resolver).getOrElse {
-        throw new AnalysisException(s"Column $colName does not exist")
+        throw QueryCompilationErrors.columnDoesNotExistError(colName)
       }
     }
     if (!field.isInstanceOf[Attribute]) {
       // If the field is not an attribute after `resolve`, then it's a nested field.
-      throw new AnalysisException(
-        s"DESC TABLE COLUMN command does not support nested data types: $colName")
+      throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+        "DESC TABLE COLUMN", colName)
     }
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)

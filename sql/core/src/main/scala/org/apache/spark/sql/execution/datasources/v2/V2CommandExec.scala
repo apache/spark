@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.AttributeSet
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.StructType
 
 /**
  * A physical operator that executes run() and saves the result to prevent multiple executions.
@@ -59,4 +61,11 @@ abstract class V2CommandExec extends SparkPlan {
 
   override def producedAttributes: AttributeSet = outputSet
 
+  protected def toCatalystRow(strs: String*): InternalRow = {
+    rowSerializer(new GenericRowWithSchema(strs.toArray, schema)).copy()
+  }
+
+  private lazy val rowSerializer = {
+    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
+  }
 }
