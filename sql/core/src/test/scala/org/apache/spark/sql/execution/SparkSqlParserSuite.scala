@@ -356,7 +356,6 @@ class SparkSqlParserSuite extends AnalysisTest {
             ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
           List.empty, List.empty, None, None, false)))
 
-
     assertEqual(
       """
         |SELECT TRANSFORM(a, sum(b) OVER w, max(c) OVER w)
@@ -412,7 +411,6 @@ class SparkSqlParserSuite extends AnalysisTest {
             ("TOK_TABLEROWFORMATNULL", "NULL"),
             ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
           List.empty, List.empty, None, None, false)))
-
 
     assertEqual(
       """

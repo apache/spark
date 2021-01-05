@@ -670,7 +670,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         AttributeReference("value", StringType)()), true)
     }
 
-    val plan = visitCommonSelectQueryClausePlan(relation,
+    val plan = visitCommonSelectQueryClausePlan(
+      relation,
       lateralView,
       transformClause.namedExpressionSeq,
       whereClause,
@@ -679,7 +680,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       windowClause,
       isDistinct = false)
 
-    // Create the transform.
+    // Create the transform, here we pass UnresolvedStart as ScriptTransform's input.
+    // In analyzer after child plan is resolved, we resolve UnresolvedStart as child's output.
     ScriptTransformation(
       Seq(UnresolvedStar(None)),
       string(transformClause.script),
@@ -715,7 +717,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val isDistinct = selectClause.setQuantifier() != null &&
       selectClause.setQuantifier().DISTINCT() != null
 
-    // Visit common project
     val plan = visitCommonSelectQueryClausePlan(
       relation,
       lateralView,

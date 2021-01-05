@@ -272,7 +272,6 @@ WHERE a <= 4
 GROUP BY b, myCol, myCol2
 HAVING max(a) > 1;
 
-
 FROM(
   FROM script_trans
   SELECT TRANSFORM(a, b)
@@ -307,8 +306,12 @@ SELECT TRANSFORM(1)
 FROM script_trans
 HAVING true;
 
+SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=false;
+
 SET spark.sql.parser.quotedRegexColumnNames=true;
 
 SELECT TRANSFORM(`(a|b)?+.+`)
  USING 'cat' AS (c)
 FROM script_trans;
+
+SET spark.sql.parser.quotedRegexColumnNames=false;
