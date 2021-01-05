@@ -56,8 +56,10 @@ private[spark] object KubernetesClientUtils extends Logging {
   /**
    * Build, file -> 'file's content' map of all the selected files in SPARK_CONF_DIR.
    */
-  def buildSparkConfDirFilesMap(configMapName: String,
-      sparkConf: SparkConf, resolvedPropertiesMap: Map[String, String]): Map[String, String] = {
+  def buildSparkConfDirFilesMap(
+      configMapName: String,
+      sparkConf: SparkConf,
+      resolvedPropertiesMap: Map[String, String]): Map[String, String] = synchronized {
     val loadedConfFilesMap = KubernetesClientUtils.loadSparkConfDirFiles(sparkConf)
     // Add resolved spark conf to the loaded configuration files map.
     if (resolvedPropertiesMap.nonEmpty) {
@@ -108,6 +110,7 @@ private[spark] object KubernetesClientUtils extends Logging {
       val orderedConfFiles = orderFilesBySize(confFiles)
       var truncatedMapSize: Long = 0
       val truncatedMap = mutable.HashMap[String, String]()
+      val skippedFiles = mutable.HashSet[String]()
       var source: Source = Source.fromString("") // init with empty source.
       for (file <- orderedConfFiles) {
         try {
@@ -117,8 +120,7 @@ private[spark] object KubernetesClientUtils extends Logging {
             truncatedMap.put(fileName, fileContent)
             truncatedMapSize = truncatedMapSize + (fileName.length + fileContent.length)
           } else {
-            logWarning(s"Skipped a conf file $fileName, due to size constraint." +
-              s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
+            skippedFiles.add(fileName)
           }
         } catch {
           case e: MalformedInputException =>
@@ -132,6 +134,10 @@ private[spark] object KubernetesClientUtils extends Logging {
       if (truncatedMap.nonEmpty) {
         logInfo(s"Spark configuration files loaded from $confDir :" +
           s" ${truncatedMap.keys.mkString(",")}")
+      }
+      if (skippedFiles.nonEmpty) {
+        logWarning(s"Skipped conf file(s) ${skippedFiles.mkString(",")}, due to size constraint." +
+          s" Please see, config: `${Config.CONFIG_MAP_MAXSIZE.key}` for more details.")
       }
       truncatedMap.toMap
     } else {
@@ -156,11 +162,8 @@ private[spark] object KubernetesClientUtils extends Logging {
     }
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
-      if (dir.isDirectory) {
-        dir.listFiles.filter(x => fileFilter(x)).toSeq
-      } else {
-        Nil
-      }
+      assert(dir.isDirectory, "Spark conf should be a directory.")
+      dir.listFiles.filter(x => fileFilter(x)).toSeq
     }
     confFiles
   }
