@@ -52,13 +52,14 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableRenamePartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), from, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement), from, to) =>
       val partitionSchema = table.partitionSchema()
-      r.copy(from = resolvePartitionSpecs(
+      val Seq(resolvedFrom, resolvedTo) = resolvePartitionSpecs(
         table.name,
-        Seq(from),
+        Seq(from, to),
         partitionSchema,
-        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)).head)
+        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames))
+      r.copy(from = resolvedFrom, to = resolvedTo)
 
     case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
       r.copy(pattern = resolvePartitionSpecs(

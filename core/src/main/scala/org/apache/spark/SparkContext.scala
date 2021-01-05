@@ -1631,7 +1631,7 @@ class SparkContext(config: SparkConf) extends Logging {
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
       Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
-        env.securityManager, hadoopConfiguration, timestamp, useCache = false)
+        hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     } else if (
       isArchive &&
@@ -1643,7 +1643,7 @@ class SparkContext(config: SparkConf) extends Logging {
       val uriToUse = if (!isLocal && scheme == "file") uri else new URI(key)
       val uriToDownload = UriBuilder.fromUri(uriToUse).fragment(null).build()
       val source = Utils.fetchFile(uriToDownload.toString, Utils.createTempDir(), conf,
-        env.securityManager, hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
+        hadoopConfiguration, timestamp, useCache = false, shouldUntar = false)
       val dest = new File(
         SparkFiles.getRootDirectory(),
         if (uri.getFragment != null) uri.getFragment else source.getName)

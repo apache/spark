@@ -937,7 +937,8 @@ class DataSourceV2SQLSuite
       sql("SHOW VIEWS FROM a.b")
     }
 
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+    assert(exception.getMessage.contains(
+      "Nested databases are not supported by v1 session catalog: a.b"))
   }
 
   test("ShowViews: using v2 catalog, command not supported.") {
@@ -2579,6 +2580,27 @@ class DataSourceV2SQLSuite
       "testcat",
       "v",
       "ALTER VIEW ... AS")
+  }
+
+  test("SPARK-33924: INSERT INTO .. PARTITION preserves the partition location") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (id bigint, city string, data string)
+        |USING foo
+        |PARTITIONED BY (id, city)""".stripMargin)
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
+
+      val loc = "partition_location"
+      sql(s"ALTER TABLE $t ADD PARTITION (id = 1, city = 'NY') LOCATION '$loc'")
+
+      val ident = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
+      assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+
+      sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
+      assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+    }
   }
 
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {

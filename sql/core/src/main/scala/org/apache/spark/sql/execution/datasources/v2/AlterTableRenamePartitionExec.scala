@@ -15,13 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.hadoop.io.Writable
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 
 /**
- * Provides several RDD implementations. See [[org.apache.spark.rdd.RDD]].
+ * Physical plan node for renaming a table partition.
  */
-package object rdd {
-  type IsWritable[A] = A => Writable
+case class AlterTableRenamePartitionExec(
+    table: SupportsPartitionManagement,
+    from: ResolvedPartitionSpec,
+    to: ResolvedPartitionSpec) extends V2CommandExec {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    table.renamePartition(from.ident, to.ident)
+    Seq.empty
+  }
 }

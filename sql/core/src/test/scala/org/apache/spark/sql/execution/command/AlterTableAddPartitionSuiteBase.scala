@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -38,8 +37,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
-
-  protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   test("one partition") {
     withNamespaceAndTable("ns", "tbl") { t =>

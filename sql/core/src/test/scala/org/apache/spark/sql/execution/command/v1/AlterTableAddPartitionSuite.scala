@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.command
 
 /**
@@ -32,21 +31,6 @@ import org.apache.spark.sql.execution.command
  *     `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
  */
 trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuiteBase {
-  override protected def checkLocation(
-      t: String,
-      spec: TablePartitionSpec,
-      expected: String): Unit = {
-    val tablePath = t.split('.')
-    val tableName = tablePath.last
-    val ns = tablePath.init.mkString(".")
-    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
-    val information = sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
-      .select("information")
-      .first().getString(0)
-    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
-    assert(location.endsWith(expected))
-  }
-
   test("empty string as partition value") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")

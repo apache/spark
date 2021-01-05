@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SecurityManager, SparkConf, TestUtils}
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.internal.config.MASTER_REST_SERVER_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
@@ -134,7 +134,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // if the caller passes the name of an existing file, we want doFetchFile to write over it with
     // the contents from the specified url.
     conf.set("spark.files.overwrite", "true")
-    val securityManager = new SecurityManager(conf)
     val hadoopConf = new Configuration
 
     val outDir = new File(targetDir)
@@ -143,7 +142,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     }
 
     // propagate exceptions up to the caller of getFileFromUrl
-    Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
+    Utils.doFetchFile(urlString, outDir, filename, conf, hadoopConf)
   }
 
   private def getStringFromUrl(urlString: String): String = {
