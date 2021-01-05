@@ -220,7 +220,7 @@ sealed trait MultiLikeBase
 /**
  * Optimized version of LIKE ALL, when all pattern values are literal.
  */
-abstract class LikeAllBase extends MultiLikeBase {
+sealed trait LikeAllBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.forall(matchFunc(_, exprValue))) {
@@ -276,7 +276,7 @@ case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends Like
 /**
  * Optimized version of LIKE ANY, when all pattern values are literal.
  */
-abstract class LikeAnyBase extends MultiLikeBase {
+sealed trait LikeAnyBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.exists(matchFunc(_, exprValue))) {

@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -682,7 +681,6 @@ object LikeSimplification extends Rule[LogicalPlan] {
         case l: LikeAny => Or(replacements.reduceLeft(Or), l.copy(patterns = remainPatterns))
         case l: NotLikeAny =>
           Or(replacements.map(Not(_)).reduceLeft(Or), l.copy(patterns = remainPatterns))
-        case _ => throw QueryCompilationErrors.cannotSimplifyMultiLikeError(multi)
       }
     }
   }
