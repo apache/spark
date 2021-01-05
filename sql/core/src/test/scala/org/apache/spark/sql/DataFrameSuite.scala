@@ -2614,7 +2614,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df, Row("2", "2"))
   }
 
-  test("SPARK-33989: Strip auto-generated cast when resolving UnresolvedAlias") {
+  test("SPARK-33989: Strip auto-generated cast when using Cast.sql") {
     Seq("SELECT id == null FROM VALUES(1) AS t(id)",
       "SELECT floor(1)",
       "SELECT split(struct(c1, c2).c1, ',') FROM VALUES(1, 2) AS t(c1, c2)").foreach { sqlStr =>
