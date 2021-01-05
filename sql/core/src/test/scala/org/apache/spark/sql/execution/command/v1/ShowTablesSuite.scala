@@ -63,11 +63,11 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     }
   }
 
-  test("v1 SHOW TABLES only support single-level namespace") {
-    val exception = intercept[AnalysisException] {
+  test("only support single-level namespace") {
+    val errMsg = intercept[AnalysisException] {
       runShowTablesSql("SHOW TABLES FROM a.b", Seq())
-    }
-    assert(exception.getMessage.contains("The database name is not valid: a.b"))
+    }.getMessage
+    assert(errMsg.contains("Nested databases are not supported by v1 session catalog: a.b"))
   }
 
   test("SHOW TABLE EXTENDED from default") {
@@ -116,7 +116,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       val errMsg = intercept[AnalysisException] {
         sql(showTableCmd)
       }.getMessage
-      assert(errMsg.contains("multi-part identifier cannot be empty"))
+      assert(errMsg.contains("Database from v1 session catalog is not specified"))
     }
   }
 }

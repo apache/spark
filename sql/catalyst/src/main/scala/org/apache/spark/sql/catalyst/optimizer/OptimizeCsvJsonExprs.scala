@@ -98,12 +98,17 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       child
 
     case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 =>
+        if schema.length > 1 && j.options.isEmpty =>
+        // Options here should be empty because the optimization should not be enabled
+        // for some options. For example, when the parse mode is failfast it should not
+        // optimize, and should force to parse the whole input JSON with failing fast for
+        // an invalid input.
+        // To be more conservative, it does not optimize when any option is set for now.
       val prunedSchema = StructType(Seq(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
     case g @ GetArrayStructFields(j @ JsonToStructs(schema: ArrayType, _, _, _), _, _, _, _)
-        if schema.elementType.asInstanceOf[StructType].length > 1 =>
+        if schema.elementType.asInstanceOf[StructType].length > 1 && j.options.isEmpty =>
       val prunedSchema = ArrayType(StructType(Seq(g.field)), g.containsNull)
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
   }

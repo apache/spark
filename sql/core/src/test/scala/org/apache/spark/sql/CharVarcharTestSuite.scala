@@ -549,6 +549,21 @@ class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
       assert(df2.schema.head.dataType === StringType)
     }
   }
+
+  test("invalidate char/varchar in spark.readStream.schema") {
+    failWithInvalidCharUsage(spark.readStream.schema(new StructType().add("id", CharType(5))))
+    failWithInvalidCharUsage(spark.readStream.schema("id char(5)"))
+    withSQLConf((SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key, "true")) {
+      withTempPath { dir =>
+        spark.range(2).write.save(dir.toString)
+        val df1 = spark.readStream.schema(new StructType().add("id", CharType(5)))
+          .load(dir.toString)
+        assert(df1.schema.map(_.dataType) == Seq(StringType))
+        val df2 = spark.readStream.schema("id char(5)").load(dir.toString)
+        assert(df2.schema.map(_.dataType) == Seq(StringType))
+      }
+    }
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {

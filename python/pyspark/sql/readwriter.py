@@ -1391,7 +1391,7 @@ class DataFrameWriter(OptionUtils):
             names of partitioning columns
         compression : str, optional
             compression codec to use when saving to file. This can be one of the
-            known case-insensitive shorten names (none, snappy, zlib, and lzo).
+            known case-insensitive shorten names (none, snappy, zlib, lzo, and zstd).
             This will override ``orc.compress`` and
             ``spark.sql.orc.compression.codec``. If None is set, it uses the value
             specified in ``spark.sql.orc.compression.codec``.

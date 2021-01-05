@@ -263,9 +263,8 @@ object QueryCompilationErrors {
       s"its class is $classCanonicalName, which is not a generator.")
   }
 
-  def distinctOrFilterOnlyWithAggregateFunctionError(prettyName: String): Throwable = {
-    new AnalysisException("DISTINCT or FILTER specified, " +
-      s"but $prettyName is not an aggregate function")
+  def functionWithUnsupportedSyntaxError(prettyName: String, syntax: String): Throwable = {
+    new AnalysisException(s"Function $prettyName does not support $syntax")
   }
 
   def nonDeterministicFilterInAggregateError(): Throwable = {
@@ -502,6 +501,10 @@ object QueryCompilationErrors {
     new AnalysisException(s"$command does not support nested column: $quoted")
   }
 
+  def columnDoesNotExistError(colName: String): Throwable = {
+    new AnalysisException(s"Column $colName does not exist")
+  }
+  
   def cannotSimplifyMultiLikeError(multi: MultiLikeBase): Throwable = {
     new AnalysisException(s"can not simplify $multi by LikeSimplification")
   }

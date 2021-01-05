@@ -429,4 +429,27 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-33963: do not use table stats while looking in table cache") {
+    val t = "table_on_test"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col int)")
+      assert(!spark.catalog.isCached(t))
+      sql(s"CACHE TABLE $t")
+      assert(spark.catalog.isCached(t))
+    }
+  }
+
+  test("SPARK-33965: cache table in spark_catalog") {
+    withNamespace("spark_catalog.ns") {
+      sql("CREATE NAMESPACE spark_catalog.ns")
+      val t = "spark_catalog.ns.tbl"
+      withTable(t) {
+        sql(s"CREATE TABLE $t (col int)")
+        assert(!spark.catalog.isCached(t))
+        sql(s"CACHE TABLE $t")
+        assert(spark.catalog.isCached(t))
+      }
+    }
+  }
 }
