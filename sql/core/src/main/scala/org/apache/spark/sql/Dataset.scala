@@ -61,7 +61,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.DataStreamWriter
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.util.{CollectExecutionMemoryUsage, SchemaUtils}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
@@ -3869,7 +3869,25 @@ class Dataset[T] private[sql](
    */
   private def collectFromPlan(plan: SparkPlan): Array[T] = {
     val fromRow = resolvedEnc.createDeserializer()
-    plan.executeCollect().map(fromRow)
+    // This projection writes output to a `InternalRow`, which means applying this projection is not
+    // thread-safe. Here we create the projection inside this method to make `Dataset` thread-safe.
+    if (sqlContext.conf.maxMemUsageDuringCollect.isDefined) {
+      // init with new CollectExecutionMemoryUsage every time
+      CollectExecutionMemoryUsage.init(sqlContext.conf.maxMemUsageDuringCollect.get)
+      val rawRows = plan.executeCollect()
+      CollectExecutionMemoryUsage.current.addSizeOfArray(rawRows)
+      var checkedFirst = false
+      rawRows.map { row =>
+        val obj = fromRow(row)
+        if (!checkedFirst) {
+          CollectExecutionMemoryUsage.current.addSizeOfArraySizeEstimatedByFistElement(obj)
+          checkedFirst = true
+        }
+        obj
+      }
+    } else {
+      plan.executeCollect().map(fromRow)
+    }
   }
 
   private def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T] = {
