@@ -177,7 +177,7 @@ abstract class UnaryNode extends LogicalPlan {
     var allConstraints = child.constraints
 
     // For each expression collect its aliases
-    val aliasMap = projectList.collect{
+    val aliasMap = projectList.collect {
       case alias @ Alias(expr, _) if !expr.foldable && expr.deterministic =>
         (expr.canonicalized, alias)
     }.groupBy(_._1).mapValues(_.map(_._2))
@@ -206,19 +206,18 @@ abstract class UnaryNode extends LogicalPlan {
         })
       })
 
-      for { alias1 <- aliases; alias2 <- aliases } {
-        if (!alias1.fastEquals(alias2)) {
-          allConstraints += EqualNullSafe(alias1.toAttribute, alias2.toAttribute)
-        }
-      }
-
       remainingExpressions.remove(expr)
       allConstraints = allConstraints.filter(shouldBeKept)
     }
 
+    // Equality between aliases for the same expression
+    aliasMap.values.foreach(_.combinations(2).map {
+      case Seq(a1, a2) => EqualNullSafe(a1.toAttribute, a2.toAttribute)
+    })
+
     /**
-    We keep the child constraints and equality between original and aliased attributes,
-    so [[ConstraintHelper.inferAdditionalConstraints]] would have the full information available.
+     * We keep the child constraints and equality between original and aliased attributes,
+     * so [[ConstraintHelper.inferAdditionalConstraints]] would have the full information available.
      */
     projectList.foreach {
       case alias @ Alias(expr, _) =>
