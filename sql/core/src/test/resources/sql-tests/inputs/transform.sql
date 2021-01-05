@@ -263,14 +263,6 @@ FROM script_trans
 WHERE a <= 4
 WINDOW w AS (PARTITION BY b ORDER BY a);
 
-SET spark.sql.legacy.bucketedTableScan.outputOrdering=true;
-
-SELECT TRANSFORM(MAX(a) as max_a, CAST(SUM(c) AS STRING))
-  USING 'cat' AS (a, b)
-FROM script_trans
-WHERE a <= 4
-HAVING max(a) > 1;
-
 SELECT TRANSFORM(b, MAX(a) as max_a, CAST(SUM(c) AS STRING), myCol, myCol2)
   USING 'cat' AS (a, b, c, d, e)
 FROM script_trans
@@ -302,6 +294,18 @@ MAP k / 10 USING 'cat' AS (one) FROM (SELECT 10 AS k);
 FROM (SELECT 1 AS key, 100 AS value) src
 MAP src.*, src.key, CAST(src.key / 10 AS INT), CAST(src.key % 10 AS INT), src.value
   USING 'cat' AS (k, v, tkey, ten, one, tvalue);
+
+SELECT TRANSFORM(1)
+  USING 'cat' AS (a)
+FROM script_trans
+HAVING true;
+
+SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=true;
+
+SELECT TRANSFORM(1)
+  USING 'cat' AS (a)
+FROM script_trans
+HAVING true;
 
 SET spark.sql.parser.quotedRegexColumnNames=true;
 
