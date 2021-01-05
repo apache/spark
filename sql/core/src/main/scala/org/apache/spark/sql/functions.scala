@@ -2849,7 +2849,7 @@ object functions {
    * @param numHours The number of hours to add to `startTime`, can be negative to subtract hours
    * @return A timestamp, or null if `startTime` was a string that could not be cast to a timestamp
    * @group datetime_funcs
-   * @since TBD
+   * @since 3.2.0
    */
   def add_hours(startTime: Column, numHours: Column): Column = withExpr {
     AddHours(startTime.expr, numHours.expr)

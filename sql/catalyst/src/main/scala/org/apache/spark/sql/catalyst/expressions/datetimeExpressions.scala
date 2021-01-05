@@ -1445,8 +1445,9 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   override val prettyName: String = "to_utc_timestamp"
 }
 
-
-
+/**
+ * Returns the time that is numHours after startTime
+ */
 case class AddHours(startTime: Expression, numHours: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant
     with TimeZoneAwareExpression {

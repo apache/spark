@@ -326,7 +326,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
   test("function add_hours") {
     val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
     val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
-    val df = Seq((1, t1), (2, t2)).toDF("n", "t")
+    val df = Seq((t1), (t2)).toDF("t")
     checkAnswer(
       df.select(add_hours(col("t"), lit(2))),
       Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
@@ -349,7 +349,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
     val d1 = Date.valueOf("2015-08-31")
     val d2 = Date.valueOf("2015-02-28")
-    val df2 = Seq((1, d1), (2, d2)).toDF("n", "d")
+    val df2 = Seq((d1), (d2)).toDF("d")
     checkAnswer(
       df2.select(add_hours(col("d"), lit(1))),
       Seq(Row(Timestamp.valueOf("2015-08-31 01:00:00")),

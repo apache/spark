@@ -580,9 +580,9 @@ object DateTimeUtils {
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
   def timestampAddHours(
-    start: Long,
-    hours: Int,
-    zoneId: ZoneId): Long = {
+      start: Long,
+      hours: Int,
+      zoneId: ZoneId): Long = {
     val resultTimestamp = microsToInstant(start)
       .atZone(zoneId)
       .plusHours(hours)
