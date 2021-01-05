@@ -38,7 +38,7 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)
                                               Project [d_date_sk,d_moy]
-                                                Filter [d_month_seq,d_date_sk]
+                                                Filter [d_date_sk,d_month_seq]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.date_dim [d_date_sk,d_month_seq,d_moy]
