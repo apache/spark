@@ -155,7 +155,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_na
 * **regex_column_names**
 
      When `spark.sql.parser.quotedRegexColumnNames` is true, quoted identifiers (using backticks) in `SELECT`
-     statement are interpreted as regular expressions and SELECT statement can take regex-based column specification.
+     statement are interpreted as regular expressions and `SELECT` statement can take regex-based column specification.
      For example, below SQL will only take column `c`:
 
      ```sql
