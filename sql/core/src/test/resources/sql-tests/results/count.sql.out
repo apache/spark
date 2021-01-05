@@ -114,7 +114,7 @@ struct<count(DISTINCT a):bigint,count(DISTINCT 2):bigint,count(DISTINCT 3, 2):bi
 -- !query
 SELECT count(distinct 0.8), percentile_approx(distinct a, 0.8) FROM testData
 -- !query schema
-struct<count(DISTINCT 0.8):bigint,percentile_approx(DISTINCT a, CAST(0.8 AS DOUBLE), 10000):int>
+struct<count(DISTINCT 0.8):bigint,percentile_approx(DISTINCT a, 0.8, 10000):int>
 -- !query output
 1	2
 

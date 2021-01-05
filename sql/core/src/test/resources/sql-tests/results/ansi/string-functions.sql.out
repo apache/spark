@@ -55,7 +55,7 @@ struct<length(uuid()):int,(NOT (uuid() = uuid())):boolean>
 -- !query
 select position('bar' in 'foobarbar'), position(null, 'foobarbar'), position('aaads', null)
 -- !query schema
-struct<locate(bar, foobarbar, 1):int,position(CAST(NULL AS STRING), foobarbar, 1):int,position(aaads, CAST(NULL AS STRING), 1):int>
+struct<locate(bar, foobarbar, 1):int,position(NULL, foobarbar, 1):int,position(aaads, NULL, 1):int>
 -- !query output
 4	NULL	NULL
 
