@@ -165,7 +165,7 @@ private[spark] object DependencyUtils extends Logging {
       ivyRepoPath: Option[String],
       ivySettingsPath: Option[String]): Seq[String] = {
     val exclusions: Seq[String] =
-      packagesExclusions.map(_.split(",")).getOrElse[Seq[String]](Nil)
+      packagesExclusions.map(_.split(",").toSeq).getOrElse(Nil)
     // Create the IvySettings, either load from file or build defaults
     val ivySettings = ivySettingsPath match {
       case Some(path) =>
