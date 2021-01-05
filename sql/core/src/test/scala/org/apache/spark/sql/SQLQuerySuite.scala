@@ -3827,7 +3827,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-
   test("SPARK-33949: Make approx_count_distinct result consistent whether Optimize rule exists " +
     "or not") {
     val excludedRules = Seq(ConstantFolding, ReorderAssociativeOperator).map(_.ruleName)
