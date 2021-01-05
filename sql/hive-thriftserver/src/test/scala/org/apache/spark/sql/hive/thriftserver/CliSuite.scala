@@ -27,7 +27,7 @@ import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -98,10 +98,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
           Seq(answer)
         } else {
           // spark-sql echoes the submitted queries
-          val queryEcho = query.split("\n").toList match {
-            case firstLine :: tail =>
-              s"spark-sql> $firstLine" :: tail.map(l => s"         > $l")
-          }
+          val xs = query.split("\n").toList
+          val queryEcho = s"spark-sql> ${xs.head}" :: xs.tail.map(l => s"         > $l")
           // longer lines sometimes get split in the output,
           // match the first 60 characters of each query line
           queryEcho.map(_.take(60)) :+ answer
@@ -132,6 +130,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     }
 
     var next = 0
+    val foundMasterAndApplicationIdMessage = Promise.apply[Unit]()
     val foundAllExpectedAnswers = Promise.apply[Unit]()
     val buffer = new ArrayBuffer[String]()
     val lock = new Object
@@ -142,6 +141,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       val newLine = s"${new Timestamp(new Date().getTime)} - $source> $line"
       log.info(newLine)
       buffer += newLine
+
+      if (line.startsWith("Spark master: ") && line.contains("Application Id: ")) {
+        foundMasterAndApplicationIdMessage.trySuccess(())
+      }
 
       // If we haven't found all expected answers and another expected answer comes up...
       if (next < expectedAnswers.size && line.contains(expectedAnswers(next))) {
@@ -172,7 +175,18 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeout)
+      val timeoutForQuery = if (!extraArgs.contains("-e")) {
+        // Wait for for cli driver to boot, up to two minutes
+        ThreadUtils.awaitResult(foundMasterAndApplicationIdMessage.future, 2.minutes)
+        log.info("Cli driver is booted. Waiting for expected answers.")
+        // Given timeout is applied after the cli driver is ready
+        timeout
+      } else {
+        // There's no boot message if -e option is provided, just extend timeout long enough
+        // so that the bootup duration is counted on the timeout
+        2.minutes + timeout
+      }
+      ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeoutForQuery)
       log.info("Found all expected output.")
     } catch { case cause: Throwable =>
       val message =
@@ -194,7 +208,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     } finally {
       if (!process.waitFor(1, MINUTES)) {
         try {
-          fail("spark-sql did not exit gracefully.")
+          log.warn("spark-sql did not exit gracefully.")
         } finally {
           process.destroy()
         }
@@ -447,7 +461,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val jarFile = new File("../../sql/hive/src/test/resources/SPARK-21101-1.0.jar").getCanonicalPath
     val hiveContribJar = HiveTestJars.getHiveContribJar().getCanonicalPath
     runCliWithin(
-      1.minute,
+      2.minutes,
       Seq("--jars", s"$jarFile", "--conf",
         s"spark.hadoop.${ConfVars.HIVEAUXJARS}=$hiveContribJar"))(
       "CREATE TEMPORARY FUNCTION testjar AS" +
@@ -550,5 +564,34 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
         "-e", "select date_sub(date'2011-11-11', '1.2');"),
       errorResponses = Seq("AnalysisException"))(
       ("", "Error in query: The second argument of 'date_sub' function needs to be an integer."))
+  }
+
+  test("SPARK-30808: use Java 8 time API in Thrift SQL CLI by default") {
+    // If Java 8 time API is enabled via the SQL config `spark.sql.datetime.java8API.enabled`,
+    // the date formatter for `java.sql.LocalDate` must output negative years with sign.
+    runCliWithin(1.minute)("SELECT MAKE_DATE(-44, 3, 15);" -> "-0044-03-15")
+  }
+
+  test("SPARK-33100: Ignore a semicolon inside a bracketed comment in spark-sql") {
+    runCliWithin(4.minute)(
+      "/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
+      "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
+      "SELECT 'test'; -- SELECT 'test';" -> "",
+      "SELECT 'test'; /* SELECT 'test';*/;" -> "",
+      "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
+      "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
+      "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
+    )
+  }
+
+  test("SPARK-33100: test sql statements with hint in bracketed comment") {
+    runCliWithin(2.minute)(
+      "CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES(1, 2) AS t1(k, v);" -> "",
+      "CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES(2, 1) AS t2(k, v);" -> "",
+      "EXPLAIN SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;" -> "SortMergeJoin",
+      "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
+        -> "BroadcastHashJoin"
+    )
   }
 }

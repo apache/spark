@@ -19,6 +19,7 @@ package org.apache.spark.sql.kafka010.consumer
 
 import java.{util => ju}
 import java.io.Closeable
+import java.time.Duration
 import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
@@ -73,7 +74,7 @@ private[kafka010] class InternalKafkaConsumer(
 
     // Seek to the offset because we may call seekToBeginning or seekToEnd before this.
     seek(offset)
-    val p = consumer.poll(pollTimeoutMs)
+    val p = consumer.poll(Duration.ofMillis(pollTimeoutMs))
     val r = p.records(topicPartition)
     logDebug(s"Polled $groupId ${p.partitions()}  ${r.size}")
     val offsetAfterPoll = consumer.position(topicPartition)
@@ -275,7 +276,7 @@ private[kafka010] class KafkaDataConsumer(
     val fetchedData = getOrRetrieveFetchedData(offset)
 
     logDebug(s"Get $groupId $topicPartition nextOffset ${fetchedData.nextOffsetInFetchedData} " +
-      "requested $offset")
+      s"requested $offset")
 
     // The following loop is basically for `failOnDataLoss = false`. When `failOnDataLoss` is
     // `false`, first, we will try to fetch the record at `offset`. If no such record exists, then

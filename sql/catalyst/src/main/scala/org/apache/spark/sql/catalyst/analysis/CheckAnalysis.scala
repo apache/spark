@@ -25,15 +25,17 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper {
+trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -93,20 +95,45 @@ trait CheckAnalysis extends PredicateHelper {
 
       case p if p.analyzed => // Skip already analyzed sub-plans
 
+      case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
+        throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
+
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedTable =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
+      case u @ UnresolvedView(NonSessionCatalogAndIdentifier(catalog, ident), cmd, _, _) =>
+        u.failAnalysis(
+          s"Cannot specify catalog `${catalog.name}` for view ${ident.quoted} " +
+            "because view support in v2 catalog has not been implemented yet. " +
+            s"$cmd expects a view.")
+
+      case u: UnresolvedView =>
+        u.failAnalysis(s"View not found: ${u.multipartIdentifier.quoted}")
+
       case u: UnresolvedTableOrView =>
-        u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+        val viewStr = if (u.allowTempView) "view" else "permanent view"
+        u.failAnalysis(
+          s"Table or $viewStr not found: ${u.multipartIdentifier.quoted}")
 
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
-      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _) =>
+      case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
+
+      case CacheTable(u: UnresolvedRelation, _, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      case UncacheTable(u: UnresolvedRelation, _, _) =>
+        failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
+
+      // TODO (SPARK-27484): handle streaming write commands when we have them.
+      case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
+        val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
+        write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
 
       case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
         u.failAnalysis(
@@ -158,20 +185,26 @@ trait CheckAnalysis extends PredicateHelper {
           case g: GroupingID =>
             failAnalysis("grouping_id() can only be used with GroupingSets/Cube/Rollup")
 
+          case e: Expression if e.children.exists(_.isInstanceOf[WindowFunction]) &&
+              !e.isInstanceOf[WindowExpression] =>
+            val w = e.children.find(_.isInstanceOf[WindowFunction]).get
+            failAnalysis(s"Window function $w requires an OVER clause.")
+
           case w @ WindowExpression(AggregateExpression(_, _, true, _, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(_: OffsetWindowFunction,
+          case w @ WindowExpression(wf: FrameLessOffsetWindowFunction,
             WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
              if order.isEmpty || !frame.isOffset =>
-            failAnalysis("An offset window function can only be evaluated in an ordered " +
+            failAnalysis(s"${wf.prettyName} function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
           case w @ WindowExpression(e, s) =>
             // Only allow window functions with an aggregate expression or an offset window
             // function or a Pandas window UDF.
             e match {
-              case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+              case _: AggregateExpression | _: FrameLessOffsetWindowFunction |
+                  _: AggregateWindowFunction =>
                 w
               case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
                 w
@@ -182,6 +215,10 @@ trait CheckAnalysis extends PredicateHelper {
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
+
+          case e: ExpressionWithRandomSeed if !e.seedExpression.foldable =>
+            failAnalysis(
+              s"Input argument to ${e.prettyName} must be a constant.")
         }
 
         operator match {
@@ -337,7 +374,8 @@ trait CheckAnalysis extends PredicateHelper {
             def ordinalNumber(i: Int): String = i match {
               case 0 => "first"
               case 1 => "second"
-              case i => s"${i}th"
+              case 2 => "third"
+              case i => s"${i + 1}th"
             }
             val ref = dataTypes(operator.children.head)
             operator.children.tail.zipWithIndex.foreach { case (child, ti) =>
@@ -388,24 +426,20 @@ trait CheckAnalysis extends PredicateHelper {
           // output, nor with the query column names, throw an AnalysisException.
           // If the view's child output can't up cast to the view output,
           // throw an AnalysisException, too.
-          case v @ View(desc, output, child) if child.resolved && !v.sameOutput(child) =>
+          case v @ View(desc, _, output, child) if child.resolved && !v.sameOutput(child) =>
             val queryColumnNames = desc.viewQueryColumnNames
             val queryOutput = if (queryColumnNames.nonEmpty) {
               if (output.length != queryColumnNames.length) {
                 // If the view output doesn't have the same number of columns with the query column
                 // names, throw an AnalysisException.
-                throw new AnalysisException(
-                  s"The view output ${output.mkString("[", ",", "]")} doesn't have the same" +
-                    "number of columns with the query column names " +
-                    s"${queryColumnNames.mkString("[", ",", "]")}")
+                throw QueryCompilationErrors.viewOutputNumberMismatchQueryColumnNamesError(
+                  output, queryColumnNames)
               }
               val resolver = SQLConf.get.resolver
               queryColumnNames.map { colName =>
                 child.output.find { attr =>
                   resolver(attr.name, colName)
-                }.getOrElse(throw new AnalysisException(
-                  s"Attribute with name '$colName' is not found in " +
-                    s"'${child.output.map(_.name).mkString("(", ",", ")")}'"))
+                }.getOrElse(throw QueryCompilationErrors.attributeNotFoundError(colName, child))
               }
             } else {
               child.output
@@ -417,9 +451,8 @@ trait CheckAnalysis extends PredicateHelper {
                 // output, so we should cast the attribute to the dataType of the view output
                 // attribute. Will throw an AnalysisException if the cast is not a up-cast.
                 if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
-                  throw new AnalysisException(s"Cannot up cast ${originAttr.sql} from " +
-                    s"${originAttr.dataType.catalogString} to ${attr.dataType.catalogString} " +
-                    "as it may truncate\n")
+                  throw QueryCompilationErrors.cannotUpCastAsAttributeError(
+                    originAttr, attr)
                 }
               case _ =>
             }
@@ -494,7 +527,12 @@ trait CheckAnalysis extends PredicateHelper {
                 TypeUtils.failWithIntervalType(add.dataType())
                 colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
               case update: UpdateColumnType =>
-                val field = findField("update", update.fieldNames)
+                val field = {
+                  val f = findField("update", update.fieldNames)
+                  CharVarcharUtils.getRawType(f.metadata)
+                    .map(dt => f.copy(dataType = dt))
+                    .getOrElse(f)
+                }
                 val fieldName = update.fieldNames.quoted
                 update.newDataType match {
                   case _: StructType =>
@@ -515,7 +553,16 @@ trait CheckAnalysis extends PredicateHelper {
                   case _ =>
                     // update is okay
                 }
-                if (!Cast.canUpCast(field.dataType, update.newDataType)) {
+
+                // We don't need to handle nested types here which shall fail before
+                def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+                  case (CharType(l1), CharType(l2)) => l1 == l2
+                  case (CharType(l1), VarcharType(l2)) => l1 <= l2
+                  case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+                  case _ => Cast.canUpCast(from, to)
+                }
+
+                if (!canAlterColumnType(field.dataType, update.newDataType)) {
                   alter.failAnalysis(
                     s"Cannot update ${table.name} field $fieldName: " +
                         s"${field.dataType.simpleString} cannot be cast to " +
@@ -552,7 +599,18 @@ trait CheckAnalysis extends PredicateHelper {
               // no validation needed for set and remove property
             }
 
-          case _ => // Fallbacks to the following checks
+          case AlterTableAddPartition(r: ResolvedTable, parts, _) =>
+            checkAlterTablePartition(r.table, parts)
+
+          case AlterTableDropPartition(r: ResolvedTable, parts, _, _) =>
+            checkAlterTablePartition(r.table, parts)
+
+          case AlterTableRenamePartition(r: ResolvedTable, from, _) =>
+            checkAlterTablePartition(r.table, Seq(from))
+
+          case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
+
+          case _ => // Falls back to the following checks
         }
 
         operator match {
@@ -629,8 +687,7 @@ trait CheckAnalysis extends PredicateHelper {
                """.stripMargin)
 
           case _: UnresolvedHint =>
-            throw new IllegalStateException(
-              "Internal error: logical hint operator should have been removed during analysis")
+            throw QueryExecutionErrors.logicalHintOperatorNotRemovedDuringAnalysisError
 
           case f @ Filter(condition, _)
             if PlanHelper.specialExpressionsInUnsupportedOperator(f).nonEmpty =>
@@ -861,7 +918,7 @@ trait CheckAnalysis extends PredicateHelper {
 
     // Simplify the predicates before validating any unsupported correlation patterns in the plan.
     AnalysisHelper.allowInvokingTransformsInAnalyzer { BooleanSimplification(sub).foreachUp {
-      // Whitelist operators allowed in a correlated subquery
+      // Approve operators allowed in a correlated subquery
       // There are 4 categories:
       // 1. Operators that are allowed anywhere in a correlated subquery, and,
       //    by definition of the operators, they either do not contain
@@ -963,5 +1020,37 @@ trait CheckAnalysis extends PredicateHelper {
       case p =>
         failOnOuterReferenceInSubTree(p)
     }}
+  }
+
+  // Make sure that table is able to alter partition.
+  private def checkAlterTablePartition(
+      table: Table, parts: Seq[PartitionSpec]): Unit = {
+    (table, parts) match {
+      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
+        failAnalysis(s"Table ${table.name()} can not alter partitions.")
+
+      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
+        failAnalysis("PartitionSpecs are not resolved")
+
+      // Skip atomic partition tables
+      case (_: SupportsAtomicPartitionManagement, _) =>
+      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
+        failAnalysis(
+          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
+
+      case _ =>
+    }
+  }
+
+  // Make sure that the `SHOW PARTITIONS` command is allowed for the table
+  private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
+    case ShowPartitions(rt: ResolvedTable, _)
+        if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
+      failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
+    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _)
+        if partTable.partitionSchema().isEmpty =>
+      failAnalysis(
+        s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")
+    case _ =>
   }
 }

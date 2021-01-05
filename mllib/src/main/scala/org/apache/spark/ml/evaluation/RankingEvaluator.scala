@@ -61,8 +61,6 @@ class RankingEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String
   @Since("3.0.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  setDefault(metricName -> "meanAveragePrecision")
-
   /**
    * param for ranking position value used in `"meanAveragePrecisionAtK"`, `"precisionAtK"`,
    * `"ndcgAtK"`, `"recallAtK"`. Must be &gt; 0. The default value is 10.
@@ -83,8 +81,6 @@ class RankingEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String
   @Since("3.0.0")
   def setK(value: Int): this.type = set(k, value)
 
-  setDefault(k -> 10)
-
   /** @group setParam */
   @Since("3.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -92,6 +88,8 @@ class RankingEvaluator @Since("3.0.0") (@Since("3.0.0") override val uid: String
   /** @group setParam */
   @Since("3.0.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
+
+  setDefault(k -> 10, metricName -> "meanAveragePrecision")
 
   @Since("3.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {

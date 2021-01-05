@@ -52,8 +52,11 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
     Examples:
       > SELECT _FUNC_('Spark');
        8cde774d6f7333752ed72cacddb05126
-  """)
-case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
+case class Md5(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
 
@@ -86,10 +89,12 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
     Examples:
       > SELECT _FUNC_('Spark', 256);
        529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
-  """)
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
 // scalastyle:on line.size.limit
 case class Sha2(left: Expression, right: Expression)
-  extends BinaryExpression with Serializable with ImplicitCastInputTypes {
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant with Serializable {
 
   override def dataType: DataType = StringType
   override def nullable: Boolean = true
@@ -159,8 +164,11 @@ case class Sha2(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_('Spark');
        85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
-  """)
-case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
+case class Sha1(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = StringType
 
@@ -186,8 +194,11 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
     Examples:
       > SELECT _FUNC_('Spark');
        1557323817
-  """)
-case class Crc32(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  """,
+  since = "1.5.0",
+  group = "hash_funcs")
+case class Crc32(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   override def dataType: DataType = LongType
 
@@ -572,7 +583,9 @@ abstract class InterpretedHashFunction {
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
        -1321691492
-  """)
+  """,
+  since = "2.0.0",
+  group = "hash_funcs")
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)
 
@@ -611,7 +624,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
       > SELECT _FUNC_('Spark', array(123), 2);
        5602566077635097486
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "hash_funcs")
 case class XxHash64(children: Seq[Expression], seed: Long) extends HashExpression[Long] {
   def this(arguments: Seq[Expression]) = this(arguments, 42L)
 
@@ -644,7 +658,9 @@ object XxHash64Function extends InterpretedHashFunction {
  * we can guarantee shuffle and bucketing have same data distribution
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.")
+  usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
+  since = "2.2.0",
+  group = "hash_funcs")
 case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override val seed = 0
 
@@ -898,7 +914,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    * - year, month (stored as HiveIntervalYearMonth)
    * - day, hour, minute, second, nanosecond (stored as HiveIntervalDayTime)
    *
-   * eg. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
+   * e.g. (INTERVAL '30' YEAR + INTERVAL '-23' DAY) fails in Hive
    *
    * This method mimics HiveIntervalDayTime.hashCode() in Hive.
    *
@@ -910,7 +926,7 @@ object HiveHashFunction extends InterpretedHashFunction {
    *
    * - Spark's [[CalendarInterval]] has precision upto microseconds but Hive's
    *   HiveIntervalDayTime can store data with precision upto nanoseconds. So, any input intervals
-   *   with nanosecond values will lead to wrong output hashes (ie. non adherent with Hive output)
+   *   with nanosecond values will lead to wrong output hashes (i.e. non adherent with Hive output)
    */
   def hashCalendarInterval(calendarInterval: CalendarInterval): Long = {
     val totalMicroSeconds = calendarInterval.days * MICROS_PER_DAY + calendarInterval.microseconds

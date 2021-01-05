@@ -194,6 +194,32 @@ class FMClassifierSuite extends MLTest with DefaultReadWriteTest {
     testPredictionModelSinglePrediction(fmModel, smallBinaryDataset)
   }
 
+  test("summary and training summary") {
+    val fm = new FMClassifier()
+    val model = fm.setMaxIter(5).fit(smallBinaryDataset)
+
+    val summary = model.evaluate(smallBinaryDataset)
+
+    assert(model.summary.accuracy === summary.accuracy)
+    assert(model.summary.weightedPrecision === summary.weightedPrecision)
+    assert(model.summary.weightedRecall === summary.weightedRecall)
+    assert(model.summary.pr.collect() === summary.pr.collect())
+    assert(model.summary.roc.collect() === summary.roc.collect())
+    assert(model.summary.areaUnderROC === summary.areaUnderROC)
+  }
+
+  test("FMClassifier training summary totalIterations") {
+    Seq(1, 5, 10, 20, 100).foreach { maxIter =>
+      val trainer = new FMClassifier().setMaxIter(maxIter)
+      val model = trainer.fit(smallBinaryDataset)
+      if (maxIter == 1) {
+        assert(model.summary.totalIterations === maxIter)
+      } else {
+        assert(model.summary.totalIterations <= maxIter)
+      }
+    }
+  }
+
   test("read/write") {
     def checkModelData(
       model: FMClassificationModel,

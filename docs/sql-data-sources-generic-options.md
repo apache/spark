@@ -119,3 +119,40 @@ To load all files recursively, you can use:
 {% include_example recursive_file_lookup r/RSparkSQLExample.R %}
 </div>
 </div>
+
+### Modification Time Path Filters
+
+`modifiedBefore` and `modifiedAfter` are options that can be 
+applied together or separately in order to achieve greater
+granularity over which files may load during a Spark batch query.
+(Note that Structured Streaming file sources don't support these options.)
+
+* `modifiedBefore`: an optional timestamp to only include files with
+modification times occurring before the specified time. The provided timestamp
+must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+* `modifiedAfter`: an optional timestamp to only include files with
+modification times occurring after the specified time. The provided timestamp
+must be in the following format: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)
+
+When a timezone option is not provided, the timestamps will be interpreted according
+to the Spark session timezone (`spark.sql.session.timeZone`).
+
+To load files with paths matching a given modified time range, you can use:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example load_with_modified_time_filter scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example load_with_modified_time_filter  java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example load_with_modified_time_filter  python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example load_with_modified_time_filter  r/RSparkSQLExample.R %}
+</div>
+</div>

@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
-import java.util.{ConcurrentModificationException, EnumSet, UUID}
+import java.util.ConcurrentModificationException
 
 import scala.reflect.ClassTag
 
 import org.apache.commons.io.IOUtils
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
-import org.apache.hadoop.fs.permission.FsPermission
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
@@ -115,42 +113,34 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    */
   override def add(batchId: Long, metadata: T): Boolean = {
     require(metadata != null, "'null' metadata cannot written to a metadata log")
-    get(batchId).map(_ => false).getOrElse {
-      // Only write metadata when the batch has not yet been written
-      writeBatchToFile(metadata, batchIdToPath(batchId))
-      true
-    }
-  }
-
-  /** Write a batch to a temp file then rename it to the batch file.
-   *
-   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
-   * valid behavior, we still need to prevent it from destroying the files.
-   */
-  private def writeBatchToFile(metadata: T, path: Path): Unit = {
-    val output = fileManager.createAtomic(path, overwriteIfPossible = false)
-    try {
-      serialize(metadata, output)
-      output.close()
-    } catch {
-      case e: FileAlreadyExistsException =>
-        output.cancel()
-        // If next batch file already exists, then another concurrently running query has
-        // written it.
-        throw new ConcurrentModificationException(
-          s"Multiple streaming queries are concurrently using $path", e)
-      case e: Throwable =>
-        output.cancel()
-        throw e
-    }
+    addNewBatchByStream(batchId) { output => serialize(metadata, output) }
   }
 
   override def get(batchId: Long): Option[T] = {
+    try {
+      applyFnToBatchByStream(batchId) { input => Some(deserialize(input)) }
+    } catch {
+      case fne: FileNotFoundException =>
+        logDebug(fne.getMessage)
+        None
+    }
+  }
+
+  /**
+   * Apply provided function to each entry in the specific batch metadata log.
+   *
+   * Unlike get which will materialize all entries into memory, this method streamlines the process
+   * via READ-AND-PROCESS. This helps to avoid the memory issue on huge metadata log file.
+   *
+   * NOTE: This no longer fails early on corruption. The caller should handle the exception
+   * properly and make sure the logic is not affected by failing in the middle.
+   */
+  def applyFnToBatchByStream[RET](batchId: Long)(fn: InputStream => RET): RET = {
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
       try {
-        Some(deserialize(input))
+        fn(input)
       } catch {
         case ise: IllegalStateException =>
           // re-throw the exception with the log file path added
@@ -160,8 +150,42 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
         IOUtils.closeQuietly(input)
       }
     } else {
-      logDebug(s"Unable to find batch $batchMetadataFile")
-      None
+      throw new FileNotFoundException(s"Unable to find batch $batchMetadataFile")
+    }
+  }
+
+  /**
+   * Store the metadata for the specified batchId and return `true` if successful. This method
+   * fills the content of metadata via executing function. If the function throws an exception,
+   * writing will be automatically cancelled and this method will propagate the exception.
+   *
+   * If the batchId's metadata has already been stored, this method will return `false`.
+   *
+   * Writing the metadata is done by writing a batch to a temp file then rename it to the batch
+   * file.
+   *
+   * There may be multiple [[HDFSMetadataLog]] using the same metadata path. Although it is not a
+   * valid behavior, we still need to prevent it from destroying the files.
+   */
+  def addNewBatchByStream(batchId: Long)(fn: OutputStream => Unit): Boolean = {
+    get(batchId).map(_ => false).getOrElse {
+      // Only write metadata when the batch has not yet been written
+      val output = fileManager.createAtomic(batchIdToPath(batchId), overwriteIfPossible = false)
+      try {
+        fn(output)
+        output.close()
+      } catch {
+        case e: FileAlreadyExistsException =>
+          output.cancel()
+          // If next batch file already exists, then another concurrently running query has
+          // written it.
+          throw new ConcurrentModificationException(
+            s"Multiple streaming queries are concurrently using $path", e)
+        case e: Throwable =>
+          output.cancel()
+          throw e
+      }
+      true
     }
   }
 
@@ -243,36 +267,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-  /**
-   * Parse the log version from the given `text` -- will throw exception when the parsed version
-   * exceeds `maxSupportedVersion`, or when `text` is malformed (such as "xyz", "v", "v-1",
-   * "v123xyz" etc.)
-   */
-  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int = {
-    if (text.length > 0 && text(0) == 'v') {
-      val version =
-        try {
-          text.substring(1, text.length).toInt
-        } catch {
-          case _: NumberFormatException =>
-            throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-              s"version from $text.")
-        }
-      if (version > 0) {
-        if (version > maxSupportedVersion) {
-          throw new IllegalStateException(s"UnsupportedLogVersion: maximum supported log version " +
-            s"is v${maxSupportedVersion}, but encountered v$version. The log file was produced " +
-            s"by a newer version of Spark and cannot be read by this version. Please upgrade.")
-        } else {
-          return version
-        }
-      }
-    }
-
-    // reaching here means we failed to read the correct log version
-    throw new IllegalStateException(s"Log file was malformed: failed to read correct log " +
-      s"version from $text.")
-  }
+  private[sql] def validateVersion(text: String, maxSupportedVersion: Int): Int =
+    MetadataVersionUtil.validateVersion(text, maxSupportedVersion)
 }
 
 object HDFSMetadataLog {

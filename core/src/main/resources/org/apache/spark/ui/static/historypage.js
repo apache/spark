@@ -130,7 +130,7 @@ $(document).ready(function() {
         if (app["attempts"].length > 1) {
             hasMultipleAttempts = true;
         }
-        var num = app["attempts"].length;
+
         for (var j in app["attempts"]) {
           var attempt = app["attempts"][j];
           attempt["startTime"] = formatTimeMillis(attempt["startTimeEpoch"]);
@@ -140,7 +140,8 @@ $(document).ready(function() {
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];
           attempt["duration"] = formatDuration(attempt["duration"]);
-          var app_clone = {"id" : id, "name" : name, "version": version, "num" : num, "attempts" : [attempt]};
+          var hasAttemptId = attempt.hasOwnProperty("attemptId");
+          var app_clone = {"id" : id, "name" : name, "version": version, "hasAttemptId" : hasAttemptId, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }

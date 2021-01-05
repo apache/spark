@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{count, sum}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.TestData
 
 class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -201,5 +203,49 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
       assertAmbiguousSelfJoin(df1.join(df2).join(df3, df2("id") < df3("id")))
       assertAmbiguousSelfJoin(df1.join(df4).join(df2).select(df2("id")))
     }
+  }
+
+  test("SPARK-28344: don't fail if there is no ambiguous self join") {
+    withSQLConf(
+      SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true") {
+      val df = Seq(1, 1, 2, 2).toDF("a")
+      val w = Window.partitionBy(df("a"))
+      checkAnswer(
+        df.select(df("a").alias("x"), sum(df("a")).over(w)),
+        Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
+
+      val joined = df.join(spark.range(1)).select($"a")
+      checkAnswer(
+        joined.select(joined("a").alias("x"), sum(joined("a")).over(w)),
+        Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
+    }
+  }
+
+  test("SPARK-33071/SPARK-33536: Avoid changing dataset_id of LogicalPlan in join() " +
+    "to not break DetectAmbiguousSelfJoin") {
+    val emp1 = Seq[TestData](
+      TestData(1, "sales"),
+      TestData(2, "personnel"),
+      TestData(3, "develop"),
+      TestData(4, "IT")).toDS()
+    val emp2 = Seq[TestData](
+      TestData(1, "sales"),
+      TestData(2, "personnel"),
+      TestData(3, "develop")).toDS()
+    val emp3 = emp1.join(emp2, emp1("key") === emp2("key")).select(emp1("*"))
+    assertAmbiguousSelfJoin(emp1.join(emp3, emp1.col("key") === emp3.col("key"),
+      "left_outer").select(emp1.col("*"), emp3.col("key").as("e2")))
+  }
+
+  test("df.show() should also not change dataset_id of LogicalPlan") {
+    val df = Seq[TestData](
+      TestData(1, "sales"),
+      TestData(2, "personnel"),
+      TestData(3, "develop"),
+      TestData(4, "IT")).toDF()
+    val ds_id1 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    df.show(0)
+    val ds_id2 = df.logicalPlan.getTagValue(Dataset.DATASET_ID_TAG)
+    assert(ds_id1 === ds_id2)
   }
 }

@@ -156,7 +156,7 @@ case class HiveTableScanExec(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = InternalRow.fromSeq(castedValues)
+        val row = InternalRow.fromSeq(castedValues.toSeq)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }

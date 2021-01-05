@@ -31,7 +31,7 @@ import org.apache.parquet.io.api.{Binary, RecordConsumer}
 
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -88,6 +88,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
 
+  private val int96RebaseMode = LegacyBehaviorPolicy.withName(
+    SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE))
+
+  private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
+    int96RebaseMode, "Parquet INT96")
+
   override def init(configuration: Configuration): WriteContext = {
     val schemaString = configuration.get(ParquetWriteSupport.SPARK_ROW_SCHEMA)
     this.schema = StructType.fromString(schemaString)
@@ -112,6 +118,12 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     ) ++ {
       if (datetimeRebaseMode == LegacyBehaviorPolicy.LEGACY) {
         Some(SPARK_LEGACY_DATETIME -> "")
+      } else {
+        None
+      }
+    } ++ {
+      if (int96RebaseMode == LegacyBehaviorPolicy.LEGACY) {
+        Some(SPARK_LEGACY_INT96 -> "")
       } else {
         None
       }
@@ -193,7 +205,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         outputTimestampType match {
           case SQLConf.ParquetOutputTimestampType.INT96 =>
             (row: SpecializedGetters, ordinal: Int) =>
-              val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
+              val micros = int96RebaseFunc(row.getLong(ordinal))
+              val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(micros)
               val buf = ByteBuffer.wrap(timestampBuffer)
               buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
               recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))

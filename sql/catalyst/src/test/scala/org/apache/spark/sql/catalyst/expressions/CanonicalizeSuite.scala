@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import java.util.TimeZone
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
@@ -94,5 +95,79 @@ class CanonicalizeSuite extends SparkFunSuite {
     val cast = Cast(literal, LongType)
     val castWithTimeZoneId = Cast(literal, LongType, Some(TimeZone.getDefault.getID))
     assert(castWithTimeZoneId.semanticEquals(cast))
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
+      val e1 = f('a, f('b, 'c))
+      val e2 = f(f('a, 'b), 'c)
+      val e3 = f('a, f('b, 'a))
+
+      assert(e1.canonicalized == e2.canonicalized)
+      assert(e1.canonicalized != e3.canonicalized)
+    }
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative for non-deterministic expressions") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
+      val e1 = f('a, f(rand(42), 'c))
+      val e2 = f(f('a, rand(42)), 'c)
+      val e3 = f('a, f(rand(42), 'a))
+
+      assert(e1.canonicalized == e2.canonicalized)
+      assert(e1.canonicalized != e3.canonicalized)
+    }
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative for literal expressions") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
+      val e1 = f('a, f(42, 'c))
+      val e2 = f(f('a, 42), 'c)
+      val e3 = f('a, f(42, 'a))
+
+      assert(e1.canonicalized == e2.canonicalized)
+      assert(e1.canonicalized != e3.canonicalized)
+    }
+  }
+
+  test("SPARK-32927: Bitwise operations are commutative in a complex case") {
+    Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f1 =>
+      Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f2 =>
+        val e1 = f2(f1('a, f1('b, 'c)), 'a)
+        val e2 = f2(f1(f1('a, 'b), 'c), 'a)
+        val e3 = f2(f1('a, f1('b, 'a)), 'a)
+
+        assert(e1.canonicalized == e2.canonicalized)
+        assert(e1.canonicalized != e3.canonicalized)
+      }
+    }
+  }
+
+  test("SPARK-33421: Support Greatest and Least in Expression Canonicalize") {
+    Seq(Least(_), Greatest(_)).foreach { f =>
+      // test deterministic expr
+      val expr1 = f(Seq(Literal(1), Literal(2), Literal(3)))
+      val expr2 = f(Seq(Literal(3), Literal(1), Literal(2)))
+      val expr3 = f(Seq(Literal(1), Literal(1), Literal(1)))
+      assert(expr1.canonicalized == expr2.canonicalized)
+      assert(expr1.canonicalized != expr3.canonicalized)
+      assert(expr2.canonicalized != expr3.canonicalized)
+
+      // test non-deterministic expr
+      val randExpr1 = f(Seq(Literal(1), rand(1)))
+      val randExpr2 = f(Seq(rand(1), Literal(1)))
+      val randExpr3 = f(Seq(Literal(1), rand(2)))
+      assert(randExpr1.canonicalized == randExpr2.canonicalized)
+      assert(randExpr1.canonicalized != randExpr3.canonicalized)
+      assert(randExpr2.canonicalized != randExpr3.canonicalized)
+
+      // test nested expr
+      val nestedExpr1 = f(Seq(Literal(1), f(Seq(Literal(2), Literal(3)))))
+      val nestedExpr2 = f(Seq(f(Seq(Literal(2), Literal(3))), Literal(1)))
+      val nestedExpr3 = f(Seq(f(Seq(Literal(1), Literal(1))), Literal(1)))
+      assert(nestedExpr1.canonicalized == nestedExpr2.canonicalized)
+      assert(nestedExpr1.canonicalized != nestedExpr3.canonicalized)
+      assert(nestedExpr2.canonicalized != nestedExpr3.canonicalized)
+    }
   }
 }

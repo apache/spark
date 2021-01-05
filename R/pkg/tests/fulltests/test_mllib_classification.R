@@ -34,7 +34,7 @@ test_that("spark.svmLinear", {
   summary <- summary(model)
 
   # test summary coefficients return matrix type
-  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(any(class(summary$coefficients) == "matrix"))
   expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   coefs <- summary$coefficients[, "Estimate"]
@@ -130,7 +130,7 @@ test_that("spark.logit", {
   summary <- summary(model)
 
   # test summary coefficients return matrix type
-  expect_true(class(summary$coefficients) == "matrix")
+  expect_true(any(class(summary$coefficients) == "matrix"))
   expect_true(class(summary$coefficients[, 1]) == "numeric")
 
   versicolorCoefsR <- c(1.52, 0.03, -0.53, 0.04, 0.00)
@@ -242,8 +242,8 @@ test_that("spark.logit", {
   # Test binomial logistic regression against two classes with upperBoundsOnCoefficients
   # and upperBoundsOnIntercepts
   u <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
-  model <- spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
-                       upperBoundsOnIntercepts = 1.0)
+  model <- suppressWarnings(spark.logit(training, Species ~ ., upperBoundsOnCoefficients = u,
+                                        upperBoundsOnIntercepts = 1.0))
   summary <- summary(model)
   coefsR <- c(-11.13331, 1.00000, 0.00000, 1.00000, 0.00000)
   coefs <- summary$coefficients[, "Estimate"]
@@ -255,8 +255,8 @@ test_that("spark.logit", {
   # Test binomial logistic regression against two classes with lowerBoundsOnCoefficients
   # and lowerBoundsOnIntercepts
   l <- matrix(c(0.0, -1.0, 0.0, -1.0), nrow = 1, ncol = 4)
-  model <- spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
-                       lowerBoundsOnIntercepts = 0.0)
+  model <- suppressWarnings(spark.logit(training, Species ~ ., lowerBoundsOnCoefficients = l,
+                                        lowerBoundsOnIntercepts = 0.0))
   summary <- summary(model)
   coefsR <- c(0, 0, -1, 0, 1.902192)
   coefs <- summary$coefficients[, "Estimate"]
@@ -268,9 +268,9 @@ test_that("spark.logit", {
   # Test multinomial logistic regression with lowerBoundsOnCoefficients
   # and lowerBoundsOnIntercepts
   l <- matrix(c(0.0, -1.0, 0.0, -1.0, 0.0, -1.0, 0.0, -1.0), nrow = 2, ncol = 4)
-  model <- spark.logit(training, Species ~ ., family = "multinomial",
-                       lowerBoundsOnCoefficients = l,
-                       lowerBoundsOnIntercepts = as.array(c(0.0, 0.0)))
+  model <- suppressWarnings(spark.logit(training, Species ~ ., family = "multinomial",
+                                        lowerBoundsOnCoefficients = l,
+                                        lowerBoundsOnIntercepts = as.array(c(0.0, 0.0))))
   summary <- summary(model)
   versicolorCoefsR <- c(42.639465, 7.258104, 14.330814, 16.298243, 11.716429)
   virginicaCoefsR <- c(0.0002970796, 4.79274, 7.65047, 25.72793, 30.0021)

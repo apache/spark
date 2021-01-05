@@ -191,7 +191,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
-        SparkEnv.get.shuffleManager.getReaderForRange(
+        SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           startMapIndex,
           endMapIndex,
@@ -201,7 +201,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
-        SparkEnv.get.shuffleManager.getReaderForRange(
+        SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           mapIndex,
           mapIndex + 1,

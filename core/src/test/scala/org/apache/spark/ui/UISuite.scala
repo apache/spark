@@ -216,6 +216,15 @@ class UISuite extends SparkFunSuite {
     assert(rewrittenURI === null)
   }
 
+  test("SPARK-33611: Avoid encoding twice on the query parameter of proxy rewrittenURI") {
+    val prefix = "/worker-id"
+    val target = "http://localhost:8081"
+    val path = "/worker-id/json"
+    val rewrittenURI =
+      JettyUtils.createProxyURI(prefix, target, path, "order%5B0%5D%5Bcolumn%5D=0")
+    assert(rewrittenURI.toString === "http://localhost:8081/json?order%5B0%5D%5Bcolumn%5D=0")
+  }
+
   test("verify rewriting location header for reverse proxy") {
     val clientRequest = mock(classOf[HttpServletRequest])
     var headerValue = "http://localhost:4040/jobs"
@@ -257,6 +266,27 @@ class UISuite extends SparkFunSuite {
 
       serverInfo.removeHandler(ctx)
       assert(TestUtils.httpResponseCode(url) === HttpServletResponse.SC_NOT_FOUND)
+    } finally {
+      stopServer(serverInfo)
+    }
+  }
+
+  test("SPARK-32467: Avoid encoding URL twice on https redirect") {
+    val (conf, securityMgr, sslOptions) = sslEnabledConf()
+    val serverInfo = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    try {
+      val serverAddr = s"http://localhost:${serverInfo.boundPort}"
+
+      val (_, ctx) = newContext("/ctx1")
+      serverInfo.addHandler(ctx, securityMgr)
+
+      TestUtils.withHttpConnection(new URL(s"$serverAddr/ctx%281%29?a%5B0%5D=b")) { conn =>
+        assert(conn.getResponseCode() === HttpServletResponse.SC_FOUND)
+        val location = Option(conn.getHeaderFields().get("Location"))
+          .map(_.get(0)).orNull
+        val expectedLocation = s"https://localhost:${serverInfo.securePort.get}/ctx(1)?a[0]=b"
+        assert(location == expectedLocation)
+      }
     } finally {
       stopServer(serverInfo)
     }

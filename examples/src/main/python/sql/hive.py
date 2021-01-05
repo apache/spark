@@ -20,10 +20,8 @@ A simple example demonstrating Spark SQL Hive integration.
 Run with:
   ./bin/spark-submit examples/src/main/python/sql/hive.py
 """
-from __future__ import print_function
-
 # $example on:spark_hive$
-from os.path import join, abspath
+from os.path import abspath
 
 from pyspark.sql import SparkSession
 from pyspark.sql import Row

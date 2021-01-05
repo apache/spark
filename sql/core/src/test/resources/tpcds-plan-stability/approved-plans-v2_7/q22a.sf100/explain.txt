@@ -1,0 +1,316 @@
+== Physical Plan ==
+TakeOrderedAndProject (52)
++- Union (51)
+   :- * HashAggregate (30)
+   :  +- * HashAggregate (29)
+   :     +- * HashAggregate (28)
+   :        +- Exchange (27)
+   :           +- * HashAggregate (26)
+   :              +- * Project (25)
+   :                 +- * SortMergeJoin Inner (24)
+   :                    :- * Sort (18)
+   :                    :  +- Exchange (17)
+   :                    :     +- * Project (16)
+   :                    :        +- * BroadcastHashJoin Inner BuildRight (15)
+   :                    :           :- * Project (9)
+   :                    :           :  +- * BroadcastHashJoin Inner BuildRight (8)
+   :                    :           :     :- * Filter (3)
+   :                    :           :     :  +- * ColumnarToRow (2)
+   :                    :           :     :     +- Scan parquet default.inventory (1)
+   :                    :           :     +- BroadcastExchange (7)
+   :                    :           :        +- * Filter (6)
+   :                    :           :           +- * ColumnarToRow (5)
+   :                    :           :              +- Scan parquet default.warehouse (4)
+   :                    :           +- BroadcastExchange (14)
+   :                    :              +- * Project (13)
+   :                    :                 +- * Filter (12)
+   :                    :                    +- * ColumnarToRow (11)
+   :                    :                       +- Scan parquet default.date_dim (10)
+   :                    +- * Sort (23)
+   :                       +- Exchange (22)
+   :                          +- * Filter (21)
+   :                             +- * ColumnarToRow (20)
+   :                                +- Scan parquet default.item (19)
+   :- * HashAggregate (35)
+   :  +- Exchange (34)
+   :     +- * HashAggregate (33)
+   :        +- * HashAggregate (32)
+   :           +- ReusedExchange (31)
+   :- * HashAggregate (40)
+   :  +- Exchange (39)
+   :     +- * HashAggregate (38)
+   :        +- * HashAggregate (37)
+   :           +- ReusedExchange (36)
+   :- * HashAggregate (45)
+   :  +- Exchange (44)
+   :     +- * HashAggregate (43)
+   :        +- * HashAggregate (42)
+   :           +- ReusedExchange (41)
+   +- * HashAggregate (50)
+      +- Exchange (49)
+         +- * HashAggregate (48)
+            +- * HashAggregate (47)
+               +- ReusedExchange (46)
+
+
+(1) Scan parquet default.inventory
+Output [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/inventory]
+PushedFilters: [IsNotNull(inv_date_sk), IsNotNull(inv_item_sk), IsNotNull(inv_warehouse_sk)]
+ReadSchema: struct<inv_date_sk:int,inv_item_sk:int,inv_warehouse_sk:int,inv_quantity_on_hand:int>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+
+(3) Filter [codegen id : 3]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4]
+Condition : ((isnotnull(inv_date_sk#1) AND isnotnull(inv_item_sk#2)) AND isnotnull(inv_warehouse_sk#3))
+
+(4) Scan parquet default.warehouse
+Output [1]: [w_warehouse_sk#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/warehouse]
+PushedFilters: [IsNotNull(w_warehouse_sk)]
+ReadSchema: struct<w_warehouse_sk:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [1]: [w_warehouse_sk#5]
+
+(6) Filter [codegen id : 1]
+Input [1]: [w_warehouse_sk#5]
+Condition : isnotnull(w_warehouse_sk#5)
+
+(7) BroadcastExchange
+Input [1]: [w_warehouse_sk#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#6]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_warehouse_sk#3]
+Right keys [1]: [w_warehouse_sk#5]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [3]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#4]
+Input [5]: [inv_date_sk#1, inv_item_sk#2, inv_warehouse_sk#3, inv_quantity_on_hand#4, w_warehouse_sk#5]
+
+(10) Scan parquet default.date_dim
+Output [2]: [d_date_sk#7, d_month_seq#8]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+
+(11) ColumnarToRow [codegen id : 2]
+Input [2]: [d_date_sk#7, d_month_seq#8]
+
+(12) Filter [codegen id : 2]
+Input [2]: [d_date_sk#7, d_month_seq#8]
+Condition : (((isnotnull(d_month_seq#8) AND (d_month_seq#8 >= 1212)) AND (d_month_seq#8 <= 1223)) AND isnotnull(d_date_sk#7))
+
+(13) Project [codegen id : 2]
+Output [1]: [d_date_sk#7]
+Input [2]: [d_date_sk#7, d_month_seq#8]
+
+(14) BroadcastExchange
+Input [1]: [d_date_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [inv_date_sk#1]
+Right keys [1]: [d_date_sk#7]
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
+Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#4, d_date_sk#7]
+
+(17) Exchange
+Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
+Arguments: hashpartitioning(inv_item_sk#2, 5), true, [id=#10]
+
+(18) Sort [codegen id : 4]
+Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
+Arguments: [inv_item_sk#2 ASC NULLS FIRST], false, 0
+
+(19) Scan parquet default.item
+Output [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_product_name:string>
+
+(20) ColumnarToRow [codegen id : 5]
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+
+(21) Filter [codegen id : 5]
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Condition : isnotnull(i_item_sk#11)
+
+(22) Exchange
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Arguments: hashpartitioning(i_item_sk#11, 5), true, [id=#16]
+
+(23) Sort [codegen id : 6]
+Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Arguments: [i_item_sk#11 ASC NULLS FIRST], false, 0
+
+(24) SortMergeJoin [codegen id : 7]
+Left keys [1]: [inv_item_sk#2]
+Right keys [1]: [i_item_sk#11]
+Join condition: None
+
+(25) Project [codegen id : 7]
+Output [5]: [inv_quantity_on_hand#4, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Input [7]: [inv_item_sk#2, inv_quantity_on_hand#4, i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+
+(26) HashAggregate [codegen id : 7]
+Input [5]: [inv_quantity_on_hand#4, i_brand#12, i_class#13, i_category#14, i_product_name#15]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [2]: [sum#17, count#18]
+Results [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#19, count#20]
+
+(27) Exchange
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#19, count#20]
+Arguments: hashpartitioning(i_product_name#15, i_brand#12, i_class#13, i_category#14, 5), true, [id=#21]
+
+(28) HashAggregate [codegen id : 8]
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#19, count#20]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#22]
+Results [5]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, avg(cast(inv_quantity_on_hand#4 as bigint))#22 AS qoh#23]
+
+(29) HashAggregate [codegen id : 8]
+Input [5]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, qoh#23]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [partial_avg(qoh#23)]
+Aggregate Attributes [2]: [sum#24, count#25]
+Results [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#26, count#27]
+
+(30) HashAggregate [codegen id : 8]
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#26, count#27]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [avg(qoh#23)]
+Aggregate Attributes [1]: [avg(qoh#23)#28]
+Results [5]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, avg(qoh#23)#28 AS qoh#29]
+
+(31) ReusedExchange [Reuses operator id: 27]
+Output [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#30, count#31]
+
+(32) HashAggregate [codegen id : 16]
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#30, count#31]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#32]
+Results [4]: [i_product_name#15, i_brand#12, i_class#13, avg(cast(inv_quantity_on_hand#4 as bigint))#32 AS qoh#23]
+
+(33) HashAggregate [codegen id : 16]
+Input [4]: [i_product_name#15, i_brand#12, i_class#13, qoh#23]
+Keys [3]: [i_product_name#15, i_brand#12, i_class#13]
+Functions [1]: [partial_avg(qoh#23)]
+Aggregate Attributes [2]: [sum#33, count#34]
+Results [5]: [i_product_name#15, i_brand#12, i_class#13, sum#35, count#36]
+
+(34) Exchange
+Input [5]: [i_product_name#15, i_brand#12, i_class#13, sum#35, count#36]
+Arguments: hashpartitioning(i_product_name#15, i_brand#12, i_class#13, 5), true, [id=#37]
+
+(35) HashAggregate [codegen id : 17]
+Input [5]: [i_product_name#15, i_brand#12, i_class#13, sum#35, count#36]
+Keys [3]: [i_product_name#15, i_brand#12, i_class#13]
+Functions [1]: [avg(qoh#23)]
+Aggregate Attributes [1]: [avg(qoh#23)#38]
+Results [5]: [i_product_name#15, i_brand#12, i_class#13, null AS i_category#39, avg(qoh#23)#38 AS qoh#40]
+
+(36) ReusedExchange [Reuses operator id: 27]
+Output [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#41, count#42]
+
+(37) HashAggregate [codegen id : 25]
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#41, count#42]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#43]
+Results [3]: [i_product_name#15, i_brand#12, avg(cast(inv_quantity_on_hand#4 as bigint))#43 AS qoh#23]
+
+(38) HashAggregate [codegen id : 25]
+Input [3]: [i_product_name#15, i_brand#12, qoh#23]
+Keys [2]: [i_product_name#15, i_brand#12]
+Functions [1]: [partial_avg(qoh#23)]
+Aggregate Attributes [2]: [sum#44, count#45]
+Results [4]: [i_product_name#15, i_brand#12, sum#46, count#47]
+
+(39) Exchange
+Input [4]: [i_product_name#15, i_brand#12, sum#46, count#47]
+Arguments: hashpartitioning(i_product_name#15, i_brand#12, 5), true, [id=#48]
+
+(40) HashAggregate [codegen id : 26]
+Input [4]: [i_product_name#15, i_brand#12, sum#46, count#47]
+Keys [2]: [i_product_name#15, i_brand#12]
+Functions [1]: [avg(qoh#23)]
+Aggregate Attributes [1]: [avg(qoh#23)#49]
+Results [5]: [i_product_name#15, i_brand#12, null AS i_class#50, null AS i_category#51, avg(qoh#23)#49 AS qoh#52]
+
+(41) ReusedExchange [Reuses operator id: 27]
+Output [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#53, count#54]
+
+(42) HashAggregate [codegen id : 34]
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#53, count#54]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#55]
+Results [2]: [i_product_name#15, avg(cast(inv_quantity_on_hand#4 as bigint))#55 AS qoh#23]
+
+(43) HashAggregate [codegen id : 34]
+Input [2]: [i_product_name#15, qoh#23]
+Keys [1]: [i_product_name#15]
+Functions [1]: [partial_avg(qoh#23)]
+Aggregate Attributes [2]: [sum#56, count#57]
+Results [3]: [i_product_name#15, sum#58, count#59]
+
+(44) Exchange
+Input [3]: [i_product_name#15, sum#58, count#59]
+Arguments: hashpartitioning(i_product_name#15, 5), true, [id=#60]
+
+(45) HashAggregate [codegen id : 35]
+Input [3]: [i_product_name#15, sum#58, count#59]
+Keys [1]: [i_product_name#15]
+Functions [1]: [avg(qoh#23)]
+Aggregate Attributes [1]: [avg(qoh#23)#61]
+Results [5]: [i_product_name#15, null AS i_brand#62, null AS i_class#63, null AS i_category#64, avg(qoh#23)#61 AS qoh#65]
+
+(46) ReusedExchange [Reuses operator id: 27]
+Output [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#66, count#67]
+
+(47) HashAggregate [codegen id : 43]
+Input [6]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, sum#66, count#67]
+Keys [4]: [i_product_name#15, i_brand#12, i_class#13, i_category#14]
+Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
+Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#68]
+Results [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#68 AS qoh#23]
+
+(48) HashAggregate [codegen id : 43]
+Input [1]: [qoh#23]
+Keys: []
+Functions [1]: [partial_avg(qoh#23)]
+Aggregate Attributes [2]: [sum#69, count#70]
+Results [2]: [sum#71, count#72]
+
+(49) Exchange
+Input [2]: [sum#71, count#72]
+Arguments: SinglePartition, true, [id=#73]
+
+(50) HashAggregate [codegen id : 44]
+Input [2]: [sum#71, count#72]
+Keys: []
+Functions [1]: [avg(qoh#23)]
+Aggregate Attributes [1]: [avg(qoh#23)#74]
+Results [5]: [null AS i_product_name#75, null AS i_brand#76, null AS i_class#77, null AS i_category#78, avg(qoh#23)#74 AS qoh#79]
+
+(51) Union
+
+(52) TakeOrderedAndProject
+Input [5]: [i_product_name#15, i_brand#12, i_class#13, i_category#14, qoh#29]
+Arguments: 100, [qoh#29 ASC NULLS FIRST, i_product_name#15 ASC NULLS FIRST, i_brand#12 ASC NULLS FIRST, i_class#13 ASC NULLS FIRST, i_category#14 ASC NULLS FIRST], [i_product_name#15, i_brand#12, i_class#13, i_category#14, qoh#29]
+

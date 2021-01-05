@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.UUID
-
-import org.apache.spark.SparkException
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.SupportsWrite
-import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
+import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.sources.{AlwaysTrue, Filter, InsertableRelation}
+import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
@@ -39,12 +35,9 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 case class AppendDataExecV1(
     table: SupportsWrite,
     writeOptions: CaseInsensitiveStringMap,
-    plan: LogicalPlan) extends V1FallbackWriters {
-
-  override protected def run(): Seq[InternalRow] = {
-    writeWithV1(newWriteBuilder().buildForV1Write())
-  }
-}
+    plan: LogicalPlan,
+    refreshCache: () => Unit,
+    write: V1Write) extends V1FallbackWriters
 
 /**
  * Physical plan node for overwrite into a v2 table with V1 write interfaces. Note that when this
@@ -59,27 +52,10 @@ case class AppendDataExecV1(
  */
 case class OverwriteByExpressionExecV1(
     table: SupportsWrite,
-    deleteWhere: Array[Filter],
     writeOptions: CaseInsensitiveStringMap,
-    plan: LogicalPlan) extends V1FallbackWriters {
-
-  private def isTruncate(filters: Array[Filter]): Boolean = {
-    filters.length == 1 && filters(0).isInstanceOf[AlwaysTrue]
-  }
-
-  override protected def run(): Seq[InternalRow] = {
-    newWriteBuilder() match {
-      case builder: SupportsTruncate if isTruncate(deleteWhere) =>
-        writeWithV1(builder.truncate().asV1Builder.buildForV1Write())
-
-      case builder: SupportsOverwrite =>
-        writeWithV1(builder.overwrite(deleteWhere).asV1Builder.buildForV1Write())
-
-      case _ =>
-        throw new SparkException(s"Table does not support overwrite by expression: $table")
-    }
-  }
-}
+    plan: LogicalPlan,
+    refreshCache: () => Unit,
+    write: V1Write) extends V1FallbackWriters
 
 /** Some helper interfaces that use V2 write semantics through the V1 writer interface. */
 sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
@@ -88,23 +64,13 @@ sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
 
   def table: SupportsWrite
   def writeOptions: CaseInsensitiveStringMap
+  def refreshCache: () => Unit
+  def write: V1Write
 
-  protected implicit class toV1WriteBuilder(builder: WriteBuilder) {
-    def asV1Builder: V1WriteBuilder = builder match {
-      case v1: V1WriteBuilder => v1
-      case other => throw new IllegalStateException(
-        s"The returned writer ${other} was no longer a V1WriteBuilder.")
-    }
-  }
-
-  protected def newWriteBuilder(): V1WriteBuilder = {
-    val info = LogicalWriteInfoImpl(
-      queryId = UUID.randomUUID().toString,
-      schema = plan.schema,
-      options = writeOptions)
-    val writeBuilder = table.newWriteBuilder(info)
-
-    writeBuilder.asV1Builder
+  override def run(): Seq[InternalRow] = {
+    val writtenRows = writeWithV1(write.toInsertableRelation)
+    refreshCache()
+    writtenRows
   }
 }
 
@@ -112,7 +78,6 @@ sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
  * A trait that allows Tables that use V1 Writer interfaces to append data.
  */
 trait SupportsV1Write extends SparkPlan {
-  // TODO: We should be able to work on SparkPlans at this point.
   def plan: LogicalPlan
 
   protected def writeWithV1(relation: InsertableRelation): Seq[InternalRow] = {

@@ -86,6 +86,16 @@ that these options will be deprecated in future release as more optimizations ar
     <td>2.0.0</td>
   </tr>
   <tr>
+    <td><code>spark.sql.files.minPartitionNum</code></td>
+    <td>Default Parallelism</td>
+    <td>
+      The suggested (not guaranteed) minimum number of split file partitions. If not set, the default
+      value is `spark.default.parallelism`. This configuration is effective only when using file-based
+      sources such as Parquet, JSON and ORC.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
     <td><code>spark.sql.broadcastTimeout</code></td>
     <td>300</td>
     <td>
@@ -113,6 +123,28 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
     <td>1.1.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.threshold</code></td>
+    <td>32</td>
+    <td>
+      Configures the threshold to enable parallel listing for job input paths. If the number of
+      input paths is larger than this threshold, Spark will list the files by using Spark distributed job.
+      Otherwise, it will fallback to sequential listing. This configuration is only effective when
+      using file-based data sources such as Parquet, ORC and JSON.
+    </td>
+    <td>1.5.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.parallelism</code></td>
+    <td>10000</td>
+    <td>
+      Configures the maximum listing parallelism for job input paths. In case the number of input
+      paths is larger than this value, it will be throttled down to use this value. Same as above,
+      this configuration is only effective when using file-based data sources such as Parquet, ORC
+      and JSON.
+    </td>
+    <td>2.1.1</td>
   </tr>
 </table>
 
@@ -179,7 +211,7 @@ SELECT /*+ BROADCAST(r) */ * FROM records r JOIN src s ON r.key = s.key
 </div>
 </div>
 
-For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html).
+For more details please refer to the documentation of [Join Hints](sql-ref-syntax-qry-select-hints.html#join-hints).
 
 ## Coalesce Hints for SQL Queries
 
@@ -195,6 +227,8 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION(3, c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
+
+For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 
 ## Adaptive Query Execution
 Adaptive Query Execution (AQE) is an optimization technique in Spark SQL that makes use of the runtime statistics to choose the most efficient query execution plan. AQE is disabled by default. Spark SQL can use the umbrella configuration of `spark.sql.adaptive.enabled` to control whether turn it on/off. As of Spark 3.0, there are three major features in AQE, including coalescing post-shuffle partitions, converting sort-merge join to broadcast join, and skew join optimization.
@@ -256,7 +290,7 @@ Data skew can severely downgrade the performance of join queries. This feature d
        <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
        <td>10</td>
        <td>
-         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewedPartitionThresholdInBytes</code>.
+         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>.
        </td>
        <td>3.0.0</td>
      </tr>

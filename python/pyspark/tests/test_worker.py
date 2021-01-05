@@ -16,14 +16,13 @@
 # limitations under the License.
 #
 import os
-import sys
 import tempfile
 import threading
 import time
 import unittest
 has_resource_module = True
 try:
-    import resource
+    import resource  # noqa: F401
 except ImportError:
     has_resource_module = False
 
@@ -31,9 +30,6 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
 from pyspark.testing.utils import ReusedPySparkTestCase, PySparkTestCase, QuietTest
-
-if sys.version_info[0] >= 3:
-    xrange = range
 
 
 class WorkerTests(ReusedPySparkTestCase):
@@ -88,15 +84,24 @@ class WorkerTests(ReusedPySparkTestCase):
             self.fail("daemon had been killed")
 
         # run a normal job
-        rdd = self.sc.parallelize(xrange(100), 1)
+        rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_exception(self):
         def raise_exception(_):
             raise Exception()
-        rdd = self.sc.parallelize(xrange(100), 1)
+        rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
+        self.assertEqual(100, rdd.map(str).count())
+
+    def test_after_non_exception_error(self):
+        # SPARK-33339: Pyspark application will hang due to non Exception
+        def raise_system_exit(_):
+            raise SystemExit()
+        rdd = self.sc.parallelize(range(100), 1)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: rdd.foreach(raise_system_exit))
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_jvm_exception(self):
@@ -110,22 +115,22 @@ class WorkerTests(ReusedPySparkTestCase):
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: filtered_data.count())
 
-        rdd = self.sc.parallelize(xrange(100), 1)
+        rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_accumulator_when_reuse_worker(self):
         from pyspark.accumulators import INT_ACCUMULATOR_PARAM
         acc1 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc1.add(x))
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc1.add(x))
         self.assertEqual(sum(range(100)), acc1.value)
 
         acc2 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc2.add(x))
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
     def test_reuse_worker_after_take(self):
-        rdd = self.sc.parallelize(xrange(100000), 1)
+        rdd = self.sc.parallelize(range(100000), 1)
         self.assertEqual(0, rdd.first())
 
         def count():
@@ -138,7 +143,7 @@ class WorkerTests(ReusedPySparkTestCase):
         t.daemon = True
         t.start()
         t.join(5)
-        self.assertTrue(not t.isAlive())
+        self.assertTrue(not t.is_alive())
         self.assertEqual(100000, rdd.count())
 
     def test_with_different_versions_of_python(self):
@@ -160,17 +165,13 @@ class WorkerTests(ReusedPySparkTestCase):
 
             self.sc.parallelize([1]).map(lambda x: f()).count()
         except Py4JJavaError as e:
-            if sys.version_info.major < 3:
-                # we have to use unicode here to avoid UnicodeDecodeError
-                self.assertRegexpMatches(unicode(e).encode("utf-8"), "exception with 中")
-            else:
-                self.assertRegexpMatches(str(e), "exception with 中")
+            self.assertRegex(str(e), "exception with 中")
 
 
 class WorkerReuseTest(PySparkTestCase):
 
-    def test_reuse_worker_of_parallelize_xrange(self):
-        rdd = self.sc.parallelize(xrange(20), 8)
+    def test_reuse_worker_of_parallelize_range(self):
+        rdd = self.sc.parallelize(range(20), 8)
         previous_pids = rdd.map(lambda x: os.getpid()).collect()
         current_pids = rdd.map(lambda x: os.getpid()).collect()
         for pid in current_pids:
@@ -189,7 +190,7 @@ class WorkerMemoryTest(unittest.TestCase):
         self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_memory_limit(self):
-        rdd = self.sc.parallelize(xrange(1), 1)
+        rdd = self.sc.parallelize(range(1), 1)
 
         def getrlimit():
             import resource
@@ -207,10 +208,10 @@ class WorkerMemoryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_worker import *
+    from pyspark.tests.test_worker import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

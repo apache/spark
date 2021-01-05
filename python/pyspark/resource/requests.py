@@ -20,8 +20,6 @@ from pyspark.util import _parse_memory
 
 class ExecutorResourceRequest(object):
     """
-    .. note:: Evolving
-
     An Executor resource request. This is used in conjunction with the ResourceProfile to
     programmatically specify the resources needed for an RDD that will be applied at the
     stage level.
@@ -41,17 +39,27 @@ class ExecutorResourceRequest(object):
 
     See the configuration and cluster specific docs for more details.
 
-    Use `pyspark.ExecutorResourceRequests` class as a convenience API.
+    Use :py:class:`pyspark.ExecutorResourceRequests` class as a convenience API.
 
-    :param resourceName: Name of the resource
-    :param amount: Amount requesting
-    :param discoveryScript: Optional script used to discover the resources. This is required on some
+    .. versionadded:: 3.1.0
+
+    Parameters
+    ----------
+    resourceName : str
+        Name of the resource
+    amount : str
+        Amount requesting
+    discoveryScript : str, optional
+        Optional script used to discover the resources. This is required on some
         cluster managers that don't tell Spark the addresses of the resources
         allocated. The script runs on Executors startup to discover the addresses
         of the resources available.
-    :param vendor: Vendor, required for some cluster managers
+    vendor : str, optional
+        Vendor, required for some cluster managers
 
-    .. versionadded:: 3.1.0
+    Notes
+    -----
+    This API is evolving.
     """
     def __init__(self, resourceName, amount, discoveryScript="", vendor=""):
         self._name = resourceName
@@ -79,18 +87,21 @@ class ExecutorResourceRequest(object):
 class ExecutorResourceRequests(object):
 
     """
-    .. note:: Evolving
-
     A set of Executor resource requests. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the
     resources needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
+
+    Notes
+    -----
+    This API is evolving.
     """
     _CORES = "cores"
     _MEMORY = "memory"
     _OVERHEAD_MEM = "memoryOverhead"
     _PYSPARK_MEM = "pyspark.memory"
+    _OFFHEAP_MEM = "offHeap"
 
     def __init__(self, _jvm=None, _requests=None):
         from pyspark import SparkContext
@@ -139,6 +150,14 @@ class ExecutorResourceRequests(object):
                 ExecutorResourceRequest(self._PYSPARK_MEM, _parse_memory(amount))
         return self
 
+    def offheapMemory(self, amount):
+        if self._java_executor_resource_requests is not None:
+            self._java_executor_resource_requests.offHeapMemory(amount)
+        else:
+            self._executor_resources[self._OFFHEAP_MEM] = \
+                ExecutorResourceRequest(self._OFFHEAP_MEM, _parse_memory(amount))
+        return self
+
     def cores(self, amount):
         if self._java_executor_resource_requests is not None:
             self._java_executor_resource_requests.cores(amount)
@@ -170,20 +189,26 @@ class ExecutorResourceRequests(object):
 
 class TaskResourceRequest(object):
     """
-    .. note:: Evolving
-
-    A task resource request. This is used in conjuntion with the
+    A task resource request. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfile` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level. The amount is specified
     as a Double to allow for saying you want more than 1 task per resource. Valid values
     are less than or equal to 0.5 or whole numbers.
     Use :class:`pyspark.resource.TaskResourceRequests` class as a convenience API.
 
-    :param resourceName: Name of the resource
-    :param amount: Amount requesting as a Double to support fractional resource requests.
+    Parameters
+    ----------
+    resourceName : str
+        Name of the resource
+    amount : float
+        Amount requesting as a float to support fractional resource requests.
         Valid values are less than or equal to 0.5 or whole numbers.
 
     .. versionadded:: 3.1.0
+
+    Notes
+    -----
+    This API is evolving.
     """
     def __init__(self, resourceName, amount):
         self._name = resourceName
@@ -201,13 +226,15 @@ class TaskResourceRequest(object):
 class TaskResourceRequests(object):
 
     """
-    .. note:: Evolving
-
-    A set of task resource requests. This is used in conjuntion with the
+    A set of task resource requests. This is used in conjunction with the
     :class:`pyspark.resource.ResourceProfileBuilder` to programmatically specify the resources
     needed for an RDD that will be applied at the stage level.
 
     .. versionadded:: 3.1.0
+
+    Notes
+    -----
+    This API is evolving.
     """
 
     _CPUS = "cpus"

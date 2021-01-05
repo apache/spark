@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.io.File
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.execution.adaptive.AdaptiveTestUtils.assertExceptionMessage
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -56,8 +55,8 @@ abstract class MetadataCacheSuite extends QueryTest with SharedSparkSession {
       val e = intercept[SparkException] {
         df.count()
       }
-      assertExceptionMessage(e, "FileNotFoundException")
-      assertExceptionMessage(e, "recreating the Dataset/DataFrame involved")
+      assert(e.getMessage.contains("FileNotFoundException"))
+      assert(e.getMessage.contains("recreating the Dataset/DataFrame involved"))
     }
   }
 }
@@ -85,8 +84,8 @@ class MetadataCacheV1Suite extends MetadataCacheSuite {
       val e = intercept[SparkException] {
         sql("select count(*) from view_refresh").first()
       }
-      assertExceptionMessage(e, "FileNotFoundException")
-      assertExceptionMessage(e, "REFRESH")
+      assert(e.getMessage.contains("FileNotFoundException"))
+      assert(e.getMessage.contains("REFRESH"))
 
       // Refresh and we should be able to read it again.
       spark.catalog.refreshTable("view_refresh")

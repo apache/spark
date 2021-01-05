@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.io.{PrintWriter, StringWriter}
-
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
@@ -67,27 +65,5 @@ trait DisableAdaptiveExecutionSuite extends SQLTestUtils {
         testFun
       }
     }
-  }
-}
-
-object AdaptiveTestUtils {
-  def assertExceptionMessage(e: Exception, expected: String): Unit = {
-    val stringWriter = new StringWriter()
-    e.printStackTrace(new PrintWriter(stringWriter))
-    val errorMsg = stringWriter.toString
-    assert(errorMsg.contains(expected))
-  }
-
-  def assertExceptionCause(t: Throwable, causeClass: Class[_]): Unit = {
-    var c = t.getCause
-    var foundCause = false
-    while (c != null && !foundCause) {
-      if (causeClass.isAssignableFrom(c.getClass)) {
-        foundCause = true
-      } else {
-        c = c.getCause
-      }
-    }
-    assert(foundCause, s"Can not find cause: $causeClass")
   }
 }

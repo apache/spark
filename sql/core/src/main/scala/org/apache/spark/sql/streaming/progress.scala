@@ -43,6 +43,7 @@ class StateOperatorProgress private[sql](
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
     val memoryUsedBytes: Long,
+    val numRowsDroppedByWatermark: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -52,13 +53,17 @@ class StateOperatorProgress private[sql](
   /** The pretty (i.e. indented) JSON representation of this progress. */
   def prettyJson: String = pretty(render(jsonValue))
 
-  private[sql] def copy(newNumRowsUpdated: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes, customMetrics)
+  private[sql] def copy(
+      newNumRowsUpdated: Long,
+      newNumRowsDroppedByWatermark: Long): StateOperatorProgress =
+    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes,
+      newNumRowsDroppedByWatermark, customMetrics)
 
   private[sql] def jsonValue: JValue = {
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
+    ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {
         val keys = customMetrics.keySet.asScala.toSeq.sorted
@@ -168,6 +173,7 @@ class StreamingQueryProgress private[sql](
  * @param description            Description of the source.
  * @param startOffset            The starting offset for data being read.
  * @param endOffset              The ending offset for data being read.
+ * @param latestOffset           The latest offset from this source.
  * @param numInputRows           The number of records read from this source.
  * @param inputRowsPerSecond     The rate at which data is arriving from this source.
  * @param processedRowsPerSecond The rate at which data from this source is being processed by
@@ -179,6 +185,7 @@ class SourceProgress protected[sql](
   val description: String,
   val startOffset: String,
   val endOffset: String,
+  val latestOffset: String,
   val numInputRows: Long,
   val inputRowsPerSecond: Double,
   val processedRowsPerSecond: Double) extends Serializable {
@@ -199,6 +206,7 @@ class SourceProgress protected[sql](
     ("description" -> JString(description)) ~
       ("startOffset" -> tryParse(startOffset)) ~
       ("endOffset" -> tryParse(endOffset)) ~
+      ("latestOffset" -> tryParse(latestOffset)) ~
       ("numInputRows" -> JInt(numInputRows)) ~
       ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
       ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
@@ -226,7 +234,7 @@ class SinkProgress protected[sql](
     val numOutputRows: Long) extends Serializable {
 
   /** SinkProgress without custom metrics. */
-  protected[sql] def this(description: String) {
+  protected[sql] def this(description: String) = {
     this(description, DEFAULT_NUM_OUTPUT_ROWS)
   }
 

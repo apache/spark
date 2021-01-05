@@ -58,7 +58,7 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 * **grouping_expression**
 
-    Specifies the critieria based on which the rows are grouped together. The grouping of rows is performed based on
+    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
     result values of the grouping expressions. A grouping expression may be a column alias, a column position
     or an expression.
 
@@ -260,6 +260,30 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
 | San Jose| HondaAccord|  8|
 | San Jose|  HondaCivic|  5|
 +---------+------------+---+
+
+--Prepare data for ignore nulls example
+CREATE TABLE person (id INT, name STRING, age INT);
+INSERT INTO person VALUES
+    (100, 'Mary', NULL),
+    (200, 'John', 30),
+    (300, 'Mike', 80),
+    (400, 'Dan', 50);
+
+--Select the first row in column age
+SELECT FIRST(age) FROM person;
++--------------------+
+| first(age, false)  |
++--------------------+
+| NULL               |
++--------------------+
+
+--Get the first row in column `age` ignore nulls,last row in column `id` and sum of column `id`.
+SELECT FIRST(age IGNORE NULLS), LAST(id), SUM(id) FROM person;
++-------------------+------------------+----------+
+| first(age, true)  | last(id, false)  | sum(id)  |
++-------------------+------------------+----------+
+| 30                | 400              | 1000     |
++-------------------+------------------+----------+
 ```
 
 ### Related Statements
@@ -272,3 +296,6 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

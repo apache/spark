@@ -18,11 +18,11 @@
 """
 Worker that receives input from Piped RDD.
 """
-from __future__ import print_function
-from __future__ import absolute_import
 import os
 import sys
 import time
+from inspect import getfullargspec
+import importlib
 # 'resource' is a Unix specific module.
 has_resource_module = True
 try:
@@ -44,13 +44,8 @@ from pyspark.serializers import write_with_length, write_int, read_long, read_bo
 from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import _get_argspec, fail_on_stopiteration
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
-
-if sys.version >= '3':
-    basestring = str
-else:
-    from itertools import imap as map  # use iterator map by default
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -64,7 +59,7 @@ def report_times(outfile, boot, init, finish):
 
 
 def add_path(path):
-    # worker can be used, so donot add path multiple times
+    # worker can be used, so do not add path multiple times
     if path not in sys.path:
         # overwrite system packages
         sys.path.insert(1, path)
@@ -272,10 +267,10 @@ def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
         return arg_offsets, wrap_pandas_iter_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
-        argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
+        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF:
-        argspec = _get_argspec(chained_func)  # signature was lost when wrapping it
+        argspec = getfullargspec(chained_func)  # signature was lost when wrapping it
         return arg_offsets, wrap_cogrouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
@@ -342,11 +337,13 @@ def read_udfs(pickleSer, infile, eval_type):
             pickleSer, infile, eval_type, runner_conf, udf_index=0)
 
         def func(_, iterator):
-            num_input_rows = [0]  # TODO(SPARK-29909): Use nonlocal after we drop Python 2.
+            num_input_rows = 0
 
             def map_batch(batch):
+                nonlocal num_input_rows
+
                 udf_args = [batch[offset] for offset in arg_offsets]
-                num_input_rows[0] += len(udf_args[0])
+                num_input_rows += len(udf_args[0])
                 if len(udf_args) == 1:
                     return udf_args[0]
                 else:
@@ -363,7 +360,7 @@ def read_udfs(pickleSer, infile, eval_type):
                 # by consuming the input iterator in user side. Therefore,
                 # it's very unlikely the output length is higher than
                 # input length.
-                assert is_map_iter or num_output_rows <= num_input_rows[0], \
+                assert is_map_iter or num_output_rows <= num_input_rows, \
                     "Pandas SCALAR_ITER UDF outputted more rows than input rows."
                 yield (result_batch, result_type)
 
@@ -376,11 +373,11 @@ def read_udfs(pickleSer, infile, eval_type):
                     raise RuntimeError("pandas iterator UDF should exhaust the input "
                                        "iterator.")
 
-                if num_output_rows != num_input_rows[0]:
+                if num_output_rows != num_input_rows:
                     raise RuntimeError(
                         "The length of output in Scalar iterator pandas UDF should be "
                         "the same with the input's; however, the length of output was %d and the "
-                        "length of input was %d." % (num_output_rows, num_input_rows[0]))
+                        "length of input was %d." % (num_output_rows, num_input_rows))
 
         # profiling is not supported for UDF
         return func, None, ser, ser
@@ -390,7 +387,10 @@ def read_udfs(pickleSer, infile, eval_type):
         Helper function to extract the key and value indexes from arg_offsets for the grouped and
         cogrouped pandas udfs. See BasePandasGroupExec.resolveArgOffsets for equivalent scala code.
 
-        :param grouped_arg_offsets:  List containing the key and value indexes of columns of the
+        Parameters
+        ----------
+        grouped_arg_offsets:  list
+            List containing the key and value indexes of columns of the
             DataFrames to be passed to the udf. It consists of n repeating groups where n is the
             number of DataFrames.  Each group has the following format:
                 group[0]: length of group
@@ -471,7 +471,7 @@ def main(infile, outfile):
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
             raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions." +
+                             "driver %s, PySpark cannot run with different minor versions. " +
                              "Please check environment variables PYSPARK_PYTHON and " +
                              "PYSPARK_DRIVER_PYTHON are correctly set.") %
                             ("%d.%d" % sys.version_info[:2], version))
@@ -548,9 +548,8 @@ def main(infile, outfile):
         for _ in range(num_python_includes):
             filename = utf8_deserializer.loads(infile)
             add_path(os.path.join(spark_files_dir, filename))
-        if sys.version > '3':
-            import importlib
-            importlib.invalidate_caches()
+
+        importlib.invalidate_caches()
 
         # fetch names and values of broadcast variables
         needs_broadcast_decryption_server = read_bool(infile)
@@ -608,21 +607,23 @@ def main(infile, outfile):
         # reuse.
         TaskContext._setTaskContext(None)
         BarrierTaskContext._setTaskContext(None)
-    except Exception:
+    except BaseException as e:
         try:
-            exc_info = traceback.format_exc()
-            if isinstance(exc_info, bytes):
-                # exc_info may contains other encoding bytes, replace the invalid bytes and convert
-                # it back to utf-8 again
-                exc_info = exc_info.decode("utf-8", "replace").encode("utf-8")
-            else:
-                exc_info = exc_info.encode("utf-8")
+            exc_info = None
+            if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
+                tb = try_simplify_traceback(sys.exc_info()[-1])
+                if tb is not None:
+                    e.__cause__ = None
+                    exc_info = "".join(traceback.format_exception(type(e), e, tb))
+            if exc_info is None:
+                exc_info = traceback.format_exc()
+
             write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
-            write_with_length(exc_info, outfile)
+            write_with_length(exc_info.encode("utf-8"), outfile)
         except IOError:
             # JVM close the socket
             pass
-        except Exception:
+        except BaseException:
             # Write the error to stderr if it happened while serializing
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)

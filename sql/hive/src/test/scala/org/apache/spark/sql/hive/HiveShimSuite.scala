@@ -16,9 +16,6 @@
  */
 package org.apache.spark.sql.hive
 
-import scala.collection.JavaConverters._
-import scala.language.implicitConversions
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 
@@ -35,18 +32,10 @@ class HiveShimSuite extends SparkFunSuite {
 
     // test when READ_COLUMN_NAMES_CONF_STR is empty
     HiveShim.appendReadColumns(conf, ids, names)
-    if (HiveUtils.isHive23) {
-      assert(names === ColumnProjectionUtils.getReadColumnNames(conf))
-    } else {
-      assert(names.asJava === ColumnProjectionUtils.getReadColumnNames(conf))
-    }
+    assert(names === ColumnProjectionUtils.getReadColumnNames(conf))
 
     // test when READ_COLUMN_NAMES_CONF_STR is non-empty
     HiveShim.appendReadColumns(conf, moreIds, moreNames)
-    if (HiveUtils.isHive23) {
-      assert((names ++ moreNames) === ColumnProjectionUtils.getReadColumnNames(conf))
-    } else {
-      assert((names ++ moreNames).asJava === ColumnProjectionUtils.getReadColumnNames(conf))
-    }
+    assert((names ++ moreNames) === ColumnProjectionUtils.getReadColumnNames(conf))
   }
 }

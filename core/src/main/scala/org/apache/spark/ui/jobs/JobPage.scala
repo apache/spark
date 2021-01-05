@@ -68,7 +68,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
         .getOrElse(System.currentTimeMillis())
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
-      // extra layers of escaping in order to embed this in a Javascript string literal.
+      // extra layers of escaping in order to embed this in a JavaScript string literal.
       val escapedName = Utility.escape(name)
       val jsEscapedNameForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedName))
       val jsEscapedNameForLabel = StringEscapeUtils.escapeEcmaScript(escapedName)
@@ -127,7 +127,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
-                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
+                        s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
+                          reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
@@ -255,7 +256,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           tasks = None,
           executorSummary = None,
           killedTasksSummary = Map(),
-          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID)
+          ResourceProfile.UNKNOWN_RESOURCE_PROFILE_ID,
+          peakExecutorMetrics = None)
       }
     }
 
@@ -282,26 +284,26 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
 
     val pendingOrSkippedTableId =
       if (isComplete) {
-        "pending"
-      } else {
         "skipped"
+      } else {
+        "pending"
       }
 
     val activeStagesTable =
-      new StageTableBase(store, request, activeStages, "active", "activeStage", parent.basePath,
-        basePath, parent.isFairScheduler,
+      new StageTableBase(store, request, activeStages.toSeq, "active", "activeStage",
+        parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = parent.killEnabled, isFailedStage = false)
     val pendingOrSkippedStagesTable =
-      new StageTableBase(store, request, pendingOrSkippedStages, pendingOrSkippedTableId,
+      new StageTableBase(store, request, pendingOrSkippedStages.toSeq, pendingOrSkippedTableId,
         "pendingStage", parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val completedStagesTable =
-      new StageTableBase(store, request, completedStages, "completed", "completedStage",
+      new StageTableBase(store, request, completedStages.toSeq, "completed", "completedStage",
         parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = false)
     val failedStagesTable =
-      new StageTableBase(store, request, failedStages, "failed", "failedStage", parent.basePath,
-        basePath, parent.isFairScheduler,
+      new StageTableBase(store, request, failedStages.toSeq, "failed", "failedStage",
+        parent.basePath, basePath, parent.isFairScheduler,
         killEnabled = false, isFailedStage = true)
 
     val shouldShowActiveStages = activeStages.nonEmpty
@@ -391,7 +393,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     var content = summary
     val appStartTime = store.applicationInfo().attempts.head.startTime.getTime()
 
-    content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
+    content ++= makeTimeline((activeStages ++ completedStages ++ failedStages).toSeq,
       store.executorList(false), appStartTime)
 
     val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {

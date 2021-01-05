@@ -5,10 +5,10 @@ REM Command file for Sphinx documentation
 if "%SPHINXBUILD%" == "" (
 	set SPHINXBUILD=sphinx-build
 )
-set SOURCEDIR=.
-set BUILDDIR=_build
+set SOURCEDIR=source
+set BUILDDIR=build
 
-set PYTHONPATH=..;..\lib\py4j-0.10.9-src.zip
+set PYTHONPATH=..;..\lib\py4j-0.10.9.1-src.zip
 
 if "%1" == "" goto help
 

@@ -16,10 +16,8 @@
 #
 import unittest
 
-import py4j
-
 from pyspark.ml.image import ImageSchema
-from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase
+from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.sql import Row
 from pyspark.testing.utils import QuietTest
 
@@ -35,7 +33,7 @@ class ImageFileFormatTest(SparkSessionTestCase):
         self.assertEqual(df.count(), 4)
         first_row = df.take(1)[0][0]
         # compare `schema.simpleString()` instead of directly compare schema,
-        # because the df loaded from datasouce may change schema column nullability.
+        # because the df loaded from datasource may change schema column nullability.
         self.assertEqual(df.schema.simpleString(), ImageSchema.imageSchema.simpleString())
         self.assertEqual(df.schema["image"].dataType.simpleString(),
                          ImageSchema.columnSchema.simpleString())
@@ -49,29 +47,29 @@ class ImageFileFormatTest(SparkSessionTestCase):
         self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 TypeError,
                 "image argument should be pyspark.sql.types.Row; however",
                 lambda: ImageSchema.toNDArray("a"))
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 ValueError,
                 "image argument should have attributes specified in",
                 lambda: ImageSchema.toNDArray(Row(a=1)))
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 TypeError,
                 "array argument should be numpy.ndarray; however, it got",
                 lambda: ImageSchema.toImage("a"))
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_image import *
+    from pyspark.ml.tests.test_image import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CreateArray, CreateMap, CreateNamedStruct, CreateStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 
@@ -56,10 +56,6 @@ import org.apache.spark.sql.types._
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    // A subquery will be rewritten into join later, and will go through this rule
-    // eventually. Here we skip subquery, as we only need to run this rule once.
-    case _: Subquery => plan
-
     case _ => plan transform {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
@@ -123,11 +119,21 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case _ if expr.dataType == FloatType || expr.dataType == DoubleType =>
       KnownFloatingPointNormalized(NormalizeNaNAndZero(expr))
 
+    case If(cond, trueValue, falseValue) =>
+      If(cond, normalize(trueValue), normalize(falseValue))
+
+    case CaseWhen(branches, elseVale) =>
+      CaseWhen(branches.map(br => (br._1, normalize(br._2))), elseVale.map(normalize))
+
+    case Coalesce(children) =>
+      Coalesce(children.map(normalize))
+
     case _ if expr.dataType.isInstanceOf[StructType] =>
-      val fields = expr.dataType.asInstanceOf[StructType].fields.indices.map { i =>
-        normalize(GetStructField(expr, i))
+      val fields = expr.dataType.asInstanceOf[StructType].fieldNames.zipWithIndex.map {
+        case (name, i) => Seq(Literal(name), normalize(GetStructField(expr, i)))
       }
-      CreateStruct(fields)
+      val struct = CreateNamedStruct(fields.flatten.toSeq)
+      KnownFloatingPointNormalized(If(IsNull(expr), Literal(null, struct.dataType), struct))
 
     case _ if expr.dataType.isInstanceOf[ArrayType] =>
       val ArrayType(et, containsNull) = expr.dataType
@@ -136,6 +142,28 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
 
     case _ => throw new IllegalStateException(s"fail to normalize $expr")
+  }
+
+  val FLOAT_NORMALIZER: Any => Any = (input: Any) => {
+    val f = input.asInstanceOf[Float]
+    if (f.isNaN) {
+      Float.NaN
+    } else if (f == -0.0f) {
+      0.0f
+    } else {
+      f
+    }
+  }
+
+  val DOUBLE_NORMALIZER: Any => Any = (input: Any) => {
+    val d = input.asInstanceOf[Double]
+    if (d.isNaN) {
+      Double.NaN
+    } else if (d == -0.0d) {
+      0.0d
+    } else {
+      d
+    }
   }
 }
 
@@ -146,27 +174,8 @@ case class NormalizeNaNAndZero(child: Expression) extends UnaryExpression with E
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(FloatType, DoubleType))
 
   private lazy val normalizer: Any => Any = child.dataType match {
-    case FloatType => (input: Any) => {
-      val f = input.asInstanceOf[Float]
-      if (f.isNaN) {
-        Float.NaN
-      } else if (f == -0.0f) {
-        0.0f
-      } else {
-        f
-      }
-    }
-
-    case DoubleType => (input: Any) => {
-      val d = input.asInstanceOf[Double]
-      if (d.isNaN) {
-        Double.NaN
-      } else if (d == -0.0d) {
-        0.0d
-      } else {
-        d
-      }
-    }
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
   }
 
   override def nullSafeEval(input: Any): Any = {

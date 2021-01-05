@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.io._
+import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
 
@@ -25,8 +26,10 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -44,9 +47,10 @@ import org.apache.spark.util.Utils
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getSortBasedShuffleBlockData().
 private[spark] class IndexShuffleBlockResolver(
     conf: SparkConf,
-    _blockManager: BlockManager = null)
+    // var for testing
+    var _blockManager: BlockManager = null)
   extends ShuffleBlockResolver
-  with Logging {
+  with Logging with MigratableResolver {
 
   private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
 
@@ -54,6 +58,19 @@ private[spark] class IndexShuffleBlockResolver(
 
 
   def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
+
+  /**
+   * Get the shuffle files that are stored locally. Used for block migrations.
+   */
+  override def getStoredShuffles(): Seq[ShuffleBlockInfo] = {
+    val allBlocks = blockManager.diskBlockManager.getAllBlocks()
+    allBlocks.flatMap {
+      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+        Some(ShuffleBlockInfo(shuffleId, mapId))
+      case _ =>
+        None
+    }
+  }
 
   /**
    * Get the shuffle data file.
@@ -74,7 +91,7 @@ private[spark] class IndexShuffleBlockResolver(
    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
    * read from the specified directories.
    */
-  private def getIndexFile(
+  def getIndexFile(
       shuffleId: Int,
       mapId: Long,
       dirs: Option[Array[String]] = None): File = {
@@ -149,6 +166,100 @@ private[spark] class IndexShuffleBlockResolver(
   }
 
   /**
+   * Write a provided shuffle block as a stream. Used for block migrations.
+   * ShuffleBlockBatchIds must contain the full range represented in the ShuffleIndexBlock.
+   * Requires the caller to delete any shuffle index blocks where the shuffle block fails to
+   * put.
+   */
+  override def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
+      StreamCallbackWithID = {
+    val file = blockId match {
+      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
+        getIndexFile(shuffleId, mapId)
+      case ShuffleDataBlockId(shuffleId, mapId, _) =>
+        getDataFile(shuffleId, mapId)
+      case _ =>
+        throw new IllegalStateException(s"Unexpected shuffle block transfer ${blockId} as " +
+          s"${blockId.getClass().getSimpleName()}")
+    }
+    val fileTmp = Utils.tempFileWith(file)
+    val channel = Channels.newChannel(
+      serializerManager.wrapStream(blockId,
+        new FileOutputStream(fileTmp)))
+
+    new StreamCallbackWithID {
+
+      override def getID: String = blockId.name
+
+      override def onData(streamId: String, buf: ByteBuffer): Unit = {
+        while (buf.hasRemaining) {
+          channel.write(buf)
+        }
+      }
+
+      override def onComplete(streamId: String): Unit = {
+        logTrace(s"Done receiving shuffle block $blockId, now storing on local disk.")
+        channel.close()
+        val diskSize = fileTmp.length()
+        this.synchronized {
+          if (file.exists()) {
+            file.delete()
+          }
+          if (!fileTmp.renameTo(file)) {
+            throw new IOException(s"fail to rename file ${fileTmp} to ${file}")
+          }
+        }
+        blockManager.reportBlockStatus(blockId, BlockStatus(StorageLevel.DISK_ONLY, 0, diskSize))
+      }
+
+      override def onFailure(streamId: String, cause: Throwable): Unit = {
+        // the framework handles the connection itself, we just need to do local cleanup
+        logWarning(s"Error while uploading $blockId", cause)
+        channel.close()
+        fileTmp.delete()
+      }
+    }
+  }
+
+  /**
+   * Get the index & data block for migration.
+   */
+  def getMigrationBlocks(shuffleBlockInfo: ShuffleBlockInfo): List[(BlockId, ManagedBuffer)] = {
+    try {
+      val shuffleId = shuffleBlockInfo.shuffleId
+      val mapId = shuffleBlockInfo.mapId
+      // Load the index block
+      val indexFile = getIndexFile(shuffleId, mapId)
+      val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      val indexFileSize = indexFile.length()
+      val indexBlockData = new FileSegmentManagedBuffer(
+        transportConf, indexFile, 0, indexFileSize)
+
+      // Load the data block
+      val dataFile = getDataFile(shuffleId, mapId)
+      val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      val dataBlockData = new FileSegmentManagedBuffer(
+        transportConf, dataFile, 0, dataFile.length())
+
+      // Make sure the index exist.
+      if (!indexFile.exists()) {
+        throw new FileNotFoundException("Index file is deleted already.")
+      }
+      if (dataFile.exists()) {
+        List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      } else {
+        List((indexBlockId, indexBlockData))
+      }
+    } catch {
+      case _: Exception => // If we can't load the blocks ignore them.
+        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}. " +
+          "This is expected to occur if a block is removed after decommissioning has started.")
+        List.empty[(BlockId, ManagedBuffer)]
+    }
+  }
+
+
+  /**
    * Write an index file with the offsets of each block, plus a final offset at the end for the
    * end of the output file. This will be used by getBlockData to figure out where each block
    * begins and ends.
@@ -169,7 +280,7 @@ private[spark] class IndexShuffleBlockResolver(
       val dataFile = getDataFile(shuffleId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
-      synchronized {
+      this.synchronized {
         val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
         if (existingLengths != null) {
           // Another attempt for the same task has already written our map outputs successfully,
@@ -209,6 +320,7 @@ private[spark] class IndexShuffleBlockResolver(
         }
       }
     } finally {
+      logDebug(s"Shuffle index for mapId $mapId: ${lengths.mkString("[", ",", "]")}")
       if (indexTmp.exists() && !indexTmp.delete()) {
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
       }

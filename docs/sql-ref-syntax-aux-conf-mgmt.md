@@ -21,3 +21,4 @@ license: |
 
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
+ * [SET TIME ZONE](sql-ref-syntax-aux-conf-mgmt-set-timezone.html)

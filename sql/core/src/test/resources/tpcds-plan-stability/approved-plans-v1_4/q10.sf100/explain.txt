@@ -1,0 +1,319 @@
+== Physical Plan ==
+TakeOrderedAndProject (58)
++- * HashAggregate (57)
+   +- Exchange (56)
+      +- * HashAggregate (55)
+         +- * Project (54)
+            +- * SortMergeJoin Inner (53)
+               :- * Sort (47)
+               :  +- Exchange (46)
+               :     +- * Project (45)
+               :        +- * BroadcastHashJoin Inner BuildRight (44)
+               :           :- * Project (38)
+               :           :  +- * Filter (37)
+               :           :     +- SortMergeJoin ExistenceJoin(exists#1) (36)
+               :           :        :- SortMergeJoin ExistenceJoin(exists#2) (27)
+               :           :        :  :- SortMergeJoin LeftSemi (18)
+               :           :        :  :  :- * Sort (5)
+               :           :        :  :  :  +- Exchange (4)
+               :           :        :  :  :     +- * Filter (3)
+               :           :        :  :  :        +- * ColumnarToRow (2)
+               :           :        :  :  :           +- Scan parquet default.customer (1)
+               :           :        :  :  +- * Sort (17)
+               :           :        :  :     +- Exchange (16)
+               :           :        :  :        +- * Project (15)
+               :           :        :  :           +- * BroadcastHashJoin Inner BuildRight (14)
+               :           :        :  :              :- * Filter (8)
+               :           :        :  :              :  +- * ColumnarToRow (7)
+               :           :        :  :              :     +- Scan parquet default.store_sales (6)
+               :           :        :  :              +- BroadcastExchange (13)
+               :           :        :  :                 +- * Project (12)
+               :           :        :  :                    +- * Filter (11)
+               :           :        :  :                       +- * ColumnarToRow (10)
+               :           :        :  :                          +- Scan parquet default.date_dim (9)
+               :           :        :  +- * Sort (26)
+               :           :        :     +- Exchange (25)
+               :           :        :        +- * Project (24)
+               :           :        :           +- * BroadcastHashJoin Inner BuildRight (23)
+               :           :        :              :- * Filter (21)
+               :           :        :              :  +- * ColumnarToRow (20)
+               :           :        :              :     +- Scan parquet default.web_sales (19)
+               :           :        :              +- ReusedExchange (22)
+               :           :        +- * Sort (35)
+               :           :           +- Exchange (34)
+               :           :              +- * Project (33)
+               :           :                 +- * BroadcastHashJoin Inner BuildRight (32)
+               :           :                    :- * Filter (30)
+               :           :                    :  +- * ColumnarToRow (29)
+               :           :                    :     +- Scan parquet default.catalog_sales (28)
+               :           :                    +- ReusedExchange (31)
+               :           +- BroadcastExchange (43)
+               :              +- * Project (42)
+               :                 +- * Filter (41)
+               :                    +- * ColumnarToRow (40)
+               :                       +- Scan parquet default.customer_address (39)
+               +- * Sort (52)
+                  +- Exchange (51)
+                     +- * Filter (50)
+                        +- * ColumnarToRow (49)
+                           +- Scan parquet default.customer_demographics (48)
+
+
+(1) Scan parquet default.customer
+Output [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk)]
+ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int>
+
+(2) ColumnarToRow [codegen id : 1]
+Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+
+(3) Filter [codegen id : 1]
+Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+Condition : (isnotnull(c_current_addr_sk#5) AND isnotnull(c_current_cdemo_sk#4))
+
+(4) Exchange
+Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+Arguments: hashpartitioning(c_customer_sk#3, 5), true, [id=#6]
+
+(5) Sort [codegen id : 2]
+Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+Arguments: [c_customer_sk#3 ASC NULLS FIRST], false, 0
+
+(6) Scan parquet default.store_sales
+Output [2]: [ss_sold_date_sk#7, ss_customer_sk#8]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_sold_date_sk)]
+ReadSchema: struct<ss_sold_date_sk:int,ss_customer_sk:int>
+
+(7) ColumnarToRow [codegen id : 4]
+Input [2]: [ss_sold_date_sk#7, ss_customer_sk#8]
+
+(8) Filter [codegen id : 4]
+Input [2]: [ss_sold_date_sk#7, ss_customer_sk#8]
+Condition : isnotnull(ss_sold_date_sk#7)
+
+(9) Scan parquet default.date_dim
+Output [3]: [d_date_sk#9, d_year#10, d_moy#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2002), GreaterThanOrEqual(d_moy,1), LessThanOrEqual(d_moy,4), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(10) ColumnarToRow [codegen id : 3]
+Input [3]: [d_date_sk#9, d_year#10, d_moy#11]
+
+(11) Filter [codegen id : 3]
+Input [3]: [d_date_sk#9, d_year#10, d_moy#11]
+Condition : (((((isnotnull(d_year#10) AND isnotnull(d_moy#11)) AND (d_year#10 = 2002)) AND (d_moy#11 >= 1)) AND (d_moy#11 <= 4)) AND isnotnull(d_date_sk#9))
+
+(12) Project [codegen id : 3]
+Output [1]: [d_date_sk#9]
+Input [3]: [d_date_sk#9, d_year#10, d_moy#11]
+
+(13) BroadcastExchange
+Input [1]: [d_date_sk#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+
+(14) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ss_sold_date_sk#7]
+Right keys [1]: [d_date_sk#9]
+Join condition: None
+
+(15) Project [codegen id : 4]
+Output [1]: [ss_customer_sk#8]
+Input [3]: [ss_sold_date_sk#7, ss_customer_sk#8, d_date_sk#9]
+
+(16) Exchange
+Input [1]: [ss_customer_sk#8]
+Arguments: hashpartitioning(ss_customer_sk#8, 5), true, [id=#13]
+
+(17) Sort [codegen id : 5]
+Input [1]: [ss_customer_sk#8]
+Arguments: [ss_customer_sk#8 ASC NULLS FIRST], false, 0
+
+(18) SortMergeJoin
+Left keys [1]: [c_customer_sk#3]
+Right keys [1]: [ss_customer_sk#8]
+Join condition: None
+
+(19) Scan parquet default.web_sales
+Output [2]: [ws_sold_date_sk#14, ws_bill_customer_sk#15]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+PushedFilters: [IsNotNull(ws_sold_date_sk)]
+ReadSchema: struct<ws_sold_date_sk:int,ws_bill_customer_sk:int>
+
+(20) ColumnarToRow [codegen id : 7]
+Input [2]: [ws_sold_date_sk#14, ws_bill_customer_sk#15]
+
+(21) Filter [codegen id : 7]
+Input [2]: [ws_sold_date_sk#14, ws_bill_customer_sk#15]
+Condition : isnotnull(ws_sold_date_sk#14)
+
+(22) ReusedExchange [Reuses operator id: 13]
+Output [1]: [d_date_sk#9]
+
+(23) BroadcastHashJoin [codegen id : 7]
+Left keys [1]: [ws_sold_date_sk#14]
+Right keys [1]: [d_date_sk#9]
+Join condition: None
+
+(24) Project [codegen id : 7]
+Output [1]: [ws_bill_customer_sk#15]
+Input [3]: [ws_sold_date_sk#14, ws_bill_customer_sk#15, d_date_sk#9]
+
+(25) Exchange
+Input [1]: [ws_bill_customer_sk#15]
+Arguments: hashpartitioning(ws_bill_customer_sk#15, 5), true, [id=#16]
+
+(26) Sort [codegen id : 8]
+Input [1]: [ws_bill_customer_sk#15]
+Arguments: [ws_bill_customer_sk#15 ASC NULLS FIRST], false, 0
+
+(27) SortMergeJoin
+Left keys [1]: [c_customer_sk#3]
+Right keys [1]: [ws_bill_customer_sk#15]
+Join condition: None
+
+(28) Scan parquet default.catalog_sales
+Output [2]: [cs_sold_date_sk#17, cs_ship_customer_sk#18]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+PushedFilters: [IsNotNull(cs_sold_date_sk)]
+ReadSchema: struct<cs_sold_date_sk:int,cs_ship_customer_sk:int>
+
+(29) ColumnarToRow [codegen id : 10]
+Input [2]: [cs_sold_date_sk#17, cs_ship_customer_sk#18]
+
+(30) Filter [codegen id : 10]
+Input [2]: [cs_sold_date_sk#17, cs_ship_customer_sk#18]
+Condition : isnotnull(cs_sold_date_sk#17)
+
+(31) ReusedExchange [Reuses operator id: 13]
+Output [1]: [d_date_sk#9]
+
+(32) BroadcastHashJoin [codegen id : 10]
+Left keys [1]: [cs_sold_date_sk#17]
+Right keys [1]: [d_date_sk#9]
+Join condition: None
+
+(33) Project [codegen id : 10]
+Output [1]: [cs_ship_customer_sk#18]
+Input [3]: [cs_sold_date_sk#17, cs_ship_customer_sk#18, d_date_sk#9]
+
+(34) Exchange
+Input [1]: [cs_ship_customer_sk#18]
+Arguments: hashpartitioning(cs_ship_customer_sk#18, 5), true, [id=#19]
+
+(35) Sort [codegen id : 11]
+Input [1]: [cs_ship_customer_sk#18]
+Arguments: [cs_ship_customer_sk#18 ASC NULLS FIRST], false, 0
+
+(36) SortMergeJoin
+Left keys [1]: [c_customer_sk#3]
+Right keys [1]: [cs_ship_customer_sk#18]
+Join condition: None
+
+(37) Filter [codegen id : 13]
+Input [5]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5, exists#2, exists#1]
+Condition : (exists#2 OR exists#1)
+
+(38) Project [codegen id : 13]
+Output [2]: [c_current_cdemo_sk#4, c_current_addr_sk#5]
+Input [5]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5, exists#2, exists#1]
+
+(39) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#20, ca_county#21]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [In(ca_county, [Rush County,Toole County,Jefferson County,Dona Ana County,La Porte County]), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_county:string>
+
+(40) ColumnarToRow [codegen id : 12]
+Input [2]: [ca_address_sk#20, ca_county#21]
+
+(41) Filter [codegen id : 12]
+Input [2]: [ca_address_sk#20, ca_county#21]
+Condition : (ca_county#21 IN (Rush County,Toole County,Jefferson County,Dona Ana County,La Porte County) AND isnotnull(ca_address_sk#20))
+
+(42) Project [codegen id : 12]
+Output [1]: [ca_address_sk#20]
+Input [2]: [ca_address_sk#20, ca_county#21]
+
+(43) BroadcastExchange
+Input [1]: [ca_address_sk#20]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
+
+(44) BroadcastHashJoin [codegen id : 13]
+Left keys [1]: [c_current_addr_sk#5]
+Right keys [1]: [ca_address_sk#20]
+Join condition: None
+
+(45) Project [codegen id : 13]
+Output [1]: [c_current_cdemo_sk#4]
+Input [3]: [c_current_cdemo_sk#4, c_current_addr_sk#5, ca_address_sk#20]
+
+(46) Exchange
+Input [1]: [c_current_cdemo_sk#4]
+Arguments: hashpartitioning(c_current_cdemo_sk#4, 5), true, [id=#23]
+
+(47) Sort [codegen id : 14]
+Input [1]: [c_current_cdemo_sk#4]
+Arguments: [c_current_cdemo_sk#4 ASC NULLS FIRST], false, 0
+
+(48) Scan parquet default.customer_demographics
+Output [9]: [cd_demo_sk#24, cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_demo_sk)]
+ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string,cd_purchase_estimate:int,cd_credit_rating:string,cd_dep_count:int,cd_dep_employed_count:int,cd_dep_college_count:int>
+
+(49) ColumnarToRow [codegen id : 15]
+Input [9]: [cd_demo_sk#24, cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+
+(50) Filter [codegen id : 15]
+Input [9]: [cd_demo_sk#24, cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Condition : isnotnull(cd_demo_sk#24)
+
+(51) Exchange
+Input [9]: [cd_demo_sk#24, cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Arguments: hashpartitioning(cd_demo_sk#24, 5), true, [id=#33]
+
+(52) Sort [codegen id : 16]
+Input [9]: [cd_demo_sk#24, cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Arguments: [cd_demo_sk#24 ASC NULLS FIRST], false, 0
+
+(53) SortMergeJoin [codegen id : 17]
+Left keys [1]: [c_current_cdemo_sk#4]
+Right keys [1]: [cd_demo_sk#24]
+Join condition: None
+
+(54) Project [codegen id : 17]
+Output [8]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Input [10]: [c_current_cdemo_sk#4, cd_demo_sk#24, cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+
+(55) HashAggregate [codegen id : 17]
+Input [8]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Keys [8]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#34]
+Results [9]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32, count#35]
+
+(56) Exchange
+Input [9]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32, count#35]
+Arguments: hashpartitioning(cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32, 5), true, [id=#36]
+
+(57) HashAggregate [codegen id : 18]
+Input [9]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32, count#35]
+Keys [8]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cd_purchase_estimate#28, cd_credit_rating#29, cd_dep_count#30, cd_dep_employed_count#31, cd_dep_college_count#32]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#37]
+Results [14]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, count(1)#37 AS cnt1#38, cd_purchase_estimate#28, count(1)#37 AS cnt2#39, cd_credit_rating#29, count(1)#37 AS cnt3#40, cd_dep_count#30, count(1)#37 AS cnt4#41, cd_dep_employed_count#31, count(1)#37 AS cnt5#42, cd_dep_college_count#32, count(1)#37 AS cnt6#43]
+
+(58) TakeOrderedAndProject
+Input [14]: [cd_gender#25, cd_marital_status#26, cd_education_status#27, cnt1#38, cd_purchase_estimate#28, cnt2#39, cd_credit_rating#29, cnt3#40, cd_dep_count#30, cnt4#41, cd_dep_employed_count#31, cnt5#42, cd_dep_college_count#32, cnt6#43]
+Arguments: 100, [cd_gender#25 ASC NULLS FIRST, cd_marital_status#26 ASC NULLS FIRST, cd_education_status#27 ASC NULLS FIRST, cd_purchase_estimate#28 ASC NULLS FIRST, cd_credit_rating#29 ASC NULLS FIRST, cd_dep_count#30 ASC NULLS FIRST, cd_dep_employed_count#31 ASC NULLS FIRST, cd_dep_college_count#32 ASC NULLS FIRST], [cd_gender#25, cd_marital_status#26, cd_education_status#27, cnt1#38, cd_purchase_estimate#28, cnt2#39, cd_credit_rating#29, cnt3#40, cd_dep_count#30, cnt4#41, cd_dep_employed_count#31, cnt5#42, cd_dep_college_count#32, cnt6#43]
+

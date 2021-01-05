@@ -21,6 +21,7 @@ import java.util.Arrays
 
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.StageStatus
+import org.apache.spark.util.Utils
 
 /**
  * Low-level status reporting APIs for monitoring job and stage progress.
@@ -103,10 +104,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext, store: AppStatusStore
    */
   def getExecutorInfos: Array[SparkExecutorInfo] = {
     store.executorList(true).map { exec =>
-      val (host, port) = exec.hostPort.split(":", 2) match {
-        case Array(h, p) => (h, p.toInt)
-        case Array(h) => (h, -1)
-      }
+      val (host, port) = Utils.parseHostPort(exec.hostPort)
       val cachedMem = exec.memoryMetrics.map { mem =>
         mem.usedOnHeapStorageMemory + mem.usedOffHeapStorageMemory
       }.getOrElse(0L)

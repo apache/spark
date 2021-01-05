@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
@@ -54,7 +53,11 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
-      groupingExprs ++ aggExprs
+      groupingExprs match {
+        // call `toList` because `Stream` can't serialize in scala 2.13
+        case s: Stream[Expression] => s.toList ++ aggExprs
+        case other => other ++ aggExprs
+      }
     } else {
       aggExprs
     }
@@ -479,7 +482,7 @@ class RelationalGroupedDataset protected[sql](
    * @since 2.4.0
    */
   def pivot(pivotColumn: Column, values: java.util.List[Any]): RelationalGroupedDataset = {
-    pivot(pivotColumn, values.asScala)
+    pivot(pivotColumn, values.asScala.toSeq)
   }
 
   /**
@@ -546,9 +549,10 @@ class RelationalGroupedDataset protected[sql](
       case ne: NamedExpression => ne
       case other => Alias(other, other.toString)()
     }
-    val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
     val child = df.logicalPlan
-    val project = Project(groupingNamedExpressions ++ child.output, child)
+    val project = df.sparkSession.sessionState.executePlan(
+      Project(groupingNamedExpressions ++ child.output, child)).analyzed
+    val groupingAttributes = project.output.take(groupingNamedExpressions.length)
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
 
@@ -583,14 +587,16 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
 
-    val leftAttributes = leftGroupingNamedExpressions.map(_.toAttribute)
-    val rightAttributes = rightGroupingNamedExpressions.map(_.toAttribute)
-
     val leftChild = df.logicalPlan
     val rightChild = r.df.logicalPlan
 
-    val left = Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)
-    val right = Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)
+    val left = df.sparkSession.sessionState.executePlan(
+      Project(leftGroupingNamedExpressions ++ leftChild.output, leftChild)).analyzed
+    val right = r.df.sparkSession.sessionState.executePlan(
+      Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
+
+    val leftAttributes = left.output.take(leftGroupingNamedExpressions.length)
+    val rightAttributes = right.output.take(rightGroupingNamedExpressions.length)
 
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
     val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)

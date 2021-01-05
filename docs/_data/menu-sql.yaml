@@ -51,6 +51,10 @@
       url: sql-performance-tuning.html#other-configuration-options
     - text: Join Strategy Hints for SQL Queries
       url: sql-performance-tuning.html#join-strategy-hints-for-sql-queries
+    - text: Coalesce Hints for SQL Queries
+      url: sql-performance-tuning.html#coalesce-hints-for-sql-queries
+    - text: Adaptive Query Execution
+      url: sql-performance-tuning.html#adaptive-query-execution
 - text: Distributed SQL Engine
   url: sql-distributed-sql-engine.html
   subitems:
@@ -60,17 +64,6 @@
       url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
 - text: PySpark Usage Guide for Pandas with Apache Arrow
   url: sql-pyspark-pandas-with-arrow.html
-  subitems:
-    - text: Apache Arrow in Spark
-      url: sql-pyspark-pandas-with-arrow.html#apache-arrow-in-spark
-    - text: "Enabling for Conversion to/from Pandas"
-      url: sql-pyspark-pandas-with-arrow.html#enabling-for-conversion-tofrom-pandas
-    - text: "Pandas UDFs (a.k.a. Vectorized UDFs)"
-      url: sql-pyspark-pandas-with-arrow.html#pandas-udfs-aka-vectorized-udfs
-    - text: "Pandas Function APIs"
-      url: sql-pyspark-pandas-with-arrow.html#pandas-function-apis
-    - text: Usage Notes
-      url: sql-pyspark-pandas-with-arrow.html#usage-notes
 - text: Migration Guide
   url: sql-migration-old.html
 - text: SQL Reference
@@ -139,7 +132,7 @@
             - text: REPAIR TABLE
               url: sql-ref-syntax-ddl-repair-table.html
             - text: USE DATABASE
-              url: sql-ref-syntax-qry-select-usedb.html
+              url: sql-ref-syntax-ddl-usedb.html
         - text: Data Manipulation Statements
           url: sql-ref-syntax-dml.html
           subitems:
@@ -171,22 +164,30 @@
                   url: sql-ref-syntax-qry-select-limit.html
                 - text: Common Table Expression
                   url: sql-ref-syntax-qry-select-cte.html
+                - text: Hints
+                  url: sql-ref-syntax-qry-select-hints.html
                 - text: Inline Table
                   url: sql-ref-syntax-qry-select-inline-table.html
+                - text: File
+                  url: sql-ref-syntax-qry-select-file.html
                 - text: JOIN
                   url: sql-ref-syntax-qry-select-join.html
-                - text: Join Hints
-                  url: sql-ref-syntax-qry-select-hints.html
                 - text: LIKE Predicate
                   url: sql-ref-syntax-qry-select-like.html
                 - text: Set Operators
                   url: sql-ref-syntax-qry-select-setops.html
                 - text: TABLESAMPLE
-                  url: sql-ref-syntax-qry-sampling.html
+                  url: sql-ref-syntax-qry-select-sampling.html
                 - text: Table-valued Function
                   url: sql-ref-syntax-qry-select-tvf.html
                 - text: Window Function
-                  url: sql-ref-syntax-qry-window.html
+                  url: sql-ref-syntax-qry-select-window.html
+                - text: CASE Clause
+                  url: sql-ref-syntax-qry-select-case.html
+                - text: LATERAL VIEW Clause
+                  url: sql-ref-syntax-qry-select-lateral-view.html
+                - text: PIVOT Clause
+                  url: sql-ref-syntax-qry-select-pivot.html
             - text: EXPLAIN
               url: sql-ref-syntax-qry-explain.html
         - text: Auxiliary Statements
@@ -207,7 +208,9 @@
                 - text: CLEAR CACHE
                   url: sql-ref-syntax-aux-cache-clear-cache.html
                 - text: REFRESH TABLE
-                  url: sql-ref-syntax-aux-refresh-table.html
+                  url: sql-ref-syntax-aux-cache-refresh-table.html
+                - text: REFRESH FUNCTION
+                  url: sql-ref-syntax-aux-cache-refresh-function.html
                 - text: REFRESH
                   url: sql-ref-syntax-aux-cache-refresh.html
             - text: DESCRIBE
@@ -249,6 +252,8 @@
                   url: sql-ref-syntax-aux-conf-mgmt-set.html
                 - text: RESET
                   url: sql-ref-syntax-aux-conf-mgmt-reset.html
+                - text: SET TIME ZONE
+                  url: sql-ref-syntax-aux-conf-mgmt-set-timezone.html
             - text: RESOURCE MANAGEMENT
               url: sql-ref-syntax-aux-resource-mgmt.html
               subitems:

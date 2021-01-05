@@ -37,10 +37,10 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       .setAppName("test-cluster")
       .set(TEST_NO_STAGE_RETRY, true)
     sc = new SparkContext(conf)
+    TestUtils.waitUntilExecutorsUp(sc, numWorker, 60000)
   }
 
-  // TODO (SPARK-31730): re-enable it
-  ignore("global sync by barrier() call") {
+  test("global sync by barrier() call") {
     initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
@@ -57,10 +57,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("share messages with allGather() call") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -78,10 +75,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("throw exception if we attempt to synchronize with different blocking calls") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -100,10 +94,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
   }
 
   test("successively sync with allGather and barrier") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[4, 1, 1024]")
-      .setAppName("test-cluster")
-    sc = new SparkContext(conf)
+    initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -129,8 +120,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     assert(times2.max - times2.min <= 1000)
   }
 
-  // TODO (SPARK-31730): re-enable it
-  ignore("support multiple barrier() call within a single task") {
+  test("support multiple barrier() call within a single task") {
     initLocalClusterSparkContext()
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
@@ -198,7 +188,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
     initLocalClusterSparkContext()
-    sc.conf.set("spark.barrier.sync.timeout", "1")
+    sc.conf.set("spark.barrier.sync.timeout", "5")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -221,7 +211,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1 second(s)"))
+    assert(error.contains("within 5 second(s)"))
   }
 
   def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {
@@ -285,11 +275,12 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     initLocalClusterSparkContext(2)
+    val id = sc.getExecutorIds().head
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
-    // set up a barrier stage with 2 tasks and both tasks prefer executor 0 (only 1 core) for
+    // set up a barrier stage with 2 tasks and both tasks prefer the same executor (only 1 core) for
     // scheduling. So, one of tasks won't be scheduled in one round of resource offer.
-    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq("executor_h_0"), Seq("executor_h_0")))
+    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq(s"executor_h_$id"), Seq(s"executor_h_$id")))
     val errorMsg = intercept[SparkException] {
       rdd.barrier().mapPartitions { iter =>
         BarrierTaskContext.get().barrier()

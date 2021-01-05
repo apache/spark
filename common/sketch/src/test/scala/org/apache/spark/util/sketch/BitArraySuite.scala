@@ -19,9 +19,9 @@ package org.apache.spark.util.sketch
 
 import scala.util.Random
 
-import org.scalatest.FunSuite // scalastyle:ignore funsuite
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-class BitArraySuite extends FunSuite { // scalastyle:ignore funsuite
+class BitArraySuite extends AnyFunSuite { // scalastyle:ignore funsuite
 
   test("error case when create BitArray") {
     intercept[IllegalArgumentException](new BitArray(0))

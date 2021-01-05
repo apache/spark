@@ -172,6 +172,7 @@ public abstract class AbstractBytesToBytesMapSuite {
       final byte[] key = getRandomByteArray(keyLengthInWords);
       Assert.assertFalse(map.lookup(key, Platform.BYTE_ARRAY_OFFSET, keyLengthInBytes).isDefined());
       Assert.assertFalse(map.iterator().hasNext());
+      Assert.assertFalse(map.iteratorWithKeyIndex().hasNext());
     } finally {
       map.free();
     }
@@ -233,9 +234,10 @@ public abstract class AbstractBytesToBytesMapSuite {
     }
   }
 
-  private void iteratorTestBase(boolean destructive) throws Exception {
+  private void iteratorTestBase(boolean destructive, boolean isWithKeyIndex) throws Exception {
     final int size = 4096;
     BytesToBytesMap map = new BytesToBytesMap(taskMemoryManager, size / 2, PAGE_SIZE_BYTES);
+    Assert.assertEquals(size / 2, map.maxNumKeysIndex());
     try {
       for (long i = 0; i < size; i++) {
         final long[] value = new long[] { i };
@@ -267,6 +269,8 @@ public abstract class AbstractBytesToBytesMapSuite {
       final Iterator<BytesToBytesMap.Location> iter;
       if (destructive) {
         iter = map.destructiveIterator();
+      } else if (isWithKeyIndex) {
+        iter = map.iteratorWithKeyIndex();
       } else {
         iter = map.iterator();
       }
@@ -291,6 +295,12 @@ public abstract class AbstractBytesToBytesMapSuite {
             countFreedPages++;
           }
         }
+        if (keyLength != 0 && isWithKeyIndex) {
+          final BytesToBytesMap.Location expectedLoc = map.lookup(
+            loc.getKeyBase(), loc.getKeyOffset(), loc.getKeyLength());
+          Assert.assertTrue(expectedLoc.isDefined() &&
+            expectedLoc.getKeyIndex() == loc.getKeyIndex());
+        }
       }
       if (destructive) {
         // Latest page is not freed by iterator but by map itself
@@ -304,12 +314,17 @@ public abstract class AbstractBytesToBytesMapSuite {
 
   @Test
   public void iteratorTest() throws Exception {
-    iteratorTestBase(false);
+    iteratorTestBase(false, false);
   }
 
   @Test
   public void destructiveIteratorTest() throws Exception {
-    iteratorTestBase(true);
+    iteratorTestBase(true, false);
+  }
+
+  @Test
+  public void iteratorWithKeyIndexTest() throws Exception {
+    iteratorTestBase(false, true);
   }
 
   @Test
@@ -561,6 +576,8 @@ public abstract class AbstractBytesToBytesMapSuite {
         iter2.next();
       }
       assertFalse(iter2.hasNext());
+      // calls hasNext twice deliberately, make sure it's idempotent
+      assertFalse(iter2.hasNext());
     } finally {
       map.free();
       for (File spillFile : spillFilesCreated) {
@@ -602,6 +619,12 @@ public abstract class AbstractBytesToBytesMapSuite {
         assert iter.hasNext();
         final BytesToBytesMap.Location loc = iter.next();
         assert loc.isDefined();
+      }
+      BytesToBytesMap.MapIteratorWithKeyIndex iterWithKeyIndex = map.iteratorWithKeyIndex();
+      for (i = 0; i < 2048; i++) {
+        assert iterWithKeyIndex.hasNext();
+        final BytesToBytesMap.Location loc = iterWithKeyIndex.next();
+        assert loc.isDefined() && loc.getKeyIndex() >= 0;
       }
     } finally {
       map.free();

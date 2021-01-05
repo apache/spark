@@ -23,5 +23,7 @@
   "blacklistedInStages" : [ ],
   "attributes" : { },
   "resources" : { },
-  "resourceProfileId" : 0
+  "resourceProfileId" : 0,
+  "isExcluded" : false,
+  "excludedInStages" : [ ]
 } ]

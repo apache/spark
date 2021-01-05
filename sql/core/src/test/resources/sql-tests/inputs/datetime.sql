@@ -2,14 +2,26 @@
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS to timestamp transfer
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
+select TIMESTAMP_SECONDS(1.23), TIMESTAMP_SECONDS(1.23d), TIMESTAMP_SECONDS(FLOAT(1.23));
 select TIMESTAMP_MILLIS(1230219000123),TIMESTAMP_MILLIS(-1230219000123),TIMESTAMP_MILLIS(null);
 select TIMESTAMP_MICROS(1230219000123123),TIMESTAMP_MICROS(-1230219000123123),TIMESTAMP_MICROS(null);
--- overflow exception:
+-- overflow exception
 select TIMESTAMP_SECONDS(1230219000123123);
 select TIMESTAMP_SECONDS(-1230219000123123);
 select TIMESTAMP_MILLIS(92233720368547758);
 select TIMESTAMP_MILLIS(-92233720368547758);
-
+-- truncate exception
+select TIMESTAMP_SECONDS(0.1234567);
+-- truncation is OK for float/double
+select TIMESTAMP_SECONDS(0.1234567d), TIMESTAMP_SECONDS(FLOAT(0.1234567));
+-- UNIX_SECONDS, UNIX_MILLISECONDS and UNIX_MICROSECONDS
+select UNIX_SECONDS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_SECONDS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_SECONDS(null);
+select UNIX_MILLIS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_MILLIS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_MILLIS(null);
+select UNIX_MICROS(TIMESTAMP('2020-12-01 14:30:08Z')), UNIX_MICROS(TIMESTAMP('2020-12-01 14:30:08.999999Z')), UNIX_MICROS(null);
+-- DATE_FROM_UNIX_DATE
+select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(null);
+-- UNIX_DATE
+select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(null);
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
 
@@ -43,6 +55,8 @@ select year('1500-01-01'), month('1500-01-01'), dayOfYear('1500-01-01');
 
 select date '2019-01-01\t';
 select timestamp '2019-01-01\t';
+select date '2020-01-01中文';
+select timestamp '2019-01-01中文';
 
 -- time add/sub
 select timestamp'2011-11-11 11:11:11' + interval '2' day;
@@ -124,10 +138,6 @@ select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm");
 select to_timestamp("2019-10-06S", "yyyy-MM-dd'S'");
 select to_timestamp("S2019-10-06", "'S'yyyy-MM-dd");
 
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuee');
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uucc');
-select date_format(timestamp '2019-10-06', 'yyyy-MM-dd uuuu');
-
 select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS"); -- middle
 select to_timestamp("2019-10-06T10:11:12'", "yyyy-MM-dd'T'HH:mm:ss''"); -- tail
 select to_timestamp("'2019-10-06T10:11:12", "''yyyy-MM-dd'T'HH:mm:ss"); -- head
@@ -142,21 +152,30 @@ select to_timestamp("2019 40", "yyyy mm");
 select to_timestamp("2019 10:10:10", "yyyy hh:mm:ss");
 
 -- Unsupported narrow text style
-select date_format(date '2020-05-23', 'GGGGG');
-select date_format(date '2020-05-23', 'MMMMM');
-select date_format(date '2020-05-23', 'LLLLL');
-select date_format(timestamp '2020-05-23', 'EEEEE');
-select date_format(timestamp '2020-05-23', 'uuuuu');
-select date_format('2020-05-23', 'QQQQQ');
-select date_format('2020-05-23', 'qqqqq');
 select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG');
 select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE');
 select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
 select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE');
-select from_unixtime(12345, 'MMMMM');
-select from_unixtime(54321, 'QQQQQ');
-select from_unixtime(23456, 'aaaaa');
-select from_json('{"time":"26/October/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
-select from_json('{"date":"26/October/2015"}', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
-select from_csv('26/October/2015', 'time Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
-select from_csv('26/October/2015', 'date Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
+select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'));
+select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'));
+
+-- Datetime types parse error
+select to_date("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_date("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("2020-01-27T20:06:11.847", "yyyy-MM-dd HH:mm:ss.SSS");
+select to_unix_timestamp("Unparseable", "yyyy-MM-dd HH:mm:ss.SSS");
+select cast("Unparseable" as timestamp);
+select cast("Unparseable" as date);
+
+-- next_day
+select next_day("2015-07-23", "Mon");
+select next_day("2015-07-23", "xx");
+select next_day("xx", "Mon");
+select next_day(null, "Mon");
+select next_day(null, "xx");

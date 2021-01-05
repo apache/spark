@@ -21,20 +21,21 @@ from pyspark.rdd import PythonEvalType
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
     udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import *
+from pyspark.sql.types import ArrayType, TimestampType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
 
+
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
@@ -144,21 +145,21 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     def test_unsupported_types(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
+            with self.assertRaisesRegex(NotImplementedError, 'not supported'):
                 pandas_udf(
                     lambda x: x,
                     ArrayType(ArrayType(TimestampType())),
                     PandasUDFType.GROUPED_AGG)
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
+            with self.assertRaisesRegex(NotImplementedError, 'not supported'):
                 @pandas_udf('mean double, std double', PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return v.mean(), v.std()
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
-                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUPED_AGG)
+            with self.assertRaisesRegex(NotImplementedError, 'not supported'):
+                @pandas_udf(ArrayType(TimestampType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
 
@@ -427,7 +428,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
         array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
         result1 = df.groupby('id').agg(array_udf(df['v']).alias('v2'))
-        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+        self.assertEqual(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
         df = self.data
@@ -435,19 +436,19 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         mean_udf = self.pandas_agg_mean_udf
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     'nor.*aggregate function'):
                 df.groupby(df.id).agg(plus_one(df.v)).collect()
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     'aggregate function.*argument.*aggregate function'):
                 df.groupby(df.id).agg(mean_udf(mean_udf(df.v))).collect()
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
@@ -510,10 +511,10 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_grouped_agg import *
+    from pyspark.sql.tests.test_pandas_udf_grouped_agg import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

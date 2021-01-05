@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,7 +23,7 @@ import sys
 from subprocess import Popen, PIPE
 
 try:
-    from jira.client import JIRA
+    from jira.client import JIRA  # noqa: F401
     # Old versions have JIRAError in exceptions package, new (0.5+) in utils.
     try:
         from jira.exceptions import JIRAError
@@ -31,11 +31,11 @@ try:
         from jira.utils import JIRAError
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 try:
-    from github import Github
+    from github import Github  # noqa: F401
     from github import GithubException
 except ImportError:
     print("This tool requires the PyGithub library")
@@ -49,8 +49,6 @@ except ImportError:
     print("Install using 'sudo pip install unidecode'")
     sys.exit(-1)
 
-if sys.version < '3':
-    input = raw_input  # noqa
 
 # Contributors list file name
 contributors_file_name = "contributors.txt"
@@ -112,7 +110,7 @@ class Commit:
 # Under the hood, this runs a `git log` on that tag and parses the fields
 # from the command output to construct a list of Commit objects. Note that
 # because certain fields reside in the commit description and cannot be parsed
-# through the Github API itself, we need to do some intelligent regex parsing
+# through the GitHub API itself, we need to do some intelligent regex parsing
 # to extract those fields.
 #
 # This is written using Git 1.8.5.
@@ -142,7 +140,7 @@ def get_commits(tag):
             sys.exit("Unexpected format in commit: %s" % commit_digest)
         [_hash, author, title] = commit_digest.split(field_end_marker)
         # The PR number and github username is in the commit message
-        # itself and cannot be accessed through any Github API
+        # itself and cannot be accessed through any GitHub API
         pr_number = None
         match = re.search("Closes #([0-9]+) from ([^/\\s]+)/", commit_body)
         if match:
@@ -152,10 +150,7 @@ def get_commits(tag):
             if not is_valid_author(author):
                 author = github_username
         # Guard against special characters
-        try:               # Python 2
-            author = unicode(author, "UTF-8")
-        except NameError:  # Python 3
-            author = str(author)
+        author = str(author)
         author = unidecode.unidecode(author).strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)
@@ -257,7 +252,7 @@ def nice_join(str_list):
         return ", ".join(str_list[:-1]) + ", and " + str_list[-1]
 
 
-# Return the full name of the specified user on Github
+# Return the full name of the specified user on GitHub
 # If the user doesn't exist, return None
 def get_github_name(author, github_client):
     if github_client:

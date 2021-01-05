@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import java.util.TimeZone
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
+import org.apache.spark.util.ThreadUtils
 
 class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
@@ -77,7 +78,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     Math.floor(millisLocal.toDouble / MILLIS_PER_DAY).toInt
   }
   private def fromJavaDateLegacy(date: Date): Int = {
-    millisToDaysLegacy(date.getTime, defaultTimeZone())
+    millisToDaysLegacy(date.getTime, TimeZone.getTimeZone(ZoneId.systemDefault()))
   }
 
   test("rebase gregorian to/from julian days") {
@@ -201,21 +202,21 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("optimization of micros rebasing - Gregorian to Julian") {
     outstandingZoneIds.foreach { zid =>
       withClue(s"zone id = $zid") {
-        withDefaultTimeZone(zid) {
-          val start = instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
-            .atZone(zid)
-            .toInstant)
-          val end = instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0)
-            .atZone(zid)
-            .toInstant)
-          var micros = start
-          do {
-            val rebased = rebaseGregorianToJulianMicros(zid, micros)
-            val rebasedAndOptimized = rebaseGregorianToJulianMicros(micros)
-            assert(rebasedAndOptimized === rebased)
-            micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
-          } while (micros <= end)
-        }
+        val start = instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
+          .atZone(zid)
+          .toInstant)
+        val end = instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0)
+          .atZone(zid)
+          .toInstant)
+        var micros = start
+        do {
+          val rebased = rebaseGregorianToJulianMicros(TimeZone.getTimeZone(zid), micros)
+          val rebasedAndOptimized = withDefaultTimeZone(zid) {
+            rebaseGregorianToJulianMicros(micros)
+          }
+          assert(rebasedAndOptimized === rebased)
+          micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
+        } while (micros <= end)
       }
     }
   }
@@ -223,26 +224,26 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("optimization of micros rebasing - Julian to Gregorian") {
     outstandingZoneIds.foreach { zid =>
       withClue(s"zone id = $zid") {
-        withDefaultTimeZone(zid) {
-          val start = rebaseGregorianToJulianMicros(
-            instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0).atZone(zid).toInstant))
-          val end = rebaseGregorianToJulianMicros(
-            instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0).atZone(zid).toInstant))
-          var micros = start
-          do {
-            val rebased = rebaseJulianToGregorianMicros(zid, micros)
-            val rebasedAndOptimized = rebaseJulianToGregorianMicros(micros)
-            assert(rebasedAndOptimized === rebased)
-            micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
-          } while (micros <= end)
-        }
+        val start = rebaseGregorianToJulianMicros(
+          instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0).atZone(zid).toInstant))
+        val end = rebaseGregorianToJulianMicros(
+          instantToMicros(LocalDateTime.of(2100, 1, 1, 0, 0, 0).atZone(zid).toInstant))
+        var micros = start
+        do {
+          val rebased = rebaseJulianToGregorianMicros(TimeZone.getTimeZone(zid), micros)
+          val rebasedAndOptimized = withDefaultTimeZone(zid) {
+            rebaseJulianToGregorianMicros(micros)
+          }
+          assert(rebasedAndOptimized === rebased)
+          micros += (MICROS_PER_DAY * 30 * (0.5 + Math.random())).toLong
+        } while (micros <= end)
       }
     }
   }
 
   private def generateRebaseJson(
-      adjustFunc: Long => Long,
-      rebaseFunc: (ZoneId, Long) => Long,
+      adjustFunc: (TimeZone, Long) => Long,
+      rebaseFunc: (TimeZone, Long) => Long,
       dir: String,
       fileName: String): Unit = {
     import java.nio.file.{Files, Paths}
@@ -254,29 +255,26 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
     import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 
     case class RebaseRecord(tz: String, switches: Array[Long], diffs: Array[Long])
-
-    val result = new ArrayBuffer[RebaseRecord]()
-    ALL_TIMEZONES
-      .sortBy(_.getId)
-      .foreach { zid =>
+    val rebaseRecords = ThreadUtils.parmap(ALL_TIMEZONES, "JSON-rebase-gen", 16) { zid =>
       withDefaultTimeZone(zid) {
-        val start = adjustFunc(instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0)
-          .atZone(zid)
-          .toInstant))
+        val tz = TimeZone.getTimeZone(zid)
+        val start = adjustFunc(
+          tz,
+          instantToMicros(LocalDateTime.of(1, 1, 1, 0, 0, 0).atZone(zid).toInstant))
         // sun.util.calendar.ZoneInfo resolves DST after 2037 year incorrectly.
         // See https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8073446
-        val end = adjustFunc(instantToMicros(LocalDateTime.of(2037, 1, 1, 0, 0, 0)
-          .atZone(zid)
-          .toInstant))
+        val end = adjustFunc(
+          tz,
+          instantToMicros(LocalDateTime.of(2037, 1, 1, 0, 0, 0).atZone(zid).toInstant))
 
         var micros = start
         var diff = Long.MaxValue
-        val maxStep = DAYS_PER_WEEK * MICROS_PER_DAY
+        val maxStep = 30 * MICROS_PER_MINUTE
         var step: Long = MICROS_PER_SECOND
         val switches = new ArrayBuffer[Long]()
         val diffs = new ArrayBuffer[Long]()
         while (micros < end) {
-          val rebased = rebaseFunc(zid, micros)
+          val rebased = rebaseFunc(tz, micros)
           val curDiff = rebased - micros
           if (curDiff != diff) {
             if (step > MICROS_PER_SECOND) {
@@ -293,9 +291,11 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
           }
           micros += step
         }
-        result.append(RebaseRecord(zid.getId, switches.toArray, diffs.toArray))
+        RebaseRecord(zid.getId, switches.toArray, diffs.toArray)
       }
     }
+    val result = new ArrayBuffer[RebaseRecord]()
+    rebaseRecords.sortBy(_.tz).foreach(result.append(_))
     val mapper = (new ObjectMapper() with ScalaObjectMapper)
       .registerModule(DefaultScalaModule)
       .writerWithDefaultPrettyPrinter()
@@ -308,7 +308,7 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   ignore("generate 'gregorian-julian-rebase-micros.json'") {
     generateRebaseJson(
-      adjustFunc = identity[Long],
+      adjustFunc = (_: TimeZone, micros: Long) => micros,
       rebaseFunc = rebaseGregorianToJulianMicros,
       dir = "/Users/maximgekk/tmp",
       fileName = "gregorian-julian-rebase-micros.json")
@@ -383,30 +383,73 @@ class RebaseDateTimeSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("rebase not-existed timestamps in the hybrid calendar") {
     outstandingZoneIds.foreach { zid =>
-      withDefaultTimeZone(zid) {
-        Seq(
-          "1582-10-04T23:59:59.999999" -> "1582-10-04 23:59:59.999999",
-          "1582-10-05T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
-          "1582-10-06T01:02:03.000001" -> "1582-10-15 01:02:03.000001",
-          "1582-10-07T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
-          "1582-10-08T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
-          "1582-10-09T23:59:59.001001" -> "1582-10-15 23:59:59.001001",
-          "1582-10-10T00:11:22.334455" -> "1582-10-15 00:11:22.334455",
-          "1582-10-11T11:12:13.111111" -> "1582-10-15 11:12:13.111111",
-          "1582-10-12T10:11:12.131415" -> "1582-10-15 10:11:12.131415",
-          "1582-10-13T00:00:00.123321" -> "1582-10-15 00:00:00.123321",
-          "1582-10-14T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
-          "1582-10-15T00:00:00.000000" -> "1582-10-15 00:00:00.000000"
-        ).foreach { case (gregTs, hybridTs) =>
-          withClue(s"tz = ${zid.getId} greg ts = $gregTs hybrid ts = $hybridTs") {
-            val hybridMicros = parseToJulianMicros(hybridTs)
-            val gregorianMicros = parseToGregMicros(gregTs, zid)
+      Seq(
+        "1582-10-04T23:59:59.999999" -> "1582-10-04 23:59:59.999999",
+        "1582-10-05T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
+        "1582-10-06T01:02:03.000001" -> "1582-10-15 01:02:03.000001",
+        "1582-10-07T00:00:00.000000" -> "1582-10-15 00:00:00.000000",
+        "1582-10-08T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
+        "1582-10-09T23:59:59.001001" -> "1582-10-15 23:59:59.001001",
+        "1582-10-10T00:11:22.334455" -> "1582-10-15 00:11:22.334455",
+        "1582-10-11T11:12:13.111111" -> "1582-10-15 11:12:13.111111",
+        "1582-10-12T10:11:12.131415" -> "1582-10-15 10:11:12.131415",
+        "1582-10-13T00:00:00.123321" -> "1582-10-15 00:00:00.123321",
+        "1582-10-14T23:59:59.999999" -> "1582-10-15 23:59:59.999999",
+        "1582-10-15T00:00:00.000000" -> "1582-10-15 00:00:00.000000"
+      ).foreach { case (gregTs, hybridTs) =>
+        withClue(s"tz = ${zid.getId} greg ts = $gregTs hybrid ts = $hybridTs") {
+          val hybridMicros = withDefaultTimeZone(zid) { parseToJulianMicros(hybridTs) }
+          val gregorianMicros = parseToGregMicros(gregTs, zid)
 
-            assert(rebaseGregorianToJulianMicros(zid, gregorianMicros) === hybridMicros)
+          val tz = TimeZone.getTimeZone(zid)
+          assert(rebaseGregorianToJulianMicros(tz, gregorianMicros) === hybridMicros)
+          withDefaultTimeZone(zid) {
             assert(rebaseGregorianToJulianMicros(gregorianMicros) === hybridMicros)
           }
         }
       }
     }
+  }
+
+  test("SPARK-31959: JST -> HKT at Asia/Hong_Kong in 1945") {
+    // The 'Asia/Hong_Kong' time zone switched from 'Japan Standard Time' (JST = UTC+9)
+    // to 'Hong Kong Time' (HKT = UTC+8). After Sunday, 18 November, 1945 01:59:59 AM,
+    // clocks were moved backward to become Sunday, 18 November, 1945 01:00:00 AM.
+    // In this way, the overlap happened w/o Daylight Saving Time.
+    val hkZid = getZoneId("Asia/Hong_Kong")
+    var expected = "1945-11-18 01:30:00.0"
+    var ldt = LocalDateTime.of(1945, 11, 18, 1, 30, 0)
+    var earlierMicros = instantToMicros(ldt.atZone(hkZid).withEarlierOffsetAtOverlap().toInstant)
+    var laterMicros = instantToMicros(ldt.atZone(hkZid).withLaterOffsetAtOverlap().toInstant)
+    var overlapInterval = MICROS_PER_HOUR
+    if (earlierMicros + overlapInterval != laterMicros) {
+      // Old JDK might have an outdated time zone database.
+      // See https://bugs.openjdk.java.net/browse/JDK-8228469: "Hong Kong ... Its 1945 transition
+      // from JST to HKT was on 11-18 at 02:00, not 09-15 at 00:00"
+      expected = "1945-09-14 23:30:00.0"
+      ldt = LocalDateTime.of(1945, 9, 14, 23, 30, 0)
+      earlierMicros = instantToMicros(ldt.atZone(hkZid).withEarlierOffsetAtOverlap().toInstant)
+      laterMicros = instantToMicros(ldt.atZone(hkZid).withLaterOffsetAtOverlap().toInstant)
+      // If time zone db doesn't have overlapping at all, set the overlap interval to zero.
+      overlapInterval = laterMicros - earlierMicros
+    }
+    val hkTz = TimeZone.getTimeZone(hkZid)
+    val rebasedEarlierMicros = rebaseGregorianToJulianMicros(hkTz, earlierMicros)
+    val rebasedLaterMicros = rebaseGregorianToJulianMicros(hkTz, laterMicros)
+    assert(rebasedEarlierMicros + overlapInterval === rebasedLaterMicros)
+    withDefaultTimeZone(hkZid) {
+      def toTsStr(micros: Long): String = toJavaTimestamp(micros).toString
+      assert(toTsStr(rebasedEarlierMicros) === expected)
+      assert(toTsStr(rebasedLaterMicros) === expected)
+      // Check optimized rebasing
+      assert(rebaseGregorianToJulianMicros(earlierMicros) === rebasedEarlierMicros)
+      assert(rebaseGregorianToJulianMicros(laterMicros) === rebasedLaterMicros)
+      // Check reverse rebasing
+      assert(rebaseJulianToGregorianMicros(rebasedEarlierMicros) === earlierMicros)
+      assert(rebaseJulianToGregorianMicros(rebasedLaterMicros) === laterMicros)
+    }
+    // Check reverse not-optimized rebasing
+    assert(rebaseJulianToGregorianMicros(hkTz, rebasedEarlierMicros) === earlierMicros)
+    assert(rebaseJulianToGregorianMicros(hkTz, rebasedLaterMicros) === laterMicros)
   }
 }

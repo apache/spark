@@ -327,7 +327,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
-   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * This should ''not'' be called by users directly, but is available for implementers of custom
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
@@ -1780,10 +1780,9 @@ abstract class RDD[T: ClassTag](
    * It will result in new executors with the resources specified being acquired to
    * calculate the RDD.
    */
-  // PRIVATE for now, added for testing purposes, will be made public with SPARK-29150
   @Experimental
-  @Since("3.0.0")
-  private[spark] def withResources(rp: ResourceProfile): this.type = {
+  @Since("3.1.0")
+  def withResources(rp: ResourceProfile): this.type = {
     resourceProfile = Option(rp)
     sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
     this
@@ -1794,10 +1793,9 @@ abstract class RDD[T: ClassTag](
    * @return the user specified ResourceProfile or null (for Java compatibility) if
    *         none was specified
    */
-  // PRIVATE for now, added for testing purposes, will be made public with SPARK-29150
   @Experimental
-  @Since("3.0.0")
-  private[spark] def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
+  @Since("3.1.0")
+  def getResourceProfile(): ResourceProfile = resourceProfile.getOrElse(null)
 
   // =======================================================================
   // Other internal methods and fields
@@ -1921,9 +1919,8 @@ abstract class RDD[T: ClassTag](
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
-        "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
-          info.numCachedPartitions, bytesToString(info.memSize),
-          bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))
+        "    CachedPartitions: %d; MemorySize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize), bytesToString(info.diskSize)))
 
       s"$rdd [$persistence]" +: storageInfo
     }

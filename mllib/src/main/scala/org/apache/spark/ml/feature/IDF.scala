@@ -215,10 +215,10 @@ object IDFModel extends MLReadable[IDFModel] {
       val data = sparkSession.read.parquet(dataPath)
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
-        val Row(idf: Vector, df: Seq[_], numDocs: Long) = data.select("idf", "docFreq", "numDocs")
-          .head()
+        val Row(idf: Vector, df: scala.collection.Seq[_], numDocs: Long) =
+          data.select("idf", "docFreq", "numDocs").head()
         new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf),
-          df.asInstanceOf[Seq[Long]].toArray, numDocs))
+          df.asInstanceOf[scala.collection.Seq[Long]].toArray, numDocs))
       } else {
         val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
           .select("idf")

@@ -540,12 +540,13 @@ Here are the details of all the sources in Spark.
         <br/>
         <code>fileNameOnly</code>: whether to check new files based on only the filename instead of on the full path (default: false). With this set to `true`, the following files would be considered as the same file, because their filenames, "dataset.txt", are the same:
         <br/>
-        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
-        <br/>
         "file:///dataset.txt"<br/>
         "s3://a/dataset.txt"<br/>
         "s3n://a/b/dataset.txt"<br/>
-        "s3a://a/b/c/dataset.txt"<br/>
+        "s3a://a/b/c/dataset.txt"
+        <br/>
+        <code>maxFileAge</code>: Maximum age of a file that can be found in this directory, before it is ignored. For the first batch all files will be considered valid. If <code>latestFirst</code> is set to `true` and <code>maxFilesPerTrigger</code> is set, then this parameter will be ignored, because old files that are valid, and should be processed, may be ignored. The max age is specified with respect to the timestamp of the latest file, and not the timestamp of the current system.(default: 1 week)
+        <br/>
         <code>cleanSource</code>: option to clean up completed files after processing.<br/>
         Available options are "archive", "delete", "off". If the option is not provided, the default value is "off".<br/>
         When "archive" is provided, additional option <code>sourceArchiveDir</code> must be provided as well. The value of "sourceArchiveDir" must not match with source pattern in depth (the number of directories from the root directory), where the depth is minimum of depth on both paths. This will ensure archived files are never included as new source files.<br/>
@@ -860,6 +861,8 @@ isStreaming(df)
 </div>
 </div>
 
+You may want to check the query plan of the query, as Spark could inject stateful operations during interpret of SQL statement against streaming dataset. Once stateful operations are injected in the query plan, you may need to check your query with considerations in stateful operations. (e.g. output mode, watermark, state store size maintenance, etc.)
+
 ### Window Operations on Event Time
 Aggregations over a sliding event-time window are straightforward with Structured Streaming and are very similar to grouped aggregations. In a grouped aggregation, aggregate values (e.g. counts) are maintained for each unique value in the user-specified grouping column. In case of window-based aggregations, aggregate values are maintained for each window the event-time of a row falls into. Let's understand this with an illustration. 
 
@@ -1114,7 +1117,7 @@ val staticDf = spark.read. ...
 val streamingDf = spark.readStream. ...
 
 streamingDf.join(staticDf, "type")          // inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join")  // right outer join with a static DF  
+streamingDf.join(staticDf, "type", "left_outer")  // left outer join with a static DF
 
 {% endhighlight %}
 
@@ -1125,7 +1128,7 @@ streamingDf.join(staticDf, "type", "right_join")  // right outer join with a sta
 Dataset<Row> staticDf = spark.read(). ...;
 Dataset<Row> streamingDf = spark.readStream(). ...;
 streamingDf.join(staticDf, "type");         // inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join");  // right outer join with a static DF
+streamingDf.join(staticDf, "type", "left_outer");  // left outer join with a static DF
 {% endhighlight %}
 
 
@@ -1136,7 +1139,7 @@ streamingDf.join(staticDf, "type", "right_join");  // right outer join with a st
 staticDf = spark.read. ...
 streamingDf = spark.readStream. ...
 streamingDf.join(staticDf, "type")  # inner equi-join with a static DF
-streamingDf.join(staticDf, "type", "right_join")  # right outer join with a static DF
+streamingDf.join(staticDf, "type", "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>
@@ -1148,10 +1151,10 @@ staticDf <- read.df(...)
 streamingDf <- read.stream(...)
 joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
 joined <- join(
+            streamingDf,
             staticDf,
-            streamingDf, 
             streamingDf$value == staticDf$value,
-            "right_outer")  # right outer join with a static DF
+            "left_outer")  # left outer join with a static DF
 {% endhighlight %}
 
 </div>
@@ -1674,8 +1677,39 @@ Any of the stateful operation(s) after any of below stateful operations can have
 As Spark cannot check the state function of `mapGroupsWithState`/`flatMapGroupsWithState`, Spark assumes that the state function
 emits late rows if the operator uses Append mode.
 
+Spark provides two ways to check the number of late rows on stateful operators which would help you identify the issue:
+
+1. On Spark UI: check the metrics in stateful operator nodes in query execution details page in SQL tab
+2. On Streaming Query Listener: check "numRowsDroppedByWatermark" in "stateOperators" in QueryProcessEvent.
+
+Please note that "numRowsDroppedByWatermark" represents the number of "dropped" rows by watermark, which is not always same as the count of "late input rows" for the operator.
+It depends on the implementation of the operator - e.g. streaming aggregation does pre-aggregate input rows and checks the late inputs against pre-aggregated inputs,
+hence the number is not same as the number of original input rows. You'd like to just check the fact whether the value is zero or non-zero.
+
 There's a known workaround: split your streaming query into multiple queries per stateful operator, and ensure
 end-to-end exactly once per query. Ensuring end-to-end exactly once for the last query is optional.
+
+### State Store and task locality
+
+The stateful operations store states for events in state stores of executors. State stores occupy resources such as memory and disk space to store the states.
+So it is more efficient to keep a state store provider running in the same executor across different streaming batches.
+Changing the location of a state store provider requires the extra overhead of loading checkpointed states. The overhead of loading state from checkpoint depends
+on the external storage and the size of the state, which tends to hurt the latency of micro-batch run. For some use cases such as processing very large state data,
+loading new state store providers from checkpointed states can be very time-consuming and inefficient.
+
+The stateful operations in Structured Streaming queries rely on the preferred location feature of Spark's RDD to run the state store provider on the same executor.
+If in the next batch the corresponding state store provider is scheduled on this executor again, it could reuse the previous states and save the time of loading checkpointed states.
+
+However, generally the preferred location is not a hard requirement and it is still possible that Spark schedules tasks to the executors other than the preferred ones.
+In this case, Spark will load state store providers from checkpointed states on new executors. The state store providers run in the previous batch will not be unloaded immediately.
+Spark runs a maintenance task which checks and unloads the state store providers that are inactive on the executors.
+
+By changing the Spark configurations related to task scheduling, for example `spark.locality.wait`, users can configure Spark how long to wait to launch a data-local task.
+For stateful operations in Structured Streaming, it can be used to let state store providers running on the same executors across batches.
+
+Specifically for built-in HDFS state store provider, users can check the state store metrics such as `loadedMapCacheHitCount` and `loadedMapCacheMissCount`. Ideally,
+it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
+User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
 
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
@@ -1751,7 +1785,9 @@ Here is the compatibility matrix.
   <tr>
     <td colspan="2" style="vertical-align: middle;">Queries with <code>mapGroupsWithState</code></td>
     <td style="vertical-align: middle;">Update</td>
-    <td style="vertical-align: middle;"></td>
+    <td style="vertical-align: middle;">
+      Aggregations not allowed in a query with <code>mapGroupsWithState</code>.
+    </td>
   </tr>
   <tr>
     <td rowspan="2" style="vertical-align: middle;">Queries with <code>flatMapGroupsWithState</code></td>
@@ -1765,7 +1801,7 @@ Here is the compatibility matrix.
     <td style="vertical-align: middle;">Update operation mode</td>
     <td style="vertical-align: middle;">Update</td>
     <td style="vertical-align: middle;">
-      Aggregations not allowed after <code>flatMapGroupsWithState</code>.
+      Aggregations not allowed in a query with <code>flatMapGroupsWithState</code>.
     </td>
   </tr>
   <tr>
@@ -1860,7 +1896,11 @@ Here are the details of all the sinks in Spark.
     <td><b>File Sink</b></td>
     <td>Append</td>
     <td>
-        <code>path</code>: path to the output directory, must be specified.
+        <code>path</code>: path to the output directory, must be specified.<br/>
+        <code>retention</code>: time to live (TTL) for output files. Output files which batches were
+        committed older than TTL will be eventually excluded in metadata log. This means reader queries which read
+        the sink's output directory may not process them. You can provide the value as string format of the time. (like "12h", "7d", etc.)
+        By default it's disabled.
         <br/><br/>
         For file-format-specific options, see the related methods in DataFrameWriter
         (<a href="api/scala/org/apache/spark/sql/DataFrameWriter.html">Scala</a>/<a href="api/java/org/apache/spark/sql/DataFrameWriter.html">Java</a>/<a href="api/python/pyspark.sql.html#pyspark.sql.DataFrameWriter">Python</a>/<a

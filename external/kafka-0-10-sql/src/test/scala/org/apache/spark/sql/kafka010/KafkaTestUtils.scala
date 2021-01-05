@@ -26,7 +26,6 @@ import javax.security.auth.login.Configuration
 
 import scala.collection.JavaConverters._
 import scala.io.Source
-import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.google.common.io.Files
@@ -38,13 +37,12 @@ import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin._
-import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.network.ListenerName
 import org.apache.kafka.common.security.auth.SecurityProtocol.{PLAINTEXT, SASL_PLAINTEXT}
-import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
+import org.apache.kafka.common.serialization.StringSerializer
 import org.apache.kafka.common.utils.SystemTime
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.apache.zookeeper.server.auth.SASLAuthenticationProvider
@@ -395,7 +393,7 @@ class KafkaTestUtils(
   }
 
   def getAllTopicsAndPartitionSize(): Seq[(String, Int)] = {
-    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster).mapValues(_.size).toSeq
+    zkClient.getPartitionsForTopics(zkClient.getAllTopicsInCluster()).mapValues(_.size).toSeq
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
@@ -462,32 +460,24 @@ class KafkaTestUtils(
     server.logManager.cleanupLogs()
   }
 
+  private def getOffsets(topics: Set[String], offsetSpec: OffsetSpec): Map[TopicPartition, Long] = {
+    val listOffsetsParams = adminClient.describeTopics(topics.asJava).all().get().asScala
+      .flatMap { topicDescription =>
+        topicDescription._2.partitions().asScala.map { topicPartitionInfo =>
+          new TopicPartition(topicDescription._1, topicPartitionInfo.partition())
+        }
+      }.map(_ -> offsetSpec).toMap.asJava
+    val partitionOffsets = adminClient.listOffsets(listOffsetsParams).all().get().asScala
+      .map(result => result._1 -> result._2.offset()).toMap
+    partitionOffsets
+  }
+
   def getEarliestOffsets(topics: Set[String]): Map[TopicPartition, Long] = {
-    val kc = new KafkaConsumer[String, String](consumerConfiguration)
-    logInfo("Created consumer to get earliest offsets")
-    kc.subscribe(topics.asJavaCollection)
-    kc.poll(0)
-    val partitions = kc.assignment()
-    kc.pause(partitions)
-    kc.seekToBeginning(partitions)
-    val offsets = partitions.asScala.map(p => p -> kc.position(p)).toMap
-    kc.close()
-    logInfo("Closed consumer to get earliest offsets")
-    offsets
+    getOffsets(topics, OffsetSpec.earliest())
   }
 
   def getLatestOffsets(topics: Set[String]): Map[TopicPartition, Long] = {
-    val kc = new KafkaConsumer[String, String](consumerConfiguration)
-    logInfo("Created consumer to get latest offsets")
-    kc.subscribe(topics.asJavaCollection)
-    kc.poll(0)
-    val partitions = kc.assignment()
-    kc.pause(partitions)
-    kc.seekToEnd(partitions)
-    val offsets = partitions.asScala.map(p => p -> kc.position(p)).toMap
-    kc.close()
-    logInfo("Closed consumer to get latest offsets")
-    offsets
+    getOffsets(topics, OffsetSpec.latest())
   }
 
   def listConsumerGroups(): ListConsumerGroupsResult = {
@@ -547,7 +537,7 @@ class KafkaTestUtils(
   }
 
   /** Call `f` with a `KafkaProducer` that has initialized transactions. */
-  def withTranscationalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
+  def withTransactionalProducer(f: KafkaProducer[String, String] => Unit): Unit = {
     val props = producerConfiguration
     props.put("transactional.id", UUID.randomUUID().toString)
     val producer = new KafkaProducer[String, String](props)
@@ -557,17 +547,6 @@ class KafkaTestUtils(
     } finally {
       producer.close()
     }
-  }
-
-  private def consumerConfiguration: Properties = {
-    val props = new Properties()
-    props.put("bootstrap.servers", brokerAddress)
-    props.put("group.id", "group-KafkaTestUtils-" + Random.nextInt)
-    props.put("value.deserializer", classOf[StringDeserializer].getName)
-    props.put("key.deserializer", classOf[StringDeserializer].getName)
-    props.put("enable.auto.commit", "false")
-    setAuthenticationConfigIfNeeded(props)
-    props
   }
 
   private def setAuthenticationConfigIfNeeded(props: Properties): Unit = {
@@ -596,7 +575,7 @@ class KafkaTestUtils(
     // ensure that logs from all replicas are deleted if delete topic is marked successful
     assert(servers.forall(server => topicAndPartitions.forall(tp =>
       server.getLogManager().getLog(tp).isEmpty)),
-      s"topic $topic still exists in log mananger")
+      s"topic $topic still exists in log manager")
     // ensure that topic is removed from all cleaner offsets
     assert(servers.forall(server => topicAndPartitions.forall { tp =>
       val checkpoints = server.getLogManager().liveLogDirs.map { logDir =>
@@ -606,7 +585,7 @@ class KafkaTestUtils(
     }), s"checkpoint for topic $topic still exists")
     // ensure the topic is gone
     assert(
-      !zkClient.getAllTopicsInCluster.contains(topic),
+      !zkClient.getAllTopicsInCluster().contains(topic),
       s"topic $topic still exists on zookeeper")
   }
 

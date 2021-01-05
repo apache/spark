@@ -28,7 +28,7 @@ class ConfTests(ReusedSQLTestCase):
         self.assertEqual(spark.conf.get("bogo"), "ta")
         self.assertEqual(spark.conf.get("bogo", "not.read"), "ta")
         self.assertEqual(spark.conf.get("not.set", "ta"), "ta")
-        self.assertRaisesRegexp(Exception, "not.set", lambda: spark.conf.get("not.set"))
+        self.assertRaisesRegex(Exception, "not.set", lambda: spark.conf.get("not.set"))
         spark.conf.unset("bogo")
         self.assertEqual(spark.conf.get("bogo", "colombia"), "colombia")
 
@@ -46,10 +46,10 @@ class ConfTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_conf import *
+    from pyspark.sql.tests.test_conf import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

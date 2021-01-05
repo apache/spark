@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -39,12 +42,34 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.InMemoryTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("fail for unresolved plan") {
+    intercept[AnalysisException] {
+      // `testRelation` does not have column `b`.
+      testRelation.select('b).analyze
+    }
+  }
+
+  test("fail if a leaf node has char/varchar type output") {
+    val schema1 = new StructType().add("c", CharType(5))
+    val schema2 = new StructType().add("c", VarcharType(5))
+    val schema3 = new StructType().add("c", ArrayType(CharType(5)))
+    Seq(schema1, schema2, schema3).foreach { schema =>
+      val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
+      intercept[IllegalStateException] {
+        DataSourceV2Relation(
+          table, schema.toAttributes, None, None, CaseInsensitiveStringMap.empty()).analyze
+      }
+    }
+  }
 
   test("union project *") {
     val plan = (1 to 120)
@@ -188,7 +213,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("divide should be casted into fractional types") {
-    val plan = caseInsensitiveAnalyzer.execute(
+    val plan = getAnalyzer.execute(
       testRelation2.select(
         $"a" / Literal(2) as "div1",
         $"a" / $"b" as "div2",
@@ -249,13 +274,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
       att1
     )
-    val prevPlan = getAnalyzer(true).execute(plan)
+    val prevPlan = getAnalyzer.execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
       CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr.as("col2")
     )).as("arr"))
-    plan = getAnalyzer(true).execute(plan)
+    plan = getAnalyzer.execute(plan)
 
     val expectedPlan = prevPlan.select(
       CreateArray(Seq(
@@ -307,6 +332,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-11725: correctly handle null inputs for ScalaUDF") {
+    def resolvedEncoder[T : TypeTag](): ExpressionEncoder[T] = {
+      ExpressionEncoder[T]().resolveAndBind()
+    }
+
     val testRelation = LocalRelation(
       AttributeReference("a", StringType)(),
       AttributeReference("b", DoubleType)(),
@@ -328,20 +357,20 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     // non-primitive parameters do not need special null handling
     val udf1 = ScalaUDF((s: String) => "x", StringType, string :: Nil,
-      Option(ExpressionEncoder[String]()) :: Nil)
+      Option(resolvedEncoder[String]()) :: Nil)
     val expected1 = udf1
     checkUDF(udf1, expected1)
 
     // only primitive parameter needs special null handling
     val udf2 = ScalaUDF((s: String, d: Double) => "x", StringType, string :: double :: Nil,
-      Option(ExpressionEncoder[String]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[String]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected2 =
       If(IsNull(double), nullResult, udf2.copy(children = string :: KnownNotNull(double) :: Nil))
     checkUDF(udf2, expected2)
 
     // special null handling should apply to all primitive parameters
     val udf3 = ScalaUDF((s: Short, d: Double) => "x", StringType, short :: double :: Nil,
-      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected3 = If(
       IsNull(short) || IsNull(double),
       nullResult,
@@ -353,7 +382,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       (s: Short, d: Double) => "x",
       StringType,
       short :: nonNullableDouble :: Nil,
-      Option(ExpressionEncoder[Short]()) :: Option(ExpressionEncoder[Double]()) :: Nil)
+      Option(resolvedEncoder[Short]()) :: Option(resolvedEncoder[Double]()) :: Nil)
     val expected4 = If(
       IsNull(short),
       nullResult,
@@ -398,7 +427,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+  test("SPARK-12102: Ignore nullability when comparing two sides of case") {
     val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
       Symbol("b").struct(Symbol("x").int.withNullability(false)))
     val plan = relation.select(
@@ -636,6 +665,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
         schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+      isTempView = false,
       output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)
     val tz = Option(conf.sessionLocalTimeZone)
@@ -758,22 +788,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // RuleExecutor only throw exception or log warning when the rule is supposed to run
     // more than once.
     val maxIterations = 2
-    val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
-    val testAnalyzer = new Analyzer(
-      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
-    val plan = testRelation2.select(
-      $"a" / Literal(2) as "div1",
-      $"a" / $"b" as "div2",
-      $"a" / $"c" as "div3",
-      $"a" / $"d" as "div4",
-      $"e" / $"e" as "div5")
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
-      testAnalyzer.execute(plan)
-    }.getMessage
-    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
-      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+      val message = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
   }
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
@@ -789,7 +820,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
       withLogAppender(logAppender) {
         val testAnalyzer1 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
         val plan1 = testRelation2.select(
           UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
@@ -811,7 +842,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
         // New analyzer from new SessionState
         val testAnalyzer2 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
         val plan4 = testRelation2.select(
           UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
         testAnalyzer2.execute(plan4)
@@ -824,6 +855,167 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         // There is no change in the log.
         check(2)
       }
+    }
+  }
+
+  test("SPARK-32131: Fix wrong column index when we have more than two columns" +
+    " during union and set operations" ) {
+    val firstTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val secondTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", TimestampType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", FloatType)())
+
+    val thirdTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", TimestampType)(),
+      AttributeReference("d", FloatType)())
+
+    val fourthTable = LocalRelation(
+      AttributeReference("a", StringType)(),
+      AttributeReference("b", DoubleType)(),
+      AttributeReference("c", IntegerType)(),
+      AttributeReference("d", TimestampType)())
+
+    val r1 = Union(firstTable, secondTable)
+    val r2 = Union(firstTable, thirdTable)
+    val r3 = Union(firstTable, fourthTable)
+    val r4 = Except(firstTable, secondTable, isAll = false)
+    val r5 = Intersect(firstTable, secondTable, isAll = false)
+
+    assertAnalysisError(r1,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r2,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> int at the third column of the second table"))
+
+    assertAnalysisError(r3,
+      Seq("Union can only be performed on tables with the compatible column types. " +
+        "timestamp <> float at the 4th column of the second table"))
+
+    assertAnalysisError(r4,
+      Seq("Except can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+
+    assertAnalysisError(r5,
+      Seq("Intersect can only be performed on tables with the compatible column types. " +
+        "timestamp <> double at the second column of the second table"))
+  }
+
+  test("SPARK-31975: Throw user facing error when use WindowFunction directly") {
+    assertAnalysisError(testRelation2.select(RowNumber()),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(Sum(RowNumber())),
+      Seq("Window function row_number() requires an OVER clause."))
+
+    assertAnalysisError(testRelation2.select(RowNumber() + 1),
+      Seq("Window function row_number() requires an OVER clause."))
+  }
+
+  test("SPARK-32237: Hint in CTE") {
+    val plan = With(
+      Project(
+        Seq(UnresolvedAttribute("cte.a")),
+        UnresolvedRelation(TableIdentifier("cte"))
+      ),
+      Seq(
+        (
+          "cte",
+          SubqueryAlias(
+            AliasIdentifier("cte"),
+            UnresolvedHint(
+              "REPARTITION",
+              Seq(Literal(3)),
+              Project(testRelation.output, testRelation)
+            )
+          )
+        )
+      )
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-33197: Make sure changes to ANALYZER_MAX_ITERATIONS take effect at runtime") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val maxIterationsEnough = 5
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
+
+      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+
+      withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
+        try {
+          testAnalyzer.execute(plan)
+        } catch {
+          case ex: TreeNodeException[_]
+            if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
+              fail("analyzer.execute should not reach max iterations.")
+        }
+      }
+
+      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
+  }
+
+  test("SPARK-33733: PullOutNondeterministic should check and collect deterministic field") {
+    val reflect =
+      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head))
+    val udf = ScalaUDF(
+      (s: String) => s,
+      StringType,
+      Literal.create(null, StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      udfDeterministic = false)
+
+    Seq(reflect, udf).foreach { e: Expression =>
+      val plan = Sort(Seq(e.asc), false, testRelation)
+      val projected = Alias(e, "_nondeterministic")()
+      val expect =
+        Project(testRelation.output,
+          Sort(Seq(projected.toAttribute.asc), false,
+            Project(testRelation.output :+ projected,
+              testRelation)))
+      checkAnalysis(plan, expect)
+    }
+  }
+
+  test("SPARK-33857: Unify the default seed of random functions") {
+    Seq(new Rand(), new Randn(), Shuffle(Literal(Array(1))), Uuid()).foreach { r =>
+      assert(r.seedExpression == UnresolvedSeed)
+      val p = getAnalyzer.execute(Project(Seq(r.as("r")), testRelation))
+      assert(
+        p.asInstanceOf[Project].projectList.head.asInstanceOf[Alias]
+          .child.asInstanceOf[ExpressionWithRandomSeed]
+          .seedExpression.isInstanceOf[Literal]
+      )
     }
   }
 }

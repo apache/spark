@@ -56,11 +56,11 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     assert(inferSchema.inferField(IntegerType, "1.0") == DoubleType)
     assert(inferSchema.inferField(DoubleType, null) == DoubleType)
     assert(inferSchema.inferField(DoubleType, "test") == StringType)
-    assert(inferSchema.inferField(LongType, "2015-08-20 14:57:00") == TimestampType)
-    assert(inferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == TimestampType)
-    assert(inferSchema.inferField(LongType, "True") == BooleanType)
-    assert(inferSchema.inferField(IntegerType, "FALSE") == BooleanType)
-    assert(inferSchema.inferField(TimestampType, "FALSE") == BooleanType)
+    assert(inferSchema.inferField(LongType, "2015-08-20 14:57:00") == StringType)
+    assert(inferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == StringType)
+    assert(inferSchema.inferField(LongType, "True") == StringType)
+    assert(inferSchema.inferField(IntegerType, "FALSE") == StringType)
+    assert(inferSchema.inferField(TimestampType, "FALSE") == StringType)
 
     val textValueOne = Long.MaxValue.toString + "0"
     val decimalValueOne = new java.math.BigDecimal(textValueOne)

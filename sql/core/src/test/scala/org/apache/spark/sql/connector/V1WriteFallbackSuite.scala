@@ -24,11 +24,18 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapability}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1WriteBuilder, WriteBuilder}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, V1Scan}
+import org.apache.spark.sql.connector.write.{LogicalWriteInfo, LogicalWriteInfoImpl, SupportsOverwrite, SupportsTruncate, V1Write, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -124,6 +131,69 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
     }
     assert(e3.getMessage.contains("schema"))
   }
+
+  test("fallback writes should only analyze plan once") {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    try {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .withExtensions(_.injectPostHocResolutionRule(_ => OnlyOnceRule))
+        .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+        .getOrCreate()
+      val df = session.createDataFrame(Seq((1, "x"), (2, "y"), (3, "z")))
+      df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+    } finally {
+      SparkSession.setActiveSession(spark)
+      SparkSession.setDefaultSession(spark)
+    }
+  }
+
+  test("SPARK-33492: append fallback should refresh cache") {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    try {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+        .getOrCreate()
+      val df = session.createDataFrame(Seq((1, "x")))
+      df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+      session.catalog.cacheTable("test")
+      checkAnswer(session.read.table("test"), Row(1, "x") :: Nil)
+
+      val df2 = session.createDataFrame(Seq((2, "y")))
+      df2.writeTo("test").append()
+      checkAnswer(session.read.table("test"), Row(1, "x") :: Row(2, "y") :: Nil)
+
+    } finally {
+      SparkSession.setActiveSession(spark)
+      SparkSession.setDefaultSession(spark)
+    }
+  }
+
+  test("SPARK-33492: overwrite fallback should refresh cache") {
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    try {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(V2_SESSION_CATALOG_IMPLEMENTATION.key, classOf[V1FallbackTableCatalog].getName)
+        .getOrCreate()
+      val df = session.createDataFrame(Seq((1, "x")))
+      df.write.mode("append").option("name", "t1").format(v2Format).saveAsTable("test")
+      session.catalog.cacheTable("test")
+      checkAnswer(session.read.table("test"), Row(1, "x") :: Nil)
+
+      val df2 = session.createDataFrame(Seq((2, "y")))
+      df2.writeTo("test").overwrite(lit(true))
+      checkAnswer(session.read.table("test"), Row(2, "y") :: Nil)
+
+    } finally {
+      SparkSession.setActiveSession(spark)
+      SparkSession.setDefaultSession(spark)
+    }
+  }
 }
 
 class V1WriteFallbackSessionCatalogSuite
@@ -156,6 +226,7 @@ class V1FallbackTableCatalog extends TestV2SessionCatalogBase[InMemoryTableWithV
       properties: util.Map[String, String]): InMemoryTableWithV1Fallback = {
     val t = new InMemoryTableWithV1Fallback(name, schema, partitions, properties)
     InMemoryV1Provider.tables.put(name, t)
+    tables.put(Identifier.of(Array("default"), name), t)
     t
   }
 }
@@ -240,7 +311,8 @@ class InMemoryV1Provider
     if (mode == SaveMode.Overwrite) {
       writer.asInstanceOf[SupportsTruncate].truncate()
     }
-    writer.asInstanceOf[V1WriteBuilder].buildForV1Write().insert(data, overwrite = false)
+    val write = writer.build()
+    write.asInstanceOf[V1Write].toInsertableRelation.insert(data, overwrite = false)
     getRelation
   }
 }
@@ -251,7 +323,7 @@ class InMemoryTableWithV1Fallback(
     override val partitioning: Array[Transform],
     override val properties: util.Map[String, String])
   extends Table
-  with SupportsWrite {
+  with SupportsWrite with SupportsRead {
 
   partitioning.foreach { t =>
     if (!t.isInstanceOf[IdentityTransform]) {
@@ -260,6 +332,7 @@ class InMemoryTableWithV1Fallback(
   }
 
   override def capabilities: util.Set[TableCapability] = Set(
+    TableCapability.BATCH_READ,
     TableCapability.V1_BATCH_WRITE,
     TableCapability.OVERWRITE_BY_FILTER,
     TableCapability.TRUNCATE).asJava
@@ -276,7 +349,6 @@ class InMemoryTableWithV1Fallback(
 
   private class FallbackWriteBuilder(options: CaseInsensitiveStringMap)
     extends WriteBuilder
-    with V1WriteBuilder
     with SupportsTruncate
     with SupportsOverwrite {
 
@@ -299,9 +371,9 @@ class InMemoryTableWithV1Fallback(
       partIndexes.map(row.get)
     }
 
-    override def buildForV1Write(): InsertableRelation = {
-      new InsertableRelation {
-        override def insert(data: DataFrame, overwrite: Boolean): Unit = {
+    override def build(): V1Write = new V1Write {
+      override def toInsertableRelation: InsertableRelation = {
+        (data: DataFrame, overwrite: Boolean) => {
           assert(!overwrite, "V1 write fallbacks cannot be called with overwrite=true")
           val rows = data.collect()
           rows.groupBy(getPartitionValues).foreach { case (partition, elements) =>
@@ -316,5 +388,50 @@ class InMemoryTableWithV1Fallback(
         }
       }
     }
+  }
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+    new V1ReadFallbackScanBuilder(schema)
+
+  private class V1ReadFallbackScanBuilder(schema: StructType) extends ScanBuilder {
+    override def build(): Scan = new V1ReadFallbackScan(schema)
+  }
+
+  private class V1ReadFallbackScan(schema: StructType) extends V1Scan {
+    override def readSchema(): StructType = schema
+    override def toV1TableScan[T <: BaseRelation with TableScan](context: SQLContext): T =
+      new V1TableScan(context, schema).asInstanceOf[T]
+  }
+
+  private class V1TableScan(
+      context: SQLContext,
+      requiredSchema: StructType) extends BaseRelation with TableScan {
+    override def sqlContext: SQLContext = context
+    override def schema: StructType = requiredSchema
+    override def buildScan(): RDD[Row] = {
+      val data = InMemoryV1Provider.getTableData(context.sparkSession, name).collect()
+      context.sparkContext.makeRDD(data)
+    }
+  }
+}
+
+/** A rule that fails if a query plan is analyzed twice. */
+object OnlyOnceRule extends Rule[LogicalPlan] {
+  private val tag = TreeNodeTag[String]("test")
+  private val counts = new mutable.HashMap[LogicalPlan, Int]()
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (plan.getTagValue(tag).isEmpty) {
+      plan.setTagValue(tag, "abc")
+      plan
+    } else {
+      val cnt = counts.getOrElseUpdate(plan, 0) + 1
+      // This rule will be run as injectPostHocResolutionRule, and is supposed to be run only twice.
+      // Once during planning and once during checkBatchIdempotence
+      assert(cnt <= 1, "This rule shouldn't have been called again")
+      counts.put(plan, cnt)
+      plan
+    }
+
   }
 }

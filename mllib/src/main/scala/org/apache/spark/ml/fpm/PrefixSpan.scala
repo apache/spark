@@ -146,7 +146,7 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
 
     val data = dataset.select(sequenceColParam)
     val sequences = data.where(col(sequenceColParam).isNotNull).rdd
-      .map(r => r.getAs[Seq[Seq[Any]]](0).map(_.toArray).toArray)
+      .map(r => r.getSeq[scala.collection.Seq[Any]](0).map(_.toArray).toArray)
 
     val mllibPrefixSpan = new mllibPrefixSpan()
       .setMinSupport($(minSupport))

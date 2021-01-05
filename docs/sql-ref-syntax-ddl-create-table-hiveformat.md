@@ -31,11 +31,22 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ COMMENT table_comment ]
     [ PARTITIONED BY ( col_name2[:] col_type2 [ COMMENT col_comment2 ], ... ) 
         | ( col_name1, col_name2, ... ) ]
+    [ CLUSTERED BY ( col_name1, col_name2, ...) 
+        [ SORTED BY ( col_name1 [ ASC | DESC ], col_name2 [ ASC | DESC ], ... ) ] 
+        INTO num_buckets BUCKETS ]
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
     [ LOCATION path ]
     [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
     [ AS select_statement ]
+
+row_format:    
+    : SERDE serde_class [ WITH SERDEPROPERTIES (k1=v1, k2=v2, ... ) ]
+    | DELIMITED [ FIELDS TERMINATED BY fields_terminated_char [ ESCAPED BY escaped_char ] ] 
+        [ COLLECTION ITEMS TERMINATED BY collection_items_terminated_char ] 
+        [ MAP KEYS TERMINATED BY map_key_terminated_char ]
+        [ LINES TERMINATED BY row_terminated_char ]
+        [ NULL DEFINED AS null_char ]
 ```
 
 Note that, the clauses between the columns definition clause and the AS SELECT clause can come in
@@ -51,15 +62,70 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **EXTERNAL**
 
-    Table is defined using the path provided as LOCATION, does not use default location for this table.
+    Table is defined using the path provided as `LOCATION`, does not use default location for this table.
 
 * **PARTITIONED BY**
 
     Partitions are created on the table, based on the columns specified.
+    
+* **CLUSTERED BY**
 
-* **ROW FORMAT**
+    Partitions created on the table will be bucketed into fixed buckets based on the column specified for bucketing.
 
-    SERDE is used to specify a custom SerDe or the DELIMITED clause in order to use the native SerDe.
+    **NOTE:** Bucketing is an optimization technique that uses buckets (and bucketing columns) to determine data partitioning and avoid data shuffle.
+
+* **SORTED BY**
+
+    Specifies an ordering of bucket columns. Optionally, one can use ASC for an ascending order or DESC for a descending order after any column names in the SORTED BY clause.
+    If not specified, ASC is assumed by default.
+
+* **INTO num_buckets BUCKETS**
+
+    Specifies buckets numbers, which is used in `CLUSTERED BY` clause.
+    
+* **row_format**    
+
+    Use the `SERDE` clause to specify a custom SerDe for one table. Otherwise, use the `DELIMITED` clause to use the native SerDe and specify the delimiter, escape character, null character and so on.
+    
+* **SERDE**
+
+    Specifies a custom SerDe for one table.
+    
+* **serde_class**
+
+    Specifies a fully-qualified class name of a custom SerDe.
+
+* **SERDEPROPERTIES**
+
+    A list of key-value pairs that is used to tag the SerDe definition.
+    
+* **DELIMITED**
+
+    The `DELIMITED` clause can be used to specify the native SerDe and state the delimiter, escape character, null character and so on.
+    
+* **FIELDS TERMINATED BY**
+
+    Used to define a column separator.
+    
+* **COLLECTION ITEMS TERMINATED BY**
+
+    Used to define a collection item separator.
+   
+* **MAP KEYS TERMINATED BY**
+
+    Used to define a map key separator.
+    
+* **LINES TERMINATED BY**
+
+    Used to define a row separator.
+    
+* **NULL DEFINED AS**
+
+    Used to define the specific value for NULL.
+    
+* **ESCAPED BY**
+
+    Used for escape mechanism.
 
 * **STORED AS**
 
@@ -114,9 +180,61 @@ CREATE TABLE student (id INT, name STRING)
     PARTITIONED BY (age INT);
 
 --Use Row Format and file format
-CREATE TABLE student (id INT,name STRING)
+CREATE TABLE student (id INT, name STRING)
     ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
     STORED AS TEXTFILE;
+
+--Use complex datatype
+CREATE EXTERNAL TABLE family(
+        name STRING,
+        friends ARRAY<STRING>,
+        children MAP<STRING, INT>,
+        address STRUCT<street: STRING, city: STRING>
+    )
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' ESCAPED BY '\\'
+    COLLECTION ITEMS TERMINATED BY '_'
+    MAP KEYS TERMINATED BY ':'
+    LINES TERMINATED BY '\n'
+    NULL DEFINED AS 'foonull'
+    STORED AS TEXTFILE
+    LOCATION '/tmp/family/';
+
+--Use predefined custom SerDe
+CREATE TABLE avroExample
+    ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+    STORED AS INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+        OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+    TBLPROPERTIES ('avro.schema.literal'='{ "namespace": "org.apache.hive",
+        "name": "first_schema",
+        "type": "record",
+        "fields": [
+                { "name":"string1", "type":"string" },
+                { "name":"string2", "type":"string" }
+            ] }');
+
+--Use personalized custom SerDe(we may need to `ADD JAR xxx.jar` first to ensure we can find the serde_class,
+--or you may run into `CLASSNOTFOUND` exception)
+ADD JAR /tmp/hive_serde_example.jar;
+
+CREATE EXTERNAL TABLE family (id INT, name STRING)
+    ROW FORMAT SERDE 'com.ly.spark.serde.SerDeExample'
+    STORED AS INPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleInputFormat'
+        OUTPUTFORMAT 'com.ly.spark.example.serde.io.SerDeExampleOutputFormat'
+    LOCATION '/tmp/family/';
+
+--Use `CLUSTERED BY` clause to create bucket table without `SORTED BY`
+CREATE TABLE clustered_by_test1 (ID INT, AGE STRING)
+    CLUSTERED BY (ID)
+    INTO 4 BUCKETS
+    STORED AS ORC
+
+--Use `CLUSTERED BY` clause to create bucket table with `SORTED BY`
+CREATE TABLE clustered_by_test2 (ID INT, NAME STRING)
+    PARTITIONED BY (YEAR STRING)
+    CLUSTERED BY (ID, NAME)
+    SORTED BY (ID ASC)
+    INTO 3 BUCKETS
+    STORED AS PARQUET
 ```
 
 ### Related Statements

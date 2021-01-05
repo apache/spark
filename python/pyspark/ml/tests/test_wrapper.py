@@ -21,7 +21,9 @@ import py4j
 
 from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.regression import LinearRegression
-from pyspark.ml.wrapper import _java2py, _py2java, JavaParams, JavaWrapper
+from pyspark.ml.wrapper import (  # type: ignore[attr-defined]
+    _java2py, _py2java, JavaParams, JavaWrapper
+)
 from pyspark.testing.mllibutils import MLlibTestCase
 from pyspark.testing.mlutils import SparkSessionTestCase
 from pyspark.testing.utils import eventually
@@ -52,7 +54,7 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
         model.__del__()
 
         def condition():
-            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
                 model._java_obj.toString()
             self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
             return True
@@ -65,9 +67,9 @@ class JavaWrapperMemoryTests(SparkSessionTestCase):
             pass
 
         def condition():
-            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
                 model._java_obj.toString()
-            with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            with self.assertRaisesRegex(py4j.protocol.Py4JError, error_no_object):
                 summary._java_obj.toString()
             return True
 
@@ -117,10 +119,10 @@ class WrapperTests(MLlibTestCase):
         self.assertEqual(_java2py(self.sc, java_array), expected_str_list)
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_wrapper import *
+    from pyspark.ml.tests.test_wrapper import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

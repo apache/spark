@@ -22,8 +22,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -102,6 +103,36 @@ class ObjectSerializerPruningSuite extends PlanTest {
       // `name` in `GetStructField.equals`?
       val expected = serializerObject.copy(serializer = Seq(prunedSerializer))
         .select($"_1._1").analyze.transformAllExpressions {
+        case g: GetStructField => g.copy(name = None)
+      }
+      comparePlans(optimized, expected)
+    }
+  }
+
+  test("SPARK-32652: Prune nested serializers: RowEncoder") {
+    withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+      val testRelation = LocalRelation('i.struct(StructType.fromDDL("a int, b string")), 'j.int)
+      val rowEncoder = RowEncoder(new StructType()
+        .add("i", new StructType().add("a", "int").add("b", "string"))
+        .add("j", "int"))
+      val serializerObject = CatalystSerde.serialize(
+        CatalystSerde.deserialize(testRelation)(rowEncoder))(rowEncoder)
+      val query = serializerObject.select($"i.a")
+      val optimized = Optimize.execute(query.analyze)
+
+      val prunedSerializer = serializerObject.serializer.head.transformDown {
+        case CreateNamedStruct(children) => CreateNamedStruct(children.take(2))
+      }.transformUp {
+        // Aligns null literal in `If` expression to make it resolvable.
+        case i @ If(invoke: Invoke, Literal(null, dt), ser) if invoke.functionName == "isNullAt" &&
+            !dt.sameType(ser.dataType) =>
+          i.copy(trueValue = Literal(null, ser.dataType))
+      }.asInstanceOf[NamedExpression]
+
+      // `name` in `GetStructField` affects `comparePlans`. Maybe we can ignore
+      // `name` in `GetStructField.equals`?
+      val expected = serializerObject.copy(serializer = Seq(prunedSerializer))
+        .select($"i.a").analyze.transformAllExpressions {
         case g: GetStructField => g.copy(name = None)
       }
       comparePlans(optimized, expected)

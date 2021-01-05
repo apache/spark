@@ -86,7 +86,7 @@ Will output:
 In PySpark we provide Spark SQL data source API for loading image data as a DataFrame.
 
 {% highlight python %}
->>> df = spark.read.format("image").option("dropInvalid", true).load("data/mllib/images/origin/kittens")
+>>> df = spark.read.format("image").option("dropInvalid", True).load("data/mllib/images/origin/kittens")
 >>> df.select("image.origin", "image.width", "image.height").show(truncate=False)
 +-----------------------------------------------------------------------+-----+------+
 |origin                                                                 |width|height|

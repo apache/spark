@@ -21,6 +21,8 @@ import java.time.ZoneId
 
 import scala.util.control.NonFatal
 
+import org.scalatest.Assertions.fail
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
@@ -82,5 +84,12 @@ trait SQLHelper {
         }
       }
     }
+  }
+
+  protected lazy val sparkHome: String = {
+    if (!(sys.props.contains("spark.test.home") || sys.env.contains("SPARK_HOME"))) {
+      fail("spark.test.home or SPARK_HOME is not set.")
+    }
+    sys.props.getOrElse("spark.test.home", sys.env("SPARK_HOME"))
   }
 }

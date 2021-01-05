@@ -25,12 +25,13 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions._
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -296,6 +297,115 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("summary for binary and multiclass") {
+    val arr = new Array[LabeledPoint](300)
+      for (i <- 0 until 300) {
+        if (i < 100) {
+          arr(i) = new LabeledPoint(0.0, Vectors.dense(2.0, 2.0))
+        } else if (i < 200) {
+          arr(i) = new LabeledPoint(1.0, Vectors.dense(1.0, 2.0))
+        } else {
+          arr(i) = new LabeledPoint(2.0, Vectors.dense(0.0, 2.0))
+        }
+      }
+    val rdd = sc.parallelize(arr)
+    val multinomialDataset = spark.createDataFrame(rdd)
+
+    val rf = new RandomForestClassifier()
+
+    val brfModel = rf.fit(binaryDataset)
+    assert(brfModel.summary.isInstanceOf[BinaryRandomForestClassificationTrainingSummary])
+    assert(brfModel.summary.asBinary.isInstanceOf[BinaryRandomForestClassificationTrainingSummary])
+    assert(brfModel.binarySummary.isInstanceOf[RandomForestClassificationTrainingSummary])
+    assert(brfModel.summary.totalIterations === 0)
+    assert(brfModel.binarySummary.totalIterations === 0)
+
+    val mrfModel = rf.fit(multinomialDataset)
+    assert(mrfModel.summary.isInstanceOf[RandomForestClassificationTrainingSummary])
+    withClue("cannot get binary summary for multiclass model") {
+      intercept[RuntimeException] {
+        mrfModel.binarySummary
+      }
+    }
+    withClue("cannot cast summary to binary summary multiclass model") {
+      intercept[RuntimeException] {
+        mrfModel.summary.asBinary
+      }
+    }
+    assert(mrfModel.summary.totalIterations === 0)
+
+    val brfSummary = brfModel.evaluate(binaryDataset)
+    val mrfSummary = mrfModel.evaluate(multinomialDataset)
+    assert(brfSummary.isInstanceOf[BinaryRandomForestClassificationSummary])
+    assert(mrfSummary.isInstanceOf[RandomForestClassificationSummary])
+
+    assert(brfSummary.accuracy === brfModel.summary.accuracy)
+    assert(brfSummary.weightedPrecision === brfModel.summary.weightedPrecision)
+    assert(brfSummary.weightedRecall === brfModel.summary.weightedRecall)
+    assert(brfSummary.asBinary.areaUnderROC ~== brfModel.summary.asBinary.areaUnderROC relTol 1e-6)
+
+    // verify instance weight works
+    val rf2 = new RandomForestClassifier()
+      .setWeightCol("weight")
+
+    val binaryDatasetWithWeight =
+      binaryDataset.select(col("label"), col("features"), lit(2.5).as("weight"))
+
+    val multinomialDatasetWithWeight =
+      multinomialDataset.select(col("label"), col("features"), lit(10.0).as("weight"))
+
+    val brfModel2 = rf2.fit(binaryDatasetWithWeight)
+    assert(brfModel2.summary.isInstanceOf[BinaryRandomForestClassificationTrainingSummary])
+    assert(brfModel2.summary.asBinary.isInstanceOf[BinaryRandomForestClassificationTrainingSummary])
+    assert(brfModel2.binarySummary.isInstanceOf[BinaryRandomForestClassificationTrainingSummary])
+
+    val mrfModel2 = rf2.fit(multinomialDatasetWithWeight)
+    assert(mrfModel2.summary.isInstanceOf[RandomForestClassificationTrainingSummary])
+    withClue("cannot get binary summary for multiclass model") {
+      intercept[RuntimeException] {
+        mrfModel2.binarySummary
+      }
+    }
+    withClue("cannot cast summary to binary summary multiclass model") {
+      intercept[RuntimeException] {
+        mrfModel2.summary.asBinary
+      }
+    }
+
+    val brfSummary2 = brfModel2.evaluate(binaryDatasetWithWeight)
+    val mrfSummary2 = mrfModel2.evaluate(multinomialDatasetWithWeight)
+    assert(brfSummary2.isInstanceOf[BinaryRandomForestClassificationSummary])
+    assert(mrfSummary2.isInstanceOf[RandomForestClassificationSummary])
+
+    assert(brfSummary2.accuracy === brfModel2.summary.accuracy)
+    assert(brfSummary2.weightedPrecision === brfModel2.summary.weightedPrecision)
+    assert(brfSummary2.weightedRecall === brfModel2.summary.weightedRecall)
+    assert(brfSummary2.asBinary.areaUnderROC ~==
+      brfModel2.summary.asBinary.areaUnderROC relTol 1e-6)
+
+    assert(brfSummary.accuracy ~== brfSummary2.accuracy relTol 1e-6)
+    assert(brfSummary.weightedPrecision ~== brfSummary2.weightedPrecision relTol 1e-6)
+    assert(brfSummary.weightedRecall ~== brfSummary2.weightedRecall relTol 1e-6)
+    assert(brfSummary.asBinary.areaUnderROC ~== brfSummary2.asBinary.areaUnderROC relTol 1e-6)
+
+    assert(brfModel.summary.asBinary.accuracy ~==
+      brfModel2.summary.asBinary.accuracy relTol 1e-6)
+    assert(brfModel.summary.asBinary.weightedPrecision ~==
+      brfModel2.summary.asBinary.weightedPrecision relTol 1e-6)
+    assert(brfModel.summary.asBinary.weightedRecall ~==
+      brfModel2.summary.asBinary.weightedRecall relTol 1e-6)
+    assert(brfModel.summary.asBinary.areaUnderROC ~==
+      brfModel2.summary.asBinary.areaUnderROC relTol 1e-6)
+
+    assert(mrfSummary.accuracy ~== mrfSummary2.accuracy relTol 1e-6)
+    assert(mrfSummary.weightedPrecision ~== mrfSummary2.weightedPrecision relTol 1e-6)
+    assert(mrfSummary.weightedRecall ~== mrfSummary2.weightedRecall relTol 1e-6)
+
+    assert(mrfModel.summary.accuracy ~== mrfModel2.summary.accuracy relTol 1e-6)
+    assert(mrfModel.summary.weightedPrecision ~== mrfModel2.summary.weightedPrecision relTol 1e-6)
+    assert(mrfModel.summary.weightedRecall ~==mrfModel2.summary.weightedRecall relTol 1e-6)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////
@@ -318,6 +428,20 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 2)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("SPARK-33398: Load RandomForestClassificationModel prior to Spark 3.0") {
+    val path = testFile("ml-models/rfc-2.4.7")
+    val model = RandomForestClassificationModel.load(path)
+    assert(model.numClasses === 2)
+    assert(model.numFeatures === 692)
+    assert(model.getNumTrees === 2)
+    assert(model.totalNumNodes === 10)
+    assert(model.trees.map(_.numNodes) === Array(3, 7))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

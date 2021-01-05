@@ -21,15 +21,16 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.mockito.ArgumentMatchers.{any, eq => meq}
-import org.mockito.Mockito.{mock, never, times, verify, when}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito._
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.Tests.TEST_SCHEDULE_INTERVAL
+import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.Tests.TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, ResourceProfileManager, TaskResourceRequests}
+import org.apache.spark.resource._
 import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -267,7 +268,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("add executors multiple profiles initial num same as needed") {
     // test when the initial number of executors equals the number needed for the first
-    // stage using a non default profile to make sure we request the intitial number
+    // stage using a non default profile to make sure we request the initial number
     // properly. Here initial is 2, each executor in ResourceProfile 1 can have 2 tasks
     // per executor, and start a stage with 4 tasks, which would need 2 executors.
     val clock = new ManualClock(8888L)
@@ -499,6 +500,175 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
     doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
+  }
+
+  test("SPARK-31418: one stage being unschedulable") {
+    val clock = new ManualClock()
+    val conf = createConf(0, 5, 0).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    onExecutorAddedDefaultProfile(manager, "0")
+    val t1 = createTaskInfo(0, 0, executorId = s"0")
+    val t2 = createTaskInfo(1, 1, executorId = s"0")
+    post(SparkListenerTaskStart(0, 0, t1))
+    post(SparkListenerTaskStart(0, 0, t2))
+
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+
+    // Stage 0 becomes unschedulable due to excludeOnFailure
+    post(SparkListenerUnschedulableTaskSetAdded(0, 0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // Assert that we are getting additional executor to schedule unschedulable tasks
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+
+    // Add a new executor
+    onExecutorAddedDefaultProfile(manager, "1")
+    // Now once the task becomes schedulable, clear the unschedulableTaskSets
+    post(SparkListenerUnschedulableTaskSetRemoved(0, 0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+  }
+
+  test("SPARK-31418: multiple stages being unschedulable") {
+    val clock = new ManualClock()
+    val conf = createConf(0, 10, 0).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+    post(SparkListenerStageSubmitted(createStageInfo(1, 2)))
+    post(SparkListenerStageSubmitted(createStageInfo(2, 2)))
+
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+
+    // Add necessary executors
+    (0 to 2).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+
+    // Start all the tasks
+    (0 to 2).foreach {
+      i =>
+        val t1Info = createTaskInfo(0, (i * 2) + 1, executorId = s"${i / 2}")
+        val t2Info = createTaskInfo(1, (i * 2) + 2, executorId = s"${i / 2}")
+        post(SparkListenerTaskStart(i, 0, t1Info))
+        post(SparkListenerTaskStart(i, 0, t2Info))
+    }
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 3)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 3)
+
+    // Complete the stage 0 tasks.
+    val t1Info = createTaskInfo(0, 0, executorId = s"0")
+    val t2Info = createTaskInfo(1, 1, executorId = s"0")
+    post(SparkListenerTaskEnd(0, 0, null, Success, t1Info, new ExecutorMetrics, null))
+    post(SparkListenerTaskEnd(0, 0, null, Success, t2Info, new ExecutorMetrics, null))
+    post(SparkListenerStageCompleted(createStageInfo(0, 2)))
+
+    // Stage 1 and 2 becomes unschedulable now due to excludeOnFailure
+    post(SparkListenerUnschedulableTaskSetAdded(1, 0))
+    post(SparkListenerUnschedulableTaskSetAdded(2, 0))
+
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    // Assert that we are getting additional executor to schedule unschedulable tasks
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 4)
+
+    // Add a new executor
+    onExecutorAddedDefaultProfile(manager, "3")
+
+    // Now once the task becomes schedulable, clear the unschedulableTaskSets
+    post(SparkListenerUnschedulableTaskSetRemoved(1, 0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 4)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+  }
+
+  test("SPARK-31418: remove executors after unschedulable tasks end") {
+    val clock = new ManualClock()
+    val stage = createStageInfo(0, 10)
+    val conf = createConf(0, 6, 0).set(config.EXECUTOR_CORES, 2)
+    val manager = createManager(conf, clock = clock)
+    val updatesNeeded =
+      new mutable.HashMap[ResourceProfile, ExecutorAllocationManager.TargetNumUpdates]
+
+    post(SparkListenerStageSubmitted(stage))
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 1)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 2)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+    assert(addExecutorsToTargetForDefaultProfile(manager, updatesNeeded) === 0)
+    doUpdateRequest(manager, updatesNeeded.toMap, clock.getTimeMillis())
+
+    (0 to 4).foreach(execId => onExecutorAddedDefaultProfile(manager, execId.toString))
+    (0 to 9).map { i => createTaskInfo(i, i, executorId = s"${i / 2}") }.foreach {
+      info => post(SparkListenerTaskStart(0, 0, info))
+    }
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 5)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 5)
+
+    // 8 tasks (0 - 7) finished
+    (0 to 7).map { i => createTaskInfo(i, i, executorId = s"${i / 2}") }.foreach {
+      info => post(SparkListenerTaskEnd(0, 0, null, Success, info, new ExecutorMetrics, null))
+    }
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    (0 to 3).foreach { i => assert(removeExecutorDefaultProfile(manager, i.toString)) }
+    (0 to 3).foreach { i => onExecutorRemoved(manager, i.toString) }
+
+    // Now due to executor being excluded, the task becomes unschedulable
+    post(SparkListenerUnschedulableTaskSetAdded(0, 0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 2)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 2)
+
+    // New executor got added
+    onExecutorAddedDefaultProfile(manager, "5")
+
+    // Now once the task becomes schedulable, clear the unschedulableTaskSets
+    post(SparkListenerUnschedulableTaskSetRemoved(0, 0))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 1)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 1)
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(9, 9, "4"), new ExecutorMetrics, null))
+    // Unschedulable task successfully ran on the new executor provisioned
+    post(SparkListenerTaskEnd(0, 0, null, Success,
+      createTaskInfo(8, 8, "5"), new ExecutorMetrics, null))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    post(SparkListenerStageCompleted(stage))
+    clock.advance(1000)
+    manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
+    assert(numExecutorsTarget(manager, defaultProfile.id) === 0)
+    assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) == 0)
+    assert(removeExecutorDefaultProfile(manager, "4"))
+    onExecutorRemoved(manager, "4")
+    assert(removeExecutorDefaultProfile(manager, "5"))
+    onExecutorRemoved(manager, "5")
   }
 
   test("SPARK-30511 remove executors when speculative tasks end") {
@@ -1101,6 +1271,68 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(executorsPendingToRemove(manager).size === 6) // limit reached (1 executor remaining)
   }
 
+  test("mock polling loop remove with decommissioning") {
+    val clock = new ManualClock(2020L)
+    val manager = createManager(createConf(1, 20, 1, true), clock = clock)
+
+    // Remove idle executors on timeout
+    onExecutorAddedDefaultProfile(manager, "executor-1")
+    onExecutorAddedDefaultProfile(manager, "executor-2")
+    onExecutorAddedDefaultProfile(manager, "executor-3")
+    assert(executorsDecommissioning(manager).isEmpty)
+    assert(executorsPendingToRemove(manager).isEmpty)
+
+    // idle threshold not reached yet
+    clock.advance(executorIdleTimeout * 1000 / 2)
+    schedule(manager)
+    assert(manager.executorMonitor.timedOutExecutors().isEmpty)
+    assert(executorsPendingToRemove(manager).isEmpty)
+    assert(executorsDecommissioning(manager).isEmpty)
+
+    // idle threshold exceeded
+    clock.advance(executorIdleTimeout * 1000)
+    assert(manager.executorMonitor.timedOutExecutors().size === 3)
+    schedule(manager)
+    assert(executorsPendingToRemove(manager).isEmpty) // limit reached (1 executor remaining)
+    assert(executorsDecommissioning(manager).size === 2) // limit reached (1 executor remaining)
+
+    // Mark a subset as busy - only idle executors should be removed
+    onExecutorAddedDefaultProfile(manager, "executor-4")
+    onExecutorAddedDefaultProfile(manager, "executor-5")
+    onExecutorAddedDefaultProfile(manager, "executor-6")
+    onExecutorAddedDefaultProfile(manager, "executor-7")
+    assert(manager.executorMonitor.executorCount === 7)
+    assert(executorsPendingToRemove(manager).isEmpty) // no pending to be removed
+    assert(executorsDecommissioning(manager).size === 2) // 2 decommissioning
+    onExecutorBusy(manager, "executor-4")
+    onExecutorBusy(manager, "executor-5")
+    onExecutorBusy(manager, "executor-6") // 3 busy and 2 idle (of the 5 active ones)
+
+    // after scheduling, the previously timed out executor should be removed, since
+    // there are new active ones.
+    schedule(manager)
+    assert(executorsDecommissioning(manager).size === 3)
+
+    // advance the clock so that idle executors should time out and move to the pending list
+    clock.advance(executorIdleTimeout * 1000)
+    schedule(manager)
+    assert(executorsPendingToRemove(manager).size === 0)
+    assert(executorsDecommissioning(manager).size === 4)
+    assert(!executorsDecommissioning(manager).contains("executor-4"))
+    assert(!executorsDecommissioning(manager).contains("executor-5"))
+    assert(!executorsDecommissioning(manager).contains("executor-6"))
+
+    // Busy executors are now idle and should be removed
+    onExecutorIdle(manager, "executor-4")
+    onExecutorIdle(manager, "executor-5")
+    onExecutorIdle(manager, "executor-6")
+    schedule(manager)
+    assert(executorsDecommissioning(manager).size === 4)
+    clock.advance(executorIdleTimeout * 1000)
+    schedule(manager)
+    assert(executorsDecommissioning(manager).size === 6) // limit reached (1 executor remaining)
+  }
+
   test("listeners trigger add executors correctly") {
     val manager = createManager(createConf(1, 20, 1))
     assert(addTime(manager) === NOT_SET)
@@ -1356,7 +1588,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   test("SPARK-23365 Don't update target num executors when killing idle executors") {
     val clock = new ManualClock()
     val manager = createManager(
-      createConf(1, 2, 1).set(config.DYN_ALLOCATION_TESTING, false),
+      createConf(1, 2, 1),
       clock = clock)
 
     when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
@@ -1384,19 +1616,17 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     clock.advance(1000)
     manager invokePrivate _updateAndSyncNumExecutorsTarget(clock.nanoTime())
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
-    verify(client, never).killExecutors(any(), any(), any(), any())
+    assert(manager.executorMonitor.executorsPendingToRemove().isEmpty)
 
     // now we cross the idle timeout for executor-1, so we kill it.  the really important
     // thing here is that we do *not* ask the executor allocation client to adjust the target
     // number of executors down
-    when(client.killExecutors(Seq("executor-1"), false, false, false))
-      .thenReturn(Seq("executor-1"))
     clock.advance(3000)
     schedule(manager)
     assert(maxNumExecutorsNeededPerResourceProfile(manager, defaultProfile) === 1)
     assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
     // here's the important verify -- we did kill the executors, but did not adjust the target count
-    verify(client).killExecutors(Seq("executor-1"), false, false, false)
+    assert(manager.executorMonitor.executorsPendingToRemove() === Set("executor-1"))
   }
 
   test("SPARK-26758 check executor target number after idle time out ") {
@@ -1419,7 +1649,8 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
   private def createConf(
       minExecutors: Int = 1,
       maxExecutors: Int = 5,
-      initialExecutors: Int = 1): SparkConf = {
+      initialExecutors: Int = 1,
+      decommissioningEnabled: Boolean = false): SparkConf = {
     val sparkConf = new SparkConf()
       .set(config.DYN_ALLOCATION_ENABLED, true)
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS, minExecutors)
@@ -1432,9 +1663,11 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       .set(config.DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, s"${executorIdleTimeout.toString}s")
       .set(config.SHUFFLE_SERVICE_ENABLED, true)
       .set(config.DYN_ALLOCATION_TESTING, true)
-      // SPARK-22864: effectively disable the allocation schedule by setting the period to a
-      // really long value.
-      .set(TEST_SCHEDULE_INTERVAL, 10000L)
+      // SPARK-22864/SPARK-32287: effectively disable the allocation schedule for the tests so that
+      // we won't result in the race condition between thread "spark-dynamic-executor-allocation"
+      // and thread "pool-1-thread-1-ScalaTest-running".
+      .set(TEST_DYNAMIC_ALLOCATION_SCHEDULE_ENABLED, false)
+      .set(DECOMMISSION_ENABLED, decommissioningEnabled)
     sparkConf
   }
 
@@ -1500,6 +1733,10 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   private def executorsPendingToRemove(manager: ExecutorAllocationManager): Set[String] = {
     manager.executorMonitor.executorsPendingToRemove()
+  }
+
+  private def executorsDecommissioning(manager: ExecutorAllocationManager): Set[String] = {
+    manager.executorMonitor.executorsDecommissioning()
   }
 }
 

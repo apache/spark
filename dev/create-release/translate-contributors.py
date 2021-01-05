@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -17,7 +17,7 @@
 
 # This script translates invalid authors in the contributors list generated
 # by generate-contributors.py. When the script encounters an author name that
-# is considered invalid, it searches Github and JIRA in an attempt to search
+# is considered invalid, it searches GitHub and JIRA in an attempt to search
 # for replacements. This tool runs in two modes:
 #
 # (1) Interactive mode: For each invalid author name, this script presents
@@ -31,7 +31,15 @@
 import os
 import sys
 
-from releaseutils import *
+from releaseutils import JIRA, JIRAError, get_jira_name, Github, get_github_name, \
+    contributors_file_name, is_valid_author, raw_input, capitalize_author, yesOrNoPrompt
+
+try:
+    import unidecode
+except ImportError:
+    print("This tool requires the unidecode library to decode obscure github usernames")
+    print("Install using 'sudo pip install unidecode'")
+    sys.exit(-1)
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
@@ -60,7 +68,7 @@ if len(sys.argv) > 1:
 if INTERACTIVE_MODE:
     print("Running in interactive mode. To disable this, provide the --non-interactive flag.")
 
-# Setup Github and JIRA clients
+# Setup GitHub and JIRA clients
 jira_options = {"server": JIRA_API_BASE}
 jira_client = JIRA(options=jira_options, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
 github_client = Github(GITHUB_API_TOKEN)
@@ -81,11 +89,11 @@ known_translations_file = open(known_translations_file_name, "a")
 
 # Generate candidates for the given author. This should only be called if the given author
 # name does not represent a full name as this operation is somewhat expensive. Under the
-# hood, it makes several calls to the Github and JIRA API servers to find the candidates.
+# hood, it makes several calls to the GitHub and JIRA API servers to find the candidates.
 #
 # This returns a list of (candidate name, source) 2-tuples. E.g.
 # [
-#   (NOT_FOUND, "No full name found for Github user andrewor14"),
+#   (NOT_FOUND, "No full name found for GitHub user andrewor14"),
 #   ("Andrew Or", "Full name of JIRA user andrewor14"),
 #   ("Andrew Orso", "Full name of SPARK-1444 assignee andrewor14"),
 #   ("Andrew Ordall", "Full name of SPARK-1663 assignee andrewor14"),
@@ -96,12 +104,12 @@ NOT_FOUND = "Not found"
 
 def generate_candidates(author, issues):
     candidates = []
-    # First check for full name of Github user
+    # First check for full name of GitHub user
     github_name = get_github_name(author, github_client)
     if github_name:
-        candidates.append((github_name, "Full name of Github user %s" % author))
+        candidates.append((github_name, "Full name of GitHub user %s" % author))
     else:
-        candidates.append((NOT_FOUND, "No full name found for Github user %s" % author))
+        candidates.append((NOT_FOUND, "No full name found for GitHub user %s" % author))
     # Then do the same for JIRA user
     jira_name = get_jira_name(author, jira_client)
     if jira_name:
@@ -135,7 +143,7 @@ def generate_candidates(author, issues):
     # Note that the candidate name may already be in unicode (JIRA returns this)
     for i, (candidate, source) in enumerate(candidates):
         try:
-            candidate = unicode(candidate, "UTF-8")
+            candidate = unicode(candidate, "UTF-8")  # noqa: F821
         except TypeError:
             # already in unicode
             pass
@@ -143,7 +151,7 @@ def generate_candidates(author, issues):
         candidates[i] = (candidate, source)
     return candidates
 
-# Translate each invalid author by searching for possible candidates from Github and JIRA
+# Translate each invalid author by searching for possible candidates from GitHub and JIRA
 # In interactive mode, this script presents the user with a list of choices and have the user
 # select from this list. Additionally, the user may also choose to enter a custom name.
 # In non-interactive mode, this script picks the first valid author name from the candidates
@@ -172,12 +180,12 @@ for i, line in enumerate(lines):
         issues = temp_author.split("/")[1:]
         candidates = generate_candidates(author, issues)
         # Print out potential replacement candidates along with the sources, e.g.
-        #   [X] No full name found for Github user andrewor14
+        #   [X] No full name found for GitHub user andrewor14
         #   [X] No assignee found for SPARK-1763
         #   [0] Andrew Or - Full name of JIRA user andrewor14
         #   [1] Andrew Orso - Full name of SPARK-1444 assignee andrewor14
         #   [2] Andrew Ordall - Full name of SPARK-1663 assignee andrewor14
-        #   [3] andrewor14 - Raw Github username
+        #   [3] andrewor14 - Raw GitHub username
         #   [4] Custom
         candidate_names = []
         bad_prompts = []  # Prompts that can't actually be selected; print these first.
@@ -199,7 +207,7 @@ for i, line in enumerate(lines):
             print(p)
         # In interactive mode, additionally provide "custom" option and await user response
         if INTERACTIVE_MODE:
-            print("    [%d] %s - Raw Github username" % (raw_index, author))
+            print("    [%d] %s - Raw GitHub username" % (raw_index, author))
             print("    [%d] Custom" % custom_index)
             response = raw_input("    Your choice: ")
             last_index = custom_index

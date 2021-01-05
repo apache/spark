@@ -184,22 +184,22 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "distinct function",
     CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
-    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
+    "Function hex does not support DISTINCT" :: Nil)
 
   errorTest(
     "non aggregate function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT hex(a) FILTER (WHERE c = 1) FROM TaBlE2"),
-    "DISTINCT or FILTER specified, but hex is not an aggregate function" :: Nil)
+    "Function hex does not support FILTER clause" :: Nil)
 
   errorTest(
     "distinct window function",
     CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) OVER () FROM TaBlE"),
-    "DISTINCT or FILTER specified, but percent_rank is not an aggregate function" :: Nil)
+    "Function percent_rank does not support DISTINCT" :: Nil)
 
   errorTest(
     "window function with filter predicate",
     CatalystSqlParser.parsePlan("SELECT percent_rank(a) FILTER (WHERE c > 1) OVER () FROM TaBlE2"),
-    "DISTINCT or FILTER specified, but percent_rank is not an aggregate function" :: Nil)
+    "Function percent_rank does not support FILTER clause" :: Nil)
 
   errorTest(
     "higher order function with filter predicate",
@@ -208,14 +208,29 @@ class AnalysisErrorSuite extends AnalysisTest {
     "FILTER predicate specified, but aggregate is not an aggregate function" :: Nil)
 
   errorTest(
-    "DISTINCT aggregate function with filter predicate",
-    CatalystSqlParser.parsePlan("SELECT count(DISTINCT a) FILTER (WHERE c > 1) FROM TaBlE2"),
-    "DISTINCT and FILTER cannot be used in aggregate functions at the same time" :: Nil)
-
-  errorTest(
     "non-deterministic filter predicate in aggregate functions",
     CatalystSqlParser.parsePlan("SELECT count(a) FILTER (WHERE rand(int(c)) > 1) FROM TaBlE2"),
     "FILTER expression is non-deterministic, it cannot be used in aggregate functions" :: Nil)
+
+  errorTest(
+    "function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT hex(a) IGNORE NULLS FROM TaBlE2"),
+    "Function hex does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "some window function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(a) IGNORE NULLS FROM TaBlE2"),
+    "Function percent_rank does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "aggregate function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT count(a) IGNORE NULLS FROM TaBlE2"),
+    "Function count does not support IGNORE NULLS" :: Nil)
+
+  errorTest(
+    "higher order function don't support ignore nulls",
+    CatalystSqlParser.parsePlan("SELECT aggregate(array(1, 2, 3), 0, (acc, x) -> acc + x) " +
+      "IGNORE NULLS"), "Function aggregate does not support IGNORE NULLS" :: Nil)
 
   errorTest(
     "nested aggregate functions",
@@ -236,7 +251,29 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as("window")),
-    "window frame" :: "must match the required frame" :: Nil)
+    "Cannot specify window frame for lead function" :: Nil)
+
+  errorTest(
+    "the offset of nth_value window function is negative or zero",
+    testRelation2.select(
+      WindowExpression(
+        new NthValue(AttributeReference("b", IntegerType)(), Literal(0)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
+    "The 'offset' argument of nth_value must be greater than zero but it is 0." :: Nil)
+
+  errorTest(
+    "the offset of nth_value window function is not int literal",
+    testRelation2.select(
+      WindowExpression(
+        new NthValue(AttributeReference("b", IntegerType)(), Literal(true)),
+        WindowSpecDefinition(
+          UnresolvedAttribute("a") :: Nil,
+          SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
+          SpecifiedWindowFrame(RowFrame, Literal(0), Literal(0)))).as("window")),
+    "argument 2 requires int type, however, 'true' is of boolean type." :: Nil)
 
   errorTest(
     "too many generators",
@@ -682,5 +719,18 @@ class AnalysisErrorSuite extends AnalysisTest {
           Alias(Literal(1), "x")() :: Nil,
           UnresolvedRelation(TableIdentifier("t", Option("nonexist")))))))
     assertAnalysisError(plan, "Table or view not found:" :: Nil)
+  }
+
+  test("SPARK-33909: Check rand functions seed is legal at analyer side") {
+    Seq(Rand("a".attr), Randn("a".attr)).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"Input argument to ${r.prettyName} must be a constant." :: Nil)
+    }
+    Seq(Rand(1.0), Rand("1"), Randn("a")).foreach { r =>
+      val plan = Project(Seq(r.as("r")), testRelation)
+      assertAnalysisError(plan,
+        s"data type mismatch: argument 1 requires (int or bigint) type" :: Nil)
+    }
   }
 }

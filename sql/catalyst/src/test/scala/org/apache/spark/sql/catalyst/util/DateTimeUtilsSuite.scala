@@ -23,13 +23,15 @@ import java.time.{Instant, LocalDate, LocalDateTime, LocalTime, ZoneId}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -37,12 +39,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   private def defaultZoneId = ZoneId.systemDefault()
 
   test("nanoseconds truncation") {
-    val tf = TimestampFormatter.getFractionFormatter(DateTimeUtils.defaultTimeZone.toZoneId)
+    val tf = TimestampFormatter.getFractionFormatter(ZoneId.systemDefault())
     def checkStringToTimestamp(originalTime: String, expectedParsedTime: String): Unit = {
       val parsedTimestampOp = DateTimeUtils.stringToTimestamp(
         UTF8String.fromString(originalTime), defaultZoneId)
       assert(parsedTimestampOp.isDefined, "timestamp with nanoseconds was not parsed correctly")
-      assert(DateTimeUtils.timestampToString(tf, parsedTimestampOp.get) === expectedParsedTime)
+      assert(tf.format(parsedTimestampOp.get) === expectedParsedTime)
     }
 
     checkStringToTimestamp("2015-01-02 00:00:00.123456789", "2015-01-02 00:00:00.123456")
@@ -69,17 +71,17 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   }
 
   test("us and julian day") {
-    val (d, ns) = toJulianDay(0)
+    val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(0))
     assert(d === JULIAN_DAY_OF_EPOCH)
     assert(ns === 0)
-    assert(fromJulianDay(d, ns) == 0L)
+    assert(rebaseJulianToGregorianMicros(fromJulianDay(d, ns)) == 0L)
 
     Seq(Timestamp.valueOf("2015-06-11 10:10:10.100"),
       Timestamp.valueOf("2015-06-11 20:10:10.100"),
       Timestamp.valueOf("1900-06-11 20:10:10.100")).foreach { t =>
-      val (d, ns) = toJulianDay(fromJavaTimestamp(t))
+      val (d, ns) = toJulianDay(RebaseDateTime.rebaseGregorianToJulianMicros(fromJavaTimestamp(t)))
       assert(ns > 0)
-      val t1 = toJavaTimestamp(fromJulianDay(d, ns))
+      val t1 = toJavaTimestamp(rebaseJulianToGregorianMicros(fromJulianDay(d, ns)))
       assert(t.equals(t1))
     }
   }
@@ -121,7 +123,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkFromToJavaDate(new Date(df2.parse("1776-07-04 18:30:00 UTC").getTime))
   }
 
-  private def toDate(s: String, zoneId: ZoneId = UTC): Option[SQLDate] = {
+  private def toDate(s: String, zoneId: ZoneId = UTC): Option[Int] = {
     stringToDate(UTF8String.fromString(s), zoneId)
   }
 
@@ -149,7 +151,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08").isEmpty)
   }
 
-  private def toTimestamp(str: String, zoneId: ZoneId): Option[SQLTimestamp] = {
+  private def toTimestamp(str: String, zoneId: ZoneId): Option[Long] = {
     stringToTimestamp(UTF8String.fromString(str), zoneId)
   }
 
@@ -516,18 +518,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(time == None)
   }
 
-  test("truncTimestamp") {
-    def testTrunc(
-        level: Int,
-        expected: String,
-        inputTS: SQLTimestamp,
-        zoneId: ZoneId = defaultZoneId): Unit = {
-      val truncated =
-        DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
-      val expectedTS = toTimestamp(expected, defaultZoneId)
-      assert(truncated === expectedTS.get)
-    }
+  def testTrunc(
+      level: Int,
+      expected: String,
+      inputTS: Long,
+      zoneId: ZoneId = defaultZoneId): Unit = {
+    val truncated = DateTimeUtils.truncTimestamp(inputTS, level, zoneId)
+    val expectedTS = toTimestamp(expected, defaultZoneId)
+    assert(truncated === expectedTS.get)
+  }
 
+  test("SPARK-33404: test truncTimestamp when time zone offset from UTC has a " +
+    "granularity of seconds") {
+    for (zid <- ALL_TIMEZONES) {
+      withDefaultTimeZone(zid) {
+        val inputTS = DateTimeUtils.stringToTimestamp(
+          UTF8String.fromString("1769-10-17T17:10:02.123456"), defaultZoneId)
+        testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "1769-10-17T17:10:02", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "1769-10-17T17:10:02.123", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_MICROSECOND, "1769-10-17T17:10:02.123456",
+          inputTS.get, zid)
+      }
+    }
+  }
+
+  test("truncTimestamp") {
     val defaultInputTS = DateTimeUtils.stringToTimestamp(
       UTF8String.fromString("2015-03-05T09:32:05.359123"), defaultZoneId)
     val defaultInputTS1 = DateTimeUtils.stringToTimestamp(
@@ -658,5 +674,12 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       assert(toDate("today", zoneId).get === today)
       assert(toDate("tomorrow CET ", zoneId).get === today + 1)
     }
+  }
+
+  test("parsing day of week") {
+    assert(getDayOfWeekFromString(UTF8String.fromString("THU")) == 0)
+    assert(getDayOfWeekFromString(UTF8String.fromString("MONDAY")) == 4)
+    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("xx")))
+    intercept[IllegalArgumentException](getDayOfWeekFromString(UTF8String.fromString("\"quote")))
   }
 }

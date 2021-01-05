@@ -264,6 +264,20 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileSystem.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use "FileSystem.get(Configuration conf)"? If the input
+      configuration is not set properly, a default FileSystem instance will be returned. It can
+      lead to errors when you deal with multiple file systems. Please consider using
+      "FileSystem.get(URI uri, Configuration conf)" or "Path.getFileSystem(Configuration conf)" instead.
+      If you must use the method "FileSystem.get(Configuration conf)", wrap the code block with
+      // scalastyle:off FileSystemGet
+      FileSystem.get(...)
+      // scalastyle:on FileSystemGet
+    ]]></customMessage>
+  </check>
+
   <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">extractOpt</parameter></parameters>
     <customMessage>Use jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter

@@ -17,11 +17,14 @@
 package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
+import java.time.Instant
 
 import scala.util.Random
 
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -36,6 +39,8 @@ import org.apache.spark.sql.types._
  * }}}
  */
 object AvroReadBenchmark extends SqlBasedBenchmark {
+  import spark.implicits._
+
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
@@ -186,6 +191,60 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
+    val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
+    val colsNum = 100
+    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", TimestampType))
+    val schema = StructType(StructField("key", LongType) +: fields)
+    def columns(): Seq[Column] = {
+      val ts = Seq.tabulate(colsNum) { i =>
+        lit(Instant.ofEpochSecond(-30610224000L + i * 123456)).as(s"col$i")
+      }
+      ($"id" % 1000).as("key") +: ts
+    }
+    withTempPath { path =>
+      // Write and read timestamp in the LEGACY mode to make timestamp conversions more expensive
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+        spark.range(rowsNum).select(columns(): _*)
+          .write
+          .format("avro")
+          .save(path.getAbsolutePath)
+      }
+      def readback = {
+        spark.read
+          .schema(schema)
+          .format("avro")
+          .load(path.getAbsolutePath)
+      }
+
+      benchmark.addCase("w/o filters", numIters) { _ =>
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+          readback.noop()
+        }
+      }
+
+      def withFilter(configEnabled: Boolean): Unit = {
+        withSQLConf(
+          SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
+          SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
+          readback.filter($"key" === 0).noop()
+        }
+      }
+
+      benchmark.addCase("pushdown disabled", numIters) { _ =>
+        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+          withFilter(configEnabled = false)
+        }
+      }
+
+      benchmark.addCase("w/ filters", numIters) { _ =>
+        withFilter(configEnabled = true)
+      }
+
+      benchmark.run()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("SQL Single Numeric Column Scan") {
       Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dataType =>
@@ -211,5 +270,8 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       columnsBenchmark(1024 * 1024 * 1, 200)
       columnsBenchmark(1024 * 1024 * 1, 300)
     }
+    // Benchmark pushdown filters that refer to top-level columns.
+    // TODO (SPARK-32328): Add benchmarks for filters with nested column attributes.
+    filtersPushdownBenchmark(rowsNum = 1000 * 1000, numIters = 3)
   }
 }

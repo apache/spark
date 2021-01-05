@@ -341,8 +341,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // to the -ith element before the end of the sequence. If a start index i is 0, it
     // refers to the first element.
     int len = numChars();
+    // `len + pos` does not overflow as `len >= 0`.
     int start = (pos > 0) ? pos -1 : ((pos < 0) ? len + pos : 0);
-    int end = (length == Integer.MAX_VALUE) ? len : start + length;
+
+    int end;
+    if ((long) start + length > Integer.MAX_VALUE) {
+      end = Integer.MAX_VALUE;
+    } else if ((long) start + length < Integer.MIN_VALUE) {
+      end = Integer.MIN_VALUE;
+    } else {
+      end = start + length;
+    }
     return substring(start, end);
   }
 
@@ -554,7 +563,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Trims whitespaces (<= ASCII 32) from both ends of this string.
+   * Trims whitespaces ({@literal <=} ASCII 32) from both ends of this string.
    *
    * Note that, this method is the same as java's {@link String#trim}, and different from
    * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
@@ -566,14 +575,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimAll() {
     int s = 0;
     // skip all of the whitespaces (<=0x20) in the left side
-    while (s < this.numBytes && getByte(s) <= ' ') s++;
+    while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
     // skip all of the whitespaces (<=0x20) in the right side
     int e = this.numBytes - 1;
-    while (e > s && getByte(e) <= ' ') e--;
+    while (e > s && Character.isWhitespace(getByte(e))) e--;
     if (s == 0 && e == numBytes - 1) {
       // Nothing trimmed
       return this;
@@ -626,13 +635,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft(UTF8String trimString) {
     if (trimString == null) return null;
     // the searching byte position in the source string
-    int srchIdx = 0;
+    int searchIdx = 0;
     // the first beginning byte position of a non-matching character
     int trimIdx = 0;
 
-    while (srchIdx < numBytes) {
+    while (searchIdx < numBytes) {
       UTF8String searchChar = copyUTF8String(
-          srchIdx, srchIdx + numBytesForFirstByte(this.getByte(srchIdx)) - 1);
+          searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
       int searchCharBytes = searchChar.numBytes;
       // try to find the matching for the searchChar in the trimString set
       if (trimString.find(searchChar, 0) >= 0) {
@@ -641,9 +650,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // no matching, exit the search
         break;
       }
-      srchIdx += searchCharBytes;
+      searchIdx += searchCharBytes;
     }
-    if (srchIdx == 0) {
+    if (searchIdx == 0) {
       // Nothing trimmed
       return this;
     }
@@ -1110,11 +1119,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toLong(LongWrapper toLongResult, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && getByte(end) <= ' ') end--;
+    while (end > offset && Character.isWhitespace(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';
@@ -1207,11 +1216,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   private boolean toInt(IntWrapper intWrapper, boolean allowDecimal) {
     int offset = 0;
-    while (offset < this.numBytes && getByte(offset) <= ' ') offset++;
+    while (offset < this.numBytes && Character.isWhitespace(getByte(offset))) offset++;
     if (offset == this.numBytes) return false;
 
     int end = this.numBytes - 1;
-    while (end > offset && getByte(end) <= ' ') end--;
+    while (end > offset && Character.isWhitespace(getByte(end))) end--;
 
     byte b = getByte(offset);
     final boolean negative = b == '-';

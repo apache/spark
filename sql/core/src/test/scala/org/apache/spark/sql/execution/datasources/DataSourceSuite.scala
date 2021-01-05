@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.test.SharedSparkSession
 
-class DataSourceSuite extends SharedSparkSession {
+class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
   import TestPaths._
 
   test("test glob and non glob paths") {
@@ -36,7 +37,8 @@ class DataSourceSuite extends SharedSparkSession {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true
+      checkFilesExist = true,
+      enableGlobbing = true
     )
 
     assert(resultPaths.toSet === allPathsInFs.toSet)
@@ -50,7 +52,8 @@ class DataSourceSuite extends SharedSparkSession {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true
+      checkFilesExist = true,
+      enableGlobbing = true
     )
 
     assert(
@@ -71,7 +74,8 @@ class DataSourceSuite extends SharedSparkSession {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = true
+      checkFilesExist = true,
+      enableGlobbing = true
     )
 
     assert(
@@ -91,7 +95,8 @@ class DataSourceSuite extends SharedSparkSession {
       ),
       hadoopConf,
       checkEmptyGlobPath = true,
-      checkFilesExist = false
+      checkFilesExist = false,
+      enableGlobbing = true
     )
 
     assert(
@@ -113,7 +118,8 @@ class DataSourceSuite extends SharedSparkSession {
         ),
         hadoopConf,
         checkEmptyGlobPath = true,
-        checkFilesExist = true
+        checkFilesExist = true,
+        enableGlobbing = true
       )
     )
   }
@@ -128,9 +134,22 @@ class DataSourceSuite extends SharedSparkSession {
         ),
         hadoopConf,
         checkEmptyGlobPath = true,
-        checkFilesExist = true
+        checkFilesExist = true,
+        enableGlobbing = true
       )
     )
+  }
+
+  test("Data source options should be propagated in method checkAndGlobPathIfNecessary") {
+    val dataSourceOptions = Map("fs.defaultFS" -> "nonexistentFs://nonexistentFs")
+    val dataSource = DataSource(spark, "parquet", Seq("/path3"), options = dataSourceOptions)
+    val checkAndGlobPathIfNecessary = PrivateMethod[Seq[Path]]('checkAndGlobPathIfNecessary)
+
+    val message = intercept[java.io.IOException] {
+      dataSource invokePrivate checkAndGlobPathIfNecessary(false, false)
+    }.getMessage
+    val expectMessage = "No FileSystem for scheme nonexistentFs"
+    assert(message.filterNot(Set(':', '"').contains) == expectMessage)
   }
 }
 

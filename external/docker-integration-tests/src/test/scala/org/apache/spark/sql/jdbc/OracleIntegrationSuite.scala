@@ -21,6 +21,8 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.{Properties, TimeZone}
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -31,27 +33,27 @@ import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 /**
- * This patch was tested using the Oracle docker. Created this integration suite for the same.
- * The ojdbc6-11.2.0.2.0.jar was to be downloaded from the maven repository. Since there was
- * no jdbc jar available in the maven repository, the jar was downloaded from oracle site
- * manually and installed in the local; thus tested. So, for SparkQA test case run, the
- * ojdbc jar might be manually placed in the local maven repository(com/oracle/ojdbc6/11.2.0.2.0)
- * while Spark QA test run.
- *
  * The following would be the steps to test this
  * 1. Build Oracle database in Docker, please refer below link about how to.
  *    https://github.com/oracle/docker-images/blob/master/OracleDatabase/SingleInstance/README.md
  * 2. export ORACLE_DOCKER_IMAGE_NAME=$ORACLE_DOCKER_IMAGE_NAME
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
- * 4. Download oracle 11g driver jar and put it in maven local repo:
- *    (com/oracle/ojdbc6/11.2.0.2.0/ojdbc6-11.2.0.2.0.jar)
- * 5. The timeout and interval parameter to be increased from 60,1 to a high value for oracle test
- *    in DockerJDBCIntegrationSuite.scala (Locally tested with 200,200 and executed successfully).
- * 6. Run spark test - ./build/sbt "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
+ *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
- * All tests in this suite are ignored because of the dependency with the oracle jar from maven
- * repository.
+ * An actual sequence of commands to run the test is as follows
+ *
+ *  $ git clone https://github.com/oracle/docker-images.git
+ *  // Head SHA: 3e352a22618070595f823977a0fd1a3a8071a83c
+ *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
+ *  $ ./buildDockerImage.sh -v 18.4.0 -x
+ *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ cd $SPARK_HOME
+ *  $ ./build/sbt -Pdocker-integration-tests
+ *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *
+ * It has been validated with 18.4.0 Express Edition.
  */
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSparkSession {
@@ -60,7 +62,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   override val db = new DatabaseOnDocker {
     override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
-      "ORACLE_ROOT_PASSWORD" -> "oracle"
+      "ORACLE_PWD" -> "oracle"
     )
     override val usesIpc = false
     override val jdbcPort: Int = 1521
@@ -68,7 +70,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       s"jdbc:oracle:thin:system/oracle@//$ip:$port/xe"
   }
 
+  override val connectionTimeout = timeout(7.minutes)
+
   override def dataPreparation(conn: Connection): Unit = {
+    // In 18.4.0 Express Edition auto commit is enabled by default.
+    conn.setAutoCommit(false)
     conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
       .executeUpdate()
     conn.prepareStatement(
@@ -395,7 +401,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val values = rows(0)
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
-    assert(values.getBoolean(2).equals(false))
+    assert(values.getBoolean(2) == false)
   }
 
   test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
@@ -511,5 +517,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
          |   oracle.jdbc.mapDateToTimestamp false)
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
+  }
+
+  test("SPARK-32992: map Oracle's ROWID type to StringType") {
+    val rows = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT ROWID from datetime")
+      .load()
+      .collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.lang.String"))
+    assert(!rows(0).getString(0).isEmpty)
   }
 }

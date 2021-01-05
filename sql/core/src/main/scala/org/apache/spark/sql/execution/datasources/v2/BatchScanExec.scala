@@ -40,7 +40,7 @@ case class BatchScanExec(
 
   override def hashCode(): Int = batch.hashCode()
 
-  override lazy val partitions: Seq[InputPartition] = batch.planInputPartitions()
+  @transient override lazy val partitions: Seq[InputPartition] = batch.planInputPartitions()
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 

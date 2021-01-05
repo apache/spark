@@ -203,7 +203,7 @@ private[sql] object JDBCRelation extends Logging {
         case TimestampType =>
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
-          DateTimeUtils.timestampToString(timestampFormatter, value)
+          timestampFormatter.format(value)
       }
       s"'$dateTimeStr'"
     }

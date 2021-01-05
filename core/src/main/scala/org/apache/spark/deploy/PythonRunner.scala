@@ -44,7 +44,7 @@ object PythonRunner {
       .orElse(sparkConf.get(PYSPARK_PYTHON))
       .orElse(sys.env.get("PYSPARK_DRIVER_PYTHON"))
       .orElse(sys.env.get("PYSPARK_PYTHON"))
-      .getOrElse("python")
+      .getOrElse("python3")
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -69,7 +69,7 @@ object PythonRunner {
     pathElements ++= formattedPyFiles
     pathElements += PythonUtils.sparkPythonPath
     pathElements += sys.env.getOrElse("PYTHONPATH", "")
-    val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
+    val pythonPath = PythonUtils.mergePythonPaths(pathElements.toSeq: _*)
 
     // Launch Python process
     val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)

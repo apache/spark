@@ -24,8 +24,10 @@ import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest._
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{ExecutorDeadException, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.BlockDataManager
@@ -86,7 +88,7 @@ class NettyBlockTransferServiceSuite
   }
 
   test("SPARK-27637: test fetch block with executor dead") {
-    implicit val exectionContext = ExecutionContext.global
+    implicit val executionContext = ExecutionContext.global
     val port = 17634 + Random.nextInt(10000)
     logInfo("random port for test: " + port)
 
@@ -116,8 +118,8 @@ class NettyBlockTransferServiceSuite
       .thenAnswer(_ => {hitExecutorDeadException = true})
 
     service0 = createService(port, driverEndpointRef)
-    val clientFactoryField = service0.getClass.getField(
-      "org$apache$spark$network$netty$NettyBlockTransferService$$clientFactory")
+    val clientFactoryField = service0.getClass
+      .getSuperclass.getSuperclass.getDeclaredField("clientFactory")
     clientFactoryField.setAccessible(true)
     clientFactoryField.set(service0, clientFactory)
 

@@ -39,14 +39,16 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
    * The imputation strategy. Currently only "mean" and "median" are supported.
    * If "mean", then replace missing values using the mean value of the feature.
    * If "median", then replace missing values using the approximate median value of the feature.
+   * If "mode", then replace missing using the most frequent value of the feature.
    * Default: mean
    *
    * @group param
    */
   final val strategy: Param[String] = new Param(this, "strategy", s"strategy for imputation. " +
     s"If ${Imputer.mean}, then replace missing values using the mean value of the feature. " +
-    s"If ${Imputer.median}, then replace missing values using the median value of the feature.",
-    ParamValidators.inArray[String](Array(Imputer.mean, Imputer.median)))
+    s"If ${Imputer.median}, then replace missing values using the median value of the feature. " +
+    s"If ${Imputer.mode}, then replace missing values using the most frequent value of " +
+    s"the feature.", ParamValidators.inArray[String](Imputer.supportedStrategies))
 
   /** @group getParam */
   def getStrategy: String = $(strategy)
@@ -63,6 +65,8 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
 
   /** @group getParam */
   def getMissingValue: Double = $(missingValue)
+
+  setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
 
   /** Returns the input and output column names corresponding in pair. */
   private[feature] def getInOutCols(): (Array[String], Array[String]) = {
@@ -102,7 +106,7 @@ private[feature] trait ImputerParams extends Params with HasInputCol with HasInp
  * For example, if the input column is IntegerType (1, 2, 4, null),
  * the output will be IntegerType (1, 2, 4, 2) after mean imputation.
  *
- * Note that the mean/median value is computed after filtering out missing values.
+ * Note that the mean/median/mode value is computed after filtering out missing values.
  * All Null values in the input columns are treated as missing, and so are also imputed. For
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
@@ -130,7 +134,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   /**
-   * Imputation strategy. Available options are ["mean", "median"].
+   * Imputation strategy. Available options are ["mean", "median", "mode"].
    * @group setParam
    */
   @Since("2.2.0")
@@ -144,46 +148,47 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   @Since("3.0.0")
   def setRelativeError(value: Double): this.type = set(relativeError, value)
 
-  setDefault(strategy -> Imputer.mean, missingValue -> Double.NaN)
-
   override def fit(dataset: Dataset[_]): ImputerModel = {
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
     val (inputColumns, _) = getInOutCols()
-
     val cols = inputColumns.map { inputCol =>
       when(col(inputCol).equalTo($(missingValue)), null)
         .when(col(inputCol).isNaN, null)
         .otherwise(col(inputCol))
-        .cast("double")
+        .cast(DoubleType)
         .as(inputCol)
     }
+    val numCols = cols.length
 
     val results = $(strategy) match {
       case Imputer.mean =>
         // Function avg will ignore null automatically.
         // For a column only containing null, avg will return null.
         val row = dataset.select(cols.map(avg): _*).head()
-        Array.range(0, inputColumns.length).map { i =>
-          if (row.isNullAt(i)) {
-            Double.NaN
-          } else {
-            row.getDouble(i)
-          }
-        }
+        Array.tabulate(numCols)(i => if (row.isNullAt(i)) Double.NaN else row.getDouble(i))
 
       case Imputer.median =>
         // Function approxQuantile will ignore null automatically.
         // For a column only containing null, approxQuantile will return an empty array.
         dataset.select(cols: _*).stat.approxQuantile(inputColumns, Array(0.5), $(relativeError))
-          .map { array =>
-            if (array.isEmpty) {
-              Double.NaN
-            } else {
-              array.head
-            }
-          }
+          .map(_.headOption.getOrElse(Double.NaN))
+
+      case Imputer.mode =>
+        import spark.implicits._
+        // If there is more than one mode, choose the smallest one to keep in line
+        // with sklearn.impute.SimpleImputer (using scipy.stats.mode).
+        val modes = dataset.select(cols: _*).flatMap { row =>
+          // Ignore null.
+          Iterator.range(0, numCols)
+            .flatMap(i => if (row.isNullAt(i)) None else Some((i, row.getDouble(i))))
+        }.toDF("index", "value")
+         .groupBy("index", "value").agg(negate(count(lit(0))).as("negative_count"))
+         .groupBy("index").agg(min(struct("negative_count", "value")).as("mode"))
+         .select("index", "mode.value")
+         .as[(Int, Double)].collect().toMap
+        Array.tabulate(numCols)(i => modes.getOrElse(i, Double.NaN))
     }
 
     val emptyCols = inputColumns.zip(results).filter(_._2.isNaN).map(_._1)
@@ -212,6 +217,10 @@ object Imputer extends DefaultParamsReadable[Imputer] {
   /** strategy names that Imputer currently supports. */
   private[feature] val mean = "mean"
   private[feature] val median = "median"
+  private[feature] val mode = "mode"
+
+  /* Set of strategies that Imputer supports */
+  private[feature] val supportedStrategies = Array(mean, median, mode)
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)
@@ -245,20 +254,25 @@ class ImputerModel private[ml] (
   /** @group setParam */
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
+  @transient private lazy val surrogates = {
+    val row = surrogateDF.head()
+    row.schema.fieldNames.zipWithIndex
+      .map { case (name, index) => (name, row.getDouble(index)) }
+      .toMap
+  }
+
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val (inputColumns, outputColumns) = getInOutCols
-    val surrogates = surrogateDF.select(inputColumns.map(col): _*).head().toSeq
+    val (inputColumns, outputColumns) = getInOutCols()
 
-
-    val newCols = inputColumns.zip(outputColumns).zip(surrogates).map {
-      case ((inputCol, outputCol), surrogate) =>
-        val inputType = dataset.schema(inputCol).dataType
-        val ic = col(inputCol).cast(DoubleType)
-        when(ic.isNull, surrogate)
-          .when(ic === $(missingValue), surrogate)
-          .otherwise(ic)
-          .cast(inputType)
+    val newCols = inputColumns.map { inputCol =>
+      val surrogate = surrogates(inputCol)
+      val inputType = dataset.schema(inputCol).dataType
+      val ic = col(inputCol).cast(DoubleType)
+      when(ic.isNull, surrogate)
+        .when(ic === $(missingValue), surrogate)
+        .otherwise(ic)
+        .cast(inputType)
     }
     dataset.withColumns(outputColumns, newCols).toDF()
   }

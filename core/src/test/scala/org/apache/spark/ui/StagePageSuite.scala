@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui
 
-import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -93,12 +92,12 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         tasks = None,
         executorSummary = None,
         killedTasksSummary = Map.empty,
-        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID,
+        peakExecutorMetrics = None
       )
       val taskTable = new TaskPagedTable(
         stageData,
         basePath = "/a/b/c",
-        currentTime = 0,
         pageSize = 10,
         sortColumn = "Index",
         desc = false,

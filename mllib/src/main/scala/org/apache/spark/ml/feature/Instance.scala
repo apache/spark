@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import scala.collection.mutable
+
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
@@ -100,6 +102,32 @@ private[spark] case class InstanceBlock(
 
 private[spark] object InstanceBlock {
 
+  /**
+   * Suggested value for BlockSizeInMB in Level-2 routine cases.
+   * According to performance tests of BLAS routine (see SPARK-31714) and
+   * LinearSVC (see SPARK-32907), 1.0 MB should be an acceptable value for
+   * linear models using Level-2 routine (GEMV) to perform prediction and
+   * gradient computation.
+   */
+  val DefaultBlockSizeInMB = 1.0
+
+  private def getBlockMemUsage(
+      numCols: Long,
+      numRows: Long,
+      nnz: Long,
+      allUnitWeight: Boolean): Long = {
+    val doubleBytes = java.lang.Double.BYTES
+    val arrayHeader = 12L
+    val denseSize = Matrices.getDenseSize(numCols, numRows)
+    val sparseSize = Matrices.getSparseSize(nnz, numRows + 1)
+    val matrixSize = math.min(denseSize, sparseSize)
+    if (allUnitWeight) {
+      matrixSize + doubleBytes * numRows + arrayHeader * 2
+    } else {
+      matrixSize + doubleBytes * numRows * 2 + arrayHeader * 2
+    }
+  }
+
   def fromInstances(instances: Seq[Instance]): InstanceBlock = {
     val labels = instances.map(_.label).toArray
     val weights = if (instances.exists(_.weight != 1)) {
@@ -113,6 +141,49 @@ private[spark] object InstanceBlock {
 
   def blokify(instances: RDD[Instance], blockSize: Int): RDD[InstanceBlock] = {
     instances.mapPartitions(_.grouped(blockSize).map(InstanceBlock.fromInstances))
+  }
+
+  def blokifyWithMaxMemUsage(
+      instanceIterator: Iterator[Instance],
+      maxMemUsage: Long): Iterator[InstanceBlock] = {
+    require(maxMemUsage > 0)
+
+    new Iterator[InstanceBlock]() {
+      private var numCols = -1L
+
+      override def hasNext: Boolean = instanceIterator.hasNext
+
+      override def next(): InstanceBlock = {
+        val buff = mutable.ArrayBuilder.make[Instance]
+        var buffCnt = 0L
+        var buffNnz = 0L
+        var buffUnitWeight = true
+        var blockMemUsage = 0L
+
+        while (instanceIterator.hasNext && blockMemUsage < maxMemUsage) {
+          val instance = instanceIterator.next()
+          if (numCols < 0L) numCols = instance.features.size
+          require(numCols == instance.features.size)
+
+          buff += instance
+          buffCnt += 1L
+          buffNnz += instance.features.numNonzeros
+          buffUnitWeight &&= (instance.weight == 1)
+          blockMemUsage = getBlockMemUsage(numCols, buffCnt, buffNnz, buffUnitWeight)
+        }
+
+        // the block memory usage may slightly exceed threshold, not a big issue.
+        // and this ensure even if one row exceed block limit, each block has one row.
+        InstanceBlock.fromInstances(buff.result())
+      }
+    }
+  }
+
+  def blokifyWithMaxMemUsage(
+      instances: RDD[Instance],
+      maxMemUsage: Long): RDD[InstanceBlock] = {
+    require(maxMemUsage > 0)
+    instances.mapPartitions(iter => blokifyWithMaxMemUsage(iter, maxMemUsage))
   }
 }
 

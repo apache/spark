@@ -20,8 +20,6 @@ An example demonstrating LDA.
 Run with:
   bin/spark-submit examples/src/main/python/ml/lda_example.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml.clustering import LDA
 # $example off$

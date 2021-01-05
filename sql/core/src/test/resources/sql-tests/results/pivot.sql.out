@@ -202,7 +202,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.;
+Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.
 
 
 -- !query
@@ -217,7 +217,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.;
+Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.
 
 
 -- !query
@@ -262,7 +262,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;
+It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
 
 -- !query
@@ -276,7 +276,7 @@ PIVOT (
   FOR (course, year) IN (('dotNET', 2012), ('Java', 2013))
 )
 -- !query schema
-struct<s:int,[dotNET, 2012]:bigint,[Java, 2013]:bigint>
+struct<s:int,{dotNET, 2012}:bigint,{Java, 2013}:bigint>
 -- !query output
 1	15000	NULL
 2	NULL	30000
@@ -313,7 +313,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>;
+Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>
 
 
 -- !query
@@ -339,7 +339,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literal expressions required for pivot values, found 'course#x';
+Literal expressions required for pivot values, found 'course#x'
 
 
 -- !query
@@ -370,7 +370,7 @@ PIVOT (
   FOR (y, course) IN ((2012, 'dotNET'), (2013, 'Java'))
 )
 -- !query schema
-struct<year:int,[2012, dotNET]:array<int>,[2013, Java]:array<int>>
+struct<year:int,{2012, dotNET}:array<int>,{2013, Java}:array<int>>
 -- !query output
 2012	[1,1]	NULL
 2013	NULL	[2,2]
@@ -404,7 +404,7 @@ PIVOT (
   FOR (course, a) IN (('dotNET', array(1, 1)), ('Java', array(2, 2)))
 )
 -- !query schema
-struct<year:int,[dotNET, [1, 1]]:bigint,[Java, [2, 2]]:bigint>
+struct<year:int,{dotNET, [1, 1]}:bigint,{Java, [2, 2]}:bigint>
 -- !query output
 2012	15000	NULL
 2013	NULL	30000
@@ -421,7 +421,7 @@ PIVOT (
   FOR s IN ((1, 'a'), (2, 'b'))
 )
 -- !query schema
-struct<year:int,[1, a]:bigint,[2, b]:bigint>
+struct<year:int,{1, a}:bigint,{2, b}:bigint>
 -- !query output
 2012	35000	NULL
 2013	NULL	78000
@@ -438,7 +438,7 @@ PIVOT (
   FOR (course, s) IN (('dotNET', (1, 'a')), ('Java', (2, 'b')))
 )
 -- !query schema
-struct<year:int,[dotNET, [1, a]]:bigint,[Java, [2, b]]:bigint>
+struct<year:int,{dotNET, {1, a}}:bigint,{Java, {2, b}}:bigint>
 -- !query output
 2012	15000	NULL
 2013	NULL	30000
@@ -458,7 +458,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'm#x'. Pivot columns must be comparable.;
+Invalid pivot column 'm#x'. Pivot columns must be comparable.
 
 
 -- !query
@@ -475,7 +475,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.;
+Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.
 
 
 -- !query

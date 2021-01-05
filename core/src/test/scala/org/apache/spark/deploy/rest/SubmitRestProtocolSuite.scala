@@ -19,6 +19,8 @@ package org.apache.spark.deploy.rest
 
 import java.lang.Boolean
 
+import scala.util.Properties.versionNumberString
+
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
@@ -96,6 +98,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     // optional fields
     conf.set(JARS, Seq("mayonnaise.jar", "ketchup.jar"))
     conf.set(FILES.key, "fireball.png")
+    conf.set(ARCHIVES.key, "fireballs.zip")
     conf.set("spark.driver.memory", s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
     conf.set(DRIVER_CORES, 180)
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
@@ -232,7 +235,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |}
     """.stripMargin
 
-  private val submitDriverRequestJson =
+  private lazy val submitDriverRequestJson = if (versionNumberString.startsWith("2.12")) {
     s"""
       |{
       |  "action" : "CreateSubmissionRequest",
@@ -244,6 +247,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |  },
       |  "mainClass" : "org.apache.spark.examples.SparkPie",
       |  "sparkProperties" : {
+      |    "spark.archives" : "fireballs.zip",
       |    "spark.driver.extraLibraryPath" : "pickle.jar",
       |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
       |    "spark.driver.supervise" : "false",
@@ -258,6 +262,34 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |  }
       |}
     """.stripMargin
+  } else {
+    s"""
+      |{
+      |  "action" : "CreateSubmissionRequest",
+      |  "appArgs" : [ "two slices", "a hint of cinnamon" ],
+      |  "appResource" : "honey-walnut-cherry.jar",
+      |  "clientSparkVersion" : "1.2.3",
+      |  "environmentVariables" : {
+      |    "PATH" : "/dev/null"
+      |  },
+      |  "mainClass" : "org.apache.spark.examples.SparkPie",
+      |  "sparkProperties" : {
+      |    "spark.archives" : "fireballs.zip",
+      |    "spark.driver.extraLibraryPath" : "pickle.jar",
+      |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
+      |    "spark.driver.supervise" : "false",
+      |    "spark.driver.memory" : "${Utils.DEFAULT_DRIVER_MEM_MB}m",
+      |    "spark.files" : "fireball.png",
+      |    "spark.driver.cores" : "180",
+      |    "spark.driver.extraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
+      |    "spark.app.name" : "SparkPie",
+      |    "spark.cores.max" : "10000",
+      |    "spark.executor.memory" : "256m",
+      |    "spark.driver.extraClassPath" : "food-coloring.jar"
+      |  }
+      |}
+    """.stripMargin
+  }
 
   private val submitDriverResponseJson =
     """

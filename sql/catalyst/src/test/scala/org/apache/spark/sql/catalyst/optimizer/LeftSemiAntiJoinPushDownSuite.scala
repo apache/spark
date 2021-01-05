@@ -60,7 +60,7 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("Project: LeftSemiAnti join no pushdown because of non-deterministic proj exprs") {
     val originalQuery = testRelation
-      .select(Rand('a), 'b, 'c)
+      .select(Rand(1), 'b, 'c)
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -313,6 +313,21 @@ class LeftSemiPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
+  }
+
+  test("Unary: LeftSemi join push down through Expand") {
+    val expand = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)),
+      Seq('a, 'b, 'c), testRelation)
+    val originalQuery = expand
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 1))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)),
+      Seq('a, 'b, 'c), testRelation
+        .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 1)))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
   Seq(Some('d === 'e), None).foreach { case innerJoinCond =>

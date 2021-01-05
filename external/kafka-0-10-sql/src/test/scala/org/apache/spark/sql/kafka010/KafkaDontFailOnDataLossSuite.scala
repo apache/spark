@@ -223,6 +223,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with KafkaM
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", "failOnDataLoss.*")
       .option("startingOffsets", "earliest")

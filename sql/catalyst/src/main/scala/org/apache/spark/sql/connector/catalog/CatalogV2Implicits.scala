@@ -18,11 +18,10 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.{BucketTransform, IdentityTransform, LogicalExpressions, Transform}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Conversion helpers for working with v2 [[CatalogPlugin]].
@@ -107,6 +106,14 @@ private[sql] object CatalogV2Implicits {
         throw new AnalysisException(
           s"$quoted is not a valid TableIdentifier as it has more than 2 name parts.")
     }
+
+    def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
+      case ns if ns.isEmpty => FunctionIdentifier(ident.name())
+      case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
+      case _ =>
+        throw new AnalysisException(
+          s"$quoted is not a valid FunctionIdentifier as it has more than 2 name parts.")
+    }
   }
 
   implicit class MultipartIdentifierHelper(parts: Seq[String]) {
@@ -135,9 +142,7 @@ private[sql] object CatalogV2Implicits {
     }
   }
 
-  private lazy val catalystSqlParser = new CatalystSqlParser(SQLConf.get)
-
   def parseColumnPath(name: String): Seq[String] = {
-    catalystSqlParser.parseMultipartIdentifier(name)
+    CatalystSqlParser.parseMultipartIdentifier(name)
   }
 }

@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.1.0-SNAPSHOT</version>
+    <version>3.2.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -108,11 +108,6 @@
       <groupId>com.github.scopt</groupId>
       <artifactId>scopt_${scala.binary.version}</artifactId>
       <version>3.7.1</version>
-    </dependency>
-    <dependency>
-      <groupId>${hive.parquet.group}</groupId>
-      <artifactId>parquet-hadoop-bundle</artifactId>
-      <scope>provided</scope>
     </dependency>
   </dependencies>
 

@@ -18,16 +18,12 @@
 import sys
 import json
 
-if sys.version >= '3':
-    basestring = str
-
 from py4j.java_gateway import java_import
 
 from pyspark import since, keyword_only
-from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
-from pyspark.sql.types import *
+from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
@@ -38,9 +34,11 @@ class StreamingQuery(object):
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
 
-    .. note:: Evolving
+    .. versionadded:: 2.0.0
 
-    .. versionadded:: 2.0
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, jsq):
@@ -120,13 +118,16 @@ class StreamingQuery(object):
         return [json.loads(p.json()) for p in self._jsq.recentProgress()]
 
     @property
-    @since(2.1)
     def lastProgress(self):
         """
         Returns the most recent :class:`StreamingQueryProgress` update of this streaming query or
         None if there were no progress updates
 
-        :return: a map
+        .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        dict
         """
         lastProgress = self._jsq.lastProgress()
         if lastProgress:
@@ -134,15 +135,18 @@ class StreamingQuery(object):
         else:
             return None
 
-    @since(2.0)
     def processAllAvailable(self):
         """Blocks until all available data in the source has been processed and committed to the
         sink. This method is intended for testing.
 
-        .. note:: In the case of continually arriving data, this method may block forever.
-            Additionally, this method is only guaranteed to block until data that has been
-            synchronously appended data to a stream source prior to invocation.
-            (i.e. `getOffset` must immediately reflect the addition).
+        .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        In the case of continually arriving data, this method may block forever.
+        Additionally, this method is only guaranteed to block until data that has been
+        synchronously appended data to a stream source prior to invocation.
+        (i.e. `getOffset` must immediately reflect the addition).
         """
         return self._jsq.processAllAvailable()
 
@@ -152,12 +156,18 @@ class StreamingQuery(object):
         """
         self._jsq.stop()
 
-    @since(2.1)
     def explain(self, extended=False):
         """Prints the (logical and physical) plans to the console for debugging purpose.
 
-        :param extended: boolean, default ``False``. If ``False``, prints only the physical plan.
+        .. versionadded:: 2.1.0
 
+        Parameters
+        ----------
+        extended : bool, optional
+            default ``False``. If ``False``, prints only the physical plan.
+
+        Examples
+        --------
         >>> sq = sdf.writeStream.format('memory').queryName('query_explain').start()
         >>> sq.processAllAvailable() # Wait a bit to generate the runtime plans.
         >>> sq.explain()
@@ -178,10 +188,14 @@ class StreamingQuery(object):
         # We should print it in the Python process.
         print(self._jsq.explainInternal(extended))
 
-    @since(2.1)
     def exception(self):
         """
-        :return: the StreamingQueryException if the query was terminated by an exception, or None.
+        .. versionadded:: 2.1.0
+
+        Returns
+        -------
+        :class:`StreamingQueryException`
+            the StreamingQueryException if the query was terminated by an exception, or None.
         """
         if self._jsq.exception().isDefined():
             je = self._jsq.exception().get()
@@ -195,38 +209,44 @@ class StreamingQuery(object):
 class StreamingQueryManager(object):
     """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
-    .. note:: Evolving
+    .. versionadded:: 2.0.0
 
-    .. versionadded:: 2.0
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, jsqm):
         self._jsqm = jsqm
 
     @property
-    @ignore_unicode_prefix
-    @since(2.0)
     def active(self):
         """Returns a list of active queries associated with this SQLContext
 
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sqm = spark.streams
         >>> # get the list of active streaming queries
         >>> [q.name for q in sqm.active]
-        [u'this_query']
+        ['this_query']
         >>> sq.stop()
         """
         return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
-    @ignore_unicode_prefix
-    @since(2.0)
     def get(self, id):
         """Returns an active query from this SQLContext or throws exception if an active query
         with this name doesn't exist.
 
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.name
-        u'this_query'
+        'this_query'
         >>> sq = spark.streams.get(sq.id)
         >>> sq.isActive
         True
@@ -265,11 +285,14 @@ class StreamingQueryManager(object):
         else:
             return self._jsqm.awaitAnyTermination()
 
-    @since(2.0)
     def resetTerminated(self):
         """Forget about past terminated queries so that :func:`awaitAnyTermination()` can be used
         again to wait for new terminations.
 
+        .. versionadded:: 2.0.0
+
+        Examples
+        --------
         >>> spark.streams.resetTerminated()
         """
         self._jsqm.resetTerminated()
@@ -281,9 +304,11 @@ class DataStreamReader(OptionUtils):
     storage systems (e.g. file systems, key-value stores, etc).
     Use :attr:`SparkSession.readStream <pyspark.sql.SparkSession.readStream>` to access this.
 
-    .. note:: Evolving.
+    .. versionadded:: 2.0.0
 
-    .. versionadded:: 2.0
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, spark):
@@ -294,20 +319,27 @@ class DataStreamReader(OptionUtils):
         from pyspark.sql.dataframe import DataFrame
         return DataFrame(jdf, self._spark)
 
-    @since(2.0)
     def format(self, source):
         """Specifies the input data source format.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param source: string, name of the data source, e.g. 'json', 'parquet'.
+        Parameters
+        ----------
+        source : str
+            name of the data source, e.g. 'json', 'parquet'.
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> s = spark.readStream.format("text")
         """
         self._jreader = self._jreader.format(source)
         return self
 
-    @since(2.0)
     def schema(self, schema):
         """Specifies the input schema.
 
@@ -315,11 +347,20 @@ class DataStreamReader(OptionUtils):
         By specifying the schema here, the underlying data source can skip the schema
         inference step, and thus speed up data loading.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
-                       (For example ``col0 INT, col1 DOUBLE``).
+        Parameters
+        ----------
+        schema : :class:`pyspark.sql.types.StructType` or str
+            a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
+            (For example ``col0 INT, col1 DOUBLE``).
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> s = spark.readStream.schema(sdf_schema)
         >>> s = spark.readStream.schema("col0 INT, col1 DOUBLE")
         """
@@ -328,13 +369,12 @@ class DataStreamReader(OptionUtils):
         if isinstance(schema, StructType):
             jschema = spark._jsparkSession.parseDataType(schema.json())
             self._jreader = self._jreader.schema(jschema)
-        elif isinstance(schema, basestring):
+        elif isinstance(schema, str):
             self._jreader = self._jreader.schema(schema)
         else:
             raise TypeError("schema should be StructType or string")
         return self
 
-    @since(2.0)
     def option(self, key, value):
         """Adds an input option for the underlying data source.
 
@@ -352,14 +392,19 @@ class DataStreamReader(OptionUtils):
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> s = spark.readStream.option("x", 1)
         """
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
-    @since(2.0)
     def options(self, **options):
         """Adds input options for the underlying data source.
 
@@ -377,27 +422,44 @@ class DataStreamReader(OptionUtils):
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> s = spark.readStream.options(x="1", y=2)
         """
         for k in options:
             self._jreader = self._jreader.option(k, to_str(options[k]))
         return self
 
-    @since(2.0)
     def load(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a
         :class:`DataFrame <pyspark.sql.DataFrame>`.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param path: optional string for file-system backed data sources.
-        :param format: optional string for format of the data source. Default to 'parquet'.
-        :param schema: optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param options: all other string options
+        Parameters
+        ----------
+        path : str, optional
+            optional string for file-system backed data sources.
+        format : str, optional
+            optional string for format of the data source. Default to 'parquet'.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        **options : dict
+            all other string options
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> json_sdf = spark.readStream.format("json") \\
         ...     .schema(sdf_schema) \\
         ...     .load(tempfile.mkdtemp())
@@ -419,14 +481,13 @@ class DataStreamReader(OptionUtils):
         else:
             return self._df(self._jreader.load())
 
-    @since(2.0)
     def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
              multiLine=None,  allowUnquotedControlChars=None, lineSep=None, locale=None,
              dropFieldIfAllNull=None, encoding=None, pathGlobFilter=None,
-             recursiveFileLookup=None):
+             recursiveFileLookup=None, allowNonNumericNumbers=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -436,81 +497,119 @@ class DataStreamReader(OptionUtils):
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param path: string represents path to the JSON dataset,
-                     or RDD of Strings storing JSON objects.
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param primitivesAsString: infers all primitive values as a string type. If None is set,
-                                   it uses the default value, ``false``.
-        :param prefersDecimal: infers all floating-point values as a decimal type. If the values
-                               do not fit in decimal, then it infers them as doubles. If None is
-                               set, it uses the default value, ``false``.
-        :param allowComments: ignores Java/C++ style comment in JSON records. If None is set,
-                              it uses the default value, ``false``.
-        :param allowUnquotedFieldNames: allows unquoted JSON field names. If None is set,
-                                        it uses the default value, ``false``.
-        :param allowSingleQuotes: allows single quotes in addition to double quotes. If None is
-                                        set, it uses the default value, ``true``.
-        :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is
-                                        set, it uses the default value, ``false``.
-        :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character
-                                                   using backslash quoting mechanism. If None is
-                                                   set, it uses the default value, ``false``.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
-                     set, it uses the default value, ``PERMISSIVE``.
+        Parameters
+        ----------
+        path : str
+            string represents path to the JSON dataset,
+            or RDD of Strings storing JSON objects.
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        primitivesAsString : str or bool, optional
+            infers all primitive values as a string type. If None is set,
+            it uses the default value, ``false``.
+        prefersDecimal : str or bool, optional
+            infers all floating-point values as a decimal type. If the values
+            do not fit in decimal, then it infers them as doubles. If None is
+            set, it uses the default value, ``false``.
+        allowComments : str or bool, optional
+            ignores Java/C++ style comment in JSON records. If None is set,
+            it uses the default value, ``false``.
+        allowUnquotedFieldNames : str or bool, optional
+            allows unquoted JSON field names. If None is set,
+            it uses the default value, ``false``.
+        allowSingleQuotes : str or bool, optional
+            allows single quotes in addition to double quotes. If None is
+            set, it uses the default value, ``true``.
+        allowNumericLeadingZero : str or bool, optional
+            allows leading zeros in numbers (e.g. 00012). If None is
+            set, it uses the default value, ``false``.
+        allowBackslashEscapingAnyCharacter : str or bool, optional
+            allows accepting quoting of all character
+            using backslash quoting mechanism. If None is
+            set, it uses the default value, ``false``.
+        mode : str, optional
+            allows a mode for dealing with corrupt records during parsing. If None is
+            set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-                  fields to ``null``. To keep corrupt records, an user can set a string type \
-                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-                  schema does not have the field, it drops corrupt records during parsing. \
-                  When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
-                  field in an output schema.
-                *  ``DROPMALFORMED``: ignores the whole corrupted records.
-                *  ``FAILFAST``: throws an exception when it meets corrupted records.
+            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
+              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+              fields to ``null``. To keep corrupt records, an user can set a string type \
+              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+              schema does not have the field, it drops corrupt records during parsing. \
+              When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
+              field in an output schema.
+            *  ``DROPMALFORMED``: ignores the whole corrupted records.
+            *  ``FAILFAST``: throws an exception when it meets corrupted records.
 
-        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
-                                          created by ``PERMISSIVE`` mode. This overrides
-                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-                                          it uses the value specified in
-                                          ``spark.sql.columnNameOfCorruptRecord``.
-        :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at `datetime pattern`_.
-                           This applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at `datetime pattern`_.
-                                This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        :param multiLine: parse one record, which may span multiple lines, per file. If None is
-                          set, it uses the default value, ``false``.
-        :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
-                                          characters (ASCII characters with value less than 32,
-                                          including tab and line feed characters) or not.
-        :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
-                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
-                       parsing dates and timestamps.
-        :param dropFieldIfAllNull: whether to ignore column of all null values or empty
-                                   array/struct during schema inference. If None is set, it
-                                   uses the default value, ``false``.
-        :param encoding: allows to forcibly set one of standard basic or extended encoding for
-                         the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
-                         the encoding of input JSON will be detected automatically
-                         when the multiLine option is set to ``true``.
-        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
-                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-                               It does not change the behavior of `partition discovery`_.
-        :param recursiveFileLookup: recursively scan a directory for files. Using this option
-                                    disables `partition discovery`_.
+        columnNameOfCorruptRecord : str, optional
+            allows renaming the new field having malformed string
+            created by ``PERMISSIVE`` mode. This overrides
+            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+            it uses the value specified in
+            ``spark.sql.columnNameOfCorruptRecord``.
+        dateFormat : str, optional
+            sets the string that indicates a date format. Custom date formats
+            follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to date type. If None is set, it uses the
+            default value, ``yyyy-MM-dd``.
+        timestampFormat : str, optional
+            sets the string that indicates a timestamp format.
+            Custom date formats follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to timestamp type. If None is set, it uses the
+            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
+        multiLine : str or bool, optional
+            parse one record, which may span multiple lines, per file. If None is
+            set, it uses the default value, ``false``.
+        allowUnquotedControlChars : str or bool, optional
+            allows JSON Strings to contain unquoted control
+            characters (ASCII characters with value less than 32,
+            including tab and line feed characters) or not.
+        lineSep : str, optional
+            defines the line separator that should be used for parsing. If None is
+            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        locale : str, optional
+            sets a locale as language tag in IETF BCP 47 format. If None is set,
+            it uses the default value, ``en-US``. For instance, ``locale`` is used while
+            parsing dates and timestamps.
+        dropFieldIfAllNull : str or bool, optional
+            whether to ignore column of all null values or empty
+            array/struct during schema inference. If None is set, it
+            uses the default value, ``false``.
+        encoding : str or bool, optional
+            allows to forcibly set one of standard basic or extended encoding for
+            the JSON files. For example UTF-16BE, UTF-32LE. If None is set,
+            the encoding of input JSON will be detected automatically
+            when the multiLine option is set to ``true``.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        allowNonNumericNumbers : str or bool, optional
+            allows JSON parser to recognize set of "Not-a-Number" (NaN)
+            tokens as legal floating number values. If None is set,
+            it uses the default value, ``true``.
 
-        .. _partition discovery:
-          https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery
-        .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
+                * ``+INF``: for positive infinity, as well as alias of
+                            ``+Infinity`` and ``Infinity``.
+                *  ``-INF``: for negative infinity, alias ``-Infinity``.
+                *  ``NaN``: for other not-a-numbers, like result of division by zero.
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
         True
@@ -526,27 +625,35 @@ class DataStreamReader(OptionUtils):
             timestampFormat=timestampFormat, multiLine=multiLine,
             allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep, locale=locale,
             dropFieldIfAllNull=dropFieldIfAllNull, encoding=encoding,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            allowNonNumericNumbers=allowNonNumericNumbers)
+        if isinstance(path, str):
             return self._df(self._jreader.json(path))
         else:
             raise TypeError("path can be only a single string")
 
-    @since(2.3)
     def orc(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.3.0
 
-        :param mergeSchema: sets whether we should merge schemas collected from all
-                            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
-                            The default value is specified in ``spark.sql.orc.mergeSchema``.
-        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
-                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-                               It does not change the behavior of `partition discovery`_.
-        :param recursiveFileLookup: recursively scan a directory for files. Using this option
-            disables `partition discovery`_.
+        Parameters
+        ----------
+        mergeSchema : str or bool, optional
+            sets whether we should merge schemas collected from all
+            ORC part-files. This will override ``spark.sql.orc.mergeSchema``.
+            The default value is specified in ``spark.sql.orc.mergeSchema``.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of `partition discovery`_.
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+        Examples
+        --------
         >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
         >>> orc_sdf.isStreaming
         True
@@ -555,28 +662,35 @@ class DataStreamReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
-    @since(2.0)
     def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param mergeSchema: sets whether we should merge schemas collected from all
-                            Parquet part-files. This will override
-                            ``spark.sql.parquet.mergeSchema``. The default value is specified in
-                            ``spark.sql.parquet.mergeSchema``.
-        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
-                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-                               It does not change the behavior of `partition discovery`_.
-        :param recursiveFileLookup: recursively scan a directory for files. Using this option
-                                    disables `partition discovery`_.
+        Parameters
+        ----------
+        mergeSchema : str or bool, optional
+            sets whether we should merge schemas collected from all
+            Parquet part-files. This will override
+            ``spark.sql.parquet.mergeSchema``. The default value is specified in
+            ``spark.sql.parquet.mergeSchema``.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of `partition discovery`_.
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+        Examples
+        --------
         >>> parquet_sdf = spark.readStream.schema(sdf_schema).parquet(tempfile.mkdtemp())
         >>> parquet_sdf.isStreaming
         True
@@ -585,13 +699,11 @@ class DataStreamReader(OptionUtils):
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
                        recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.parquet(path))
         else:
             raise TypeError("path can be only a single string")
 
-    @ignore_unicode_prefix
-    @since(2.0)
     def text(self, path, wholetext=False, lineSep=None, pathGlobFilter=None,
              recursiveFileLookup=None):
         """
@@ -602,18 +714,32 @@ class DataStreamReader(OptionUtils):
 
         By default, each line in the text file is a new row in the resulting DataFrame.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param paths: string, or list of strings, for input path(s).
-        :param wholetext: if true, read each file from input path(s) as a single row.
-        :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
-                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-                               It does not change the behavior of `partition discovery`_.
-        :param recursiveFileLookup: recursively scan a directory for files. Using this option
-                                    disables `partition discovery`_.
+        Parameters
+        ----------
+        paths : str or list
+            string, or list of strings, for input path(s).
+        wholetext : str or bool, optional
+            if true, read each file from input path(s) as a single row.
+        lineSep : str, optional
+            defines the line separator that should be used for parsing. If None is
+            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of `partition discovery`_.
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option
+            disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
         True
@@ -623,12 +749,11 @@ class DataStreamReader(OptionUtils):
         self._set_opts(
             wholetext=wholetext, lineSep=lineSep, pathGlobFilter=pathGlobFilter,
             recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self._df(self._jreader.text(path))
         else:
             raise TypeError("path can be only a single string")
 
-    @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
@@ -636,114 +761,174 @@ class DataStreamReader(OptionUtils):
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
             columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None,
             enforceSchema=None, emptyValue=None, locale=None, lineSep=None,
-            pathGlobFilter=None, recursiveFileLookup=None):
+            pathGlobFilter=None, recursiveFileLookup=None, unescapedQuoteHandling=None):
         r"""Loads a CSV file stream and returns the result as a :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        .. note:: Evolving.
+        Parameters
+        ----------
+        path : str or list
+            string, or list of strings, for input path(s).
+        schema : :class:`pyspark.sql.types.StructType` or str, optional
+            an optional :class:`pyspark.sql.types.StructType` for the input schema
+            or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
+        sep : str, optional
+            sets a separator (one or more characters) for each field and value. If None is
+            set, it uses the default value, ``,``.
+        encoding : str, optional
+            decodes the CSV files by the given encoding type. If None is set,
+            it uses the default value, ``UTF-8``.
+        quote : str, optional sets a single character used for escaping quoted values where the
+            separator can be part of the value. If None is set, it uses the default
+            value, ``"``. If you would like to turn off quotations, you need to set an
+            empty string.
+        escape : str, optional
+            sets a single character used for escaping quotes inside an already
+            quoted value. If None is set, it uses the default value, ``\``.
+        comment : str, optional
+            sets a single character used for skipping lines beginning with this
+            character. By default (None), it is disabled.
+        header : str or bool, optional
+            uses the first line as names of columns. If None is set, it uses the
+            default value, ``false``.
+        inferSchema : str or bool, optional
+            infers the input schema automatically from data. It requires one extra
+            pass over the data. If None is set, it uses the default value, ``false``.
+        enforceSchema : str or bool, optional
+            If it is set to ``true``, the specified or inferred schema will be
+            forcibly applied to datasource files, and headers in CSV files will be
+            ignored. If the option is set to ``false``, the schema will be
+            validated against all headers in CSV files or the first header in RDD
+            if the ``header`` option is set to ``true``. Field names in the schema
+            and column names in CSV headers are checked by their positions
+            taking into account ``spark.sql.caseSensitive``. If None is set,
+            ``true`` is used by default. Though the default value is ``true``,
+            it is recommended to disable the ``enforceSchema`` option
+            to avoid incorrect results.
+        ignoreLeadingWhiteSpace : str or bool, optional
+            a flag indicating whether or not leading whitespaces from
+            values being read should be skipped. If None is set, it
+            uses the default value, ``false``.
+        ignoreTrailingWhiteSpace : str or bool, optional
+            a flag indicating whether or not trailing whitespaces from
+            values being read should be skipped. If None is set, it
+            uses the default value, ``false``.
+        nullValue : str, optional
+            sets the string representation of a null value. If None is set, it uses
+            the default value, empty string. Since 2.0.1, this ``nullValue`` param
+            applies to all supported types including the string type.
+        nanValue : str, optional
+            sets the string representation of a non-number value. If None is set, it
+            uses the default value, ``NaN``.
+        positiveInf : str, optional
+            sets the string representation of a positive infinity value. If None
+            is set, it uses the default value, ``Inf``.
+        negativeInf : str, optional
+            sets the string representation of a negative infinity value. If None
+            is set, it uses the default value, ``Inf``.
+        dateFormat : str, optional
+            sets the string that indicates a date format. Custom date formats
+            follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to date type. If None is set, it uses the
+            default value, ``yyyy-MM-dd``.
+        timestampFormat : str, optional
+            sets the string that indicates a timestamp format.
+            Custom date formats follow the formats at
+            `datetime pattern <https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html>`_.  # noqa
+            This applies to timestamp type. If None is set, it uses the
+            default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
+        maxColumns : str or int, optional
+            defines a hard limit of how many columns a record can have. If None is
+            set, it uses the default value, ``20480``.
+        maxCharsPerColumn : str or int, optional
+            defines the maximum number of characters allowed for any given
+            value being read. If None is set, it uses the default value,
+            ``-1`` meaning unlimited length.
+        maxMalformedLogPerPartition : str or int, optional
+            this parameter is no longer used since Spark 2.2.0.
+            If specified, it is ignored.
+        mode : str, optional
+            allows a mode for dealing with corrupt records during parsing. If None is
+            set, it uses the default value, ``PERMISSIVE``.
 
-        :param path: string, or list of strings, for input path(s).
-        :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
-                       or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets a separator (one or more characters) for each field and value. If None is
-                    set, it uses the default value, ``,``.
-        :param encoding: decodes the CSV files by the given encoding type. If None is set,
-                         it uses the default value, ``UTF-8``.
-        :param quote: sets a single character used for escaping quoted values where the
-                      separator can be part of the value. If None is set, it uses the default
-                      value, ``"``. If you would like to turn off quotations, you need to set an
-                      empty string.
-        :param escape: sets a single character used for escaping quotes inside an already
-                       quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets a single character used for skipping lines beginning with this
-                        character. By default (None), it is disabled.
-        :param header: uses the first line as names of columns. If None is set, it uses the
-                       default value, ``false``.
-        :param inferSchema: infers the input schema automatically from data. It requires one extra
-                       pass over the data. If None is set, it uses the default value, ``false``.
-        :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
-                              forcibly applied to datasource files, and headers in CSV files will be
-                              ignored. If the option is set to ``false``, the schema will be
-                              validated against all headers in CSV files or the first header in RDD
-                              if the ``header`` option is set to ``true``. Field names in the schema
-                              and column names in CSV headers are checked by their positions
-                              taking into account ``spark.sql.caseSensitive``. If None is set,
-                              ``true`` is used by default. Though the default value is ``true``,
-                              it is recommended to disable the ``enforceSchema`` option
-                              to avoid incorrect results.
-        :param ignoreLeadingWhiteSpace: a flag indicating whether or not leading whitespaces from
-                                        values being read should be skipped. If None is set, it
-                                        uses the default value, ``false``.
-        :param ignoreTrailingWhiteSpace: a flag indicating whether or not trailing whitespaces from
-                                         values being read should be skipped. If None is set, it
-                                         uses the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string. Since 2.0.1, this ``nullValue`` param
-                          applies to all supported types including the string type.
-        :param nanValue: sets the string representation of a non-number value. If None is set, it
-                         uses the default value, ``NaN``.
-        :param positiveInf: sets the string representation of a positive infinity value. If None
-                            is set, it uses the default value, ``Inf``.
-        :param negativeInf: sets the string representation of a negative infinity value. If None
-                            is set, it uses the default value, ``Inf``.
-        :param dateFormat: sets the string that indicates a date format. Custom date formats
-                           follow the formats at `datetime pattern`_.
-                           This applies to date type. If None is set, it uses the
-                           default value, ``yyyy-MM-dd``.
-        :param timestampFormat: sets the string that indicates a timestamp format.
-                                Custom date formats follow the formats at `datetime pattern`_.
-                                This applies to timestamp type. If None is set, it uses the
-                                default value, ``yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]``.
-        :param maxColumns: defines a hard limit of how many columns a record can have. If None is
-                           set, it uses the default value, ``20480``.
-        :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
-                                  value being read. If None is set, it uses the default value,
-                                  ``-1`` meaning unlimited length.
-        :param maxMalformedLogPerPartition: this parameter is no longer used since Spark 2.2.0.
-                                            If specified, it is ignored.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
-                     set, it uses the default value, ``PERMISSIVE``.
+            * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
+              into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
+              fields to ``null``. To keep corrupt records, an user can set a string type \
+              field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+              schema does not have the field, it drops corrupt records during parsing. \
+              A record with less/more tokens than schema is not a corrupted record to CSV. \
+              When it meets a record having fewer tokens than the length of the schema, \
+              sets ``null`` to extra fields. When the record has more tokens than the \
+              length of the schema, it drops extra tokens.
+            * ``DROPMALFORMED``: ignores the whole corrupted records.
+            * ``FAILFAST``: throws an exception when it meets corrupted records.
 
-                * ``PERMISSIVE``: when it meets a corrupted record, puts the malformed string \
-                  into a field configured by ``columnNameOfCorruptRecord``, and sets malformed \
-                  fields to ``null``. To keep corrupt records, an user can set a string type \
-                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
-                  schema does not have the field, it drops corrupt records during parsing. \
-                  A record with less/more tokens than schema is not a corrupted record to CSV. \
-                  When it meets a record having fewer tokens than the length of the schema, \
-                  sets ``null`` to extra fields. When the record has more tokens than the \
-                  length of the schema, it drops extra tokens.
-                * ``DROPMALFORMED``: ignores the whole corrupted records.
-                * ``FAILFAST``: throws an exception when it meets corrupted records.
+        columnNameOfCorruptRecord : str, optional
+            allows renaming the new field having malformed string
+            created by ``PERMISSIVE`` mode. This overrides
+            ``spark.sql.columnNameOfCorruptRecord``. If None is set,
+            it uses the value specified in
+            ``spark.sql.columnNameOfCorruptRecord``.
+        multiLine : str or bool, optional
+            parse one record, which may span multiple lines. If None is
+            set, it uses the default value, ``false``.
+        charToEscapeQuoteEscaping : str, optional
+            sets a single character used for escaping the escape for
+            the quote character. If None is set, the default value is
+            escape character when escape and quote characters are
+            different, ``\0`` otherwise.
+        emptyValue : str, optional
+            sets the string representation of an empty value. If None is set, it uses
+            the default value, empty string.
+        locale : str, optional
+            sets a locale as language tag in IETF BCP 47 format. If None is set,
+            it uses the default value, ``en-US``. For instance, ``locale`` is used while
+            parsing dates and timestamps.
+        lineSep : str, optional
+            defines the line separator that should be used for parsing. If None is
+            set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+            Maximum length is 1 character.
+        pathGlobFilter : str or bool, optional
+            an optional glob pattern to only include files with paths matching
+            the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
+            It does not change the behavior of
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        recursiveFileLookup : str or bool, optional
+            recursively scan a directory for files. Using this option disables
+            `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        unescapedQuoteHandling : str, optional
+            defines how the CsvParser will handle values with unescaped quotes. If None is
+            set, it uses the default value, ``STOP_AT_DELIMITER``.
 
-        :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
-                                          created by ``PERMISSIVE`` mode. This overrides
-                                          ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-                                          it uses the value specified in
-                                          ``spark.sql.columnNameOfCorruptRecord``.
-        :param multiLine: parse one record, which may span multiple lines. If None is
-                          set, it uses the default value, ``false``.
-        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
-                                          the quote character. If None is set, the default value is
-                                          escape character when escape and quote characters are
-                                          different, ``\0`` otherwise..
-        :param emptyValue: sets the string representation of an empty value. If None is set, it uses
-                           the default value, empty string.
-        :param locale: sets a locale as language tag in IETF BCP 47 format. If None is set,
-                       it uses the default value, ``en-US``. For instance, ``locale`` is used while
-                       parsing dates and timestamps.
-        :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-                        Maximum length is 1 character.
-        :param pathGlobFilter: an optional glob pattern to only include files with paths matching
-                               the pattern. The syntax follows `org.apache.hadoop.fs.GlobFilter`.
-                               It does not change the behavior of `partition discovery`_.
-        :param recursiveFileLookup: recursively scan a directory for files. Using this option
-                                    disables `partition discovery`_.
+            * ``STOP_AT_CLOSING_QUOTE``: If unescaped quotes are found in the input, accumulate
+              the quote character and proceed parsing the value as a quoted value, until a closing
+              quote is found.
+            * ``BACK_TO_DELIMITER``: If unescaped quotes are found in the input, consider the value
+              as an unquoted value. This will make the parser accumulate all characters of the current
+              parsed value until the delimiter is found. If no delimiter is found in the value, the
+              parser will continue accumulating characters from the input until a delimiter or line
+              ending is found.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, consider the value
+              as an unquoted value. This will make the parser accumulate all characters until the
+              delimiter or a line ending is found in the input.
+            * ``STOP_AT_DELIMITER``: If unescaped quotes are found in the input, the content parsed
+              for the given value will be skipped and the value set in nullValue will be produced
+              instead.
+            * ``RAISE_ERROR``: If unescaped quotes are found in the input, a TextParsingException
+              will be thrown.
 
+        .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
         True
@@ -761,11 +946,40 @@ class DataStreamReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
             charToEscapeQuoteEscaping=charToEscapeQuoteEscaping, enforceSchema=enforceSchema,
             emptyValue=emptyValue, locale=locale, lineSep=lineSep,
-            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup)
-        if isinstance(path, basestring):
+            pathGlobFilter=pathGlobFilter, recursiveFileLookup=recursiveFileLookup,
+            unescapedQuoteHandling=unescapedQuoteHandling)
+        if isinstance(path, str):
             return self._df(self._jreader.csv(path))
         else:
             raise TypeError("path can be only a single string")
+
+    def table(self, tableName):
+        """Define a Streaming DataFrame on a Table. The DataSource corresponding to the table should
+        support streaming mode.
+
+        .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, for the name of the table.
+
+        Returns
+        --------
+        :class:`DataFrame`
+
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
+        >>> spark.readStream.table('input_table') # doctest: +SKIP
+        """
+        if isinstance(tableName, str):
+            return self._df(self._jreader.table(tableName))
+        else:
+            raise TypeError("tableName can be only a single string")
 
 
 class DataStreamWriter(object):
@@ -775,9 +989,11 @@ class DataStreamWriter(object):
     Use :attr:`DataFrame.writeStream <pyspark.sql.DataFrame.writeStream>`
     to access this.
 
-    .. note:: Evolving.
+    .. versionadded:: 2.0.0
 
-    .. versionadded:: 2.0
+    Notes
+    -----
+    This API is evolving.
     """
 
     def __init__(self, df):
@@ -789,22 +1005,27 @@ class DataStreamWriter(object):
         from pyspark.sql.streaming import StreamingQuery
         return StreamingQuery(jsq)
 
-    @since(2.0)
     def outputMode(self, outputMode):
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+
+        .. versionadded:: 2.0.0
 
         Options include:
 
         * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
         * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the sink
-           every time these is some updates
+           every time these are some updates
         * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
            written to the sink every time there are some updates. If the query doesn't contain
            aggregations, it will be equivalent to `append` mode.
 
-       .. note:: Evolving.
+        Notes
+        -----
+        This API is evolving.
 
+        Examples
+        --------
         >>> writer = sdf.writeStream.outputMode('append')
         """
         if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
@@ -812,20 +1033,27 @@ class DataStreamWriter(object):
         self._jwrite = self._jwrite.outputMode(outputMode)
         return self
 
-    @since(2.0)
     def format(self, source):
         """Specifies the underlying output data source.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param source: string, name of the data source, which for now can be 'parquet'.
+        Parameters
+        ----------
+        source : str
+            string, name of the data source, which for now can be 'parquet'.
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> writer = sdf.writeStream.format('json')
         """
         self._jwrite = self._jwrite.format(source)
         return self
 
-    @since(2.0)
     def option(self, key, value):
         """Adds an output option for the underlying data source.
 
@@ -843,12 +1071,15 @@ class DataStreamWriter(object):
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        This API is evolving.
         """
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
-    @since(2.0)
     def options(self, **options):
         """Adds output options for the underlying data source.
 
@@ -866,39 +1097,56 @@ class DataStreamWriter(object):
                 ambiguous. If it isn't set, the current value of the SQL config
                 ``spark.sql.session.timeZone`` is used by default.
 
-       .. note:: Evolving.
+        .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        This API is evolving.
         """
         for k in options:
             self._jwrite = self._jwrite.option(k, to_str(options[k]))
         return self
 
-    @since(2.0)
     def partitionBy(self, *cols):
         """Partitions the output by the given columns on the file system.
 
         If specified, the output is laid out on the file system similar
         to Hive's partitioning scheme.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param cols: name of columns
+        Parameters
+        ----------
+        cols : str or list
+            name of columns
 
+        Notes
+        -----
+        This API is evolving.
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
         self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
-    @since(2.0)
     def queryName(self, queryName):
         """Specifies the name of the :class:`StreamingQuery` that can be started with
         :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param queryName: unique name for the query
+        Parameters
+        ----------
+        queryName : str
+            unique name for the query
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> writer = sdf.writeStream.queryName('streaming_query')
         """
         if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
@@ -907,22 +1155,32 @@ class DataStreamWriter(object):
         return self
 
     @keyword_only
-    @since(2.0)
-    def trigger(self, processingTime=None, once=None, continuous=None):
+    def trigger(self, *, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
-                               Set a trigger that runs a microbatch query periodically based on the
-                               processing time. Only one trigger can be set.
-        :param once: if set to True, set a trigger that processes only one batch of data in a
-                     streaming query then terminates the query. Only one trigger can be set.
-        :param continuous: a time interval as a string, e.g. '5 seconds', '1 minute'.
-                           Set a trigger that runs a continuous query with a given checkpoint
-                           interval. Only one trigger can be set.
+        Parameters
+        ----------
+        processingTime : str, optional
+            a processing time interval as a string, e.g. '5 seconds', '1 minute'.
+            Set a trigger that runs a microbatch query periodically based on the
+            processing time. Only one trigger can be set.
+        once : bool, optional
+            if set to True, set a trigger that processes only one batch of data in a
+            streaming query then terminates the query. Only one trigger can be set.
+        continuous : str, optional
+            a time interval as a string, e.g. '5 seconds', '1 minute'.
+            Set a trigger that runs a continuous query with a given checkpoint
+            interval. Only one trigger can be set.
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
         >>> # trigger the query for just once batch of data
@@ -962,7 +1220,6 @@ class DataStreamWriter(object):
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 
-    @since(2.4)
     def foreach(self, f):
         """
         Sets the output of the streaming query to be processed using the provided writer ``f``.
@@ -1030,8 +1287,14 @@ class DataStreamWriter(object):
                 returns successfully (irrespective of the return value), except if the Python
                 crashes in the middle.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.4.0
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> # Print every row using a function
         >>> def print_row(row):
         ...     print(row)
@@ -1124,7 +1387,6 @@ class DataStreamWriter(object):
         self._jwrite.foreach(jForeachWriter)
         return self
 
-    @since(2.4)
     def foreachBatch(self, func):
         """
         Sets the output of the streaming query to be processed using the provided
@@ -1136,8 +1398,14 @@ class DataStreamWriter(object):
         to exactly same for the same batchId (assuming all operations are deterministic in the
         query).
 
-        .. note:: Evolving.
+        .. versionadded:: 2.4.0
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> def func(batch_df, batch_id):
         ...     batch_df.collect()
         ...
@@ -1153,8 +1421,6 @@ class DataStreamWriter(object):
         ensure_callback_server_started(gw)
         return self
 
-    @ignore_unicode_prefix
-    @since(2.0)
     def start(self, path=None, format=None, outputMode=None, partitionBy=None, queryName=None,
               **options):
         """Streams the contents of the :class:`DataFrame` to a data source.
@@ -1163,37 +1429,51 @@ class DataStreamWriter(object):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        .. note:: Evolving.
+        .. versionadded:: 2.0.0
 
-        :param path: the path in a Hadoop supported file system
-        :param format: the format used to save
-        :param outputMode: specifies how data of a streaming DataFrame/Dataset is written to a
-                           streaming sink.
+        Parameters
+        ----------
+        path : str, optional
+            the path in a Hadoop supported file system
+        format : str, optional
+            the format used to save
+        outputMode : str, optional
+            specifies how data of a streaming DataFrame/Dataset is written to a
+            streaming sink.
 
             * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
               sink
             * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
-              sink every time these is some updates
+              sink every time these are some updates
             * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
               written to the sink every time there are some updates. If the query doesn't contain
               aggregations, it will be equivalent to `append` mode.
-        :param partitionBy: names of partitioning columns
-        :param queryName: unique name for the query
-        :param options: All other string options. You may want to provide a `checkpointLocation`
-                        for most streams, however it is not required for a `memory` stream.
+        partitionBy : str or list, optional
+            names of partitioning columns
+        queryName : str, optional
+            unique name for the query
+        **options : dict
+            All other string options. You may want to provide a `checkpointLocation`
+            for most streams, however it is not required for a `memory` stream.
 
+        Notes
+        -----
+        This API is evolving.
+
+        Examples
+        --------
         >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> sq.isActive
         True
         >>> sq.name
-        u'this_query'
+        'this_query'
         >>> sq.stop()
         >>> sq.isActive
         False
         >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').start(
         ...     queryName='that_query', outputMode="append", format='memory')
         >>> sq.name
-        u'that_query'
+        'that_query'
         >>> sq.isActive
         True
         >>> sq.stop()
@@ -1212,12 +1492,82 @@ class DataStreamWriter(object):
         else:
             return self._sq(self._jwrite.start(path))
 
+    def toTable(self, tableName, format=None, outputMode=None, partitionBy=None, queryName=None,
+                **options):
+        """
+        Starts the execution of the streaming query, which will continually output results to the
+        given table as new data arrives.
+
+        The returned :class:`StreamingQuery` object can be used to interact with the stream.
+
+        .. versionadded:: 3.1.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, for the name of the table.
+        format : str, optional
+            the format used to save.
+        outputMode : str, optional
+            specifies how data of a streaming DataFrame/Dataset is written to a
+            streaming sink.
+
+            * `append`: Only the new rows in the streaming DataFrame/Dataset will be written to the
+              sink
+            * `complete`: All the rows in the streaming DataFrame/Dataset will be written to the
+              sink every time these are some updates
+            * `update`: only the rows that were updated in the streaming DataFrame/Dataset will be
+              written to the sink every time there are some updates. If the query doesn't contain
+              aggregations, it will be equivalent to `append` mode.
+        partitionBy : str or list, optional
+            names of partitioning columns
+        queryName : str, optional
+            unique name for the query
+        **options : dict
+            All other string options. You may want to provide a `checkpointLocation`.
+
+        Notes
+        -----
+        This API is evolving.
+
+        For v1 table, partitioning columns provided by `partitionBy` will be respected no matter
+        the table exists or not. A new table will be created if the table not exists.
+
+        For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
+        be respected only if the v2 table does not exist. Besides, the v2 table created by this API
+        lacks some functionalities (e.g., customized properties, options, and serde info). If you
+        need them, please create the v2 table manually before the execution to avoid creating a
+        table with incomplete information.
+
+        Examples
+        --------
+        >>> sdf.writeStream.format('parquet').queryName('query').toTable('output_table')
+        ... # doctest: +SKIP
+
+        >>> sdf.writeStream.trigger(processingTime='5 seconds').toTable(
+        ...     'output_table',
+        ...     queryName='that_query',
+        ...     outputMode="append",
+        ...     format='parquet',
+        ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
+        """
+        self.options(**options)
+        if outputMode is not None:
+            self.outputMode(outputMode)
+        if partitionBy is not None:
+            self.partitionBy(partitionBy)
+        if format is not None:
+            self.format(format)
+        if queryName is not None:
+            self.queryName(queryName)
+        return self._sq(self._jwrite.toTable(tableName))
+
 
 def _test():
     import doctest
     import os
     import tempfile
-    from pyspark.sql import Row, SparkSession, SQLContext
+    from pyspark.sql import SparkSession, SQLContext
     import pyspark.sql.streaming
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -1225,8 +1575,8 @@ def _test():
     globs = pyspark.sql.streaming.__dict__.copy()
     try:
         spark = SparkSession.builder.getOrCreate()
-    except py4j.protocol.Py4JError:
-        spark = SparkSession(sc)
+    except py4j.protocol.Py4JError:  # noqa: F821
+        spark = SparkSession(sc)  # noqa: F821
 
     globs['tempfile'] = tempfile
     globs['os'] = os

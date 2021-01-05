@@ -16,42 +16,38 @@
  */
 package org.apache.spark.sql.hive.thriftserver
 
+import java.lang.reflect.InvocationTargetException
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationHandle
-import org.apache.hive.service.cli.operation.{GetCatalogsOperation, OperationManager}
-import org.apache.hive.service.cli.session.{HiveSessionImpl, SessionManager}
-import org.mockito.Mockito.{mock, verify, when}
-import org.mockito.invocation.InvocationOnMock
+import org.apache.hive.service.cli.operation.{GetCatalogsOperation, Operation, OperationManager}
+import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, SessionManager}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
 
 import org.apache.spark.SparkFunSuite
 
 class HiveSessionImplSuite extends SparkFunSuite {
   private var session: HiveSessionImpl = _
-  private var operationManager: OperationManager = _
+  private var operationManager: OperationManagerMock = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
+    val sessionManager = new SessionManager(null)
+    operationManager = new OperationManagerMock()
+
     session = new HiveSessionImpl(
-      ThriftserverShimUtils.testedProtocolVersions.head,
+      TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
       "",
       "",
       new HiveConf(),
       ""
     )
-    val sessionManager = mock(classOf[SessionManager])
     session.setSessionManager(sessionManager)
-    operationManager = mock(classOf[OperationManager])
     session.setOperationManager(operationManager)
-    when(operationManager.newGetCatalogsOperation(session)).thenAnswer(
-      (_: InvocationOnMock) => {
-        val operation = mock(classOf[GetCatalogsOperation])
-        when(operation.getHandle).thenReturn(mock(classOf[OperationHandle]))
-        operation
-      }
-    )
 
     session.open(Map.empty[String, String].asJava)
   }
@@ -60,14 +56,35 @@ class HiveSessionImplSuite extends SparkFunSuite {
     val operationHandle1 = session.getCatalogs
     val operationHandle2 = session.getCatalogs
 
-    when(operationManager.closeOperation(operationHandle1))
-      .thenThrow(classOf[NullPointerException])
-    when(operationManager.closeOperation(operationHandle2))
-      .thenThrow(classOf[NullPointerException])
-
     session.close()
 
-    verify(operationManager).closeOperation(operationHandle1)
-    verify(operationManager).closeOperation(operationHandle2)
+    assert(operationManager.getCalledHandles.contains(operationHandle1))
+    assert(operationManager.getCalledHandles.contains(operationHandle2))
   }
 }
+
+class OperationManagerMock extends OperationManager {
+  private val calledHandles: mutable.Set[OperationHandle] = new mutable.HashSet[OperationHandle]()
+
+  override def newGetCatalogsOperation(parentSession: HiveSession): GetCatalogsOperation = {
+    val operation = new GetCatalogsOperationMock(parentSession)
+    try {
+      val m = classOf[OperationManager].getDeclaredMethod("addOperation", classOf[Operation])
+      m.setAccessible(true)
+      m.invoke(this, operation)
+    } catch {
+      case e@(_: NoSuchMethodException | _: IllegalAccessException |
+              _: InvocationTargetException) =>
+        throw new RuntimeException(e)
+    }
+    operation
+  }
+
+  override def closeOperation(opHandle: OperationHandle): Unit = {
+    calledHandles.add(opHandle)
+    throw new RuntimeException
+  }
+
+  def getCalledHandles: mutable.Set[OperationHandle] = calledHandles
+}
+

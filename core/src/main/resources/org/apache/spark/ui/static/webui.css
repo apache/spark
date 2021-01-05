@@ -80,6 +80,10 @@ a:not([href]):hover {
   padding: 0;
 }
 
+.navbar-brand a:hover {
+  text-decoration: none;
+}
+
 .navbar .navbar-nav .nav-link {
   height: 50px;
   padding: 10px 15px 10px;
@@ -315,10 +319,6 @@ a.expandbutton {
 
 .table-dataTable {
   width: 100%;
-}
-
-.container-fluid-div {
-  width: 200px;
 }
 
 .select-all-div-checkbox-div {

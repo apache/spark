@@ -213,7 +213,7 @@ private[netty] class NettyRpcEnv(
     def onFailure(e: Throwable): Unit = {
       if (!promise.tryFailure(e)) {
         e match {
-          case e : RpcEnvStoppedException => logDebug (s"Ignored failure: $e")
+          case e : RpcEnvStoppedException => logDebug(s"Ignored failure: $e")
           case _ => logWarning(s"Ignored failure: $e")
         }
       }
@@ -254,14 +254,14 @@ private[netty] class NettyRpcEnv(
 
       val timeoutCancelable = timeoutScheduler.schedule(new Runnable {
         override def run(): Unit = {
-          val remoteReceAddr = if (remoteAddr == null) {
+          val remoteRecAddr = if (remoteAddr == null) {
             Try {
               message.receiver.client.getChannel.remoteAddress()
             }.toOption.orNull
           } else {
             remoteAddr
           }
-          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteReceAddr} " +
+          onFailure(new TimeoutException(s"Cannot receive any reply from ${remoteRecAddr} " +
             s"in ${timeout.duration}"))
         }
       }, timeout.duration.toNanos, TimeUnit.NANOSECONDS)

@@ -426,19 +426,19 @@ queries. Currently, it contains the following metrics.
 * **Batch Duration.** The process duration of each batch. 
 * **Operation Duration.** The amount of time taken to perform various operations in milliseconds.
 The tracked operations are listed as follows.
-    * addBatch: Adds result data of the current batch to the sink.
-    * getBatch: Gets a new batch of data to process.
-    * latestOffset: Gets the latest offsets for sources. 
-    * queryPlanning: Generates the execution plan.
-    * walCommit: Writes the offsets to the metadata log.
+    * addBatch: Time taken to read the micro-batch's input data from the sources, process it, and write the batch's output to the sink. This should take the bulk of the micro-batch's time.
+    * getBatch: Time taken to prepare the logical query to read the input of the current micro-batch from the sources.
+    * latestOffset & getOffset: Time taken to query the maximum available offset for this source.
+    * queryPlanning: Time taken to generates the execution plan.
+    * walCommit: Time taken to write the offsets to the metadata log.
     
 As an early-release version, the statistics page is still under development and will be improved in
 future releases.
 
-## Streaming Tab
-The web UI includes a Streaming tab if the application uses Spark streaming. This tab displays
-scheduling delay and processing time for each micro-batch in the data stream, which can be useful
-for troubleshooting the streaming application.
+## Streaming (DStreams) Tab
+The web UI includes a Streaming tab if the application uses Spark Streaming with DStream API.
+This tab displays scheduling delay and processing time for each micro-batch in the data stream,
+which can be useful for troubleshooting the streaming application.
 
 ## JDBC/ODBC Server Tab
 We can see this tab when Spark is running as a [distributed SQL engine](sql-distributed-sql-engine.html). It shows information about sessions and submitted SQL operations.

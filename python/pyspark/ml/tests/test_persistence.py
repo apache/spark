@@ -21,17 +21,76 @@ import tempfile
 import unittest
 
 from pyspark.ml import Transformer
-from pyspark.ml.classification import DecisionTreeClassifier, LogisticRegression, OneVsRest, \
-    OneVsRestModel
+from pyspark.ml.classification import DecisionTreeClassifier, FMClassifier, \
+    FMClassificationModel, LogisticRegression, MultilayerPerceptronClassifier, \
+    MultilayerPerceptronClassificationModel, OneVsRest, OneVsRestModel
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.feature import Binarizer, HashingTF, PCA
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Params
 from pyspark.ml.pipeline import Pipeline, PipelineModel
-from pyspark.ml.regression import DecisionTreeRegressor, LinearRegression
+from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegression, \
+    GeneralizedLinearRegressionModel, \
+    LinearRegression
 from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWriter
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import MockUnaryTransformer, SparkSessionTestCase
+
+
+class TestDefaultSolver(SparkSessionTestCase):
+
+    def test_multilayer_load(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense([0.0, 0.0])),
+                                         (1.0, Vectors.dense([0.0, 1.0])),
+                                         (1.0, Vectors.dense([1.0, 0.0])),
+                                         (0.0, Vectors.dense([1.0, 1.0]))],
+                                        ["label",  "features"])
+
+        mlp = MultilayerPerceptronClassifier(layers=[2, 2, 2], seed=123)
+        model = mlp.fit(df)
+        self.assertEqual(model.getSolver(), "l-bfgs")
+        transformed1 = model.transform(df)
+        path = tempfile.mkdtemp()
+        model_path = path + "/mlp"
+        model.save(model_path)
+        model2 = MultilayerPerceptronClassificationModel.load(model_path)
+        self.assertEqual(model2.getSolver(), "l-bfgs")
+        transformed2 = model2.transform(df)
+        self.assertEqual(transformed1.take(4), transformed2.take(4))
+
+    def test_fm_load(self):
+        df = self.spark.createDataFrame([(1.0, Vectors.dense(1.0)),
+                                         (0.0, Vectors.sparse(1, [], []))],
+                                        ["label",  "features"])
+        fm = FMClassifier(factorSize=2, maxIter=50, stepSize=2.0)
+        model = fm.fit(df)
+        self.assertEqual(model.getSolver(), "adamW")
+        transformed1 = model.transform(df)
+        path = tempfile.mkdtemp()
+        model_path = path + "/fm"
+        model.save(model_path)
+        model2 = FMClassificationModel.load(model_path)
+        self.assertEqual(model2.getSolver(), "adamW")
+        transformed2 = model2.transform(df)
+        self.assertEqual(transformed1.take(2), transformed2.take(2))
+
+    def test_glr_load(self):
+        df = self.spark.createDataFrame([(1.0, Vectors.dense(0.0, 0.0)),
+                                         (1.0, Vectors.dense(1.0, 2.0)),
+                                         (2.0, Vectors.dense(0.0, 0.0)),
+                                         (2.0, Vectors.dense(1.0, 1.0))],
+                                        ["label",  "features"])
+        glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
+        model = glr.fit(df)
+        self.assertEqual(model.getSolver(), "irls")
+        transformed1 = model.transform(df)
+        path = tempfile.mkdtemp()
+        model_path = path + "/glr"
+        model.save(model_path)
+        model2 = GeneralizedLinearRegressionModel.load(model_path)
+        self.assertEqual(model2.getSolver(), "irls")
+        transformed2 = model2.transform(df)
+        self.assertEqual(transformed1.take(4), transformed2.take(4))
 
 
 class PersistenceTest(SparkSessionTestCase):
@@ -178,6 +237,11 @@ class PersistenceTest(SparkSessionTestCase):
                 self.assertEqual(len(m1.models), len(m2.models))
                 for x, y in zip(m1.models, m2.models):
                     self._compare_pipelines(x, y)
+        elif isinstance(m1, Params):
+            # Test on python backend Estimator/Transformer/Model/Evaluator
+            self.assertEqual(len(m1.params), len(m2.params))
+            for p in m1.params:
+                self._compare_params(m1, m2, p)
         else:
             raise RuntimeError("_compare_pipelines does not yet support type: %s" % type(m1))
 
@@ -267,14 +331,14 @@ class PersistenceTest(SparkSessionTestCase):
             except OSError:
                 pass
 
-    def test_onevsrest(self):
+    def _run_test_onevsrest(self, LogisticRegressionCls):
         temp_path = tempfile.mkdtemp()
         df = self.spark.createDataFrame([(0.0, 0.5, Vectors.dense(1.0, 0.8)),
                                          (1.0, 0.5, Vectors.sparse(2, [], [])),
                                          (2.0, 1.0, Vectors.dense(0.5, 0.5))] * 10,
                                         ["label", "wt", "features"])
 
-        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        lr = LogisticRegressionCls(maxIter=5, regParam=0.01)
         ovr = OneVsRest(classifier=lr)
 
         def reload_and_compare(ovr, suffix):
@@ -290,6 +354,11 @@ class PersistenceTest(SparkSessionTestCase):
 
         reload_and_compare(OneVsRest(classifier=lr), "ovr")
         reload_and_compare(OneVsRest(classifier=lr).setWeightCol("wt"), "ovrw")
+
+    def test_onevsrest(self):
+        from pyspark.testing.mlutils import DummyLogisticRegression
+        self._run_test_onevsrest(LogisticRegression)
+        self._run_test_onevsrest(DummyLogisticRegression)
 
     def test_decisiontree_classifier(self):
         dt = DecisionTreeClassifier(maxDepth=1)
@@ -383,7 +452,7 @@ class PersistenceTest(SparkSessionTestCase):
         del metadata['defaultParamMap']
         metadataStr = json.dumps(metadata, separators=[',',  ':'])
         loadedMetadata = reader._parseMetaData(metadataStr, )
-        with self.assertRaisesRegexp(AssertionError, "`defaultParamMap` section not found"):
+        with self.assertRaisesRegex(AssertionError, "`defaultParamMap` section not found"):
             reader.getAndSetParams(lr, loadedMetadata)
 
         # Prior to 2.4.0, metadata doesn't have `defaultParamMap`.
@@ -394,10 +463,10 @@ class PersistenceTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_persistence import *
+    from pyspark.ml.tests.test_persistence import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

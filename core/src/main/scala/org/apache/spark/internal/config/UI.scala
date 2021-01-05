@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.config
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.network.util.ByteUnit
@@ -191,4 +192,15 @@ private[spark] object UI {
     .version("3.0.0")
     .stringConf
     .createOptional
+
+  val MASTER_UI_DECOMMISSION_ALLOW_MODE = ConfigBuilder("spark.master.ui.decommission.allow.mode")
+    .doc("Specifies the behavior of the Master Web UI's /workers/kill endpoint. Possible choices" +
+      " are: `LOCAL` means allow this endpoint from IP's that are local to the machine running" +
+      " the Master, `DENY` means to completely disable this endpoint, `ALLOW` means to allow" +
+      " calling this endpoint from any IP.")
+    .internal()
+    .version("3.1.0")
+    .stringConf
+    .transform(_.toUpperCase(Locale.ROOT))
+    .createWithDefault("LOCAL")
 }

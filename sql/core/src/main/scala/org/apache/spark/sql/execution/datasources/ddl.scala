@@ -103,17 +103,6 @@ case class CreateTempViewUsing(
   }
 }
 
-case class RefreshTable(tableIdent: TableIdentifier)
-  extends RunnableCommand {
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
-    // drop the original cached version and make the new version cached lazily.
-    sparkSession.catalog.refreshTable(tableIdent.quotedString)
-    Seq.empty[Row]
-  }
-}
-
 case class RefreshResource(path: String)
   extends RunnableCommand {
 

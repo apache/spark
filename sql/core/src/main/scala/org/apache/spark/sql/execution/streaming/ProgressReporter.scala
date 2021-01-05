@@ -71,6 +71,8 @@ trait ProgressReporter extends Logging {
   private var currentTriggerEndTimestamp = -1L
   private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
   private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerLatestOffsets: Map[SparkDataStream, String] = _
+
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
 
@@ -119,6 +121,7 @@ trait ProgressReporter extends Logging {
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     currentTriggerStartOffsets = null
     currentTriggerEndOffsets = null
+    currentTriggerLatestOffsets = null
     currentDurationsMs.clear()
   }
 
@@ -126,9 +129,13 @@ trait ProgressReporter extends Logging {
    * Record the offsets range this trigger will process. Call this before updating
    * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
    */
-  protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
-    currentTriggerStartOffsets = from.mapValues(_.json)
-    currentTriggerEndOffsets = to.mapValues(_.json)
+  protected def recordTriggerOffsets(
+      from: StreamProgress,
+      to: StreamProgress,
+      latest: StreamProgress): Unit = {
+    currentTriggerStartOffsets = from.mapValues(_.json).toMap
+    currentTriggerEndOffsets = to.mapValues(_.json).toMap
+    currentTriggerLatestOffsets = latest.mapValues(_.json).toMap
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -151,7 +158,8 @@ trait ProgressReporter extends Logging {
    *                    though the sources don't have any new data.
    */
   protected def finishTrigger(hasNewData: Boolean, hasExecuted: Boolean): Unit = {
-    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
+    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
+      currentTriggerLatestOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData, hasExecuted)
@@ -161,7 +169,7 @@ trait ProgressReporter extends Logging {
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
-      Double.NaN
+      Double.PositiveInfinity
     }
     logDebug(s"Execution stats: $executionStats")
 
@@ -171,6 +179,7 @@ trait ProgressReporter extends Logging {
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
         endOffset = currentTriggerEndOffsets.get(source).orNull,
+        latestOffset = currentTriggerLatestOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
         processedRowsPerSecond = numRecords / processingTimeSec
@@ -192,7 +201,8 @@ trait ProgressReporter extends Logging {
       timestamp = formatTimestamp(currentTriggerStartTimestamp),
       batchId = currentBatchId,
       batchDuration = processingTimeMills,
-      durationMs = new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).asJava),
+      durationMs =
+        new java.util.HashMap(currentDurationsMs.toMap.mapValues(long2Long).toMap.asJava),
       eventTime = new java.util.HashMap(executionStats.eventTimeStats.asJava),
       stateOperators = executionStats.stateOperators.toArray,
       sources = sourceProgress.toArray,
@@ -201,7 +211,7 @@ trait ProgressReporter extends Logging {
 
     if (hasExecuted) {
       // Reset noDataEventTimestamp if we processed any data
-      lastNoExecutionProgressEventTime = Long.MinValue
+      lastNoExecutionProgressEventTime = triggerClock.getTimeMillis()
       updateProgress(newProgress)
     } else {
       val now = triggerClock.getTimeMillis()
@@ -222,7 +232,11 @@ trait ProgressReporter extends Logging {
     lastExecution.executedPlan.collect {
       case p if p.isInstanceOf[StateStoreWriter] =>
         val progress = p.asInstanceOf[StateStoreWriter].getProgress()
-        if (hasExecuted) progress else progress.copy(newNumRowsUpdated = 0)
+        if (hasExecuted) {
+          progress
+        } else {
+          progress.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0)
+        }
     }
   }
 
@@ -251,14 +265,14 @@ trait ProgressReporter extends Logging {
           "avg" -> stats.avg.toLong).mapValues(formatTimestamp)
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
-    ExecutionStats(numInputRows, stateOperators, eventTimeStats)
+    ExecutionStats(numInputRows, stateOperators, eventTimeStats.toMap)
   }
 
   /** Extract number of input sources for each streaming source in plan */
   private def extractSourceToNumInputRows(): Map[SparkDataStream, Long] = {
 
     def sumRows(tuples: Seq[(SparkDataStream, Long)]): Map[SparkDataStream, Long] = {
-      tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
+      tuples.groupBy(_._1).mapValues(_.map(_._2).sum).toMap // sum up rows for each source
     }
 
     val onlyDataSourceV2Sources = {

@@ -43,6 +43,7 @@ class CheckpointTests(ReusedPySparkTestCase):
 
         self.assertFalse(flatMappedRDD.isCheckpointed())
         self.assertTrue(flatMappedRDD.getCheckpointFile() is None)
+        self.assertFalse(self.sc.getCheckpointDir() is None)
 
         flatMappedRDD.checkpoint()
         result = flatMappedRDD.collect()
@@ -51,6 +52,8 @@ class CheckpointTests(ReusedPySparkTestCase):
         self.assertEqual(flatMappedRDD.collect(), result)
         self.assertEqual("file:" + self.checkpointDir.name,
                          os.path.dirname(os.path.dirname(flatMappedRDD.getCheckpointFile())))
+        self.assertEqual(self.sc.getCheckpointDir(),
+                         os.path.dirname(flatMappedRDD.getCheckpointFile()))
 
     def test_checkpoint_and_restore(self):
         parCollection = self.sc.parallelize([1, 2, 3, 4])
@@ -93,7 +96,7 @@ class AddFileTests(PySparkTestCase):
         # this job fails due to `userlibrary` not being on the Python path:
         # disable logging in log4j temporarily
         def func(x):
-            from userlibrary import UserClass
+            from userlibrary import UserClass  # type: ignore
             return UserClass().hello()
         with QuietTest(self.sc):
             self.assertRaises(Exception, self.sc.parallelize(range(2)).map(func).first)
@@ -126,7 +129,7 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlibrary import UserClass
+            from userlibrary import UserClass  # noqa: F401
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlibrary.py")
         self.sc.addPyFile(path)
@@ -137,7 +140,8 @@ class AddFileTests(PySparkTestCase):
         # To ensure that we're actually testing addPyFile's effects, check that
         # this fails due to `userlibrary` not being on the Python path:
         def func():
-            from userlib import UserClass
+            from userlib import UserClass  # type: ignore[import]
+            UserClass()
         self.assertRaises(ImportError, func)
         path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1.zip")
         self.sc.addPyFile(path)
@@ -147,11 +151,11 @@ class AddFileTests(PySparkTestCase):
     def test_overwrite_system_module(self):
         self.sc.addPyFile(os.path.join(SPARK_HOME, "python/test_support/SimpleHTTPServer.py"))
 
-        import SimpleHTTPServer
+        import SimpleHTTPServer  # type: ignore[import]
         self.assertEqual("My Server", SimpleHTTPServer.__name__)
 
         def func(x):
-            import SimpleHTTPServer
+            import SimpleHTTPServer  # type: ignore[import]
             return SimpleHTTPServer.__name__
 
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
@@ -171,8 +175,8 @@ class ContextTests(unittest.TestCase):
         with SparkContext() as sc:
             temp_files = os.listdir(sc._temp_dir)
             rdd = sc.parallelize([0, 1, 2])
-            post_parallalize_temp_files = os.listdir(sc._temp_dir)
-            self.assertEqual(temp_files, post_parallalize_temp_files)
+            post_parallelize_temp_files = os.listdir(sc._temp_dir)
+            self.assertEqual(temp_files, post_parallelize_temp_files)
 
     def test_set_conf(self):
         # This is for an internal use case. When there is an existing SparkContext,
@@ -267,6 +271,25 @@ class ContextTests(unittest.TestCase):
             resources = sc.resources
             self.assertEqual(len(resources), 0)
 
+    def test_disallow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext should not be created in executors.
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            with self.assertRaises(Exception) as context:
+                sc.range(2).foreach(lambda _: SparkContext())
+            self.assertIn("SparkContext should only be created and accessed on the driver.",
+                          str(context.exception))
+
+    def test_allow_to_create_spark_context_in_executors(self):
+        # SPARK-32160: SparkContext can be created in executors if the config is set.
+
+        def create_spark_context():
+            conf = SparkConf().set("spark.executor.allowSparkContext", "true")
+            with SparkContext(conf=conf):
+                pass
+
+        with SparkContext("local-cluster[3, 1, 1024]") as sc:
+            sc.range(2).foreach(lambda _: create_spark_context())
+
 
 class ContextTestsWithResources(unittest.TestCase):
 
@@ -299,10 +322,10 @@ class ContextTestsWithResources(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_context import *
+    from pyspark.tests.test_context import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

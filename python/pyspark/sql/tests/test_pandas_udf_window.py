@@ -26,12 +26,12 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarro
 from pyspark.testing.utils import QuietTest
 
 if have_pandas:
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def data(self):
@@ -241,14 +241,14 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
         result1 = df.withColumn('v2', array_udf(df['v']).over(w))
-        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+        self.assertEqual(result1.first()['v2'], [1.0, 2.0])
 
     def test_invalid_args(self):
         df = self.data
         w = self.unbounded_window
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     AnalysisException,
                     '.*not supported within a window function'):
                 foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
@@ -352,10 +352,10 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_window import *
+    from pyspark.sql.tests.test_pandas_udf_window import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

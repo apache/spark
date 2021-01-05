@@ -24,8 +24,10 @@ import java.util.{Locale, TimeZone}
 import org.apache.log4j.spi.LoggingEvent
 
 import scala.annotation.tailrec
+import org.apache.commons.io.FileUtils
 import org.apache.log4j.{Appender, AppenderSkeleton, Level, Logger}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, Outcome}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, BeforeAndAfterEach, Outcome}
+import org.scalatest.funsuite.AnyFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -57,12 +59,18 @@ import scala.collection.mutable.ArrayBuffer
  * }
  */
 abstract class SparkFunSuite
-  extends FunSuite
+  extends AnyFunSuite
   with BeforeAndAfterAll
   with BeforeAndAfterEach
   with ThreadAudit
   with Logging {
 // scalastyle:on
+
+  // Initialize the logger forcibly to let the logger log timestamp
+  // based on the local time zone depending on environments.
+  // The default time zone will be set to America/Los_Angeles later
+  // so this initialization is necessary here.
+  log
 
   // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -98,6 +106,17 @@ abstract class SparkFunSuite
 
   protected final def getTestResourcePath(file: String): String = {
     getTestResourceFile(file).getCanonicalPath
+  }
+
+  protected final def copyAndGetResourceFile(fileName: String, suffix: String): File = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
+    // To avoid illegal accesses to a resource file inside jar
+    // (URISyntaxException might be thrown when accessing it),
+    // copy it into a temporary one for accessing it from the dependent module.
+    val file = File.createTempFile("test-resource", suffix)
+    file.deleteOnExit()
+    FileUtils.copyURLToFile(url, file)
+    file
   }
 
   /**
