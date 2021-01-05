@@ -20,8 +20,10 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -226,8 +228,23 @@ class ResolveSessionCatalog(
     case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(ResolvedV1TableOrViewIdentifier(ident), colNameParts, isExtended) =>
-      DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
+    case DescribeColumn(ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended) =>
+      // For views, the column will not be resolved by `ResolveReferences` because
+      // `ResolvedView` stores only the identifier.
+      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended)
+
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended) =>
+      column match {
+        case u: UnresolvedAttribute =>
+          throw QueryCompilationErrors.columnDoesNotExistError(u.name)
+        case a: Attribute =>
+          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
+        case Alias(child, _) =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "DESC TABLE COLUMN", toPrettySQL(child))
+        case other =>
+          throw new AnalysisException(s"[BUG] unexpected column expression: $other")
+      }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.
@@ -639,9 +656,16 @@ class ResolveSessionCatalog(
     }
   }
 
+  object ResolvedViewIdentifier {
+    def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
+      case ResolvedView(ident, _) => Some(ident)
+      case _ => None
+    }
+  }
+
   object ResolvedV1TableIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
-      case ResolvedTable(catalog, ident, _: V1Table) if isSessionCatalog(catalog) => Some(ident)
+      case ResolvedTable(catalog, ident, _: V1Table, _) if isSessionCatalog(catalog) => Some(ident)
       case _ => None
     }
   }
@@ -649,7 +673,7 @@ class ResolveSessionCatalog(
   object ResolvedV1TableOrViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedV1TableIdentifier(ident) => Some(ident)
-      case ResolvedView(ident, _) => Some(ident)
+      case ResolvedViewIdentifier(ident) => Some(ident)
       case _ => None
     }
   }

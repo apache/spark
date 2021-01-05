@@ -2468,7 +2468,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.4.0</version>
+          <version>4.3.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2988,7 +2988,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.0</version>
+        <version>3.1.1</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -3008,7 +3008,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.29</version>
+            <version>8.39</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3371,6 +3371,12 @@
       <properties>
         <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
       </properties>
+      <activation>
+        <os>
+          <family>linux</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
     </profile>
   </profiles>
 </project>
