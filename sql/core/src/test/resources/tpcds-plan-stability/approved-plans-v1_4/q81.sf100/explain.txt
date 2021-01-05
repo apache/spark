@@ -252,24 +252,24 @@ Input [3]: [ctr_state#17, sum#26, count#27]
 Keys [1]: [ctr_state#17]
 Functions [1]: [avg(ctr_total_return#18)]
 Aggregate Attributes [1]: [avg(ctr_total_return#18)#29]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#18)#29) * 1.200000), DecimalType(24,7), true) AS (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#30, ctr_state#17 AS ctr_state#17#31]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#18)#29) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#30, ctr_state#17 AS ctr_state#17#31]
 
 (42) Filter [codegen id : 14]
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#30, ctr_state#17#31]
-Condition : isnotnull((CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#30)
+Input [2]: [(avg(ctr_total_return) * 1.2)#30, ctr_state#17#31]
+Condition : isnotnull((avg(ctr_total_return) * 1.2)#30)
 
 (43) BroadcastExchange
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#30, ctr_state#17#31]
+Input [2]: [(avg(ctr_total_return) * 1.2)#30, ctr_state#17#31]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#32]
 
 (44) BroadcastHashJoin [codegen id : 15]
 Left keys [1]: [ctr_state#17]
 Right keys [1]: [ctr_state#17#31]
-Join condition: (cast(ctr_total_return#18 as decimal(24,7)) > (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#30)
+Join condition: (cast(ctr_total_return#18 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#30)
 
 (45) Project [codegen id : 15]
 Output [2]: [ctr_customer_sk#16, ctr_total_return#18]
-Input [5]: [ctr_customer_sk#16, ctr_state#17, ctr_total_return#18, (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#30, ctr_state#17#31]
+Input [5]: [ctr_customer_sk#16, ctr_state#17, ctr_total_return#18, (avg(ctr_total_return) * 1.2)#30, ctr_state#17#31]
 
 (46) Exchange
 Input [2]: [ctr_customer_sk#16, ctr_total_return#18]

@@ -7,7 +7,7 @@ WholeStageCodegen (12)
             Filter [sum(netpaid)]
               Subquery #1
                 WholeStageCodegen (14)
-                  HashAggregate [sum,count] [avg(netpaid),(CAST(0.05 AS DECIMAL(21,6)) * CAST(avg(netpaid) AS DECIMAL(21,6))),sum,count]
+                  HashAggregate [sum,count] [avg(netpaid),(0.05 * avg(netpaid)),sum,count]
                     InputAdapter
                       Exchange #10
                         WholeStageCodegen (13)
