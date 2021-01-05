@@ -551,12 +551,12 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.blacklist.executor.launch.blacklisting.enabled</code></td>
+  <td><code>spark.yarn.executor.launch.excludeOnFailure.enabled</code></td>
   <td>false</td>
   <td>
-  Flag to enable blacklisting of nodes having YARN resource allocation problems.
-  The error limit for blacklisting can be configured by
-  <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
+  Flag to enable exclusion of nodes having YARN resource allocation problems.
+  The error limit for excluding can be configured by
+  <code>spark.excludeOnFailure.application.maxFailedExecutorsPerNode</code>.
   </td>
   <td>2.4.0</td>
 </tr>
@@ -584,48 +584,48 @@ To use a custom metrics.properties for the application master and executors, upd
 <table class="table">
     <tr><th>Pattern</th><th>Meaning</th></tr>
     <tr>
-      <td>{{HTTP_SCHEME}}</td>
-      <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
+      <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
+      <td><code>http://</code> or <code>https://</code> according to YARN HTTP policy. (Configured via <code>yarn.http.policy</code>)</td>
     </tr>
     <tr>
-      <td>{{NM_HOST}}</td>
+      <td>&#123;&#123;NM_HOST&#125;&#125;</td>
       <td>The "host" of node where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_PORT}}</td>
+      <td>&#123;&#123;NM_PORT&#125;&#125;</td>
       <td>The "port" of node manager where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_HTTP_PORT}}</td>
+      <td>&#123;&#123;NM_HTTP_PORT&#125;&#125;</td>
       <td>The "port" of node manager's http server where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_HTTP_ADDRESS}}</td>
+      <td>&#123;&#123;NM_HTTP_ADDRESS&#125;&#125;</td>
       <td>Http URI of the node on which the container is allocated.</td>
     </tr>
     <tr>
-      <td>{{CLUSTER_ID}}</td>
-      <td>The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)</td>
+      <td>&#123;&#123;CLUSTER_ID&#125;&#125;</td>
+      <td>The cluster ID of Resource Manager. (Configured via <code>yarn.resourcemanager.cluster-id</code>)</td>
     </tr>
     <tr>
-      <td>{{CONTAINER_ID}}</td>
+      <td>&#123;&#123;CONTAINER_ID&#125;&#125;</td>
       <td>The ID of container.</td>
     </tr>
     <tr>
-      <td>{{USER}}</td>
-      <td>'SPARK_USER' on system environment.</td>
+      <td>&#123;&#123;USER&#125;&#125;</td>
+      <td><code>SPARK_USER</code> on system environment.</td>
     </tr>
     <tr>
-      <td>{{FILE_NAME}}</td>
-      <td>`stdout`, `stderr`.</td>
+      <td>&#123;&#123;FILE_NAME&#125;&#125;</td>
+      <td><code>stdout</code>, <code>stderr</code>.</td>
     </tr>
 </table>
 
 For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
 
- `{{HTTP_SCHEME}}<JHS_HOST>:<JHS_PORT>/jobhistory/logs/{{NM_HOST}}:{{NM_PORT}}/{{CONTAINER_ID}}/{{CONTAINER_ID}}/{{USER}}/{{FILE_NAME}}?start=-4096`
+<code>&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096</code>
 
- NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
 
 # Resource Allocation and Configuration Overview
 
@@ -644,6 +644,7 @@ YARN does not tell Spark the addresses of the resources allocated to each contai
 # Stage Level Scheduling Overview
 
 Stage level scheduling is supported on YARN when dynamic allocation is enabled. One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind.
+Note there is a difference in the way custom resources are handled between the base default profile and custom ResourceProfiles. To allow for the user to request YARN containers with extra resources without Spark scheduling on them, the user can specify resources via the <code>spark.yarn.executor.resource.</code> config. Those configs are only used in the base default profile though and do not get propagated into any other custom ResourceProfiles. This is because there would be no way to remove them if you wanted a stage to not have them. This results in your default profile getting custom resources defined in <code>spark.yarn.executor.resource.</code> plus spark defined resources of GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not know the mapping of any other resources. Any other Spark custom resources are not propagated to YARN for the default profile. So if you want Spark to schedule based off a custom resource and have it requested from YARN, you must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark config off if you only want YARN containers with the extra resources but Spark not to schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way to only specify YARN resources without Spark scheduling off of them. This means for custom ResourceProfiles we propagate all the resources defined in the ResourceProfile to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires that the name of any custom resources you specify match what they are defined as in YARN.
 
 # Important notes
 

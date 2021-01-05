@@ -46,7 +46,6 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> OrcPartitionDiscoverySuite
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
- *   -> HiveOrcFilterSuite
  */
 abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 

@@ -47,7 +47,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertTrue("Column" in _to_java_column(u"a").getClass().toString())
         self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "Invalid argument, not a string or column",
             lambda: _to_java_column(1))
@@ -58,7 +58,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertRaises(TypeError, lambda: _to_java_column(A()))
         self.assertRaises(TypeError, lambda: _to_java_column([]))
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             TypeError,
             "Invalid argument, not a string or column",
             lambda: udf(lambda x: x)(None))
@@ -79,9 +79,9 @@ class ColumnTests(ReusedSQLTestCase):
             cs.startswith('a'), cs.endswith('a'), ci.eqNullSafe(cs)
         self.assertTrue(all(isinstance(c, Column) for c in css))
         self.assertTrue(isinstance(ci.cast(LongType()), Column))
-        self.assertRaisesRegexp(ValueError,
-                                "Cannot apply 'in' operator against a column",
-                                lambda: 1 in cs)
+        self.assertRaisesRegex(ValueError,
+                               "Cannot apply 'in' operator against a column",
+                               lambda: 1 in cs)
 
     def test_column_accessor(self):
         from pyspark.sql.functions import col
@@ -116,6 +116,7 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertEqual([("数量", 'bigint')], df.dtypes)
         self.assertEqual(1, df.select("数量").first()[0])
         self.assertEqual(1, df.select(df["数量"]).first()[0])
+        self.assertTrue(columnName in repr(df[columnName]))
 
     def test_field_accessor(self):
         df = self.sc.parallelize([Row(l=[1], r=Row(a=1, b="b"), d={"k": "v"})]).toDF()
@@ -155,6 +156,28 @@ class ColumnTests(ReusedSQLTestCase):
         self.assertRaisesRegex(TypeError,
                                'fieldName should be a string',
                                lambda: df['a'].withField(col('b'), lit(3)))
+
+    def test_drop_fields(self):
+        df = self.spark.createDataFrame([Row(a=Row(b=1, c=2, d=Row(e=3, f=4)))])
+        self.assertIsInstance(df["a"].dropFields("b"), Column)
+        self.assertIsInstance(df["a"].dropFields("b", "c"), Column)
+        self.assertIsInstance(df["a"].dropFields("d.e"), Column)
+
+        result = df.select(
+            df["a"].dropFields("b").alias("a1"),
+            df["a"].dropFields("d.e").alias("a2"),
+        ).first().asDict(True)
+
+        self.assertTrue(
+            "b" not in result["a1"] and
+            "c" in result["a1"] and
+            "d" in result["a1"]
+        )
+
+        self.assertTrue(
+            "e" not in result["a2"]["d"] and
+            "f" in result["a2"]["d"]
+        )
 
 if __name__ == "__main__":
     import unittest

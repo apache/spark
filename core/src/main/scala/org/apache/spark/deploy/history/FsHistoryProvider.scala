@@ -21,7 +21,7 @@ import java.io.{File, FileNotFoundException, IOException}
 import java.lang.{Long => JLong}
 import java.nio.file.Files
 import java.util.{Date, NoSuchElementException, ServiceLoader}
-import java.util.concurrent.{ConcurrentHashMap, ExecutorService, Future, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ExecutorService, TimeUnit}
 import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConverters._
@@ -359,15 +359,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     val conf = this.conf.clone()
-    val secManager = new SecurityManager(conf)
-
-    secManager.setAcls(historyUiAclsEnable)
-    // make sure to set admin acls before view acls so they are properly picked up
-    secManager.setAdminAcls(historyUiAdminAcls ++ stringToSeq(attempt.adminAcls.getOrElse("")))
-    secManager.setViewAcls(attempt.info.sparkUser, stringToSeq(attempt.viewAcls.getOrElse("")))
-    secManager.setAdminAclsGroups(historyUiAdminAclsGroups ++
-      stringToSeq(attempt.adminAclsGroups.getOrElse("")))
-    secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
+    val secManager = createSecurityManager(conf, attempt)
 
     val kvstore = try {
       diskManager match {
@@ -461,6 +453,17 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
+      user: String): Boolean = {
+    val app = load(appId)
+    val attempt = app.attempts.find(_.info.attemptId == attemptId).orNull
+    if (attempt == null) {
+      throw new NoSuchElementException()
+    }
+    val secManager = createSecurityManager(this.conf.clone(), attempt)
+    secManager.checkUIViewPermissions(user)
+  }
+
   /**
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
@@ -471,9 +474,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
+      // Mark entries that are processing as not stale. Such entries do not have a chance to be
+      // updated with the new 'lastProcessed' time and thus any entity that completes processing
+      // right after this check and before the check for stale entities will be identified as stale
+      // and will be deleted from the UI until the next 'checkForLogs' run.
+      val notStale = mutable.HashSet[String]()
       val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
         .filter { entry => isAccessible(entry.getPath) }
-        .filter { entry => !isProcessing(entry.getPath) }
+        .filter { entry =>
+          if (isProcessing(entry.getPath)) {
+            notStale.add(entry.getPath.toString())
+            false
+          } else {
+            true
+          }
+        }
         .flatMap { entry => EventLogFileReader(fs, entry) }
         .filter { reader =>
           try {
@@ -538,6 +553,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 reader.fileSizeForLastIndex > 0
               } catch {
                 case _: FileNotFoundException => false
+                case NonFatal(e) =>
+                  logWarning(s"Error while reading new log ${reader.rootPath}", e)
+                  false
               }
 
             case NonFatal(e) =>
@@ -570,12 +588,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .last(newLastScanTime - 1)
         .asScala
         .toList
-      stale.filterNot(isProcessing).foreach { log =>
-        log.appId.foreach { appId =>
-          cleanAppData(appId, log.attemptId, log.logPath)
-          listing.delete(classOf[LogInfo], log.logPath)
+      stale.filterNot(isProcessing)
+        .filterNot(info => notStale.contains(info.logPath))
+        .foreach { log =>
+          log.appId.foreach { appId =>
+            cleanAppData(appId, log.attemptId, log.logPath)
+            listing.delete(classOf[LogInfo], log.logPath)
+          }
         }
-      }
 
       lastScanTime.set(newLastScanTime)
     } catch {
@@ -716,7 +736,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   /**
    * Replay the given log file, saving the application in the listing db.
-   * Visable for testing
+   * Visible for testing
    */
   private[history] def doMergeApplicationListing(
       reader: EventLogFileReader,
@@ -1373,6 +1393,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         endProcessing(rootPath)
     }
   }
+
+  private def createSecurityManager(conf: SparkConf,
+      attempt: AttemptInfoWrapper): SecurityManager = {
+    val secManager = new SecurityManager(conf)
+    secManager.setAcls(historyUiAclsEnable)
+    // make sure to set admin acls before view acls so they are properly picked up
+    secManager.setAdminAcls(historyUiAdminAcls ++ stringToSeq(attempt.adminAcls.getOrElse("")))
+    secManager.setViewAcls(attempt.info.sparkUser, stringToSeq(attempt.viewAcls.getOrElse("")))
+    secManager.setAdminAclsGroups(historyUiAdminAclsGroups ++
+      stringToSeq(attempt.adminAclsGroups.getOrElse("")))
+    secManager.setViewAclsGroups(stringToSeq(attempt.viewAclsGroups.getOrElse("")))
+    secManager
+  }
 }
 
 private[history] object FsHistoryProvider {
@@ -1527,14 +1560,9 @@ private[history] class AppListingListener(
   private class MutableApplicationInfo {
     var id: String = null
     var name: String = null
-    var coresGranted: Option[Int] = None
-    var maxCores: Option[Int] = None
-    var coresPerExecutor: Option[Int] = None
-    var memoryPerExecutorMB: Option[Int] = None
 
     def toView(): ApplicationInfoWrapper = {
-      val apiInfo = ApplicationInfo(id, name, coresGranted, maxCores, coresPerExecutor,
-        memoryPerExecutorMB, Nil)
+      val apiInfo = ApplicationInfo(id, name, None, None, None, None, Nil)
       new ApplicationInfoWrapper(apiInfo, List(attempt.toView()))
     }
 

@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
@@ -41,6 +41,7 @@ case class DescribeTableExec(
     addPartitioning(rows)
 
     if (isExtended) {
+      addMetadataColumns(rows)
       addTableDetails(rows)
     }
     rows.toSeq
@@ -70,6 +71,19 @@ case class DescribeTableExec(
       toCatalystRow(
         column.name, column.dataType.simpleString, column.getComment().getOrElse(""))
     }
+  }
+
+  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+      rows += emptyRow()
+      rows += toCatalystRow("# Metadata Columns", "", "")
+      rows ++= hasMeta.metadataColumns.map { column =>
+        toCatalystRow(
+          column.name,
+          column.dataType.simpleString,
+          Option(column.comment()).getOrElse(""))
+      }
+    case _ =>
   }
 
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {

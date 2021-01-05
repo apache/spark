@@ -33,6 +33,9 @@ abstract class LogicalPlan
   with QueryPlanConstraints
   with Logging {
 
+  /** Metadata fields that can be projected from this node */
+  def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
+
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming)
 
@@ -86,7 +89,8 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+  private[this] lazy val childAttributes =
+    AttributeSeq(children.flatMap(c => c.output ++ c.metadataOutput))
 
   private[this] lazy val outputAttributes = AttributeSeq(output)
 
@@ -132,7 +136,7 @@ abstract class LogicalPlan
   def outputOrdering: Seq[SortOrder] = Nil
 
   /**
-   * Returns true iff `other`'s output is semantically the same, ie.:
+   * Returns true iff `other`'s output is semantically the same, i.e.:
    *  - it contains the same number of `Attribute`s;
    *  - references are the same;
    *  - the order is equal too.

@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.connector.catalog.{SessionConfigSupport, SupportsRead, SupportsWrite, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, ScanBuilder}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReaderFactory, ContinuousStream, MicroBatchStream, Offset, PartitionOffset}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, PhysicalWriteInfo, WriteBuilder, WriterCommitMessage}
@@ -195,6 +196,30 @@ class FakeNoWrite extends DataSourceRegister with SimpleTableProvider {
   }
 }
 
+class FakeWriteSupportingExternalMetadata
+    extends DataSourceRegister
+    with TableProvider {
+  override def shortName(): String = "fake-write-supporting-external-metadata"
+
+  override def supportsExternalMetadata(): Boolean = true
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType = {
+    throw new IllegalArgumentException(
+      "Data stream writer should not require inferring table schema the data source supports" +
+      " external Metadata.")
+  }
+
+  override def getTable(
+      tableSchema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new Table with FakeStreamingWriteTable {
+      override def name(): String = "fake"
+      override def schema(): StructType = tableSchema
+    }
+  }
+}
+
 case class FakeWriteV1FallbackException() extends Exception
 
 class FakeSink extends Sink {
@@ -265,7 +290,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     Trigger.Continuous(1000))
 
   private def testPositiveCase(readFormat: String, writeFormat: String, trigger: Trigger): Unit = {
-    testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(() => _)
+    testPositiveCaseWithQuery(readFormat, writeFormat, trigger)(_ => ())
   }
 
   private def testPositiveCaseWithQuery(
@@ -311,6 +336,17 @@ class StreamingDataSourceV2Suite extends StreamTest {
       assert(query.exception.isDefined)
       assert(query.exception.get.cause != null)
       assert(query.exception.get.cause.getMessage.contains(errorMsg))
+    }
+  }
+
+  test("SPARK-33369: Skip schema inference in DataStreamWriter.start() if table provider " +
+    "supports external metadata") {
+    testPositiveCaseWithQuery(
+      "fake-read-microbatch-continuous", "fake-write-supporting-external-metadata",
+      Trigger.Once()) { v2Query =>
+      val sink = v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+      assert(sink.isInstanceOf[Table])
+      assert(sink.asInstanceOf[Table].schema() == StructType(Nil))
     }
   }
 

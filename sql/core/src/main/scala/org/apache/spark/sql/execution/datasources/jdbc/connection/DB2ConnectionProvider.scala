@@ -28,6 +28,8 @@ import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 private[sql] class DB2ConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "com.ibm.db2.jcc.DB2Driver"
 
+  override val name: String = "db2"
+
   override def appEntry(driver: Driver, options: JDBCOptions): String = "JaasClient"
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {

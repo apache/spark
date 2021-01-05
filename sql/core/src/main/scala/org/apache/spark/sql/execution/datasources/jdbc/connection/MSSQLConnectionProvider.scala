@@ -29,6 +29,8 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
   override val driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
   val parserMethod: String = "parseAndMergeProperties"
 
+  override val name: String = "mssql"
+
   override def appEntry(driver: Driver, options: JDBCOptions): String = {
     val configName = "jaasConfigurationName"
     val appEntryDefault = "SQLJDBCDriver"

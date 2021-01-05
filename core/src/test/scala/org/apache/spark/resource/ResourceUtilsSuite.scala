@@ -26,10 +26,8 @@ import org.json4s.{DefaultFormats, Extraction}
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Tests._
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.resource.TestResourceIDs._
-import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.util.Utils
 
 class ResourceUtilsSuite extends SparkFunSuite
@@ -223,7 +221,7 @@ class ResourceUtilsSuite extends SparkFunSuite
     val conf = new SparkConf
     assume(!(Utils.isWindows))
     withTempDir { dir =>
-      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDisocveryScript",
+      val gpuDiscovery = createTempScriptWithExpectedOutput(dir, "gpuDiscoveryScript",
         """{"name": "gpu", "addresses": ["0", "1"]}""")
       conf.set(DRIVER_GPU_ID.amountConf, "2")
       conf.set(DRIVER_GPU_ID.discoveryScriptConf, gpuDiscovery)

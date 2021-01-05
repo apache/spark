@@ -49,7 +49,8 @@ case class LocalTableScanExec(
     if (rows.isEmpty) {
       sqlContext.sparkContext.emptyRDD
     } else {
-      val numSlices = math.min(unsafeRows.length, sqlContext.sparkContext.defaultParallelism)
+      val numSlices = math.min(
+        unsafeRows.length, sqlContext.sparkSession.leafNodeDefaultParallelism)
       sqlContext.sparkContext.parallelize(unsafeRows, numSlices)
     }
   }

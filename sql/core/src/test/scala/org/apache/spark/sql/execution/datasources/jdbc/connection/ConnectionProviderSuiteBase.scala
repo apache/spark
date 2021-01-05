@@ -42,7 +42,7 @@ abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndA
     JDBCOptions.JDBC_PRINCIPAL -> "principal"
   ))
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     try {
       Configuration.setConfiguration(null)
     } finally {

@@ -28,11 +28,25 @@ import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
+class LibSVMRelationSuite
+  extends SparkFunSuite
+  with MLlibTestSparkContext
+  with CommonFileDataSourceSuite {
 
-class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
+  override protected def dataSourceFormat = "libsvm"
+  override protected def inputDataset = {
+    val rawData = new java.util.ArrayList[Row]()
+    rawData.add(Row(1.0, Vectors.sparse(1, Seq((0, 1.0)))))
+    val struct = new StructType()
+      .add("labelFoo", DoubleType, false)
+      .add("featuresBar", VectorType, false)
+    spark.createDataFrame(rawData, struct)
+  }
+
   // Path for dataset
   var path: String = _
 

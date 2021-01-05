@@ -375,7 +375,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
                 (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeColumn]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

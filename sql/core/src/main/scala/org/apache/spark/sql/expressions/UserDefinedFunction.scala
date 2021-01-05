@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.expressions
 
-import scala.reflect.runtime.universe.TypeTag
-
-import org.apache.spark.annotation.{Experimental, Stable}
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
-import org.apache.spark.sql.types.{AnyDataType, DataType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.

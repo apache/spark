@@ -23,7 +23,6 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
@@ -39,12 +38,12 @@ import org.apache.spark.sql.types._
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ *   build/sbt "hive-thriftserver/testOnly *ThriftServerQueryTestSuite" -Phive-thriftserver
  * }}}
  *
  * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * TODO:

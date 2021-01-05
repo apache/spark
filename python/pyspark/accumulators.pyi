@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Callable, Generic, Tuple, Type, TypeVar
+from typing import Callable, Dict, Generic, Tuple, Type, TypeVar
 
 import socketserver.BaseRequestHandler  # type: ignore
 
@@ -26,6 +26,8 @@ T = TypeVar("T")
 U = TypeVar("U", bound=SupportsIAdd)
 
 import socketserver as SocketServer
+
+_accumulatorRegistry: Dict[int, Accumulator]
 
 class Accumulator(Generic[T]):
     aid: int
