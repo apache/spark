@@ -991,26 +991,6 @@ class DataSourceV2SQLSuite
       " only SessionCatalog supports this command."))
   }
 
-  private def runShowTablesSql(
-      sqlText: String,
-      expected: Seq[Row],
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-    } else {
-      new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-    }
-
-    val df = spark.sql(sqlText)
-    assert(df.schema === schema)
-    assert(expected === df.collect())
-  }
-
   test("CreateNameSpace: basic tests") {
     // Session catalog is used.
     withNamespace("ns") {
