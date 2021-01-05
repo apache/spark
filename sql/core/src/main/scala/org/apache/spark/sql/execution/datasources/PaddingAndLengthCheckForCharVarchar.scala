@@ -27,17 +27,21 @@ import org.apache.spark.sql.types.{CharType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * This rule applies char type padding in two places:
- *   1. When reading values from column/field of type CHAR(N), right-pad the values to length N.
- *   2. When comparing char type column/field with string literal or char type column/field,
- *      right-pad the shorter one to the longer length.
+ * This rule performs char type padding and length check for both char and varchar.
+ *
+ * When reading values from column/field of type CHAR(N) or VARCHAR(N), the underlying string value
+ * might be over length (e.g. tables w/ external locations), it will fail in this case.
+ * Otherwise, right-pad the values to length N for CHAR(N) and remain the same for VARCHAR(N).
+ *
+ * When comparing char type column/field with string literal or char type column/field,
+ * right-pad the shorter one to the longer length.
  */
-object ApplyCharTypePadding extends Rule[LogicalPlan] {
+object PaddingAndLengthCheckForCharVarchar extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val padded = plan.resolveOperatorsUpWithNewOutput {
       case r: LogicalRelation =>
-        val projectList = CharVarcharUtils.charTypePadding(r.output)
+        val projectList = CharVarcharUtils.paddingWithLengthCheck(r.output)
         if (projectList == r.output) {
           r -> Nil
         } else {
@@ -47,7 +51,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         }
 
       case r: DataSourceV2Relation =>
-        val projectList = CharVarcharUtils.charTypePadding(r.output)
+        val projectList = CharVarcharUtils.paddingWithLengthCheck(r.output)
         if (projectList == r.output) {
           r -> Nil
         } else {
@@ -57,7 +61,7 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         }
 
       case r: HiveTableRelation =>
-        val projectList = CharVarcharUtils.charTypePadding(r.output)
+        val projectList = CharVarcharUtils.paddingWithLengthCheck(r.output)
         if (projectList == r.output) {
           r -> Nil
         } else {

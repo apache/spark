@@ -28,7 +28,6 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Base trait to fetch offsets from Kafka. The implementations are
  * [[KafkaOffsetReaderConsumer]] and [[KafkaOffsetReaderAdmin]].
- * Please see the documentation and API description there.
  */
 private[kafka010] trait KafkaOffsetReader {
 
@@ -39,22 +38,87 @@ private[kafka010] trait KafkaOffsetReader {
   // This is needed here because of KafkaContinuousStream
   val driverKafkaParams: ju.Map[String, Object]
 
+  /**
+   * Closes the connection to Kafka, and cleans up state.
+   */
   def close(): Unit
+
+  /**
+   * Fetch the partition offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]] and [[KafkaOffsetRangeLimit]].
+   */
   def fetchPartitionOffsets(
       offsetRangeLimit: KafkaOffsetRangeLimit,
       isStartingOffsets: Boolean): Map[TopicPartition, Long]
+
+  /**
+   * Resolves the specific offsets based on Kafka seek positions.
+   * This method resolves offset value -1 to the latest and -2 to the
+   * earliest Kafka seek position.
+   *
+   * @param partitionOffsets the specific offsets to resolve
+   * @param reportDataLoss callback to either report or log data loss depending on setting
+   */
   def fetchSpecificOffsets(
       partitionOffsets: Map[TopicPartition, Long],
       reportDataLoss: String => Unit): KafkaSourceOffset
+
+  /**
+   * Resolves the specific offsets based on timestamp per topic-partition.
+   * The returned offset for each partition is the earliest offset whose timestamp is greater
+   * than or equal to the given timestamp in the corresponding partition. If the matched offset
+   * doesn't exist, depending on `failsOnNoMatchingOffset` parameter, the offset will be set to
+   * latest or this method throws an error.
+   *
+   * @param partitionTimestamps the timestamp per topic-partition.
+   * @param failsOnNoMatchingOffset whether to fail the query when no matched offset can be found.
+   */
   def fetchSpecificTimestampBasedOffsets(
       partitionTimestamps: Map[TopicPartition, Long],
       failsOnNoMatchingOffset: Boolean): KafkaSourceOffset
+
+  /**
+   * Fetch the earliest offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]].
+   */
   def fetchEarliestOffsets(): Map[TopicPartition, Long]
+
+  /**
+   * Fetch the latest offsets for the topic partitions that are indicated
+   * in the [[ConsumerStrategy]].
+   *
+   * In order to avoid unknown issues, we use the given `knownOffsets` to audit the
+   * latest offsets returned by Kafka. If we find some incorrect offsets (a latest offset is less
+   * than an offset in `knownOffsets`), we will retry at most `maxOffsetFetchAttempts` times. When
+   * a topic is recreated, the latest offsets may be less than offsets in `knownOffsets`. We cannot
+   * distinguish this with issues like KAFKA-7703, so we just return whatever we get from Kafka
+   * after retrying.
+   */
   def fetchLatestOffsets(knownOffsets: Option[PartitionOffsetMap]): PartitionOffsetMap
+
+  /**
+   * Fetch the earliest offsets for specific topic partitions.
+   * The return result may not contain some partitions if they are deleted.
+   */
   def fetchEarliestOffsets(newPartitions: Seq[TopicPartition]): Map[TopicPartition, Long]
+
+  /**
+   * Return the offset ranges for a Kafka batch query. If `minPartitions` is set, this method may
+   * split partitions to respect it. Since offsets can be early and late binding which are evaluated
+   * on the executors, in order to divvy up the partitions we need to perform some substitutions. We
+   * don't want to send exact offsets to the executors, because data may age out before we can
+   * consume the data. This method makes some approximate splitting, and replaces the special offset
+   * values in the final output.
+   */
   def getOffsetRangesFromUnresolvedOffsets(
       startingOffsets: KafkaOffsetRangeLimit,
       endingOffsets: KafkaOffsetRangeLimit): Seq[KafkaOffsetRange]
+
+  /**
+   * Return the offset ranges for a Kafka streaming batch. If `minPartitions` is set, this method
+   * may split partitions to respect it. If any data lost issue is detected, `reportDataLoss` will
+   * be called.
+   */
   def getOffsetRangesFromResolvedOffsets(
       fromPartitionOffsets: PartitionOffsetMap,
       untilPartitionOffsets: PartitionOffsetMap,

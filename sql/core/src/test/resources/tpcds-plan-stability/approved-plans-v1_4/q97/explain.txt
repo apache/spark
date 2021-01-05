@@ -84,7 +84,7 @@ Results [2]: [ss_customer_sk#3, ss_item_sk#2]
 
 (12) Exchange
 Input [2]: [ss_customer_sk#3, ss_item_sk#2]
-Arguments: hashpartitioning(ss_customer_sk#3, ss_item_sk#2, 5), true, [id=#7]
+Arguments: hashpartitioning(ss_customer_sk#3, ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#7]
 
 (13) HashAggregate [codegen id : 3]
 Input [2]: [ss_customer_sk#3, ss_item_sk#2]
@@ -132,7 +132,7 @@ Results [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
 
 (22) Exchange
 Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
-Arguments: hashpartitioning(cs_bill_customer_sk#11, cs_item_sk#12, 5), true, [id=#13]
+Arguments: hashpartitioning(cs_bill_customer_sk#11, cs_item_sk#12, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (23) HashAggregate [codegen id : 6]
 Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
@@ -157,18 +157,18 @@ Input [4]: [customer_sk#8, item_sk#9, customer_sk#14, item_sk#15]
 (27) HashAggregate [codegen id : 7]
 Input [2]: [customer_sk#8, customer_sk#14]
 Keys: []
-Functions [3]: [partial_sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))]
+Functions [3]: [partial_sum(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END)]
 Aggregate Attributes [3]: [sum#16, sum#17, sum#18]
 Results [3]: [sum#19, sum#20, sum#21]
 
 (28) Exchange
 Input [3]: [sum#19, sum#20, sum#21]
-Arguments: SinglePartition, true, [id=#22]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#22]
 
 (29) HashAggregate [codegen id : 8]
 Input [3]: [sum#19, sum#20, sum#21]
 Keys: []
-Functions [3]: [sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))]
-Aggregate Attributes [3]: [sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#23, sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#24, sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#25]
-Results [3]: [sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#23 AS store_only#26, sum(cast(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#24 AS catalog_only#27, sum(cast(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END as bigint))#25 AS store_and_catalog#28]
+Functions [3]: [sum(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [3]: [sum(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END)#23, sum(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END)#24, sum(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END)#25]
+Results [3]: [sum(CASE WHEN (isnotnull(customer_sk#8) AND isnull(customer_sk#14)) THEN 1 ELSE 0 END)#23 AS store_only#26, sum(CASE WHEN (isnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END)#24 AS catalog_only#27, sum(CASE WHEN (isnotnull(customer_sk#8) AND isnotnull(customer_sk#14)) THEN 1 ELSE 0 END)#25 AS store_and_catalog#28]
 

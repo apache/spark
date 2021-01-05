@@ -937,8 +937,24 @@ object functions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def lag(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    Lag(e.expr, Literal(offset), Literal(defaultValue))
+  def lag(e: Column, offset: Int, defaultValue: Any): Column = {
+    lag(e, offset, defaultValue, false)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows before the current row, and
+   * `defaultValue` if there is less than `offset` rows before the current row. `ignoreNulls`
+   * determines whether null values of row are included in or eliminated from the calculation.
+   * For example, an `offset` of one will return the previous row at any given point in the
+   * window partition.
+   *
+   * This is equivalent to the LAG function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.2.0
+   */
+  def lag(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
+    Lag(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
   }
 
   /**
@@ -989,8 +1005,24 @@ object functions {
    * @group window_funcs
    * @since 1.4.0
    */
-  def lead(e: Column, offset: Int, defaultValue: Any): Column = withExpr {
-    Lead(e.expr, Literal(offset), Literal(defaultValue))
+  def lead(e: Column, offset: Int, defaultValue: Any): Column = {
+    lead(e, offset, defaultValue, false)
+  }
+
+  /**
+   * Window function: returns the value that is `offset` rows after the current row, and
+   * `defaultValue` if there is less than `offset` rows after the current row. `ignoreNulls`
+   * determines whether null values of row are included in or eliminated from the calculation.
+   * The default value of `ignoreNulls` is false. For example, an `offset` of one will return
+   * the next row at any given point in the window partition.
+   *
+   * This is equivalent to the LEAD function in SQL.
+   *
+   * @group window_funcs
+   * @since 3.2.0
+   */
+  def lead(e: Column, offset: Int, defaultValue: Any, ignoreNulls: Boolean): Column = withExpr {
+    Lead(e.expr, Literal(offset), Literal(defaultValue), ignoreNulls)
   }
 
   /**

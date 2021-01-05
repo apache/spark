@@ -282,23 +282,23 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("static SQL conf comes from SparkConf") {
-    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+    val previousValue = sparkContext.conf.get(GLOBAL_TEMP_DATABASE)
     try {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, "a")
       val newSession = new SparkSession(sparkContext)
-      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
+      assert(newSession.conf.get(GLOBAL_TEMP_DATABASE) == "a")
       checkAnswer(
-        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
-        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+        newSession.sql(s"SET ${GLOBAL_TEMP_DATABASE.key}"),
+        Row(GLOBAL_TEMP_DATABASE.key, "a"))
     } finally {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, previousValue)
     }
   }
 
   test("cannot set/unset static SQL conf") {
-    val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    val e1 = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10"))
     assert(e1.message.contains("Cannot modify the value of a static config"))
-    val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
+    val e2 = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 

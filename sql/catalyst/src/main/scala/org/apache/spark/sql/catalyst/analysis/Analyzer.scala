@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{FrameLessOffsetWindowFunction, _}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -44,7 +44,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
@@ -168,6 +168,7 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+    if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
       try {
@@ -885,8 +886,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case UnresolvedRelation(ident, _, false) =>
             lookupTempView(ident).map(EliminateSubqueryAliases(_)).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ => throw new AnalysisException("Cannot write into temp view " +
-                s"${ident.quoted} as it's not a data source v2 relation.")
+              case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
             }.getOrElse(write)
           case _ => write
         }
@@ -927,8 +927,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
 
       if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
-        throw new AnalysisException(s"${identifier.quoted} is not a temp view of streaming " +
-          s"logical plan, please use batch API such as `DataFrameReader.table` to read it.")
+        throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
       }
       tmpView.map(ResolveRelations.resolveViews)
     }
@@ -990,12 +989,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
@@ -1020,8 +1019,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u: UnresolvedRelation if !u.isStreaming =>
             lookupV2Relation(u.multipartIdentifier, u.options, false).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case other => throw new IllegalStateException(
-                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
+              case other =>
+                throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupV2Relation")
             }.getOrElse(write)
           case _ => write
         }
@@ -1132,8 +1131,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
                 case r: DataSourceV2Relation => write.withNewTable(r)
-                case other => throw new IllegalStateException(
-                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
+                case other =>
+                  throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupRelation")
               }.getOrElse(write)
           case _ => write
         }
@@ -1167,7 +1166,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
               ResolvedView(ident, isTemp = false)
             case table =>
-              ResolvedTable(catalog.asTableCatalog, ident, table)
+              ResolvedTable.create(catalog.asTableCatalog, ident, table)
           }
         case _ => None
       }
@@ -1187,9 +1186,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table =>
               if (isStreaming) {
                 if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-                  throw new AnalysisException(s"${identifier.quoted} is a permanent view, " +
-                    "which is not supported by streaming reading API such as " +
-                    "`DataStreamReader.table` yet.")
+                  throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+                    identifier.quoted)
                 }
                 SubqueryAlias(
                   catalog.name +: ident.asMultipartIdentifier,
@@ -2115,29 +2113,77 @@ class Analyzer(override val catalogManager: CatalogManager)
                   name, other.getClass.getCanonicalName)
               }
             }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
+          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter, ignoreNulls) =>
             withPosition(u) {
               v1SessionCatalog.lookupFunction(funcId, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
-                  if (isDistinct || filter.isDefined) {
-                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                      wf.prettyName)
+                  if (isDistinct) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      wf.prettyName, "DISTINCT")
+                  } else if (filter.isDefined) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      wf.prettyName, "FILTER clause")
+                  } else if (ignoreNulls) {
+                    wf match {
+                      case nthValue: NthValue =>
+                        nthValue.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          wf.prettyName, "IGNORE NULLS")
+                    }
                   } else {
                     wf
+                  }
+                case owf: FrameLessOffsetWindowFunction =>
+                  if (isDistinct) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      owf.prettyName, "DISTINCT")
+                  } else if (filter.isDefined) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      owf.prettyName, "FILTER clause")
+                  } else if (ignoreNulls) {
+                    owf match {
+                      case lead: Lead =>
+                        lead.copy(ignoreNulls = ignoreNulls)
+                      case lag: Lag =>
+                        lag.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          owf.prettyName, "IGNORE NULLS")
+                    }
+                  } else {
+                    owf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   if (filter.isDefined && !filter.get.deterministic) {
                     throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
                   }
-                  AggregateExpression(agg, Complete, isDistinct, filter)
+                  if (ignoreNulls) {
+                    val aggFunc = agg match {
+                      case first: First => first.copy(ignoreNulls = ignoreNulls)
+                      case last: Last => last.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          agg.prettyName, "IGNORE NULLS")
+                    }
+                    AggregateExpression(aggFunc, Complete, isDistinct, filter)
+                  } else {
+                    AggregateExpression(agg, Complete, isDistinct, filter)
+                  }
                 // This function is not an aggregate function, just return the resolved one.
-                case other if (isDistinct || filter.isDefined) =>
-                  throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                    other.prettyName)
+                case other if isDistinct =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "DISTINCT")
+                case other if filter.isDefined =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "FILTER clause")
+                case other if ignoreNulls =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "IGNORE NULLS")
                 case e: String2TrimExpression if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
                     log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
@@ -3002,8 +3048,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
-        case Uuid(None) => Uuid(Some(random.nextLong()))
-        case Shuffle(child, None) => Shuffle(child, Some(random.nextLong()))
+        case e: ExpressionWithRandomSeed if e.seedExpression == UnresolvedSeed =>
+          e.withNewSeed(random.nextLong())
       }
     }
   }
@@ -3483,7 +3529,8 @@ class Analyzer(override val catalogManager: CatalogManager)
               Some(typeChange)
             } else {
               val (fieldNames, field) = fieldOpt.get
-              if (field.dataType == typeChange.newDataType()) {
+              val dt = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
+              if (dt == typeChange.newDataType()) {
                 // The user didn't want the field to change, so remove this change
                 None
               } else {
@@ -3546,8 +3593,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
           case column: ColumnChange =>
             // This is informational for future developers
-            throw new UnsupportedOperationException(
-              "Please add an implementation for a column change here")
+            throw QueryExecutionErrors.columnChangeUnsupportedError
           case other => Some(other)
         }
 

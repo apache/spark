@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -65,7 +66,8 @@ case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
 }
@@ -94,7 +96,8 @@ case class OverwriteByExpression(
     deleteExpr: Expression,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -132,7 +135,8 @@ case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
   }
@@ -344,7 +348,7 @@ case class DescribeRelation(
  */
 case class DescribeColumn(
     relation: LogicalPlan,
-    colNameParts: Seq[String],
+    column: Expression,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
@@ -410,6 +414,14 @@ case class Assignment(key: Expression, value: Expression) extends Expression wit
 
 /**
  * The logical plan of the DROP TABLE command.
+ *
+ * If the `PURGE` option is set, the table catalog must remove table data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
+ *
+ * The syntax of this command is:
+ * {{{
+ *     DROP TABLE [IF EXISTS] table [PURGE];
+ * }}}
  */
 case class DropTable(
     child: LogicalPlan,
@@ -657,9 +669,12 @@ case class AlterTableAddPartition(
  * The logical plan of the ALTER TABLE DROP PARTITION command.
  * This may remove the data and metadata for this partition.
  *
+ * If the `PURGE` option is set, the table catalog must remove partition data by skipping the trash
+ * even when the catalog has configured one. The option is applicable only for managed tables.
+ *
  * The syntax of this command is:
  * {{{
- *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...];
+ *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
 case class AlterTableDropPartition(
@@ -669,6 +684,21 @@ case class AlterTableDropPartition(
     purge: Boolean) extends Command {
   override lazy val resolved: Boolean =
     childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
+ */
+case class AlterTableRenamePartition(
+    child: LogicalPlan,
+    from: PartitionSpec,
+    to: PartitionSpec) extends Command {
+  override lazy val resolved: Boolean =
+    childrenResolved &&
+      from.isInstanceOf[ResolvedPartitionSpec] &&
+      to.isInstanceOf[ResolvedPartitionSpec]
 
   override def children: Seq[LogicalPlan] = child :: Nil
 }

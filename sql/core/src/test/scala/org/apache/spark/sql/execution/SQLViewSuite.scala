@@ -149,7 +149,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertAnalysisError(
         s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
         s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')",
+        s"$viewName is a temp view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table")
       assertAnalysisError(
         s"ALTER TABLE $viewName RECOVER PARTITIONS",
         s"$viewName is a temp view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table")

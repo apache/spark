@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -226,7 +227,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
-      case java.sql.Types.TIME          => TimestampType
+      case java.sql.Types.TIME          => IntegerType
       case java.sql.Types.TIME_WITH_TIMEZONE
                                         => null
       case java.sql.Types.TIMESTAMP     => TimestampType
@@ -303,11 +304,23 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder()
+      // SPARK-33888
+      // - include scale in metadata for only DECIMAL & NUMERIC
+      // - include TIME type metadata
+      // - always build the metadata
+      dataType match {
+        // scalastyle:off
+        case java.sql.Types.NUMERIC => metadata.putLong("scale", fieldScale)
+        case java.sql.Types.DECIMAL => metadata.putLong("scale", fieldScale)
+        case java.sql.Types.TIME    => metadata.putBoolean("logical_time_type", true)
+        case _                      =>
+        // scalastyle:on
+      }
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable)
+      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
     new StructType(fields)
@@ -407,6 +420,23 @@ object JdbcUtils extends Logging {
     case FloatType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setFloat(pos, rs.getFloat(pos + 1))
+
+
+    // SPARK-33888 - sql TIME type represents as physical int in millis
+    // Represents a time of day, with no reference to a particular calendar,
+    // time zone or date, with a precision of one millisecond.
+    // It stores the number of milliseconds after midnight, 00:00:00.000.
+    case IntegerType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) => {
+        val rawTime = rs.getTime(pos + 1)
+        if (rawTime != null) {
+          val rawTimeInNano = rawTime.toLocalTime().toNanoOfDay()
+          val timeInMillis = Math.toIntExact(TimeUnit.NANOSECONDS.toMillis(rawTimeInNano))
+          row.setInt(pos, timeInMillis)
+        } else {
+          row.update(pos, null)
+        }
+      }
 
     case IntegerType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

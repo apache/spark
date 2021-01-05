@@ -82,4 +82,11 @@ private[spark] object Worker {
       .version("2.0.2")
       .intConf
       .createWithDefault(100)
+
+  val WORKER_DECOMMISSION_SIGNAL =
+    ConfigBuilder("spark.worker.decommission.signal")
+      .doc("The signal that used to trigger the worker to start decommission.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefaultString("PWR")
 }

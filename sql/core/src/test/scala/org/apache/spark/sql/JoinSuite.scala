@@ -1107,7 +1107,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
   test("SPARK-32330: Preserve shuffled hash join build side partitioning") {
     withSQLConf(
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2",
         SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
@@ -1116,9 +1115,9 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       Seq("inner", "cross").foreach(joinType => {
         val plan = df1.join(df2, $"k1" === $"k2", joinType).groupBy($"k1").count()
           .queryExecution.executedPlan
-        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
         // No extra shuffle before aggregate
-        assert(plan.collect { case _: ShuffleExchangeExec => true }.size === 2)
+        assert(collect(plan) { case _: ShuffleExchangeExec => true }.size === 2)
       })
     }
   }
@@ -1131,7 +1130,6 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 
     // Test broadcast hash join
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50") {
       Seq("inner", "left_outer").foreach(joinType => {
         val plan = df1.join(df2, $"k1" === $"k2", joinType)
@@ -1139,16 +1137,15 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           .join(df4, $"k1" === $"k4", joinType)
           .queryExecution
           .executedPlan
-        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
-        assert(plan.collect { case _: BroadcastHashJoinExec => true }.size === 1)
+        assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 2)
+        assert(collect(plan) { case _: BroadcastHashJoinExec => true }.size === 1)
         // No extra sort before last sort merge join
-        assert(plan.collect { case _: SortExec => true }.size === 3)
+        assert(collect(plan) { case _: SortExec => true }.size === 3)
       })
     }
 
     // Test shuffled hash join
     withSQLConf(
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "50",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2",
       SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
@@ -1160,10 +1157,10 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           .join(df4, $"k1" === $"k4", joinType)
           .queryExecution
           .executedPlan
-        assert(plan.collect { case _: SortMergeJoinExec => true }.size === 2)
-        assert(plan.collect { case _: ShuffledHashJoinExec => true }.size === 1)
+        assert(collect(plan) { case _: SortMergeJoinExec => true }.size === 2)
+        assert(collect(plan) { case _: ShuffledHashJoinExec => true }.size === 1)
         // No extra sort before last sort merge join
-        assert(plan.collect { case _: SortExec => true }.size === 3)
+        assert(collect(plan) { case _: SortExec => true }.size === 3)
       })
     }
   }
@@ -1256,17 +1253,16 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       withSQLConf(
         // Set broadcast join threshold and number of shuffle partitions,
         // as shuffled hash join depends on these two configs.
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80",
         SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
         val smjDF = df1.join(df2, joinExprs, "full")
-        assert(smjDF.queryExecution.executedPlan.collect {
+        assert(collect(smjDF.queryExecution.executedPlan) {
           case _: SortMergeJoinExec => true }.size === 1)
         val smjResult = smjDF.collect()
 
         withSQLConf(SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
           val shjDF = df1.join(df2, joinExprs, "full")
-          assert(shjDF.queryExecution.executedPlan.collect {
+          assert(collect(shjDF.queryExecution.executedPlan) {
             case _: ShuffledHashJoinExec => true }.size === 1)
           // Same result between shuffled hash join and sort merge join
           checkAnswer(shjDF, smjResult)

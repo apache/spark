@@ -775,4 +775,69 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }.getMessage
     assert(errMsg3.contains("DataType cow is not supported"))
   }
+
+  test("SPARK-33907: bad json input with json pruning optimization: GetStructField") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val schema = new StructType()
+          .add("a", IntegerType)
+          .add("b", IntegerType)
+        val badRec = """{"a" 1, "b": 11}"""
+        val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+        val exception1 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
+        }.getMessage
+        assert(exception1.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+        val exception2 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
+        }.getMessage
+        assert(exception2.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }
+    }
+  }
+
+  test("SPARK-33907: bad json input with json pruning optimization: GetArrayStructFields") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val schema = ArrayType(new StructType()
+          .add("a", IntegerType)
+          .add("b", IntegerType))
+        val badRec = """{"a" 1, "b": 11}"""
+        val df = Seq(s"""[$badRec, {"a": 2, "b": 12}]""").toDS()
+
+        val exception1 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("b")).collect()
+        }.getMessage
+        assert(exception1.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+
+        val exception2 = intercept[SparkException] {
+          df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))("a")).collect()
+        }.getMessage
+        assert(exception2.contains(
+          "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      }
+    }
+  }
+
+  test("SPARK-33907: json pruning optimization with corrupt record field") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val schema = new StructType()
+          .add("a", IntegerType)
+          .add("b", IntegerType)
+        val badRec = """{"a" 1, "b": 11}"""
+
+        val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+          .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as parsed")
+          .selectExpr("parsed._corrupt_record")
+
+        checkAnswer(df, Seq(Row("""{"a" 1, "b": 11}"""), Row(null)))
+      }
+    }
+  }
 }
