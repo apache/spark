@@ -796,11 +796,11 @@ object SQLConf {
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
       "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
-      "Acceptable values include: none, uncompressed, snappy, zlib, lzo.")
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd.")
     .version("2.3.0")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
+    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd"))
     .createWithDefault("snappy")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
@@ -970,8 +970,8 @@ object SQLConf {
         "a positive value, a running query will be cancelled automatically when the timeout is " +
         "exceeded, otherwise the query continues to run till completion. If timeout values are " +
         "set for each statement via `java.sql.Statement.setQueryTimeout` and they are smaller " +
-        "than this configuration value, they take precedence. If you set this timeout and prefer" +
-        "to cancel the queries right away without waiting task to finish, consider enabling" +
+        "than this configuration value, they take precedence. If you set this timeout and prefer " +
+        "to cancel the queries right away without waiting task to finish, consider enabling " +
         s"${THRIFTSERVER_FORCE_CANCEL.key} together.")
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
@@ -1628,6 +1628,14 @@ object SQLConf {
         "unnecessary columns from from_json, simplifying from_json + to_json, to_json + " +
         "named_struct(from_json.col1, from_json.col2, ....).")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val CSV_EXPRESSION_OPTIMIZATION =
+    buildConf("spark.sql.optimizer.enableCsvExpressionOptimization")
+      .doc("Whether to optimize CSV expressions in SQL optimizer. It includes pruning " +
+        "unnecessary columns from from_csv.")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -3488,6 +3496,8 @@ class SQLConf extends Serializable with Logging {
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
+
+  def csvExpressionOptimization: Boolean = getConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION)
 
   def parallelFileListingInStatsComputation: Boolean =
     getConf(SQLConf.PARALLEL_FILE_LISTING_IN_STATS_COMPUTATION)

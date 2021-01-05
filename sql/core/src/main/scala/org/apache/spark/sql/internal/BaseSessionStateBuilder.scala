@@ -179,7 +179,7 @@ abstract class BaseSessionStateBuilder(
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
-        ApplyCharTypePadding +:
+        PaddingAndLengthCheckForCharVarchar +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
@@ -231,8 +231,8 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
-      override def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] =
-        super.dataSourceRewriteRules ++ customDataSourceRewriteRules
+      override def preCBORules: Seq[Rule[LogicalPlan]] =
+        super.preCBORules ++ customPreCBORules
 
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
@@ -258,13 +258,13 @@ abstract class BaseSessionStateBuilder(
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
-   * Custom rules for rewriting data source plans to add to the Optimizer. Prefer overriding
-   * this instead of creating your own Optimizer.
+   * Custom rules for rewriting plans after operator optimization and before CBO.
+   * Prefer overriding this instead of creating your own Optimizer.
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customDataSourceRewriteRules: Seq[Rule[LogicalPlan]] = {
-    extensions.buildDataSourceRewriteRules(session)
+  protected def customPreCBORules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPreCBORules(session)
   }
 
   /**

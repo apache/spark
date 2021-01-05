@@ -26,7 +26,7 @@ The `INSERT INTO` statement inserts new rows into a table. The inserted rows can
 ### Syntax
 
 ```sql
-INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
+INSERT INTO [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 ```
 
@@ -40,10 +40,18 @@ INSERT INTO [ TABLE ] table_identifier [ partition_spec ]
 
 * **partition_spec**
 
-    An optional parameter that specifies a comma separated list of key and value pairs
+    An optional parameter that specifies a comma-separated list of key and value pairs
     for partitions.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
+
+* **column_list**
+
+    An optional parameter that specifies a comma-separated list of columns belonging to the `table_identifier` table. Spark will reorder the columns of the input query to match the table schema according to the specified column list.
+
+    **Note:**The current behaviour has some limitations:
+    - All specified columns should exist in the table and not be duplicated from each other. It includes all columns except the static partition columns.
+    - The size of the column list should be exactly the size of the data from `VALUES` clause or query.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
@@ -196,6 +204,34 @@ SELECT * FROM students;
 +-------------+--------------------------+----------+
 |   Jason Wang|     908 Bird St, Saratoga|    121212|
 +-------------+--------------------------+----------+
+```
+
+#### Insert with a column list
+
+```sql
+INSERT INTO students (address, name, student_id) VALUES
+    ('Hangzhou, China', 'Kent Yao', 11215016);
+
+SELECT * FROM students WHERE name = 'Kent Yao';
++---------+----------------------+----------+
+|     name|               address|student_id|
++---------+----------------------+----------+
+|Kent Yao |       Hangzhou, China|  11215016|
++---------+----------------------+----------+
+```
+
+#### Insert with both a partition spec and a column list
+
+```sql
+INSERT INTO students PARTITION (student_id = 11215017) (address, name) VALUES
+    ('Hangzhou, China', 'Kent Yao Jr.');
+
+SELECT * FROM students WHERE student_id = 11215017;
++------------+----------------------+----------+
+|        name|               address|student_id|
++------------+----------------------+----------+
+|Kent Yao Jr.|       Hangzhou, China|  11215017|
++------------+----------------------+----------+
 ```
 
 ### Related Statements

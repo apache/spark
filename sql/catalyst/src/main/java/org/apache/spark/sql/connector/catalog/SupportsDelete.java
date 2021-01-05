@@ -44,6 +44,8 @@ public interface SupportsDelete {
    *
    * @param filters filter expressions, used to select rows to delete when all expressions match
    * @return true if the delete operation can be performed
+   *
+   * @since 3.1.0
    */
   default boolean canDeleteWhere(Filter[] filters) {
     return true;

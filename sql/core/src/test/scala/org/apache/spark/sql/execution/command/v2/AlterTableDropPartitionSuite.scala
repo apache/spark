@@ -20,6 +20,10 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
+/**
+ * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command
+ * to check V2 table catalogs.
+ */
 class AlterTableDropPartitionSuite
   extends command.AlterTableDropPartitionSuiteBase
   with CommandSuiteBase {
@@ -33,6 +37,30 @@ class AlterTableDropPartitionSuite
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }.getMessage
       assert(errMsg.contains("can not alter partitions"))
+    }
+  }
+
+  test("purge partition data") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+      try {
+        val errMsg = intercept[UnsupportedOperationException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
+        }.getMessage
+        assert(errMsg.contains("purge is not supported"))
+      } finally {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }
+    }
+  }
+
+  test("empty string as partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = '')")
+      checkPartitions(t)
     }
   }
 }
