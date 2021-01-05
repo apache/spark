@@ -504,7 +504,7 @@ object QueryCompilationErrors {
   def columnDoesNotExistError(colName: String): Throwable = {
     new AnalysisException(s"Column $colName does not exist")
   }
-  
+
   def cannotSimplifyMultiLikeError(multi: MultiLikeBase): Throwable = {
     new AnalysisException(s"can not simplify $multi by LikeSimplification")
   }
