@@ -1074,7 +1074,7 @@ Cannot cast Unparseable to DateType.
 -- !query
 select next_day("2015-07-23", "Mon")
 -- !query schema
-struct<next_day(CAST(2015-07-23 AS DATE), Mon):date>
+struct<next_day(2015-07-23, Mon):date>
 -- !query output
 2015-07-27
 
@@ -1100,7 +1100,7 @@ Cannot cast xx to DateType.
 -- !query
 select next_day(null, "Mon")
 -- !query schema
-struct<next_day(CAST(NULL AS DATE), Mon):date>
+struct<next_day(NULL, Mon):date>
 -- !query output
 NULL
 
@@ -1108,6 +1108,6 @@ NULL
 -- !query
 select next_day(null, "xx")
 -- !query schema
-struct<next_day(CAST(NULL AS DATE), xx):date>
+struct<next_day(NULL, xx):date>
 -- !query output
 NULL
