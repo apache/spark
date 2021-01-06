@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -65,7 +66,8 @@ case class AppendData(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): AppendData = copy(query = newQuery)
   override def withNewTable(newTable: NamedRelation): AppendData = copy(table = newTable)
 }
@@ -94,7 +96,8 @@ case class OverwriteByExpression(
     deleteExpr: Expression,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override lazy val resolved: Boolean = {
     table.resolved && query.resolved && outputResolved && deleteExpr.resolved
   }
@@ -132,7 +135,8 @@ case class OverwritePartitionsDynamic(
     table: NamedRelation,
     query: LogicalPlan,
     writeOptions: Map[String, String],
-    isByName: Boolean) extends V2WriteCommand {
+    isByName: Boolean,
+    write: Option[Write] = None) extends V2WriteCommand {
   override def withNewQuery(newQuery: LogicalPlan): OverwritePartitionsDynamic = {
     copy(query = newQuery)
   }
@@ -344,7 +348,7 @@ case class DescribeRelation(
  */
 case class DescribeColumn(
     relation: LogicalPlan,
-    colNameParts: Seq[String],
+    column: Expression,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
@@ -690,9 +694,11 @@ case class AlterTableDropPartition(
 case class AlterTableRenamePartition(
     child: LogicalPlan,
     from: PartitionSpec,
-    to: TablePartitionSpec) extends Command {
+    to: PartitionSpec) extends Command {
   override lazy val resolved: Boolean =
-    childrenResolved && from.isInstanceOf[ResolvedPartitionSpec]
+    childrenResolved &&
+      from.isInstanceOf[ResolvedPartitionSpec] &&
+      to.isInstanceOf[ResolvedPartitionSpec]
 
   override def children: Seq[LogicalPlan] = child :: Nil
 }

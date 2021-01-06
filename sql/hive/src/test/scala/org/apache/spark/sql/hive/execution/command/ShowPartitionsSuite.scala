@@ -17,6 +17,25 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command.v1
 
-class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check
+ * V1 Hive external table catalog.
+ */
+class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBase {
+  test("SPARK-33904: null and empty string as partition values") {
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        createNullPartTable(t, "hive")
+        runShowPartitionsSql(
+          s"SHOW PARTITIONS $t",
+          Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
+        checkAnswer(spark.table(t),
+          Row(0, "__HIVE_DEFAULT_PARTITION__") ::
+          Row(1, "__HIVE_DEFAULT_PARTITION__") :: Nil)
+      }
+    }
+  }
+}

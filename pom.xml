@@ -134,7 +134,8 @@
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
     <kafka.version>2.6.0</kafka.version>
-    <derby.version>10.12.1.1</derby.version>
+    <!-- After 10.15.1.3, the minimum required version is JDK9 -->
+    <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.10.1</parquet.version>
     <orc.version>1.6.6</orc.version>
     <jetty.version>9.4.34.v20201102</jetty.version>
@@ -178,7 +179,7 @@
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
-    <commons-lang3.version>3.10</commons-lang3.version>
+    <commons-lang3.version>3.11</commons-lang3.version>
     <!-- org.apache.commons/commons-pool2/-->
     <commons-pool2.version>2.6.2</commons-pool2.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
@@ -2468,7 +2469,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.4.0</version>
+          <version>4.3.0</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2508,6 +2509,9 @@
               <arg>-feature</arg>
               <arg>-explaintypes</arg>
               <arg>-target:jvm-1.8</arg>
+              <arg>-Xfatal-warnings</arg>
+              <arg>-Ywarn-unused:imports</arg>
+              <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
               <jvmArg>-Xms1024m</jvmArg>
@@ -2521,6 +2525,13 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
             </javacArgs>
+            <compilerPlugins>
+              <compilerPlugin>
+                <groupId>com.github.ghik</groupId>
+                <artifactId>silencer-plugin_${scala.version}</artifactId>
+                <version>1.6.0</version>
+              </compilerPlugin>
+            </compilerPlugins>
           </configuration>
         </plugin>
         <plugin>
@@ -2978,7 +2989,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.0</version>
+        <version>3.1.1</version>
         <configuration>
           <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
@@ -2998,7 +3009,7 @@
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
             <artifactId>checkstyle</artifactId>
-            <version>8.29</version>
+            <version>8.39</version>
           </dependency>
         </dependencies>
         <executions>
@@ -3243,6 +3254,48 @@
           </dependency>
         </dependencies>
       </dependencyManagement>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <configuration>
+                <args>
+                  <arg>-unchecked</arg>
+                  <arg>-deprecation</arg>
+                  <arg>-feature</arg>
+                  <arg>-explaintypes</arg>
+                  <arg>-target:jvm-1.8</arg>
+                  <arg>-Wconf:cat=deprecation:wv,any:e</arg>
+                  <!--
+                    TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed
+                    <arg>-Wunused:imports</arg>
+                  -->
+                  <arg>-Wconf:cat=scaladoc:wv</arg>
+                  <arg>-Wconf:cat=lint-multiarg-infix:wv</arg>
+                  <arg>-Wconf:cat=other-nullary-override:wv</arg>
+                  <arg>-Wconf:cat=other-match-analysis&amp;site=org.apache.spark.sql.catalyst.catalog.SessionCatalog.lookupFunction.catalogFunction:wv</arg>
+                  <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.streaming.util.FileBasedWriteAheadLog.readAll.readFile:wv</arg>
+                  <arg>-Wconf:cat=other-pure-statement&amp;site=org.apache.spark.scheduler.OutputCommitCoordinatorSuite.&lt;local OutputCommitCoordinatorSuite&gt;.futureAction:wv</arg>
+                  <!--
+                    SPARK-33775 Suppress compilation warnings that contain the following contents.
+                    TODO(SPARK-33805): Undo the corresponding deprecated usage suppression rule after fixed.
+                  -->
+                  <arg>-Wconf:msg=^(?=.*?method|value|type|object|trait|inheritance)(?=.*?deprecated)(?=.*?since 2.13).+$:s</arg>
+                  <arg>-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s</arg>
+                  <arg>-Wconf:msg=Auto-application to \`\(\)\` is deprecated:s</arg>
+                  <arg>-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s</arg>
+                  <arg>-Wconf:msg=method without a parameter list overrides a method with a single empty one:s</arg>
+                </args>
+                <compilerPlugins combine.self="override">
+                </compilerPlugins>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
+
     </profile>
 
     <!--
@@ -3319,6 +3372,12 @@
       <properties>
         <leveldbjni.group>org.openlabtesting.leveldbjni</leveldbjni.group>
       </properties>
+      <activation>
+        <os>
+          <family>linux</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
     </profile>
   </profiles>
 </project>

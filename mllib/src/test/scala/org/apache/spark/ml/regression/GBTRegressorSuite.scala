@@ -370,6 +370,18 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
       allParamSettings, checkModelData)
   }
+
+  test("SPARK-33398: Load GBTRegressionModel prior to Spark 3.0") {
+    val path = testFile("ml-models/gbtr-2.4.7")
+    val model = GBTRegressionModel.load(path)
+    assert(model.numFeatures === 692)
+    assert(model.totalNumNodes === 6)
+    assert(model.trees.map(_.numNodes) === Array(5, 1))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
+  }
 }
 
 private object GBTRegressorSuite extends SparkFunSuite {

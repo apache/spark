@@ -61,6 +61,7 @@ class InMemoryPartitionTable(
   def dropPartition(ident: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
+      removePartitionKey(ident.toSeq(schema))
       true
     } else {
       false
@@ -84,7 +85,7 @@ class InMemoryPartitionTable(
   }
 
   override protected def addPartitionKey(key: Seq[Any]): Unit = {
-    memoryTablePartitions.put(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
+    memoryTablePartitions.putIfAbsent(InternalRow.fromSeq(key), Map.empty[String, String].asJava)
   }
 
   override def listPartitionIdentifiers(
@@ -106,5 +107,18 @@ class InMemoryPartitionTable(
       }
       currentRow == ident
     }.toArray
+  }
+
+  override def renamePartition(from: InternalRow, to: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(to)) {
+      throw new PartitionAlreadyExistsException(name, to, partitionSchema)
+    } else {
+      val partValue = memoryTablePartitions.remove(from)
+      if (partValue == null) {
+        throw new NoSuchPartitionException(name, from, partitionSchema)
+      }
+      memoryTablePartitions.put(to, partValue) == null &&
+        renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
+    }
   }
 }

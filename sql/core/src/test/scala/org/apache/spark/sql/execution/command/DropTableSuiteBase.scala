@@ -19,6 +19,16 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
+/**
+ * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2
+ * table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * specific test suites:
+ *
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.DropTableSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.DropTableSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropTableSuite`
+ *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
+ */
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "DROP TABLE"
 
@@ -93,6 +103,28 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         } finally {
           sql(s"USE spark_catalog")
         }
+      }
+    }
+  }
+
+  test("SPARK-33305: DROP TABLE should also invalidate cache") {
+    val t = s"$catalog.ns.tbl"
+    val view = "view"
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      withTempView(view, "source") {
+        val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
+        df.createOrReplaceTempView("source")
+        sql(s"CREATE TABLE $t $defaultUsing AS SELECT id, data FROM source")
+        sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+        checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source").collect())
+        checkAnswer(
+          sql(s"SELECT * FROM $view"),
+          spark.table("source").select("id").collect())
+
+        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        sql(s"DROP TABLE $t")
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
       }
     }
   }

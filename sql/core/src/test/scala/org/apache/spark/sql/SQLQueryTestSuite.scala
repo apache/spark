@@ -24,7 +24,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -260,6 +260,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
 
+    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+    // here we need to check command available
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = splitCommentsAndCodes(input)

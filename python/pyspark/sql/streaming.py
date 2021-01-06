@@ -974,9 +974,7 @@ class DataStreamReader(OptionUtils):
 
         Examples
         --------
-        >>> csv_sdf = spark.readStream.table('input_table') # doctest: +SKIP
-        >>> csv_sdf.isStreaming # doctest: +SKIP
-        True
+        >>> spark.readStream.table('input_table') # doctest: +SKIP
         """
         if isinstance(tableName, str):
             return self._df(self._jreader.table(tableName))
@@ -1500,8 +1498,7 @@ class DataStreamWriter(object):
         Starts the execution of the streaming query, which will continually output results to the
         given table as new data arrives.
 
-        A new table will be created if the table not exists. The returned
-        :class:`StreamingQuery` object can be used to interact with the stream.
+        The returned :class:`StreamingQuery` object can be used to interact with the stream.
 
         .. versionadded:: 3.1.0
 
@@ -1533,27 +1530,27 @@ class DataStreamWriter(object):
         -----
         This API is evolving.
 
+        For v1 table, partitioning columns provided by `partitionBy` will be respected no matter
+        the table exists or not. A new table will be created if the table not exists.
+
+        For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
+        be respected only if the v2 table does not exist. Besides, the v2 table created by this API
+        lacks some functionalities (e.g., customized properties, options, and serde info). If you
+        need them, please create the v2 table manually before the execution to avoid creating a
+        table with incomplete information.
+
         Examples
         --------
-        >>> sq = sdf.writeStream.format('parquet').queryName('this_query').option(
-        ...      'checkpointLocation', '/tmp/checkpoint').toTable('output_table') # doctest: +SKIP
-        >>> sq.isActive # doctest: +SKIP
-        True
-        >>> sq.name # doctest: +SKIP
-        'this_query'
-        >>> sq.stop() # doctest: +SKIP
-        >>> sq.isActive # doctest: +SKIP
-        False
-        >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').toTable(
-        ...     'output_table', queryName='that_query', outputMode="append", format='parquet',
+        >>> sdf.writeStream.format('parquet').queryName('query').toTable('output_table')
+        ... # doctest: +SKIP
+
+        >>> sdf.writeStream.trigger(processingTime='5 seconds').toTable(
+        ...     'output_table',
+        ...     queryName='that_query',
+        ...     outputMode="append",
+        ...     format='parquet',
         ...     checkpointLocation='/tmp/checkpoint') # doctest: +SKIP
-        >>> sq.name # doctest: +SKIP
-        'that_query'
-        >>> sq.isActive # doctest: +SKIP
-        True
-        >>> sq.stop() # doctest: +SKIP
         """
-        # TODO(SPARK-33659): document the current behavior for DataStreamWriter.toTable API
         self.options(**options)
         if outputMode is not None:
             self.outputMode(outputMode)

@@ -700,6 +700,61 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 3, null, null, null)))
   }
 
+  test("lead/lag with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("b", 2, nullStr),
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        $"value",
+        lead($"value", 1).over(window),
+        lead($"value", 2).over(window),
+        lead($"value", 0, null, true).over(window),
+        lead($"value", 1, null, true).over(window),
+        lead($"value", 2, null, true).over(window),
+        lead($"value", 3, null, true).over(window),
+        lead(concat($"value", $"key"), 1, null, true).over(window),
+        lag($"value", 1).over(window),
+        lag($"value", 2).over(window),
+        lag($"value", 0, null, true).over(window),
+        lag($"value", 1, null, true).over(window),
+        lag($"value", 2, null, true).over(window),
+        lag($"value", 3, null, true).over(window),
+        lag(concat($"value", $"key"), 1, null, true).over(window))
+        .orderBy($"order"),
+      Seq(
+        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
+          null, null, null, null, null, null, null),
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
+          null, null, "x", null, null, null, null),
+        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
+          "x", null, null, "x", null, null, "xa"),
+        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
+          null, "x", null, "x", null, null, "xa"),
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
+          null, null, "y", "x", null, null, "xa"),
+        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
+          "y", null, null, "y", "x", null, "ya"),
+        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
+          null, "y", "z", "y", "x", null, "ya"),
+        Row("a", 7, "v", null, null, "v", null, null, null, null,
+          "z", null, "v", "z", "y", "x", "za"),
+        Row("a", 8, null, null, null, null, null, null, null, null,
+          "v", "z", null, "v", "z", "y", "va")))
+  }
+
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
     val src = Seq((0, 3, 5)).toDF("a", "b", "c")
       .withColumn("Data", struct("a", "b"))
