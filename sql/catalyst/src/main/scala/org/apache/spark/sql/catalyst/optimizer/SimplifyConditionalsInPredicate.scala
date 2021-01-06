@@ -39,9 +39,7 @@ import org.apache.spark.sql.types.BooleanType
  * - CASE WHEN cond THEN trueVal ELSE null END  => AND(cond, trueVal)
  * - CASE WHEN cond THEN trueVal ELSE true END  => OR(NOT(cond), trueVal)
  * - CASE WHEN cond THEN false ELSE elseVal END => AND(NOT(cond), elseVal)
- * - CASE WHEN cond THEN false END              => false
  * - CASE WHEN cond THEN true ELSE elseVal END  => OR(cond, elseVal)
- * - CASE WHEN cond THEN true END               => cond
  */
 object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
 
