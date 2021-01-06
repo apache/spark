@@ -369,7 +369,7 @@ trait OffsetWindowFunction extends WindowFunction {
  * within the partition. For instance: a FrameLessOffsetWindowFunction for value x with offset -2,
  * will get the value of x 2 rows back from the current row in the partition.
  */
-abstract class FrameLessOffsetWindowFunction
+sealed abstract class FrameLessOffsetWindowFunction
   extends OffsetWindowFunction with Unevaluable with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(input, offset, default)
