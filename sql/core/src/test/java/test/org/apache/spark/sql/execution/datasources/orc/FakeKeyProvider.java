@@ -34,6 +34,8 @@ import org.apache.hadoop.crypto.key.kms.KMSClientProvider;
 /**
  * A Hadoop KeyProvider that lets us test the interaction
  * with the Hadoop code.
+ *
+ * https://github.com/apache/orc/blob/master/java/tools/src/test/org/apache/orc/impl/FakeKeyProvider.java
  */
 public class FakeKeyProvider extends KeyProvider {
   // map from key name to metadata
