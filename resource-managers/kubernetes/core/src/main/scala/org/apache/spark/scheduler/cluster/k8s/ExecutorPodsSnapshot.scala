@@ -86,11 +86,13 @@ object ExecutorPodsSnapshot extends Logging {
             sparkContainerStatusOpt match {
               case Some(sparkContainerStatus) =>
                 sparkContainerStatus.getState.getTerminated match {
+                  // If there is no terminated state we are running.
                   case null => PodRunning(pod)
                   case t if t.getExitCode != 0 =>
                     PodFailed(pod)
                   case t if t.getExitCode == 0 =>
                     PodSucceeded(pod)
+                  // Fall through case
                   case _ =>
                     PodRunning(pod)
                 }
