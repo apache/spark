@@ -162,8 +162,11 @@ private[spark] object KubernetesClientUtils extends Logging {
     }
     val confFiles: Seq[File] = {
       val dir = new File(confDir)
-      assert(dir.isDirectory, "Spark conf should be a directory.")
-      dir.listFiles.filter(x => fileFilter(x)).toSeq
+      if (dir.isDirectory) {
+        dir.listFiles.filter(x => fileFilter(x)).toSeq
+      } else {
+        Nil
+      }
     }
     confFiles
   }
