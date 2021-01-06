@@ -80,3 +80,13 @@ SELECT 1 FROM range(10) HAVING true;
 SELECT 1 FROM range(10) HAVING MAX(id) > 0;
 
 SELECT id FROM range(10) HAVING id > 0;
+
+SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=true;
+
+SELECT 1 FROM range(10) HAVING true;
+
+SELECT 1 FROM range(10) HAVING MAX(id) > 0;
+
+SELECT id FROM range(10) HAVING id > 0;
+
+SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=false;
