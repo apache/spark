@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -30,4 +31,20 @@ trait CommandSuiteBase extends TestHiveSingleton {
   def version: String = "Hive V1" // The prefix is added to test names
   def catalog: String = CatalogManager.SESSION_CATALOG_NAME
   def defaultUsing: String = "USING HIVE" // The clause is used in creating tables under testing
+
+  def checkLocation(
+      t: String,
+      spec: TablePartitionSpec,
+      expected: String): Unit = {
+    val tablePath = t.split('.')
+    val tableName = tablePath.last
+    val ns = tablePath.init.mkString(".")
+    val partSpec = spec.map { case (key, value) => s"$key = $value"}.mkString(", ")
+    val information =
+      spark.sql(s"SHOW TABLE EXTENDED IN $ns LIKE '$tableName' PARTITION($partSpec)")
+        .select("information")
+        .first().getString(0)
+    val location = information.split("\\r?\\n").filter(_.startsWith("Location:")).head
+    assert(location.endsWith(expected))
+  }
 }

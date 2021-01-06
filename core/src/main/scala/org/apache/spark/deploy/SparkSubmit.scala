@@ -374,13 +374,13 @@ private[spark] class SparkSubmit extends Logging {
     var localPyFiles: String = null
     if (deployMode == CLIENT) {
       localPrimaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFile(_, targetDir, sparkConf, hadoopConf)
       }.orNull
       localJars = Option(args.jars).map {
-        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf)
       }.orNull
       localPyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf)
       }.orNull
 
       if (isKubernetesClusterModeDriver) {
@@ -389,14 +389,14 @@ private[spark] class SparkSubmit extends Logging {
         // Explicitly download the related files here
         args.jars = localJars
         val filesLocalFiles = Option(args.files).map {
-          downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+          downloadFileList(_, targetDir, sparkConf, hadoopConf)
         }.orNull
         val archiveLocalFiles = Option(args.archives).map { uris =>
           val resolvedUris = Utils.stringToSeq(uris).map(Utils.resolveURI)
           val localArchives = downloadFileList(
             resolvedUris.map(
               UriBuilder.fromUri(_).fragment(null).build().toString).mkString(","),
-            targetDir, sparkConf, hadoopConf, secMgr)
+            targetDir, sparkConf, hadoopConf)
 
           // SPARK-33748: this mimics the behaviour of Yarn cluster mode. If the driver is running
           // in cluster mode, the archives should be available in the driver's current working
@@ -447,7 +447,7 @@ private[spark] class SparkSubmit extends Logging {
             if (file.exists()) {
               file.toURI.toString
             } else {
-              downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
+              downloadFile(resource, targetDir, sparkConf, hadoopConf)
             }
           case _ => uri.toString
         }
@@ -1194,11 +1194,11 @@ private[spark] object SparkSubmitUtils {
   }
 
   /**
-   * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
+   * Output a list of paths for the downloaded jars to be added to the classpath
    * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
-   * @param cacheDirectory directory where jars are cached
-   * @return a comma-delimited list of paths for the dependencies
+   * @param cacheDirectory Directory where jars are cached
+   * @return List of paths for the dependencies
    */
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],

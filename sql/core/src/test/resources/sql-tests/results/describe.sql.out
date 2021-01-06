@@ -561,7 +561,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeColumnCommand
-   +- DescribeColumnCommand `default`.`t`, [b], false
+   +- DescribeColumnCommand `default`.`t`, [spark_catalog, default, t, b], false
 
 
 -- !query

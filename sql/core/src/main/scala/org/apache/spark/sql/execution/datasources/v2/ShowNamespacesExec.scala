@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
@@ -44,11 +43,9 @@ case class ShowNamespacesExec(
     }
 
     val rows = new ArrayBuffer[InternalRow]()
-    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
-
     namespaces.map(_.quoted).map { ns =>
       if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
-        rows += toRow(new GenericRowWithSchema(Array(ns), schema)).copy()
+        rows += toCatalystRow(ns)
       }
     }
 

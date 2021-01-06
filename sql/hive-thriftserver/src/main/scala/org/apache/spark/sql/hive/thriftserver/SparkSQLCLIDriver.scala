@@ -522,13 +522,21 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   // Note: [SPARK-31595] if there is a `'` in a double quoted string, or a `"` in a single quoted
   // string, the origin implementation from Hive will not drop the trailing semicolon as expected,
   // hence we refined this function a little bit.
+  // Note: [SPARK-33100] Ignore a semicolon inside a bracketed comment in spark-sql.
   private def splitSemiColon(line: String): JList[String] = {
     var insideSingleQuote = false
     var insideDoubleQuote = false
-    var insideComment = false
+    var insideSimpleComment = false
+    var bracketedCommentLevel = 0
     var escape = false
     var beginIndex = 0
+    var includingStatement = false
     val ret = new JArrayList[String]
+
+    def insideBracketedComment: Boolean = bracketedCommentLevel > 0
+    def insideComment: Boolean = insideSimpleComment || insideBracketedComment
+    def statementBegin(index: Int): Boolean = includingStatement || (!insideComment &&
+      index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
       if (line.charAt(index) == '\'' && !insideComment) {
@@ -553,21 +561,33 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           // Sample query: select "quoted value --"
           //                                    ^^ avoids starting a comment if it's inside quotes.
         } else if (hasNext && line.charAt(index + 1) == '-') {
-          // ignore quotes and ;
-          insideComment = true
+          // ignore quotes and ; in simple comment
+          insideSimpleComment = true
         }
       } else if (line.charAt(index) == ';') {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
         } else {
-          // split, do not include ; itself
-          ret.add(line.substring(beginIndex, index))
+          if (includingStatement) {
+            // split, do not include ; itself
+            ret.add(line.substring(beginIndex, index))
+          }
           beginIndex = index + 1
+          includingStatement = false
         }
       } else if (line.charAt(index) == '\n') {
-        // with a new line the inline comment should end.
+        // with a new line the inline simple comment should end.
         if (!escape) {
-          insideComment = false
+          insideSimpleComment = false
+        }
+      } else if (line.charAt(index) == '/' && !insideSimpleComment) {
+        val hasNext = index + 1 < line.length
+        if (insideSingleQuote || insideDoubleQuote) {
+          // Ignores '/' in any case of quotes
+        } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
+          bracketedCommentLevel -= 1
+        } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
+          bracketedCommentLevel += 1
         }
       }
       // set the escape
@@ -576,8 +596,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       } else if (line.charAt(index) == '\\') {
         escape = true
       }
+
+      includingStatement = statementBegin(index)
     }
-    ret.add(line.substring(beginIndex))
+    if (includingStatement) {
+      ret.add(line.substring(beginIndex))
+    }
     ret
   }
 }
