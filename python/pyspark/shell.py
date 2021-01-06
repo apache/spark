@@ -28,7 +28,6 @@ import warnings
 
 from pyspark.context import SparkContext
 from pyspark.sql import SparkSession
-from pyspark.util import PySparkWarning
 
 if os.environ.get("SPARK_EXECUTOR_URI"):
     SparkContext.setSystemProperty("spark.executor.uri", os.environ["SPARK_EXECUTOR_URI"])
@@ -40,7 +39,7 @@ try:
 except Exception:
     import sys
     import traceback
-    warnings.warn("Failed to initialize Spark session.", PySparkWarning)
+    warnings.warn("Failed to initialize Spark session.")
     traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 

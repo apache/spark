@@ -28,7 +28,6 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaWrapper
 from pyspark.ml.common import inherit_doc, _java2py
 from pyspark.ml.stat import MultivariateGaussian
 from pyspark.sql import DataFrame
-from pyspark.util import PySparkFutureWarning
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
            'KMeans', 'KMeansModel', 'KMeansSummary',
@@ -822,7 +821,7 @@ class BisectingKMeansModel(JavaModel, _BisectingKMeansParams, JavaMLWritable, Ja
         """
         warnings.warn("Deprecated in 3.0.0. It will be removed in future versions. Use "
                       "ClusteringEvaluator instead. You can also get the cost on the training "
-                      "dataset in the summary.", PySparkFutureWarning)
+                      "dataset in the summary.", FutureWarning)
         return self._call_java("computeCost", dataset)
 
     @property

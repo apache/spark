@@ -45,7 +45,6 @@ from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
-from pyspark.util import PySparkWarning
 
 __all__ = ['LinearSVC', 'LinearSVCModel',
            'LinearSVCSummary', 'LinearSVCTrainingSummary',
@@ -2895,11 +2894,8 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWrita
             if isinstance(classifier, HasWeightCol):
                 weightCol = self.getWeightCol()
             else:
-                warnings.warn(
-                    "weightCol is ignored, "
-                    "as it is not supported by {} now.".format(classifier),
-                    PySparkWarning
-                )
+                warnings.warn("weightCol is ignored, "
+                              "as it is not supported by {} now.".format(classifier))
 
         if weightCol:
             multiclassLabeled = dataset.select(labelCol, featuresCol, weightCol)

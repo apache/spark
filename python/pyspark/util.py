@@ -323,18 +323,6 @@ class InheritableThread(threading.Thread):
                         thread_connection.close()
 
 
-class PySparkWarning(UserWarning):
-    """A base class for PySpark warnings."""
-
-
-class PySparkFutureWarning(PySparkWarning, FutureWarning):
-    """A base class for deprecated PySpark APIs."""
-
-
-class PySparkResourceWarning(PySparkWarning, ResourceWarning):
-    """A base class for PySpark warnings related to resource usage."""
-
-
 if __name__ == "__main__":
     import doctest
 

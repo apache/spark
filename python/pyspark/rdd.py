@@ -46,7 +46,7 @@ from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
-from pyspark.util import fail_on_stopiteration, _parse_memory, PySparkFutureWarning
+from pyspark.util import fail_on_stopiteration, _parse_memory
 
 __all__ = ["RDD"]
 
@@ -449,7 +449,7 @@ class RDD(object):
         """
         warnings.warn(
             "mapPartitionsWithSplit is deprecated; use mapPartitionsWithIndex instead",
-            PySparkFutureWarning, stacklevel=2
+            FutureWarning, stacklevel=2
         )
         return self.mapPartitionsWithIndex(f, preservesPartitioning)
 
@@ -961,7 +961,7 @@ class RDD(object):
         warnings.warn(
             "Deprecated in 3.1, Use pyspark.InheritableThread with "
             "the pinned thread mode enabled.",
-            PySparkFutureWarning
+            FutureWarning
         )
 
         with SCCallSiteSync(self.context) as css:

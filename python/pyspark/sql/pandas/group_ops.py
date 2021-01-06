@@ -20,7 +20,6 @@ import warnings
 from pyspark.rdd import PythonEvalType
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.util import PySparkWarning
 
 
 class PandasGroupedOpsMixin(object):
@@ -82,9 +81,7 @@ class PandasGroupedOpsMixin(object):
         warnings.warn(
             "It is preferred to use 'applyInPandas' over this "
             "API. This API will be deprecated in the future releases. See SPARK-28264 for "
-            "more details.",
-            PySparkWarning
-        )
+            "more details.", UserWarning)
 
         return self.applyInPandas(udf.func, schema=udf.returnType)
 

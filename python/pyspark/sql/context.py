@@ -25,7 +25,6 @@ from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
 from pyspark.sql.utils import install_exception_handler
-from pyspark.util import PySparkFutureWarning
 
 __all__ = ["SQLContext", "HiveContext"]
 
@@ -77,7 +76,7 @@ class SQLContext(object):
         if sparkSession is None:
             warnings.warn(
                 "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-                PySparkFutureWarning
+                FutureWarning
             )
 
         self._sc = sparkContext
@@ -125,7 +124,7 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            PySparkFutureWarning
+            FutureWarning
         )
 
         if (cls._instantiatedContext is None
@@ -232,7 +231,7 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            PySparkFutureWarning
+            FutureWarning
         )
         return self.sparkSession.udf.register(name, f, returnType)
 
@@ -247,7 +246,7 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
-            PySparkFutureWarning
+            FutureWarning
         )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
@@ -602,7 +601,7 @@ class HiveContext(SQLContext):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use " +
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-            PySparkFutureWarning
+            FutureWarning
         )
         if jhiveContext is None:
             sparkContext._conf.set("spark.sql.catalogImplementation", "hive")

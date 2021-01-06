@@ -33,7 +33,6 @@ from pyspark.sql.udf import _create_udf
 # Keep pandas_udf and PandasUDFType import for backwards compatible import; moved in SPARK-28264
 from pyspark.sql.pandas.functions import pandas_udf, PandasUDFType  # noqa: F401
 from pyspark.sql.utils import to_str
-from pyspark.util import PySparkFutureWarning
 
 # Note to developers: all of PySpark functions here take string as column names whenever possible.
 # Namely, if columns are referred as arguments, they can be always both Column or string,
@@ -477,7 +476,7 @@ def toDegrees(col):
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
     """
-    warnings.warn("Deprecated in 2.1, use degrees instead.", PySparkFutureWarning)
+    warnings.warn("Deprecated in 2.1, use degrees instead.", FutureWarning)
     return degrees(col)
 
 
@@ -487,7 +486,7 @@ def toRadians(col):
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
     """
-    warnings.warn("Deprecated in 2.1, use radians instead.", PySparkFutureWarning)
+    warnings.warn("Deprecated in 2.1, use radians instead.", FutureWarning)
     return radians(col)
 
 
@@ -796,7 +795,7 @@ def approxCountDistinct(col, rsd=None):
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
     """
-    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", PySparkFutureWarning)
+    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
 
 

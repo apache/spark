@@ -34,7 +34,6 @@ from pyspark.sql.streaming import DataStreamWriter
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 from pyspark.sql.pandas.conversion import PandasConversionMixin
 from pyspark.sql.pandas.map_ops import PandasMapOpsMixin
-from pyspark.util import PySparkFutureWarning, PySparkWarning
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
 
@@ -137,7 +136,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         warnings.warn(
             "Deprecated in 2.0, use createOrReplaceTempView instead.",
-            PySparkFutureWarning
+            FutureWarning
         )
         self._jdf.createOrReplaceTempView(name)
 
@@ -2212,10 +2211,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(to_replace, dict):
             rep_dict = to_replace
             if value is not None:
-                warnings.warn(
-                    "to_replace is a dict and value is not None. value will be ignored.",
-                    PySparkWarning
-                )
+                warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
         else:
             if isinstance(value, (float, int, str)) or value is None:
                 value = [value for _ in range(len(to_replace))]

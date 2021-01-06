@@ -45,7 +45,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, read_bo
 from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback, PySparkResourceWarning
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -503,7 +503,7 @@ def main(infile, outfile):
                 # not all systems support resource limits, so warn instead of failing
                 warnings.warn(
                     "Failed to set memory limit: {0}\n".format(e),
-                    PySparkResourceWarning
+                    ResourceWarning
                 )
 
         # initialize global state

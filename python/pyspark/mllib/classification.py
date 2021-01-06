@@ -1,3 +1,4 @@
+#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -27,7 +28,6 @@ from pyspark.mllib.regression import (
     LabeledPoint, LinearModel, _regression_train_wrapper,
     StreamingLinearAlgorithm)
 from pyspark.mllib.util import Saveable, Loader, inherit_doc
-from pyspark.util import PySparkFutureWarning
 
 
 __all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
@@ -324,7 +324,7 @@ class LogisticRegressionWithSGD(object):
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
-            "LogisticRegressionWithLBFGS.", PySparkFutureWarning)
+            "LogisticRegressionWithLBFGS.", FutureWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
