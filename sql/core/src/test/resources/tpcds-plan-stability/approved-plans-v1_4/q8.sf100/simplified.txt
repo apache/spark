@@ -27,14 +27,14 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                         BroadcastExchange #3
                                           WholeStageCodegen (1)
                                             Project [d_date_sk]
-                                              Filter [d_qoy,d_year,d_date_sk]
+                                              Filter [d_year,d_qoy,d_date_sk]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
-                                        Filter [s_store_sk,s_zip]
+                                        Filter [s_zip,s_store_sk]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.store [s_store_sk,s_store_name,s_zip]

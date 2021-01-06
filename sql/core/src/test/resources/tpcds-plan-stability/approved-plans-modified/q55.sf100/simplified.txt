@@ -13,7 +13,7 @@ TakeOrderedAndProject [ext_price,brand_id,brand]
                         BroadcastExchange #2
                           WholeStageCodegen (1)
                             Project [d_date_sk]
-                              Filter [d_moy,d_year,d_date_sk]
+                              Filter [d_date_sk,d_year,d_moy]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]

@@ -2010,6 +2010,13 @@ object SQLConf {
     .doubleConf
     .createWithDefault(0.9)
 
+  val PREDICATE_REORDER_ENABLED = buildConf("spark.sql.predicateReorder.enabled")
+    .doc("Enables predicate reorder. Expressions with higher priority are executed in preference " +
+      "to expressions with lower priority.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
   private def isValidTimezone(zone: String): Boolean = {
     Try { DateTimeUtils.getZoneId(zone) }.isSuccess
   }
@@ -3770,6 +3777,8 @@ class SQLConf extends Serializable with Logging {
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
+
+  def predicateReorder: Boolean = getConf(PREDICATE_REORDER_ENABLED)
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
