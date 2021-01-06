@@ -585,10 +585,11 @@ SELECT TRANSFORM(1)
 FROM script_trans
 HAVING true
 -- !query schema
-struct<>
+struct<a:string>
 -- !query output
-org.apache.spark.sql.AnalysisException
-unresolved operator 'UnresolvedHaving cast(true as boolean)
+1
+1
+1
 
 
 -- !query
