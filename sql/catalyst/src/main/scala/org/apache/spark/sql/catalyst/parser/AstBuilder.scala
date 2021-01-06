@@ -680,9 +680,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       windowClause,
       isDistinct = false)
 
-    // Create the transform, here we pass UnresolvedStart as ScriptTransform's input.
-    // In analyzer after child plan is resolved, we resolve UnresolvedStart as child's output.
     ScriptTransformation(
+      // Create the transform, here we pass UnresolvedStart as ScriptTransform's input.
+      // In analyzer after child plan is resolved, we resolve UnresolvedStart as child's output.
       Seq(UnresolvedStar(None)),
       string(transformClause.script),
       attributes,
