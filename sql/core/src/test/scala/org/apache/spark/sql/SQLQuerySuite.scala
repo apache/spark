@@ -22,6 +22,8 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -29,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -3719,6 +3722,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-33084: Add jar support Ivy URI in SQL") {
+    val sc = spark.sparkContext
+    // default transitive=false, only download specified jar
+    sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    assert(sc.listJars()
+      .exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+
+    // test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
+
+    sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7" +
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
+  }
+
   test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
     withTempView("df") {
       Seq("m@ca").toDF("s").createOrReplaceTempView("df")
@@ -3770,6 +3792,56 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
       }
     })
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val functionName = "test_udf"
+    withTempDir { dir =>
+      System.setProperty("ivy.home", dir.getAbsolutePath)
+      val sourceJar = new File(Thread.currentThread().getContextClassLoader
+        .getResource("SPARK-33084.jar").getFile)
+      val targetCacheJarDir = new File(dir.getAbsolutePath +
+        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
+      targetCacheJarDir.mkdir()
+      // copy jar to local cache
+      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      withTempView("v1") {
+        withUserDefinedFunction(
+          s"default.$functionName" -> false,
+          functionName -> true) {
+          // create temporary function without class
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          }.getMessage
+          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
+          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          // create a view using a function in 'default' database
+          sql(s"CREATE TEMPORARY VIEW v1 AS SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+          // view v1 should still using function defined in `default` database
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
+        }
+      }
+      System.clearProperty("ivy.home")
+    }
+  }
+
+  test("SPARK-33964: Combine distinct unions that have noop project between them") {
+    val df = sql("""
+      |SELECT a, b FROM (
+      |  SELECT a, b FROM testData2
+      |  UNION
+      |  SELECT a, sum(b) FROM testData2 GROUP BY a
+      |  UNION
+      |  SELECT null AS a, sum(b) FROM testData2
+      |)""".stripMargin)
+
+    val unions = df.queryExecution.sparkPlan.collect {
+      case u: UnionExec => u
+    }
+
+    assert(unions.size == 1)
   }
 }
 

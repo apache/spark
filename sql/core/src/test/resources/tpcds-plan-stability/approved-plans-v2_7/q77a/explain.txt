@@ -1,112 +1,108 @@
 == Physical Plan ==
-TakeOrderedAndProject (108)
-+- * HashAggregate (107)
-   +- Exchange (106)
-      +- * HashAggregate (105)
-         +- Union (104)
-            :- * HashAggregate (98)
-            :  +- Exchange (97)
-            :     +- * HashAggregate (96)
-            :        +- Union (95)
-            :           :- * HashAggregate (89)
-            :           :  +- Exchange (88)
-            :           :     +- * HashAggregate (87)
-            :           :        +- Union (86)
-            :           :           :- * Project (34)
-            :           :           :  +- * BroadcastHashJoin LeftOuter BuildRight (33)
-            :           :           :     :- * HashAggregate (19)
-            :           :           :     :  +- Exchange (18)
-            :           :           :     :     +- * HashAggregate (17)
-            :           :           :     :        +- * Project (16)
-            :           :           :     :           +- * BroadcastHashJoin Inner BuildRight (15)
-            :           :           :     :              :- * Project (10)
-            :           :           :     :              :  +- * BroadcastHashJoin Inner BuildRight (9)
-            :           :           :     :              :     :- * Filter (3)
-            :           :           :     :              :     :  +- * ColumnarToRow (2)
-            :           :           :     :              :     :     +- Scan parquet default.store_sales (1)
-            :           :           :     :              :     +- BroadcastExchange (8)
-            :           :           :     :              :        +- * Project (7)
-            :           :           :     :              :           +- * Filter (6)
-            :           :           :     :              :              +- * ColumnarToRow (5)
-            :           :           :     :              :                 +- Scan parquet default.date_dim (4)
-            :           :           :     :              +- BroadcastExchange (14)
-            :           :           :     :                 +- * Filter (13)
-            :           :           :     :                    +- * ColumnarToRow (12)
-            :           :           :     :                       +- Scan parquet default.store (11)
-            :           :           :     +- BroadcastExchange (32)
-            :           :           :        +- * HashAggregate (31)
-            :           :           :           +- Exchange (30)
-            :           :           :              +- * HashAggregate (29)
-            :           :           :                 +- * Project (28)
-            :           :           :                    +- * BroadcastHashJoin Inner BuildRight (27)
-            :           :           :                       :- * Project (25)
-            :           :           :                       :  +- * BroadcastHashJoin Inner BuildRight (24)
-            :           :           :                       :     :- * Filter (22)
-            :           :           :                       :     :  +- * ColumnarToRow (21)
-            :           :           :                       :     :     +- Scan parquet default.store_returns (20)
-            :           :           :                       :     +- ReusedExchange (23)
-            :           :           :                       +- ReusedExchange (26)
-            :           :           :- * Project (55)
-            :           :           :  +- BroadcastNestedLoopJoin Inner BuildLeft (54)
-            :           :           :     :- BroadcastExchange (44)
-            :           :           :     :  +- * HashAggregate (43)
-            :           :           :     :     +- Exchange (42)
-            :           :           :     :        +- * HashAggregate (41)
-            :           :           :     :           +- * Project (40)
-            :           :           :     :              +- * BroadcastHashJoin Inner BuildRight (39)
-            :           :           :     :                 :- * Filter (37)
-            :           :           :     :                 :  +- * ColumnarToRow (36)
-            :           :           :     :                 :     +- Scan parquet default.catalog_sales (35)
-            :           :           :     :                 +- ReusedExchange (38)
-            :           :           :     +- * HashAggregate (53)
-            :           :           :        +- Exchange (52)
-            :           :           :           +- * HashAggregate (51)
-            :           :           :              +- * Project (50)
-            :           :           :                 +- * BroadcastHashJoin Inner BuildRight (49)
-            :           :           :                    :- * Filter (47)
-            :           :           :                    :  +- * ColumnarToRow (46)
-            :           :           :                    :     +- Scan parquet default.catalog_returns (45)
-            :           :           :                    +- ReusedExchange (48)
-            :           :           +- * Project (85)
-            :           :              +- * BroadcastHashJoin LeftOuter BuildRight (84)
-            :           :                 :- * HashAggregate (70)
-            :           :                 :  +- Exchange (69)
-            :           :                 :     +- * HashAggregate (68)
-            :           :                 :        +- * Project (67)
-            :           :                 :           +- * BroadcastHashJoin Inner BuildRight (66)
-            :           :                 :              :- * Project (61)
-            :           :                 :              :  +- * BroadcastHashJoin Inner BuildRight (60)
-            :           :                 :              :     :- * Filter (58)
-            :           :                 :              :     :  +- * ColumnarToRow (57)
-            :           :                 :              :     :     +- Scan parquet default.web_sales (56)
-            :           :                 :              :     +- ReusedExchange (59)
-            :           :                 :              +- BroadcastExchange (65)
-            :           :                 :                 +- * Filter (64)
-            :           :                 :                    +- * ColumnarToRow (63)
-            :           :                 :                       +- Scan parquet default.web_page (62)
-            :           :                 +- BroadcastExchange (83)
-            :           :                    +- * HashAggregate (82)
-            :           :                       +- Exchange (81)
-            :           :                          +- * HashAggregate (80)
-            :           :                             +- * Project (79)
-            :           :                                +- * BroadcastHashJoin Inner BuildRight (78)
-            :           :                                   :- * Project (76)
-            :           :                                   :  +- * BroadcastHashJoin Inner BuildRight (75)
-            :           :                                   :     :- * Filter (73)
-            :           :                                   :     :  +- * ColumnarToRow (72)
-            :           :                                   :     :     +- Scan parquet default.web_returns (71)
-            :           :                                   :     +- ReusedExchange (74)
-            :           :                                   +- ReusedExchange (77)
-            :           +- * HashAggregate (94)
-            :              +- Exchange (93)
-            :                 +- * HashAggregate (92)
-            :                    +- * HashAggregate (91)
-            :                       +- ReusedExchange (90)
-            +- * HashAggregate (103)
-               +- Exchange (102)
-                  +- * HashAggregate (101)
-                     +- * HashAggregate (100)
-                        +- ReusedExchange (99)
+TakeOrderedAndProject (104)
++- * HashAggregate (103)
+   +- Exchange (102)
+      +- * HashAggregate (101)
+         +- Union (100)
+            :- * HashAggregate (89)
+            :  +- Exchange (88)
+            :     +- * HashAggregate (87)
+            :        +- Union (86)
+            :           :- * Project (34)
+            :           :  +- * BroadcastHashJoin LeftOuter BuildRight (33)
+            :           :     :- * HashAggregate (19)
+            :           :     :  +- Exchange (18)
+            :           :     :     +- * HashAggregate (17)
+            :           :     :        +- * Project (16)
+            :           :     :           +- * BroadcastHashJoin Inner BuildRight (15)
+            :           :     :              :- * Project (10)
+            :           :     :              :  +- * BroadcastHashJoin Inner BuildRight (9)
+            :           :     :              :     :- * Filter (3)
+            :           :     :              :     :  +- * ColumnarToRow (2)
+            :           :     :              :     :     +- Scan parquet default.store_sales (1)
+            :           :     :              :     +- BroadcastExchange (8)
+            :           :     :              :        +- * Project (7)
+            :           :     :              :           +- * Filter (6)
+            :           :     :              :              +- * ColumnarToRow (5)
+            :           :     :              :                 +- Scan parquet default.date_dim (4)
+            :           :     :              +- BroadcastExchange (14)
+            :           :     :                 +- * Filter (13)
+            :           :     :                    +- * ColumnarToRow (12)
+            :           :     :                       +- Scan parquet default.store (11)
+            :           :     +- BroadcastExchange (32)
+            :           :        +- * HashAggregate (31)
+            :           :           +- Exchange (30)
+            :           :              +- * HashAggregate (29)
+            :           :                 +- * Project (28)
+            :           :                    +- * BroadcastHashJoin Inner BuildRight (27)
+            :           :                       :- * Project (25)
+            :           :                       :  +- * BroadcastHashJoin Inner BuildRight (24)
+            :           :                       :     :- * Filter (22)
+            :           :                       :     :  +- * ColumnarToRow (21)
+            :           :                       :     :     +- Scan parquet default.store_returns (20)
+            :           :                       :     +- ReusedExchange (23)
+            :           :                       +- ReusedExchange (26)
+            :           :- * Project (55)
+            :           :  +- BroadcastNestedLoopJoin Inner BuildLeft (54)
+            :           :     :- BroadcastExchange (44)
+            :           :     :  +- * HashAggregate (43)
+            :           :     :     +- Exchange (42)
+            :           :     :        +- * HashAggregate (41)
+            :           :     :           +- * Project (40)
+            :           :     :              +- * BroadcastHashJoin Inner BuildRight (39)
+            :           :     :                 :- * Filter (37)
+            :           :     :                 :  +- * ColumnarToRow (36)
+            :           :     :                 :     +- Scan parquet default.catalog_sales (35)
+            :           :     :                 +- ReusedExchange (38)
+            :           :     +- * HashAggregate (53)
+            :           :        +- Exchange (52)
+            :           :           +- * HashAggregate (51)
+            :           :              +- * Project (50)
+            :           :                 +- * BroadcastHashJoin Inner BuildRight (49)
+            :           :                    :- * Filter (47)
+            :           :                    :  +- * ColumnarToRow (46)
+            :           :                    :     +- Scan parquet default.catalog_returns (45)
+            :           :                    +- ReusedExchange (48)
+            :           +- * Project (85)
+            :              +- * BroadcastHashJoin LeftOuter BuildRight (84)
+            :                 :- * HashAggregate (70)
+            :                 :  +- Exchange (69)
+            :                 :     +- * HashAggregate (68)
+            :                 :        +- * Project (67)
+            :                 :           +- * BroadcastHashJoin Inner BuildRight (66)
+            :                 :              :- * Project (61)
+            :                 :              :  +- * BroadcastHashJoin Inner BuildRight (60)
+            :                 :              :     :- * Filter (58)
+            :                 :              :     :  +- * ColumnarToRow (57)
+            :                 :              :     :     +- Scan parquet default.web_sales (56)
+            :                 :              :     +- ReusedExchange (59)
+            :                 :              +- BroadcastExchange (65)
+            :                 :                 +- * Filter (64)
+            :                 :                    +- * ColumnarToRow (63)
+            :                 :                       +- Scan parquet default.web_page (62)
+            :                 +- BroadcastExchange (83)
+            :                    +- * HashAggregate (82)
+            :                       +- Exchange (81)
+            :                          +- * HashAggregate (80)
+            :                             +- * Project (79)
+            :                                +- * BroadcastHashJoin Inner BuildRight (78)
+            :                                   :- * Project (76)
+            :                                   :  +- * BroadcastHashJoin Inner BuildRight (75)
+            :                                   :     :- * Filter (73)
+            :                                   :     :  +- * ColumnarToRow (72)
+            :                                   :     :     +- Scan parquet default.web_returns (71)
+            :                                   :     +- ReusedExchange (74)
+            :                                   +- ReusedExchange (77)
+            :- * HashAggregate (94)
+            :  +- Exchange (93)
+            :     +- * HashAggregate (92)
+            :        +- * HashAggregate (91)
+            :           +- ReusedExchange (90)
+            +- * HashAggregate (99)
+               +- Exchange (98)
+                  +- * HashAggregate (97)
+                     +- * HashAggregate (96)
+                        +- ReusedExchange (95)
 
 
 (1) Scan parquet default.store_sales
@@ -190,7 +186,7 @@ Results [3]: [s_store_sk#8, sum#12, sum#13]
 
 (18) Exchange
 Input [3]: [s_store_sk#8, sum#12, sum#13]
-Arguments: hashpartitioning(s_store_sk#8, 5), true, [id=#14]
+Arguments: hashpartitioning(s_store_sk#8, 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (19) HashAggregate [codegen id : 8]
 Input [3]: [s_store_sk#8, sum#12, sum#13]
@@ -246,7 +242,7 @@ Results [3]: [s_store_sk#23, sum#26, sum#27]
 
 (30) Exchange
 Input [3]: [s_store_sk#23, sum#26, sum#27]
-Arguments: hashpartitioning(s_store_sk#23, 5), true, [id=#28]
+Arguments: hashpartitioning(s_store_sk#23, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (31) HashAggregate [codegen id : 7]
 Input [3]: [s_store_sk#23, sum#26, sum#27]
@@ -303,7 +299,7 @@ Results [3]: [cs_call_center_sk#39, sum#44, sum#45]
 
 (42) Exchange
 Input [3]: [cs_call_center_sk#39, sum#44, sum#45]
-Arguments: hashpartitioning(cs_call_center_sk#39, 5), true, [id=#46]
+Arguments: hashpartitioning(cs_call_center_sk#39, 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (43) HashAggregate [codegen id : 11]
 Input [3]: [cs_call_center_sk#39, sum#44, sum#45]
@@ -351,7 +347,7 @@ Results [2]: [sum#57, sum#58]
 
 (52) Exchange
 Input [2]: [sum#57, sum#58]
-Arguments: SinglePartition, true, [id=#59]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#59]
 
 (53) HashAggregate [codegen id : 14]
 Input [2]: [sum#57, sum#58]
@@ -429,7 +425,7 @@ Results [3]: [wp_web_page_sk#71, sum#75, sum#76]
 
 (69) Exchange
 Input [3]: [wp_web_page_sk#71, sum#75, sum#76]
-Arguments: hashpartitioning(wp_web_page_sk#71, 5), true, [id=#77]
+Arguments: hashpartitioning(wp_web_page_sk#71, 5), ENSURE_REQUIREMENTS, [id=#77]
 
 (70) HashAggregate [codegen id : 23]
 Input [3]: [wp_web_page_sk#71, sum#75, sum#76]
@@ -485,7 +481,7 @@ Results [3]: [wp_web_page_sk#86, sum#89, sum#90]
 
 (81) Exchange
 Input [3]: [wp_web_page_sk#86, sum#89, sum#90]
-Arguments: hashpartitioning(wp_web_page_sk#86, 5), true, [id=#91]
+Arguments: hashpartitioning(wp_web_page_sk#86, 5), ENSURE_REQUIREMENTS, [id=#91]
 
 (82) HashAggregate [codegen id : 22]
 Input [3]: [wp_web_page_sk#86, sum#89, sum#90]
@@ -518,7 +514,7 @@ Results [8]: [channel#34, id#35, sum#107, isEmpty#108, sum#109, isEmpty#110, sum
 
 (88) Exchange
 Input [8]: [channel#34, id#35, sum#107, isEmpty#108, sum#109, isEmpty#110, sum#111, isEmpty#112]
-Arguments: hashpartitioning(channel#34, id#35, 5), true, [id=#113]
+Arguments: hashpartitioning(channel#34, id#35, 5), ENSURE_REQUIREMENTS, [id=#113]
 
 (89) HashAggregate [codegen id : 25]
 Input [8]: [channel#34, id#35, sum#107, isEmpty#108, sum#109, isEmpty#110, sum#111, isEmpty#112]
@@ -546,7 +542,7 @@ Results [7]: [channel#34, sum#139, isEmpty#140, sum#141, isEmpty#142, sum#143, i
 
 (93) Exchange
 Input [7]: [channel#34, sum#139, isEmpty#140, sum#141, isEmpty#142, sum#143, isEmpty#144]
-Arguments: hashpartitioning(channel#34, 5), true, [id=#145]
+Arguments: hashpartitioning(channel#34, 5), ENSURE_REQUIREMENTS, [id=#145]
 
 (94) HashAggregate [codegen id : 51]
 Input [7]: [channel#34, sum#139, isEmpty#140, sum#141, isEmpty#142, sum#143, isEmpty#144]
@@ -555,75 +551,55 @@ Functions [3]: [sum(sales#130), sum(returns#131), sum(profit#132)]
 Aggregate Attributes [3]: [sum(sales#130)#146, sum(returns#131)#147, sum(profit#132)#148]
 Results [5]: [channel#34, null AS id#149, sum(sales#130)#146 AS sales#150, sum(returns#131)#147 AS returns#151, sum(profit#132)#148 AS profit#152]
 
-(95) Union
+(95) ReusedExchange [Reuses operator id: 88]
+Output [8]: [channel#34, id#35, sum#153, isEmpty#154, sum#155, isEmpty#156, sum#157, isEmpty#158]
 
-(96) HashAggregate [codegen id : 52]
-Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-Keys [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-Functions: []
-Aggregate Attributes: []
-Results [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-
-(97) Exchange
-Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-Arguments: hashpartitioning(channel#34, id#35, sales#117, returns#118, profit#119, 5), true, [id=#153]
-
-(98) HashAggregate [codegen id : 53]
-Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-Keys [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-Functions: []
-Aggregate Attributes: []
-Results [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-
-(99) ReusedExchange [Reuses operator id: 88]
-Output [8]: [channel#34, id#35, sum#154, isEmpty#155, sum#156, isEmpty#157, sum#158, isEmpty#159]
-
-(100) HashAggregate [codegen id : 78]
-Input [8]: [channel#34, id#35, sum#154, isEmpty#155, sum#156, isEmpty#157, sum#158, isEmpty#159]
+(96) HashAggregate [codegen id : 76]
+Input [8]: [channel#34, id#35, sum#153, isEmpty#154, sum#155, isEmpty#156, sum#157, isEmpty#158]
 Keys [2]: [channel#34, id#35]
-Functions [3]: [sum(sales#17), sum(returns#36), sum(profit#160)]
-Aggregate Attributes [3]: [sum(sales#17)#161, sum(returns#36)#162, sum(profit#160)#163]
-Results [3]: [sum(sales#17)#161 AS sales#130, sum(returns#36)#162 AS returns#131, sum(profit#160)#163 AS profit#132]
+Functions [3]: [sum(sales#17), sum(returns#36), sum(profit#159)]
+Aggregate Attributes [3]: [sum(sales#17)#160, sum(returns#36)#161, sum(profit#159)#162]
+Results [3]: [sum(sales#17)#160 AS sales#130, sum(returns#36)#161 AS returns#131, sum(profit#159)#162 AS profit#132]
 
-(101) HashAggregate [codegen id : 78]
+(97) HashAggregate [codegen id : 76]
 Input [3]: [sales#130, returns#131, profit#132]
 Keys: []
 Functions [3]: [partial_sum(sales#130), partial_sum(returns#131), partial_sum(profit#132)]
-Aggregate Attributes [6]: [sum#164, isEmpty#165, sum#166, isEmpty#167, sum#168, isEmpty#169]
-Results [6]: [sum#170, isEmpty#171, sum#172, isEmpty#173, sum#174, isEmpty#175]
+Aggregate Attributes [6]: [sum#163, isEmpty#164, sum#165, isEmpty#166, sum#167, isEmpty#168]
+Results [6]: [sum#169, isEmpty#170, sum#171, isEmpty#172, sum#173, isEmpty#174]
 
-(102) Exchange
-Input [6]: [sum#170, isEmpty#171, sum#172, isEmpty#173, sum#174, isEmpty#175]
-Arguments: SinglePartition, true, [id=#176]
+(98) Exchange
+Input [6]: [sum#169, isEmpty#170, sum#171, isEmpty#172, sum#173, isEmpty#174]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#175]
 
-(103) HashAggregate [codegen id : 79]
-Input [6]: [sum#170, isEmpty#171, sum#172, isEmpty#173, sum#174, isEmpty#175]
+(99) HashAggregate [codegen id : 77]
+Input [6]: [sum#169, isEmpty#170, sum#171, isEmpty#172, sum#173, isEmpty#174]
 Keys: []
 Functions [3]: [sum(sales#130), sum(returns#131), sum(profit#132)]
-Aggregate Attributes [3]: [sum(sales#130)#177, sum(returns#131)#178, sum(profit#132)#179]
-Results [5]: [null AS channel#180, null AS id#181, sum(sales#130)#177 AS sales#182, sum(returns#131)#178 AS returns#183, sum(profit#132)#179 AS profit#184]
+Aggregate Attributes [3]: [sum(sales#130)#176, sum(returns#131)#177, sum(profit#132)#178]
+Results [5]: [null AS channel#179, null AS id#180, sum(sales#130)#176 AS sales#181, sum(returns#131)#177 AS returns#182, sum(profit#132)#178 AS profit#183]
 
-(104) Union
+(100) Union
 
-(105) HashAggregate [codegen id : 80]
+(101) HashAggregate [codegen id : 78]
 Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 Keys [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 Functions: []
 Aggregate Attributes: []
 Results [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 
-(106) Exchange
+(102) Exchange
 Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
-Arguments: hashpartitioning(channel#34, id#35, sales#117, returns#118, profit#119, 5), true, [id=#185]
+Arguments: hashpartitioning(channel#34, id#35, sales#117, returns#118, profit#119, 5), ENSURE_REQUIREMENTS, [id=#184]
 
-(107) HashAggregate [codegen id : 81]
+(103) HashAggregate [codegen id : 79]
 Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 Keys [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 Functions: []
 Aggregate Attributes: []
 Results [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 
-(108) TakeOrderedAndProject
+(104) TakeOrderedAndProject
 Input [5]: [channel#34, id#35, sales#117, returns#118, profit#119]
 Arguments: 100, [channel#34 ASC NULLS FIRST, id#35 ASC NULLS FIRST], [channel#34, id#35, sales#117, returns#118, profit#119]
 

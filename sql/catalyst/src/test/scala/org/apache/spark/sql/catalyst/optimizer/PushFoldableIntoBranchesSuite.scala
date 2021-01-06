@@ -53,7 +53,7 @@ class PushFoldableIntoBranchesSuite
 
   test("Push down EqualTo through If") {
     assertEquivalent(EqualTo(ifExp, Literal(4)), FalseLiteral)
-    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a))
+    assertEquivalent(EqualTo(ifExp, Literal(3)), Not(a <=> TrueLiteral))
 
     // Push down at most one not foldable expressions.
     assertEquivalent(
@@ -102,7 +102,7 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(Remainder(ifExp, Literal(4)), If(a, Literal(2), Literal(3)))
     assertEquivalent(Divide(If(a, Literal(2.0), Literal(3.0)), Literal(1.0)),
       If(a, Literal(2.0), Literal(3.0)))
-    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a))
+    assertEquivalent(And(If(a, FalseLiteral, TrueLiteral), TrueLiteral), Not(a <=> TrueLiteral))
     assertEquivalent(Or(If(a, FalseLiteral, TrueLiteral), TrueLiteral), TrueLiteral)
   }
 
@@ -141,7 +141,7 @@ class PushFoldableIntoBranchesSuite
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal(1))), Some(Literal(2)))
     assert(!nonDeterministic.deterministic)
     assertEquivalent(EqualTo(nonDeterministic, Literal(2)),
-      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(TrueLiteral)))
+      GreaterThanOrEqual(Rand(1), Literal(0.5)))
     assertEquivalent(EqualTo(nonDeterministic, Literal(3)),
       CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), FalseLiteral)), Some(FalseLiteral)))
 
@@ -257,5 +257,24 @@ class PushFoldableIntoBranchesSuite
     assertEquivalent(
       EqualTo(CaseWhen(Seq((a, Literal(1)), (c, Literal(2))), None).cast(StringType), Literal("4")),
       CaseWhen(Seq((a, FalseLiteral), (c, FalseLiteral)), None))
+  }
+
+  test("SPARK-33847: Remove the CaseWhen if elseValue is empty and other outputs are null") {
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((a, Literal.create(null, IntegerType)))), Literal(2)),
+      Literal.create(null, BooleanType))
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal("str")))).cast(IntegerType),
+        Literal(2)),
+      CaseWhen(Seq((LessThan(Rand(1), Literal(0.5)), Literal.create(null, BooleanType)))))
+  }
+
+  test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
+      'a > 10 <=> TrueLiteral)
+    assertEquivalent(
+      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not('a > 10 <=> TrueLiteral))
   }
 }

@@ -103,6 +103,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
+        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
@@ -113,7 +114,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveNoopOperators,
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
-        OptimizeJsonExprs,
+        OptimizeCsvJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -155,6 +156,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
+      RemoveNoopOperators,
       CombineUnions) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
@@ -489,7 +491,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Eliminate no-op Projects
     case p @ Project(_, child) if child.sameOutput(p) => child
 

@@ -159,10 +159,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testChangeColumn(isDatasourceTable = false)
   }
 
-  test("alter table: rename partition") {
-    testRenamePartitions(isDatasourceTable = false)
-  }
-
   test("alter datasource table add columns - orc") {
     testAddColumn("orc")
   }
@@ -2892,6 +2888,20 @@ class HiveDDLSuite
             assert(table.storage.serde === Some(expectedSerde.get.serde.get))
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-33844: Insert overwrite directory should check schema too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[AnalysisException] {
+          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+        }.getMessage
+        assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
+          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
       }
     }
   }

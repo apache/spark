@@ -6,26 +6,26 @@ TakeOrderedAndProject [ext_price,brand_id,brand]
           WholeStageCodegen (3)
             HashAggregate [i_brand,i_brand_id,ss_ext_sales_price] [sum,sum]
               Project [ss_ext_sales_price,i_brand_id,i_brand]
-                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                  Project [ss_sold_date_sk,ss_ext_sales_price,i_brand_id,i_brand]
-                    BroadcastHashJoin [ss_item_sk,i_item_sk]
+                BroadcastHashJoin [ss_item_sk,i_item_sk]
+                  Project [ss_item_sk,ss_ext_sales_price]
+                    BroadcastHashJoin [d_date_sk,ss_sold_date_sk]
+                      InputAdapter
+                        BroadcastExchange #2
+                          WholeStageCodegen (1)
+                            Project [d_date_sk]
+                              Filter [d_moy,d_year,d_date_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                       Filter [ss_sold_date_sk,ss_item_sk]
                         ColumnarToRow
                           InputAdapter
                             Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_ext_sales_price]
-                      InputAdapter
-                        BroadcastExchange #2
-                          WholeStageCodegen (1)
-                            Project [i_item_sk,i_brand_id,i_brand]
-                              Filter [i_manager_id,i_item_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.item [i_item_sk,i_brand_id,i_brand,i_manager_id]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)
-                        Project [d_date_sk]
-                          Filter [d_moy,d_year,d_date_sk]
+                        Project [i_item_sk,i_brand_id,i_brand]
+                          Filter [i_manager_id,i_item_sk]
                             ColumnarToRow
                               InputAdapter
-                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                Scan parquet default.item [i_item_sk,i_brand_id,i_brand,i_manager_id]

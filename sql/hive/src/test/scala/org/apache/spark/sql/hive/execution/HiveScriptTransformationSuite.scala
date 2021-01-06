@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TestUtils}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
@@ -437,5 +438,94 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       }.getMessage
       assert(e2.contains("array<double> cannot be converted to Hive TypeInfo"))
     }
+  }
+
+  test("SPARK-32685: When use specified serde, filed.delim's default value is '\t'") {
+    val query1 = sql(
+      """
+        |SELECT split(value, "\t") FROM (
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat'
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |) temp;
+      """.stripMargin)
+    checkAnswer(query1, identity, Row(Seq("2", "3")) :: Nil)
+
+    val query2 = sql(
+      """
+        |SELECT split(value, "\t") FROM (
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |USING 'cat'
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'serialization.last.column.takes.rest' = 'true'
+        |  )
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |) temp;
+      """.stripMargin)
+    checkAnswer(query2, identity, Row(Seq("2", "3")) :: Nil)
+
+    val query3 = sql(
+      """
+        |SELECT split(value, "&") FROM (
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'field.delim' = '&'
+        |  )
+        |USING 'cat'
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'serialization.last.column.takes.rest' = 'true',
+        |   'field.delim' = '&'
+        |  )
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |) temp;
+      """.stripMargin)
+    checkAnswer(query3, identity, Row(Seq("2", "3")) :: Nil)
+
+    val query4 = sql(
+      """
+        |SELECT split(value, "&") FROM (
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |USING 'cat'
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'serialization.last.column.takes.rest' = 'true',
+        |   'field.delim' = '&'
+        |  )
+        |FROM (SELECT 1 AS a, 2 AS b, 3 AS c) t
+        |) temp;
+      """.stripMargin)
+    checkAnswer(query4, identity, Row(null) :: Nil)
+  }
+
+  test("SPARK-32684: Script transform hive serde mode null format is same with hive as '\\N'") {
+    val query1 = sql(
+      """
+        |SELECT TRANSFORM(null, null, null)
+        |USING 'cat'
+        |FROM (SELECT 1 AS a) t
+      """.stripMargin)
+    checkAnswer(query1, identity, Row(null, "\\N\t\\N") :: Nil)
+
+    val query2 = sql(
+      """
+        |SELECT TRANSFORM(null, null, null)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'field.delim' = ','
+        |  )
+        |USING 'cat' AS (a)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |  WITH SERDEPROPERTIES (
+        |   'field.delim' = '&'
+        |  )
+        |FROM (SELECT 1 AS a) t
+      """.stripMargin)
+    checkAnswer(query2, identity, Row("\\N,\\N,\\N") :: Nil)
+
   }
 }
