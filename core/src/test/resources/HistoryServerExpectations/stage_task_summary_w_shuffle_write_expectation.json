@@ -1,19 +1,19 @@
 {
-  "quantiles" : [ 0.05, 0.25, 0.5, 0.75, 0.95 ],
-  "executorDeserializeTime" : [ 2.0, 2.0, 3.0, 7.0, 31.0 ],
+  "quantiles" : [ 0.0, 0.25, 0.5, 0.75, 1.0 ],
+  "executorDeserializeTime" : [ 1.0, 2.0, 3.0, 7.0, 36.0 ],
   "executorDeserializeCpuTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-  "executorRunTime" : [ 16.0, 18.0, 28.0, 49.0, 349.0 ],
+  "executorRunTime" : [ 14.0, 18.0, 28.0, 49.0, 351.0 ],
   "executorCpuTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "resultSize" : [ 2010.0, 2065.0, 2065.0, 2065.0, 2065.0 ],
   "jvmGcTime" : [ 0.0, 0.0, 0.0, 5.0, 7.0 ],
-  "resultSerializationTime" : [ 0.0, 0.0, 0.0, 0.0, 1.0 ],
+  "resultSerializationTime" : [ 0.0, 0.0, 0.0, 0.0, 2.0 ],
   "gettingResultTime" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
-  "schedulerDelay" : [ 2.0, 4.0, 6.0, 13.0, 40.0 ],
+  "schedulerDelay" : [ 2.0, 4.0, 6.0, 13.0, 53.0 ],
   "peakExecutionMemory" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "memoryBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "diskBytesSpilled" : [ 0.0, 0.0, 0.0, 0.0, 0.0 ],
   "inputMetrics" : {
-    "bytesRead" : [ 60488.0, 70564.0, 70564.0, 70564.0, 70564.0 ],
+    "bytesRead" : [ 49294.0, 70564.0, 70564.0, 70564.0, 70565.0 ],
     "recordsRead" : [ 10000.0, 10000.0, 10000.0, 10000.0, 10000.0 ]
   },
   "outputMetrics" : {
@@ -33,6 +33,6 @@
   "shuffleWriteMetrics" : {
     "writeBytes" : [ 1710.0, 1710.0, 1710.0, 1710.0, 1710.0 ],
     "writeRecords" : [ 10.0, 10.0, 10.0, 10.0, 10.0 ],
-    "writeTime" : [ 90329.0, 95848.0, 102159.0, 121551.0, 2579051.0 ]
+    "writeTime" : [ 83022.0, 95848.0, 102159.0, 121551.0, 4016617.0 ]
   }
 }
