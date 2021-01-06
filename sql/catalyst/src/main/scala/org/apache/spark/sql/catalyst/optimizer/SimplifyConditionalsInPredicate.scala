@@ -64,12 +64,8 @@ object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
       And(cond, trueValue)
     case CaseWhen(Seq((cond, trueValue)), Some(TrueLiteral)) =>
       Or(Not(cond), trueValue)
-    case CaseWhen(Seq((_, FalseLiteral)), Some(FalseLiteral) | None) =>
-      FalseLiteral
     case CaseWhen(Seq((cond, FalseLiteral)), Some(elseValue)) =>
       And(Not(cond), elseValue)
-    case CaseWhen(Seq((cond, TrueLiteral)), Some(FalseLiteral) | None) =>
-      cond
     case CaseWhen(Seq((cond, TrueLiteral)), Some(elseValue)) =>
       Or(cond, elseValue)
     case e if e.dataType == BooleanType => e
