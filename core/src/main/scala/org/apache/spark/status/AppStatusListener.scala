@@ -281,10 +281,12 @@ private[spark] class AppStatusListener(
 
     // Implicitly blacklist every available executor for the stage associated with this node
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
-      val executorIds = liveExecutors.values.filter(_.host == event.hostId).map(_.executorId).toSeq
+      val executorIds = liveExecutors.values.filter(exec => exec.host == event.hostId
+        && exec.executorId != SparkContext.DRIVER_IDENTIFIER).map(_.executorId).toSeq
       setStageBlackListStatus(stage, now, executorIds: _*)
     }
-    liveExecutors.values.filter(_.hostname == event.hostId).foreach { exec =>
+    liveExecutors.values.filter(exec => exec.hostname == event.hostId
+      && exec.executorId != SparkContext.DRIVER_IDENTIFIER).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
     }
   }
@@ -333,7 +335,7 @@ private[spark] class AppStatusListener(
 
     // Implicitly (un)blacklist every executor associated with the node.
     liveExecutors.values.foreach { exec =>
-      if (exec.hostname == host) {
+      if (exec.hostname == host && exec.executorId != SparkContext.DRIVER_IDENTIFIER) {
         exec.isBlacklisted = blacklisted
         liveUpdate(exec, now)
       }
