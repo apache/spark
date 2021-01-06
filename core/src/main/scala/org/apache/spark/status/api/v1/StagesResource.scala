@@ -74,7 +74,7 @@ private[v1] class StagesResource extends BaseAppResource {
   def taskSummary(
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int,
-      @DefaultValue("0.05,0.25,0.5,0.75,0.95") @QueryParam("quantiles") quantileString: String)
+      @DefaultValue("0,0.25,0.5,0.75,1.0") @QueryParam("quantiles") quantileString: String)
   : TaskMetricDistributions = withUI { ui =>
     val quantiles = quantileString.split(",").map { s =>
       try {
