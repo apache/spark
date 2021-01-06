@@ -21,15 +21,17 @@ import java.io._
 import java.net.{InetAddress, ServerSocket}
 import java.util.Arrays
 
-import scala.io.Source
-import scala.util.Try
-
+import org.apache.log4j.Level.INFO
+import org.apache.log4j.Logger.getRootLogger
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.Utils
+
+import scala.io.Source
+import scala.util.Try
 
 /**
  * A helper class to run R UDFs in Spark.
@@ -301,6 +303,7 @@ private[r] object BaseRRunner {
     pb.environment().put("SPARKR_SPARKFILES_ROOT_DIR", SparkFiles.getRootDirectory())
     pb.environment().put("SPARKR_IS_RUNNING_ON_WORKER", "TRUE")
     pb.environment().put("SPARKR_WORKER_SECRET", authHelper.secret)
+    pb.environment().put("SPARKR_DAEMON_INIT", sparkConf.get(R_DAEMON_INIT))
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread = startStdoutThread(proc)
@@ -318,15 +321,24 @@ private[r] object BaseRRunner {
           // we expect one connections
           val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
           val daemonPort = serverSocket.getLocalPort
+
+          // Ensure daemon initialization is logged by ensuring
+          // org.apache.spark.api.r.BufferedStreamThread is at INFO level
+          val rootLogger = getRootLogger
+          val logLevel = rootLogger.getLevel
+          val raiseLogging = logLevel.getSyslogEquivalent < INFO.getSyslogEquivalent
+          if(raiseLogging) rootLogger.setLevel(INFO)
+
           errThread = createRProcess(daemonPort, "daemon.R")
           // the socket used to send out the input of task
-          serverSocket.setSoTimeout(10000)
+          serverSocket.setSoTimeout(SparkEnv.get.conf.get(R_DAEMON_TIMEOUT))
           val sock = serverSocket.accept()
           try {
             authHelper.authClient(sock)
             daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
           } finally {
             serverSocket.close()
+            if(raiseLogging) rootLogger.setLevel(logLevel)
           }
         }
         try {
