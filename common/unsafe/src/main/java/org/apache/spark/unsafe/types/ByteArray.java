@@ -109,7 +109,7 @@ public final class ByteArray {
    * @return this byte array with no bytes representing spaces at the start or end
    */
   public static byte[] trim(byte[] srcArr) {
-    return trim(srcArr, " ".getBytes());
+    return trim(srcArr, new byte[]{(byte) 32});
   }
 
   /**
@@ -131,7 +131,7 @@ public final class ByteArray {
    * @return this byte array with no bytes representing spaces at the start
    */
   public static byte[] trimLeft(byte[] srcArr) {
-    return trimLeft(srcArr, " ".getBytes());
+    return trimLeft(srcArr, new byte[]{(byte) 32});
   }
 
   /**
@@ -145,8 +145,6 @@ public final class ByteArray {
   public static byte[] trimLeft(byte[] srcArr, byte[] trimArr) {
     if (trimArr == null) {
       return null;
-    } else if (trimArr.length == 0 || srcArr.length == 0) {
-      return srcArr;
     } else {
       // the searching byte position in the source byte array
       int searchIdx = 0;
@@ -176,7 +174,7 @@ public final class ByteArray {
    * @return this byte array with no bytes representing spaces at the end
    */
   public static byte[] trimRight(byte[] srcArr) {
-    return trimRight(srcArr, " ".getBytes());
+    return trimRight(srcArr, new byte[]{(byte) 32});
   }
 
   /**
@@ -190,8 +188,6 @@ public final class ByteArray {
   public static byte[] trimRight(byte[] srcArr, byte[] trimArr) {
     if (trimArr == null) {
       return null;
-    } else if (trimArr.length == 0) {
-      return srcArr;
     } else {
       // the searching byte position in the source byte array
       int searchIdx = srcArr.length - 1;
