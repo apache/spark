@@ -2825,6 +2825,28 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>1.5.3</td>
 </tr>
 <tr>
+  <td><code>spark.r.daemonInit</code></td>
+  <td>NULL</td>
+  <td>
+    R code you would like executed <b>before</b> the daemon starts
+    processing groups. See
+    <a href="sparkr.md#daemon-initialization">Daemon Initialization</a>.
+    Increase spark.r.daemonTimeout if your initialization takes longer
+    than the default.
+    </td>
+    <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.r.daemonTimeout</code></td>
+  <td>10000</td>
+  <td>
+    What is the upper limit in milliseconds that we allow for daemon
+    initialization? In other words, how long should the spark executor
+    wait until it decides that it can't launch the SparkR daemon?
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.r.driver.command</code></td>
   <td>spark.r.command</td>
   <td>
