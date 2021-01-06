@@ -42,4 +42,16 @@ private[spark] object R {
     .version("1.5.3")
     .stringConf
     .createOptional
+
+  /** The SparkR daemon will evaluate this before forking. */
+  val R_DAEMON_INIT = ConfigBuilder("spark.r.daemonInit")
+    .version("3.2.0")
+    .stringConf
+    .createWithDefault("NULL")
+
+  /** milliseconds to wait until we give up launching the daemon */
+  val R_DAEMON_TIMEOUT = ConfigBuilder("spark.r.daemonTimeout")
+    .version("3.2.0")
+    .intConf
+    .createWithDefault(10000)
 }

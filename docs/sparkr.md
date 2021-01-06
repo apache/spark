@@ -754,3 +754,58 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 # Migration Guide
 
 The migration guide is now archived [on this page](sparkr-migration-guide.html).
+
+
+# Daemon Initialization
+
+If your worker function has a lengthy initialization, and your
+application has lots of partitions, you may find you are spending weeks
+of compute time repeatedly doing something that should have taken a few
+seconds during daemon initialization.
+
+Every Spark executor spawns a process running an R daemon. The daemon
+"forks a copy" of itself whenever Spark finds work for it to do. It may
+be applying a predefined method such as "max", or it may be applying
+your worker function. SparkR::gapply arranges things so that your worker
+function will be called with each group. A group is the pair
+Key-Seq[Row]. In the absence of partitioning, the daemon will fork for
+every group found. With partitioning, the daemon will fork for every
+partition found. A partition may have several groups in it.
+
+All the initializations and library loading your worker function manages
+is thrown away when the fork concludes. Every fork has to be
+initialized.
+
+The configuration spark.r.daemonInit provides a way to avoid reloading
+packages every time the daemon forks by having the daemon pre-load
+packages. You do this by providing R code to initialize the daemon for
+your application.
+
+## Examples
+
+Suppose we want library(wow) to be pre-loaded for our workers.
+
+```R
+sparkR.session(spark.r.daemonInit = 'library(wow)')
+```
+
+of course, that would only work if we knew that library(wow) was on our
+path and available on the executor. If we have to ship the library, we
+can use YARN
+
+```R
+sparkR.session(
+  master = 'yarn',
+  spark.r.daemonInit = '.libPaths(c("wowTarget", .libPaths())); library(wow)',
+  spark.submit.deployMode = 'client',
+  spark.yarn.dist.archives = 'wow.zip#wowTarget')
+```
+
+YARN creates a directory for the new executor, unzips 'wow.zip' in some
+other directory, and then provides a symlink to it called
+./wowTarget. When the executor starts the daemon, the daemon loads
+library(wow) from the newly created wowTarget.
+
+
+Warning: if your initialization takes longer than 10 seconds, consider
+increasing the configuration [spark.r.daemonTimeout](configuration.md#sparkr).
