@@ -1613,11 +1613,10 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
  * {{{
  *   SELECT DISTINCT f1, f2 FROM t  ==>  SELECT f1, f2 FROM t GROUP BY f1, f2
  * }}}
- *
- * The [[Distinct]] can be ignored if it is the right child of a left semi or anti join.
  */
 object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    // The [[Distinct]] can be ignored if it is the right child of a left semi or anti join.
     case j @ Join(_, Distinct(right), LeftSemiOrAnti(_), _, _) => j.copy(right = right)
     case Distinct(child) => Aggregate(child.output, child.output, child)
   }
