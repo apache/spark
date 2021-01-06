@@ -530,6 +530,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     var bracketedCommentLevel = 0
     var escape = false
     var beginIndex = 0
+    var bracketedCommentRightBound = -1
     var includingStatement = false
     val ret = new JArrayList[String]
 
@@ -539,6 +540,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
+      if (index > 0 && index - 1 == bracketedCommentRightBound) {
+        bracketedCommentLevel -= 1
+      }
+
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         // See the comment above about SPARK-31595
@@ -585,7 +590,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (insideSingleQuote || insideDoubleQuote) {
           // Ignores '/' in any case of quotes
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
-          bracketedCommentLevel -= 1
+          bracketedCommentRightBound = index
         } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
           bracketedCommentLevel += 1
         }
