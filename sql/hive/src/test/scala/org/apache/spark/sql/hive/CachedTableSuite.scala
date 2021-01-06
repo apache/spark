@@ -454,4 +454,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(1, 1)))
     }
   }
+
+  test("SPARK-34011: refresh cache after partition renaming") {
+    withTable("t") {
+      sql("CREATE TABLE t (id int, part int) USING hive PARTITIONED BY (part)")
+      sql("INSERT INTO t PARTITION (part=0) SELECT 0")
+      sql("INSERT INTO t PARTITION (part=1) SELECT 1")
+      assert(!spark.catalog.isCached("t"))
+      sql("CACHE TABLE t")
+      assert(spark.catalog.isCached("t"))
+      QueryTest.checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(1, 1)))
+      sql("ALTER TABLE t PARTITION (part=0) RENAME TO PARTITION (part=2)")
+      assert(spark.catalog.isCached("t"))
+      QueryTest.checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 2), Row(1, 1)))
+    }
+  }
 }
