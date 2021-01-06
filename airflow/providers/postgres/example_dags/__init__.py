@@ -14,32 +14,3 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
----
-package-name: apache-airflow-providers-postgres
-name: PostgreSQL
-description: |
-  `PostgreSQL <https://www.postgresql.org/>`__
-
-versions:
-  - 1.0.0
-
-integrations:
-  - integration-name: PostgreSQL
-    external-doc-url: https://www.postgresql.org/
-    how-to-guide:
-      - /docs/apache-airflow-providers-postgres/operators/postgres_operator_howto_guide.rst
-    tags: [software]
-
-operators:
-  - integration-name: PostgreSQL
-    python-modules:
-      - airflow.providers.postgres.operators.postgres
-
-hooks:
-  - integration-name: PostgreSQL
-    python-modules:
-      - airflow.providers.postgres.hooks.postgres
-
-hook-class-names:
-  - airflow.providers.postgres.hooks.postgres.PostgresHook
