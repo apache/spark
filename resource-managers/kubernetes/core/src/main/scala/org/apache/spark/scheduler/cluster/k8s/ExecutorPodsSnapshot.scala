@@ -80,27 +80,21 @@ object ExecutorPodsSnapshot extends Logging {
               .anyMatch(t => t != null && t.getExitCode != 0)) {
             PodFailed(pod)
           } else {
-            // Otherwise look for the Spark container
-            val sparkContainerStatusOpt = pod.getStatus.getContainerStatuses.asScala
-              .find(_.getName() == sparkContainerName)
-            sparkContainerStatusOpt match {
-              case Some(sparkContainerStatus) =>
-                sparkContainerStatus.getState.getTerminated match {
-                  // If there is no terminated state we are running.
-                  case null => PodRunning(pod)
-                  case t if t.getExitCode != 0 =>
-                    PodFailed(pod)
-                  case t if t.getExitCode == 0 =>
+            // Otherwise look for the Spark container and get the exit code if present.
+            val sparkContainerExitCode = pod.getStatus.getContainerStatuses.asScala
+              .find(_.getName() == sparkContainerName).flatMap(x => Option(x.getState))
+              .flatMap(x => Option(x.getTerminated)).flatMap(x => Option(x.getExitCode))
+              .map(_.toInt)
+            sparkContainerExitCode match {
+              case Some(t) =>
+                t match {
+                  case 0 =>
                     PodSucceeded(pod)
-                  // Fall through case
                   case _ =>
-                    PodRunning(pod)
+                    PodFailed(pod)
                 }
-              // If we can't find the Spark container status, fall back to the pod status. This is
-              // expected to occur during pod startup and other situations.
+              // No exit code means we are running.
               case _ =>
-                logDebug(s"Unable to find container ${sparkContainerName} in pod ${pod} " +
-                  "defaulting to entire pod status (running).")
                 PodRunning(pod)
             }
           }
