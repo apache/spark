@@ -592,6 +592,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "EXPLAIN SELECT /*+ MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;" -> "SortMergeJoin",
       "EXPLAIN SELECT /* + MERGEJOIN(t1) */ t1.* FROM t1 JOIN t2 ON t1.k = t2.v;"
         -> "BroadcastHashJoin"
+
     )
   }
 }
