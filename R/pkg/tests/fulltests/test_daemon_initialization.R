@@ -23,7 +23,7 @@ sparkR.session(master = "local[*]",
 data <-
   list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3))
 inputColumnNames <- c("a", "b", "c", "d")
-outputColumnNames <- c("a", "c")
+groupingColumnNames <- c("a", "c")
 workerFunction <- function(key, x) {
   if (!exists("testInit")) {
     warning("daemon did not initialize")
@@ -31,7 +31,7 @@ workerFunction <- function(key, x) {
   }
   data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 }
-schema <-
+outputSchema <-
   structType(
     structField("a", "integer"),
     structField("c", "string"),
@@ -41,7 +41,7 @@ test_that("Daemon Initialization",
           {
             df <- createDataFrame (data, inputColumnNames)
             resultDF <-
-              gapply(df, outputColumnNames, workerFunction, schema)
+              gapply(df, groupingColumnNames, workerFunction, outputSchema)
             result <- collect(resultDF)
             expect_equal(max(result$avg), 3)
           })
