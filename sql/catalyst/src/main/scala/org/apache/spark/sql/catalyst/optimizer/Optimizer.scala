@@ -207,7 +207,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // idempotence enforcement on this batch. We thus make it FixedPoint(1) instead of Once.
     Batch("Join Reorder", FixedPoint(1),
       CostBasedJoinReorder) :+
-    Batch("Reorder Predicate", FixedPoint(1),
+    Batch("Predicate Reorder", Once,
       PredicateReorder) :+
     Batch("Eliminate Sorts", Once,
       EliminateSorts) :+
