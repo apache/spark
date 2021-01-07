@@ -17,15 +17,21 @@
 library(testthat)
 context("Daemon Initialization")
 sparkR.stop()
-sparkR.session(master = "local[*]")
+sparkR.session(master = "local[*]",
+               spark.r.daemonInit =
+                 'message("Initting the Daemon ..."); testInit <- "wow"')
 data <-
   list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3))
 inputColumnNames <- c("a", "b", "c", "d")
-groupingColumnNames <- c("a", "c")
+outputColumnNames <- c("a", "c")
 workerFunction <- function(key, x) {
+  if (!exists("testInit")) {
+    warning("daemon did not initialize")
+    quit(status = 1, save = "no")
+  }
   data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 }
-outputSchema <-
+schema <-
   structType(
     structField("a", "integer"),
     structField("c", "string"),
@@ -35,7 +41,7 @@ test_that("Daemon Initialization",
           {
             df <- createDataFrame (data, inputColumnNames)
             resultDF <-
-              gapply(df, groupingColumnNames, workerFunction, outputSchema)
+              gapply(df, outputColumnNames, workerFunction, schema)
             result <- collect(resultDF)
             expect_equal(max(result$avg), 3)
           })
