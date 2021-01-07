@@ -39,7 +39,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   override val command = "ALTER TABLE .. DROP PARTITION"
 
   protected def notFullPartitionSpecErr: String
-  protected def nullPartitionValue: String = "null"
+  protected def nullPartitionValue: String
 
   protected def checkDropPartition(
       t: String,
