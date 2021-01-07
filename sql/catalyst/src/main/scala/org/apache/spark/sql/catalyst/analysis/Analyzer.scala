@@ -2384,7 +2384,6 @@ class Analyzer(override val catalogManager: CatalogManager)
           val aliasedOrdering =
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
-          aggregatedOrdering.setAnalyzed()
           val resolvedAggregate: Aggregate =
             executeSameContext(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
@@ -2401,16 +2400,22 @@ class Analyzer(override val catalogManager: CatalogManager)
           // to push down this ordering expression and can reference the original aggregate
           // expression instead.
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
-            case (evaluated, order) =>
+          val orderToAlias = unresolvedSortOrders.zip(aliasedOrdering)
+          val evaluatedOrderings = resolvedAliasedOrdering.zip(orderToAlias).map {
+            case (evaluated, (order, aliasOrder)) =>
               val index = originalAggExprs.indexWhere {
                 case Alias(child, _) => child semanticEquals evaluated.child
                 case other => other semanticEquals evaluated.child
               }
 
               if (index == -1) {
-                needsPushDown += evaluated
-                order.copy(child = evaluated.toAttribute)
+                if (CharVarcharUtils.getRawType(evaluated.metadata).nonEmpty) {
+                  needsPushDown += aliasOrder
+                  order.copy(child = aliasOrder)
+                } else {
+                  needsPushDown += evaluated
+                  order.copy(child = evaluated.toAttribute)
+                }
               } else {
                 order.copy(child = originalAggExprs(index).toAttribute)
               }
