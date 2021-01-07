@@ -1050,7 +1050,7 @@ case class RepartitionByExpression(
   val numPartitions = if (optNumPartitions.nonEmpty) {
     optNumPartitions.get
   } else {
-    if (partitionExpressions.forall(_.foldable)) {
+    if (partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable)) {
       1
     } else {
       SQLConf.get.numShufflePartitions
