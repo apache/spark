@@ -826,7 +826,8 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 object PartitionNumberFolding extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
     case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
-      if partitionExpressions.forall(_.foldable) && numPartitions.isEmpty =>
+      if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
+        numPartitions.isEmpty =>
       r.copy(optNumPartitions = Some(1))
   }
 }
