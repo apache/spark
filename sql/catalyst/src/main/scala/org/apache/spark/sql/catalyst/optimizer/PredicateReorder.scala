@@ -38,7 +38,8 @@ object PredicateReorder extends Rule[LogicalPlan] with PredicateHelper {
         case c: CaseWhen => c.branches.size
       }.max
       3.0 + (1.0 / maxSize)
-    case e => filterEstimation.flatMap(_.calculateFilterSelectivity(e).map(5.0 - _)).getOrElse(4.0)
+    case e =>
+      filterEstimation.flatMap(_.calculateFilterSelectivity(e, false).map(5.0 - _)).getOrElse(4.0)
   }
 
   private def reorderPredicates(e: Expression, estimation: Option[FilterEstimation]): Expression = {
