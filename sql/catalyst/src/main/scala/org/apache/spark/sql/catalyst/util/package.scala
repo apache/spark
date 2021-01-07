@@ -136,6 +136,8 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
     case r: RuntimeReplaceable =>
       PrettyAttribute(r.mkString(r.exprsReplaced.map(toPrettySQL)), r.dataType)
+    case c @ Cast(child, dataType, _) if c.getTagValue(Cast.AUTO_GENERATED_TAG).getOrElse(true) =>
+      PrettyAttribute(usePrettyExpression(child).sql, dataType)
   }
 
   def quoteIdentifier(name: String): String = {
