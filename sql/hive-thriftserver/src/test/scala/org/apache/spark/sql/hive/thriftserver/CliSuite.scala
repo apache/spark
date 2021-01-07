@@ -557,8 +557,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "/* SELECT 'test';*/ SELECT 'test';" -> "test",
       ";;/* SELECT 'test';*/ SELECT 'test';" -> "test",
       "/* SELECT 'test';*/;; SELECT 'test';" -> "test",
-      "SELECT 'test'; -- SELECT 'test';" -> "",
-      "SELECT 'test'; /* SELECT 'test';*/;" -> "",
+      "SELECT 'test'; -- SELECT 'test';" -> "test",
+      "SELECT 'test'; /* SELECT 'test';*/;" -> "test",
       "/*$meta chars{^\\;}*/ SELECT 'test';" -> "test",
       "/*\nmulti-line\n*/ SELECT 'test';" -> "test",
       "/*/* multi-level bracketed*/ SELECT 'test';" -> "test"
