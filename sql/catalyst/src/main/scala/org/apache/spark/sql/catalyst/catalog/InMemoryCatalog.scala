@@ -542,7 +542,7 @@ class InMemoryCatalog(
     listPartitions(db, table, partialSpec).map { partition =>
       partitionColumnNames.map { name =>
         val partValue = if (partition.spec(name) == null) {
-          "null"
+          DEFAULT_PARTITION_NAME
         } else {
           escapePathName(partition.spec(name))
         }
