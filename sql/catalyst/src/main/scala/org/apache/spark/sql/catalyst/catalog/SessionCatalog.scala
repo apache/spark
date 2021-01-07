@@ -1552,7 +1552,6 @@ class SessionCatalog(
       externalCatalog.getFunction(database, name.funcName)
     } catch {
       case _: AnalysisException => failFunctionLookup(name)
-      case _: NoSuchPermanentFunctionException => failFunctionLookup(name)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,
