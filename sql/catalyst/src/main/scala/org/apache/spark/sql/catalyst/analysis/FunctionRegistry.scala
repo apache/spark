@@ -328,6 +328,7 @@ object FunctionRegistry {
     expression[Chr]("char", true),
     expression[Chr]("chr"),
     expression[Base64]("base64"),
+    expression[BinaryTrim]("btrim"),
     expression[BitLength]("bit_length"),
     expression[Length]("char_length", true),
     expression[Length]("character_length", true),

@@ -2830,6 +2830,23 @@ object functions {
   }
 
   /**
+   * Trim the byte 32 from both ends for the specified binary column.
+   *
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def btrim(e: Column): Column = withExpr { BinaryTrim(e.expr) }
+
+  /**
+   * Trim the specified bytes from both ends for the specified binary column.
+   * @group string_funcs
+   * @since 3.2.0
+   */
+  def btrim(e: Column, trimBinary: Array[Byte]): Column = withExpr {
+    BinaryTrim(e.expr, Literal(trimBinary))
+  }
+
+  /**
    * Converts a string column to upper case.
    *
    * @group string_funcs

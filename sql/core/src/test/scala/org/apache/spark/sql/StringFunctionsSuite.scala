@@ -302,6 +302,20 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("example  ", "  example", "example"))
   }
 
+  test("binary trim function") {
+    val df = Seq(("  example  ".getBytes, "example".getBytes)).toDF("a", "b")
+
+    checkAnswer(df.select(btrim($"a")), Row("example".getBytes))
+
+    checkAnswer(df.select(btrim($"b", "e".getBytes)), Row("xampl".getBytes))
+
+    checkAnswer(df.select(btrim($"b", "elxp".getBytes)), Row("am".getBytes))
+
+    checkAnswer(df.select(btrim($"b", "xyz".getBytes)), Row("example".getBytes))
+
+    checkAnswer(df.selectExpr("btrim(a)"), Row("example".getBytes))
+  }
+
   test("string formatString function") {
     val df = Seq(("aa%d%s", 123, "cc")).toDF("a", "b", "c")
 

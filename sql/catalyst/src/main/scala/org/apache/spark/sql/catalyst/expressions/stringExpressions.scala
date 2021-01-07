@@ -1016,6 +1016,108 @@ case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = Non
   override val trimMethod: String = "trimRight"
 }
 
+object BinaryTrim {
+  def apply(srcBinary: Expression, trimBinary: Expression): BinaryTrim =
+    BinaryTrim(srcBinary, Some(trimBinary))
+  def apply(srcBinary: Expression): BinaryTrim = BinaryTrim(srcBinary, None)
+}
+
+/**
+ * A function that takes a byte array, removes the leading and trailing bytes matching with any
+ * byte in the trim byte array, returns the new byte array.
+ * If trimBinary keywords are not specified, it defaults to remove byte 32(ASCII code of space)
+ * from both ends. The trim function will have one argument, which contains the source byte array.
+ * If trimBinary keywords are specified, it trims the bytes from both ends, and the trim
+ * function will have two arguments, the first argument contains the source byte array, the second
+ * argument contains the trim byte array.
+ * trimBinary: A byte array to be trimmed from the source byte array, if it has multiple bytes,
+ * the function searches for each byte in the source byte array, removes the bytes from the
+ * source byte array until it encounters the first non-match byte.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(binary) - Remove all the leading and trailing byte 32 from `binary`.
+    _FUNC_(binary, trim) - Remove all the leading and trailing `trim` bytes from `binary`.
+  """,
+  arguments = """
+    Arguments:
+      * srcBinary - a binary expression
+      * trimBinary - the trim bytes to trim, the default value is byte 32
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
+      > SELECT _FUNC_(encode('SSparkSQLS', 'utf-8'), encode('SL', 'utf-8'));
+       parkSQ
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+case class BinaryTrim(srcBinary: Expression, trimBinary: Option[Expression] = None)
+  extends Expression with ImplicitCastInputTypes {
+
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
+
+  def this(srcStr: Expression) = this(srcStr, None)
+
+  override def prettyName: String = "btrim"
+
+  override def children: Seq[Expression] = srcBinary +: trimBinary.toSeq
+  override def dataType: DataType = BinaryType
+  override def inputTypes: Seq[BinaryType] = Seq.fill(children.size)(BinaryType)
+
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
+
+  override def eval(input: InternalRow): Any = {
+    val srcBytes = srcBinary.eval (input).asInstanceOf[Array[Byte]]
+    if (srcBytes == null) {
+      null
+    } else {
+      val result = if (trimBinary.isDefined) {
+        ByteArray.trim(srcBytes, trimBinary.get.eval(input).asInstanceOf[Array[Byte]])
+      } else {
+        ByteArray.trim(srcBytes)
+      }
+      result
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evals = children.map(_.genCode(ctx))
+    val srcBytes = evals(0)
+
+    if (evals.length == 1) {
+      ev.copy(code = code"""
+        |${srcBytes.code}
+        |boolean ${ev.isNull} = false;
+        |byte[] ${ev.value} = null;
+        |if (${srcBytes.isNull}) {
+        |  ${ev.isNull} = true;
+        |} else {
+        |  ${ev.value} = org.apache.spark.unsafe.types.ByteArray.trim(${srcBytes.value});
+        |}""".stripMargin)
+    } else {
+      val trimBytes = evals(1)
+      ev.copy(code = code"""
+        |${srcBytes.code}
+        |boolean ${ev.isNull} = false;
+        |byte[] ${ev.value} = null;
+        |if (${srcBytes.isNull}) {
+        |  ${ev.isNull} = true;
+        |} else {
+        |  ${trimBytes.code}
+        |  if (${trimBytes.isNull}) {
+        |    ${ev.isNull} = true;
+        |  } else {
+        |    ${ev.value} = org.apache.spark.unsafe.types.ByteArray
+        |      .trim(${srcBytes.value}, ${trimBytes.value});
+        |  }
+        |}""".stripMargin)
+    }
+  }
+}
+
 /**
  * A function that returns the position of the first occurrence of substr in the given string.
  * Returns null if either of the arguments are null and

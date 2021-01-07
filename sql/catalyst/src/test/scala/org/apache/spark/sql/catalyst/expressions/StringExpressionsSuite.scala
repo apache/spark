@@ -649,6 +649,41 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(StringTrimRight(Literal("TURNERyxXxy"), Literal("xy")), "TURNERyxX")
   }
 
+  test("TRIM for binary") {
+    val s = 'a.binary.at(0)
+    // scalastyle:off
+    checkEvaluation(BinaryTrim(Literal(" aa  ".getBytes)), "aa".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(BinaryTrim("aa".getBytes, "a".getBytes), "".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(BinaryTrim(Literal(" aabbtrimccc".getBytes), "ab cd".getBytes),
+      "trim".getBytes, create_row("bdef".getBytes))
+    checkEvaluation(BinaryTrim(Literal("a<a >@>.,>".getBytes), "a.,@<>".getBytes),
+      " ".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(BinaryTrim(s), "abdef".getBytes, create_row(" abdef ".getBytes))
+    checkEvaluation(BinaryTrim(s, "abd".getBytes), "ef".getBytes, create_row("abdefa".getBytes))
+    checkEvaluation(BinaryTrim(s, "a".getBytes), "bdef".getBytes, create_row("aaabdefaaaa".getBytes))
+    checkEvaluation(BinaryTrim(s, "SLSQ".getBytes), "park".getBytes, create_row("SSparkSQLS".getBytes))
+
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(BinaryTrim(s), "花花世界".getBytes, create_row("  花花世界 ".getBytes))
+    checkEvaluation(BinaryTrim(s, "花世界".getBytes), "".getBytes, create_row("花花世界花花".getBytes))
+    checkEvaluation(BinaryTrim(s, "花 ".getBytes), "世界".getBytes, create_row(" 花花世界花花".getBytes))
+    checkEvaluation(BinaryTrim(s, "花 ".getBytes), "世界".getBytes, create_row(" 花 花 世界 花 花 ".getBytes))
+    checkEvaluation(BinaryTrim(s, "a花世".getBytes), "界".getBytes, create_row("aa花花世界花花aa".getBytes))
+    checkEvaluation(BinaryTrim(s, "a@#( )".getBytes), "花花世界花花".getBytes, create_row("aa()花花世界花花@ #".getBytes))
+    checkEvaluation(BinaryTrim(Literal("花trim".getBytes), "花 ".getBytes), "trim".getBytes, create_row(" abdef ".getBytes))
+
+    checkEvaluation(BinaryTrim(Literal("a".getBytes), Literal.create(null, BinaryType)), null)
+    checkEvaluation(BinaryTrim(Literal.create(null, BinaryType), Literal("a".getBytes)), null)
+
+    // Test escaping of arguments
+    GenerateUnsafeProjection.generate(
+      BinaryTrim(Literal("\"quote".getBytes), Literal("\"quote".getBytes)) :: Nil)
+
+    checkEvaluation(BinaryTrim(Literal("yxTomxx".getBytes), Literal("xyz".getBytes)), "Tom".getBytes)
+    checkEvaluation(BinaryTrim(Literal("xxxbarxxx".getBytes), Literal("x".getBytes)), "bar".getBytes)
+    // scalastyle:on
+  }
+
   test("FORMAT") {
     checkEvaluation(FormatString(Literal("aa%d%s"), Literal(123), Literal("a")), "aa123a")
     checkEvaluation(FormatString(Literal("aa")), "aa", create_row(null))
