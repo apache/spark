@@ -49,7 +49,6 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * @param ioschema the class set that defines how to handle input/output data.
  */
 case class HiveScriptTransformationExec(
-    input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
