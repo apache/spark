@@ -489,6 +489,7 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.catalyst.expressions.HashExpressionsSuite",
     "org.apache.spark.sql.catalyst.expressions.CastSuite",
     "org.apache.spark.sql.catalyst.expressions.MathExpressionsSuite",
+    "org.apache.spark.sql.execution.datasources.orc.OrcEncryptionSuite",
     "org.apache.spark.sql.hive.HiveExternalCatalogSuite",
     "org.apache.spark.sql.hive.StatisticsSuite",
     "org.apache.spark.sql.hive.client.VersionsSuite",
@@ -958,18 +959,24 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
-    javacOptions in (JavaUnidoc, unidoc) := Seq(
-      "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
-      "-public",
-      "-noqualifier", "java.lang",
-      "-tag", """example:a:Example\:""",
-      "-tag", """note:a:Note\:""",
-      "-tag", "group:X",
-      "-tag", "tparam:X",
-      "-tag", "constructor:X",
-      "-tag", "todo:X",
-      "-tag", "groupname:X"
-    ),
+    javacOptions in (JavaUnidoc, unidoc) := {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major == 1) major = versionParts(1).toInt
+
+      Seq(
+        "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
+        "-public",
+        "-noqualifier", "java.lang",
+        "-tag", """example:a:Example\:""",
+        "-tag", """note:a:Note\:""",
+        "-tag", "group:X",
+        "-tag", "tparam:X",
+        "-tag", "constructor:X",
+        "-tag", "todo:X",
+        "-tag", "groupname:X",
+      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+    },
 
     // Use GitHub repository for Scaladoc source links
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",
