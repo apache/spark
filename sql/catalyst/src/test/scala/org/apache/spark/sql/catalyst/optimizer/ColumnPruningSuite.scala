@@ -222,6 +222,7 @@ class ColumnPruningSuite extends PlanTest {
     val input = LocalRelation('a.int, 'b.string, 'c.double)
     val query =
       ScriptTransformation(
+        Seq('a, 'b),
         "func",
         Seq.empty,
         input,
@@ -230,6 +231,7 @@ class ColumnPruningSuite extends PlanTest {
 
     val expected =
       ScriptTransformation(
+        Seq('a, 'b),
         "func",
         Seq.empty,
         Project(

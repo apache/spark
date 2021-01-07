@@ -596,8 +596,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object SparkScripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(script, output, child, ioschema) =>
+      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
         SparkScriptTransformationExec(
+          input,
           script,
           output,
           planLater(child),

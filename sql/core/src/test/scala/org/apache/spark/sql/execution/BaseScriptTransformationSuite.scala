@@ -30,7 +30,7 @@ import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -64,6 +64,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   }
 
   def createScriptTransformationExec(
+      input: Seq[Expression],
       script: String,
       output: Seq[Attribute],
       child: SparkPlan,
@@ -76,6 +77,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     checkAnswer(
       rowsDf,
       (child: SparkPlan) => createScriptTransformationExec(
+        input = Seq(rowsDf.col("a").expr),
         script = "cat",
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
@@ -93,6 +95,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       checkAnswer(
         rowsDf,
         (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
           script = "cat",
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
@@ -149,6 +152,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr,
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr),
           script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
@@ -163,6 +172,9 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr),
           script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
@@ -177,11 +189,13 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr),
           script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
-          child = ProjectExec(child.output.filter(_.name == "a"), child),
+          child = child,
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
@@ -197,6 +211,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     val e = intercept[SparkException] {
       val plan =
         createScriptTransformationExec(
+          input = Seq(rowsDf.col("a").expr),
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
@@ -224,6 +239,17 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         checkAnswer(
           df,
           (child: SparkPlan) => createScriptTransformationExec(
+            input = Seq(
+              df.col("a").expr,
+              df.col("b").expr,
+              df.col("c").expr,
+              df.col("d").expr,
+              df.col("e").expr,
+              df.col("f").expr,
+              df.col("g").expr,
+              df.col("h").expr,
+              df.col("i").expr,
+              df.col("j").expr),
             script = "cat",
             output = Seq(
               AttributeReference("a", IntegerType)(),
@@ -267,6 +293,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr,
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr),
           script = "cat",
           output = Seq(
             AttributeReference("a", CalendarIntervalType)(),
@@ -376,13 +408,16 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     checkAnswer(
       df,
       (child: SparkPlan) => createScriptTransformationExec(
+        input = Seq(
+          df.col("a").expr,
+          df.col("b").expr),
         script = "cat",
         output = Seq(
           AttributeReference("a", StringType)(),
           AttributeReference("b", StringType)(),
           AttributeReference("c", StringType)(),
           AttributeReference("d", StringType)()),
-        child = ProjectExec(child.output.filter(e => Seq("a", "b").contains(e.name)), child),
+        child = child,
         ioschema = defaultIOSchema
       ),
       df.select(
