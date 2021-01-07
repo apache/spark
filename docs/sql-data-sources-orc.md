@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-[Apache ORC](https://orc.apache.org) is a columnar format which has more advanced features like bloom filter and columnar encryption.
+[Apache ORC](https://orc.apache.org) is a columnar format which has more advanced features like native zstd compression, bloom filter and columnar encryption.
 
 ### ORC Implementation
 
@@ -52,6 +52,28 @@ turned it off by default . You may enable it by
 
 1. setting data source option `mergeSchema` to `true` when reading ORC files, or
 2. setting the global SQL option `spark.sql.orc.mergeSchema` to `true`.
+
+### Zstandard
+
+Spark supports both Hadoop 2 and 3. Since Spark 3.2, you can take advantage
+of Zstandard compression in ORC files on both Hadoop versions.
+Please see [Zstandard](https://facebook.github.io/zstd/) for the benefits.
+
+<div class="codetabs">
+<div data-lang="SQL"  markdown="1">
+
+{% highlight sql %}
+CREATE TABLE compressed (
+  key STRING,
+  value STRING
+)
+USING ORC
+OPTIONS (
+  compression 'zstd'
+)
+{% endhighlight %}
+</div>
+</div>
 
 ### Bloom Filters
 
