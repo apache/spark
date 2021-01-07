@@ -540,9 +540,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
-      // judge and reduce bracketed comment level if the flag of leaving  bracketed comment is true,
-      // because that the last character of bracketed comment is still inside the comment and we can
-      // only mark it and reduce bracketed comment level in next loop
+      // Checks if we need to decrement a bracketed comment level; the last character '/' of
+      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
+      // in the previous loop and we decrement the level here if needed.
       if (leavingBracketedComment) {
         bracketedCommentLevel -= 1
         leavingBracketedComment = false
@@ -594,6 +594,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (insideSingleQuote || insideDoubleQuote) {
           // Ignores '/' in any case of quotes
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
+          // Decrements `bracketedCommentLevel` at the beginning of the next loop
           leavingBracketedComment = true
         } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
           bracketedCommentLevel += 1
