@@ -49,7 +49,7 @@ setClass("KSTest", representation(jobj = "jobj"))
 #' @rdname spark.kstest
 #' @aliases spark.kstest,SparkDataFrame-method
 #' @name spark.kstest
-#' @seealso \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
+#' @seealso \href{https://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
 #'          MLlib: Hypothesis Testing}
 #' @examples
 #' \dontrun{

@@ -217,7 +217,7 @@ object Union {
 }
 
 /**
- * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
