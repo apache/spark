@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.orc
+package org.apache.spark.sql.sources
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.test.SharedSparkSession
 
 class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
