@@ -22,7 +22,7 @@ license: |
 * Table of contents
 {:toc}
 
-[Apache ORC](https://orc.apache.org) is a columnar format which has more advanced features like bloom filter and columnar cncryption.
+[Apache ORC](https://orc.apache.org) is a columnar format which has more advanced features like bloom filter and columnar encryption.
 
 ### ORC Implementation
 
@@ -44,7 +44,7 @@ the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also 
 
 Like Protocol Buffer, Avro, and Thrift, ORC also supports schema evolution. Users can start with
 a simple schema, and gradually add more columns to the schema as needed. In this way, users may end
-up with multiple Parquet files with different but mutually compatible schemas. The ORC data
+up with multiple ORC files with different but mutually compatible schemas. The ORC data
 source is now able to automatically detect this case and merge schemas of all these files.
 
 Since schema merging is a relatively expensive operation, and is not a necessity in most cases, we
@@ -55,7 +55,7 @@ turned it off by default . You may enable it by
 
 ### Bloom Filters
 
-You can control bloom filters and dictionary encodings for ORC data sources. The following ORC example will create bloom filter and use dictionary encoding only for favorite_color. To find more detailed information about the extra ORC options, visit the official Apache ORC websites.
+You can control bloom filters and dictionary encodings for ORC data sources. The following ORC example will create bloom filter and use dictionary encoding only for `favorite_color`. To find more detailed information about the extra ORC options, visit the official Apache ORC websites.
 
 <div class="codetabs">
 <div data-lang="SQL"  markdown="1">
@@ -103,7 +103,7 @@ OPTIONS (
 
 ### Hive metastore ORC table conversion
 
-When reading from Hive metastore ORC tables and writing to non-partitioned Hive metastore ORC tables, Spark SQL will try to use its own ORC support instead of Hive SerDe for better performance. This behavior is controlled by the `spark.sql.hive.convertMetastoreOrc` configuration, and is turned on by default.
+When reading from Hive metastore ORC tables and inserting to Hive metastore ORC tables, Spark SQL will try to use its own ORC support instead of Hive SerDe for better performance. For CTAS statement, only non-partitioned Hive metastore ORC tables are converted. This behavior is controlled by the `spark.sql.hive.convertMetastoreOrc` configuration, and is turned on by default.
 
 ### Configuration
 
