@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -40,10 +39,8 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
-
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(LongType, DoubleType, DecimalType))
 
   override def nullable: Boolean = true
 

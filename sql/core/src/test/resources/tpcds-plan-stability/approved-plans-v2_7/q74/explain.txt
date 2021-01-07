@@ -150,7 +150,7 @@ Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#13]
 
 (17) Exchange
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#13]
-Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), true, [id=#14]
+Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (18) HashAggregate [codegen id : 16]
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#13]
@@ -225,7 +225,7 @@ Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#20]
 
 (33) Exchange
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#20]
-Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), true, [id=#21]
+Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (34) HashAggregate [codegen id : 7]
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#20]
@@ -305,7 +305,7 @@ Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#33]
 
 (50) Exchange
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#33]
-Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), true, [id=#34]
+Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (51) HashAggregate [codegen id : 11]
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#33]
@@ -382,7 +382,7 @@ Results [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#42]
 
 (67) Exchange
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#42]
-Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), true, [id=#43]
+Arguments: hashpartitioning(c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, 5), ENSURE_REQUIREMENTS, [id=#43]
 
 (68) HashAggregate [codegen id : 15]
 Input [5]: [c_customer_id#2, c_first_name#3, c_last_name#4, d_year#10, sum#42]

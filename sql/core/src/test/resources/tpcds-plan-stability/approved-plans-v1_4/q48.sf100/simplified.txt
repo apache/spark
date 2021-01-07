@@ -1,5 +1,5 @@
 WholeStageCodegen (6)
-  HashAggregate [sum] [sum(cast(ss_quantity as bigint)),sum(ss_quantity),sum]
+  HashAggregate [sum] [sum(cast(ss_quantity as bigint)),sum(CAST(ss_quantity AS BIGINT)),sum]
     InputAdapter
       Exchange #1
         WholeStageCodegen (5)

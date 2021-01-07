@@ -134,7 +134,7 @@ Results [3]: [cr_returning_customer_sk#2, ca_state#9, sum#12]
 
 (18) Exchange
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#12]
-Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), true, [id=#13]
+Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (19) HashAggregate [codegen id : 11]
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#12]
@@ -194,7 +194,7 @@ Results [3]: [cr_returning_customer_sk#2, ca_state#9, sum#19]
 
 (31) Exchange
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#19]
-Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), true, [id=#20]
+Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (32) HashAggregate [codegen id : 7]
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#19]
@@ -212,7 +212,7 @@ Results [3]: [ctr_state#16, sum#24, count#25]
 
 (34) Exchange
 Input [3]: [ctr_state#16, sum#24, count#25]
-Arguments: hashpartitioning(ctr_state#16, 5), true, [id=#26]
+Arguments: hashpartitioning(ctr_state#16, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (35) HashAggregate [codegen id : 8]
 Input [3]: [ctr_state#16, sum#24, count#25]

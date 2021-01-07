@@ -164,7 +164,7 @@ Results [7]: [ws_item_sk#2, sum#22, sum#23, sum#24, isEmpty#25, sum#26, isEmpty#
 
 (19) Exchange
 Input [7]: [ws_item_sk#2, sum#22, sum#23, sum#24, isEmpty#25, sum#26, isEmpty#27]
-Arguments: hashpartitioning(ws_item_sk#2, 5), true, [id=#28]
+Arguments: hashpartitioning(ws_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (20) HashAggregate [codegen id : 4]
 Input [7]: [ws_item_sk#2, sum#22, sum#23, sum#24, isEmpty#25, sum#26, isEmpty#27]
@@ -175,7 +175,7 @@ Results [3]: [ws_item_sk#2 AS item#33, CheckOverflow((promote_precision(cast(sum
 
 (21) Exchange
 Input [3]: [item#33, return_ratio#34, currency_ratio#35]
-Arguments: SinglePartition, true, [id=#36]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#36]
 
 (22) Sort [codegen id : 5]
 Input [3]: [item#33, return_ratio#34, currency_ratio#35]
@@ -267,7 +267,7 @@ Results [7]: [cs_item_sk#41, sum#57, sum#58, sum#59, isEmpty#60, sum#61, isEmpty
 
 (42) Exchange
 Input [7]: [cs_item_sk#41, sum#57, sum#58, sum#59, isEmpty#60, sum#61, isEmpty#62]
-Arguments: hashpartitioning(cs_item_sk#41, 5), true, [id=#63]
+Arguments: hashpartitioning(cs_item_sk#41, 5), ENSURE_REQUIREMENTS, [id=#63]
 
 (43) HashAggregate [codegen id : 11]
 Input [7]: [cs_item_sk#41, sum#57, sum#58, sum#59, isEmpty#60, sum#61, isEmpty#62]
@@ -278,7 +278,7 @@ Results [3]: [cs_item_sk#41 AS item#68, CheckOverflow((promote_precision(cast(su
 
 (44) Exchange
 Input [3]: [item#68, return_ratio#69, currency_ratio#70]
-Arguments: SinglePartition, true, [id=#71]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#71]
 
 (45) Sort [codegen id : 12]
 Input [3]: [item#68, return_ratio#69, currency_ratio#70]
@@ -370,7 +370,7 @@ Results [7]: [ss_item_sk#76, sum#92, sum#93, sum#94, isEmpty#95, sum#96, isEmpty
 
 (65) Exchange
 Input [7]: [ss_item_sk#76, sum#92, sum#93, sum#94, isEmpty#95, sum#96, isEmpty#97]
-Arguments: hashpartitioning(ss_item_sk#76, 5), true, [id=#98]
+Arguments: hashpartitioning(ss_item_sk#76, 5), ENSURE_REQUIREMENTS, [id=#98]
 
 (66) HashAggregate [codegen id : 18]
 Input [7]: [ss_item_sk#76, sum#92, sum#93, sum#94, isEmpty#95, sum#96, isEmpty#97]
@@ -381,7 +381,7 @@ Results [3]: [ss_item_sk#76 AS item#103, CheckOverflow((promote_precision(cast(s
 
 (67) Exchange
 Input [3]: [item#103, return_ratio#104, currency_ratio#105]
-Arguments: SinglePartition, true, [id=#106]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#106]
 
 (68) Sort [codegen id : 19]
 Input [3]: [item#103, return_ratio#104, currency_ratio#105]
@@ -418,7 +418,7 @@ Results [5]: [channel#39, item#33, return_ratio#34, return_rank#37, currency_ran
 
 (76) Exchange
 Input [5]: [channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38]
-Arguments: hashpartitioning(channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38, 5), true, [id=#110]
+Arguments: hashpartitioning(channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38, 5), ENSURE_REQUIREMENTS, [id=#110]
 
 (77) HashAggregate [codegen id : 23]
 Input [5]: [channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38]

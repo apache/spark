@@ -95,7 +95,7 @@ Results [9]: [d_week_seq#5, ss_store_sk#2, sum#15, sum#16, sum#17, sum#18, sum#1
 
 (11) Exchange
 Input [9]: [d_week_seq#5, ss_store_sk#2, sum#15, sum#16, sum#17, sum#18, sum#19, sum#20, sum#21]
-Arguments: hashpartitioning(d_week_seq#5, ss_store_sk#2, 5), true, [id=#22]
+Arguments: hashpartitioning(d_week_seq#5, ss_store_sk#2, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (12) HashAggregate [codegen id : 10]
 Input [9]: [d_week_seq#5, ss_store_sk#2, sum#15, sum#16, sum#17, sum#18, sum#19, sum#20, sum#21]

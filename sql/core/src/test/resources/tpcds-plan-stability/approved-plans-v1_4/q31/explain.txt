@@ -177,7 +177,7 @@ Results [4]: [ca_county#9, d_qoy#6, d_year#5, sum#12]
 
 (17) Exchange
 Input [4]: [ca_county#9, d_qoy#6, d_year#5, sum#12]
-Arguments: hashpartitioning(ca_county#9, d_qoy#6, d_year#5, 5), true, [id=#13]
+Arguments: hashpartitioning(ca_county#9, d_qoy#6, d_year#5, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (18) HashAggregate [codegen id : 24]
 Input [4]: [ca_county#9, d_qoy#6, d_year#5, sum#12]
@@ -248,7 +248,7 @@ Results [4]: [ca_county#21, d_qoy#18, d_year#17, sum#23]
 
 (32) Exchange
 Input [4]: [ca_county#21, d_qoy#18, d_year#17, sum#23]
-Arguments: hashpartitioning(ca_county#21, d_qoy#18, d_year#17, 5), true, [id=#24]
+Arguments: hashpartitioning(ca_county#21, d_qoy#18, d_year#17, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (33) HashAggregate [codegen id : 7]
 Input [4]: [ca_county#21, d_qoy#18, d_year#17, sum#23]
@@ -328,7 +328,7 @@ Results [4]: [ca_county#33, d_qoy#30, d_year#29, sum#35]
 
 (49) Exchange
 Input [4]: [ca_county#33, d_qoy#30, d_year#29, sum#35]
-Arguments: hashpartitioning(ca_county#33, d_qoy#30, d_year#29, 5), true, [id=#36]
+Arguments: hashpartitioning(ca_county#33, d_qoy#30, d_year#29, 5), ENSURE_REQUIREMENTS, [id=#36]
 
 (50) HashAggregate [codegen id : 11]
 Input [4]: [ca_county#33, d_qoy#30, d_year#29, sum#35]
@@ -397,7 +397,7 @@ Results [4]: [ca_county#47, d_qoy#45, d_year#44, sum#49]
 
 (64) Exchange
 Input [4]: [ca_county#47, d_qoy#45, d_year#44, sum#49]
-Arguments: hashpartitioning(ca_county#47, d_qoy#45, d_year#44, 5), true, [id=#50]
+Arguments: hashpartitioning(ca_county#47, d_qoy#45, d_year#44, 5), ENSURE_REQUIREMENTS, [id=#50]
 
 (65) HashAggregate [codegen id : 15]
 Input [4]: [ca_county#47, d_qoy#45, d_year#44, sum#49]
@@ -462,7 +462,7 @@ Results [4]: [ca_county#58, d_qoy#56, d_year#55, sum#60]
 
 (78) Exchange
 Input [4]: [ca_county#58, d_qoy#56, d_year#55, sum#60]
-Arguments: hashpartitioning(ca_county#58, d_qoy#56, d_year#55, 5), true, [id=#61]
+Arguments: hashpartitioning(ca_county#58, d_qoy#56, d_year#55, 5), ENSURE_REQUIREMENTS, [id=#61]
 
 (79) HashAggregate [codegen id : 19]
 Input [4]: [ca_county#58, d_qoy#56, d_year#55, sum#60]
@@ -531,7 +531,7 @@ Results [4]: [ca_county#69, d_qoy#67, d_year#66, sum#71]
 
 (93) Exchange
 Input [4]: [ca_county#69, d_qoy#67, d_year#66, sum#71]
-Arguments: hashpartitioning(ca_county#69, d_qoy#67, d_year#66, 5), true, [id=#72]
+Arguments: hashpartitioning(ca_county#69, d_qoy#67, d_year#66, 5), ENSURE_REQUIREMENTS, [id=#72]
 
 (94) HashAggregate [codegen id : 23]
 Input [4]: [ca_county#69, d_qoy#67, d_year#66, sum#71]
@@ -555,7 +555,7 @@ Input [10]: [ca_county#9, d_year#5, store_sales#15, store_sales#26, store_sales#
 
 (98) Exchange
 Input [6]: [ca_county#9, d_year#5, web_q1_q2_increase#76, store_q1_q2_increase#77, web_q2_q3_increase#78, store_q2_q3_increase#79]
-Arguments: rangepartitioning(ca_county#9 ASC NULLS FIRST, 5), true, [id=#80]
+Arguments: rangepartitioning(ca_county#9 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#80]
 
 (99) Sort [codegen id : 25]
 Input [6]: [ca_county#9, d_year#5, web_q1_q2_increase#76, store_q1_q2_increase#77, web_q2_q3_increase#78, store_q2_q3_increase#79]

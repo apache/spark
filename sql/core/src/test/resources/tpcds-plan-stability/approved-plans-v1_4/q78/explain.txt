@@ -142,7 +142,7 @@ Results [6]: [d_year#12, ss_item_sk#2, ss_customer_sk#3, sum#17, sum#18, sum#19]
 
 (18) Exchange
 Input [6]: [d_year#12, ss_item_sk#2, ss_customer_sk#3, sum#17, sum#18, sum#19]
-Arguments: hashpartitioning(d_year#12, ss_item_sk#2, ss_customer_sk#3, 5), true, [id=#20]
+Arguments: hashpartitioning(d_year#12, ss_item_sk#2, ss_customer_sk#3, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (19) HashAggregate [codegen id : 12]
 Input [6]: [d_year#12, ss_item_sk#2, ss_customer_sk#3, sum#17, sum#18, sum#19]
@@ -217,7 +217,7 @@ Results [6]: [d_year#12, ws_item_sk#29, ws_bill_customer_sk#30, sum#41, sum#42, 
 
 (34) Exchange
 Input [6]: [d_year#12, ws_item_sk#29, ws_bill_customer_sk#30, sum#41, sum#42, sum#43]
-Arguments: hashpartitioning(d_year#12, ws_item_sk#29, ws_bill_customer_sk#30, 5), true, [id=#44]
+Arguments: hashpartitioning(d_year#12, ws_item_sk#29, ws_bill_customer_sk#30, 5), ENSURE_REQUIREMENTS, [id=#44]
 
 (35) HashAggregate [codegen id : 7]
 Input [6]: [d_year#12, ws_item_sk#29, ws_bill_customer_sk#30, sum#41, sum#42, sum#43]
@@ -309,7 +309,7 @@ Results [6]: [d_year#12, cs_item_sk#56, cs_bill_customer_sk#55, sum#67, sum#68, 
 
 (54) Exchange
 Input [6]: [d_year#12, cs_item_sk#56, cs_bill_customer_sk#55, sum#67, sum#68, sum#69]
-Arguments: hashpartitioning(d_year#12, cs_item_sk#56, cs_bill_customer_sk#55, 5), true, [id=#70]
+Arguments: hashpartitioning(d_year#12, cs_item_sk#56, cs_bill_customer_sk#55, 5), ENSURE_REQUIREMENTS, [id=#70]
 
 (55) HashAggregate [codegen id : 11]
 Input [6]: [d_year#12, cs_item_sk#56, cs_bill_customer_sk#55, sum#67, sum#68, sum#69]

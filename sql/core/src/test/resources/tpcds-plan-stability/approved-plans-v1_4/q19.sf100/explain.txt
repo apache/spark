@@ -151,7 +151,7 @@ Input [9]: [ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#5, i_brand_id#7,
 
 (24) Exchange
 Input [7]: [ss_customer_sk#3, ss_ext_sales_price#5, i_brand_id#7, i_brand#8, i_manufact_id#9, i_manufact#10, s_zip#18]
-Arguments: hashpartitioning(ss_customer_sk#3, 5), true, [id=#20]
+Arguments: hashpartitioning(ss_customer_sk#3, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (25) Sort [codegen id : 5]
 Input [7]: [ss_customer_sk#3, ss_ext_sales_price#5, i_brand_id#7, i_brand#8, i_manufact_id#9, i_manufact#10, s_zip#18]
@@ -173,7 +173,7 @@ Condition : (isnotnull(c_customer_sk#21) AND isnotnull(c_current_addr_sk#22))
 
 (29) Exchange
 Input [2]: [c_customer_sk#21, c_current_addr_sk#22]
-Arguments: hashpartitioning(c_current_addr_sk#22, 5), true, [id=#23]
+Arguments: hashpartitioning(c_current_addr_sk#22, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (30) Sort [codegen id : 7]
 Input [2]: [c_customer_sk#21, c_current_addr_sk#22]
@@ -195,7 +195,7 @@ Condition : (isnotnull(ca_address_sk#24) AND isnotnull(ca_zip#25))
 
 (34) Exchange
 Input [2]: [ca_address_sk#24, ca_zip#25]
-Arguments: hashpartitioning(ca_address_sk#24, 5), true, [id=#26]
+Arguments: hashpartitioning(ca_address_sk#24, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (35) Sort [codegen id : 9]
 Input [2]: [ca_address_sk#24, ca_zip#25]
@@ -212,7 +212,7 @@ Input [4]: [c_customer_sk#21, c_current_addr_sk#22, ca_address_sk#24, ca_zip#25]
 
 (38) Exchange
 Input [2]: [c_customer_sk#21, ca_zip#25]
-Arguments: hashpartitioning(c_customer_sk#21, 5), true, [id=#27]
+Arguments: hashpartitioning(c_customer_sk#21, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (39) Sort [codegen id : 11]
 Input [2]: [c_customer_sk#21, ca_zip#25]
@@ -236,7 +236,7 @@ Results [5]: [i_brand#8, i_brand_id#7, i_manufact_id#9, i_manufact#10, sum#29]
 
 (43) Exchange
 Input [5]: [i_brand#8, i_brand_id#7, i_manufact_id#9, i_manufact#10, sum#29]
-Arguments: hashpartitioning(i_brand#8, i_brand_id#7, i_manufact_id#9, i_manufact#10, 5), true, [id=#30]
+Arguments: hashpartitioning(i_brand#8, i_brand_id#7, i_manufact_id#9, i_manufact#10, 5), ENSURE_REQUIREMENTS, [id=#30]
 
 (44) HashAggregate [codegen id : 13]
 Input [5]: [i_brand#8, i_brand_id#7, i_manufact_id#9, i_manufact#10, sum#29]

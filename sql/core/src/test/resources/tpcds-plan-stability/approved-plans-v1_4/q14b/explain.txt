@@ -319,7 +319,7 @@ Results [3]: [brand_id#13, class_id#14, category_id#15]
 
 (49) Exchange
 Input [3]: [brand_id#13, class_id#14, category_id#15]
-Arguments: hashpartitioning(brand_id#13, class_id#14, category_id#15, 5), true, [id=#23]
+Arguments: hashpartitioning(brand_id#13, class_id#14, category_id#15, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (50) HashAggregate [codegen id : 10]
 Input [3]: [brand_id#13, class_id#14, category_id#15]
@@ -439,7 +439,7 @@ Results [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sum#35, isEmpty#36, c
 
 (74) Exchange
 Input [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sum#35, isEmpty#36, count#37]
-Arguments: hashpartitioning(i_brand_id#6, i_class_id#7, i_category_id#8, 5), true, [id=#38]
+Arguments: hashpartitioning(i_brand_id#6, i_class_id#7, i_category_id#8, 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (75) HashAggregate [codegen id : 52]
 Input [6]: [i_brand_id#6, i_class_id#7, i_category_id#8, sum#35, isEmpty#36, count#37]
@@ -530,7 +530,7 @@ Results [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sum#57, isEmpty#58
 
 (94) Exchange
 Input [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sum#57, isEmpty#58, count#59]
-Arguments: hashpartitioning(i_brand_id#48, i_class_id#49, i_category_id#50, 5), true, [id=#60]
+Arguments: hashpartitioning(i_brand_id#48, i_class_id#49, i_category_id#50, 5), ENSURE_REQUIREMENTS, [id=#60]
 
 (95) HashAggregate [codegen id : 51]
 Input [6]: [i_brand_id#48, i_class_id#49, i_category_id#50, sum#57, isEmpty#58, count#59]
@@ -699,7 +699,7 @@ Results [2]: [sum#81, count#82]
 
 (125) Exchange
 Input [2]: [sum#81, count#82]
-Arguments: SinglePartition, true, [id=#83]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#83]
 
 (126) HashAggregate [codegen id : 8]
 Input [2]: [sum#81, count#82]

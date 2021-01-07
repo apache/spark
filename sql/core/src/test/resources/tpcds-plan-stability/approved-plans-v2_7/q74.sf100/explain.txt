@@ -130,7 +130,7 @@ Input [5]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_net_paid#3, d_date_sk#4, d_y
 
 (10) Exchange
 Input [3]: [ss_customer_sk#2, ss_net_paid#3, d_year#5]
-Arguments: hashpartitioning(ss_customer_sk#2, 5), true, [id=#7]
+Arguments: hashpartitioning(ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [id=#7]
 
 (11) Sort [codegen id : 3]
 Input [3]: [ss_customer_sk#2, ss_net_paid#3, d_year#5]
@@ -152,7 +152,7 @@ Condition : (isnotnull(c_customer_sk#8) AND isnotnull(c_customer_id#9))
 
 (15) Exchange
 Input [4]: [c_customer_sk#8, c_customer_id#9, c_first_name#10, c_last_name#11]
-Arguments: hashpartitioning(c_customer_sk#8, 5), true, [id=#12]
+Arguments: hashpartitioning(c_customer_sk#8, 5), ENSURE_REQUIREMENTS, [id=#12]
 
 (16) Sort [codegen id : 5]
 Input [4]: [c_customer_sk#8, c_customer_id#9, c_first_name#10, c_last_name#11]
@@ -176,7 +176,7 @@ Results [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#14
 
 (20) Exchange
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#14]
-Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), true, [id=#15]
+Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (21) HashAggregate [codegen id : 7]
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#14]
@@ -191,7 +191,7 @@ Condition : (isnotnull(year_total#18) AND (year_total#18 > 0.00))
 
 (23) Exchange
 Input [2]: [customer_id#17, year_total#18]
-Arguments: hashpartitioning(customer_id#17, 5), true, [id=#19]
+Arguments: hashpartitioning(customer_id#17, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (24) Sort [codegen id : 8]
 Input [2]: [customer_id#17, year_total#18]
@@ -240,7 +240,7 @@ Input [5]: [ss_sold_date_sk#1, ss_customer_sk#2, ss_net_paid#3, d_date_sk#4, d_y
 
 (34) Exchange
 Input [3]: [ss_customer_sk#2, ss_net_paid#3, d_year#5]
-Arguments: hashpartitioning(ss_customer_sk#2, 5), true, [id=#21]
+Arguments: hashpartitioning(ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (35) Sort [codegen id : 11]
 Input [3]: [ss_customer_sk#2, ss_net_paid#3, d_year#5]
@@ -271,7 +271,7 @@ Results [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#23
 
 (41) Exchange
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#23]
-Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), true, [id=#24]
+Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (42) HashAggregate [codegen id : 15]
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#23]
@@ -282,7 +282,7 @@ Results [4]: [c_customer_id#9 AS customer_id#26, c_first_name#10 AS customer_fir
 
 (43) Exchange
 Input [4]: [customer_id#26, customer_first_name#27, customer_last_name#28, year_total#29]
-Arguments: hashpartitioning(customer_id#26, 5), true, [id=#30]
+Arguments: hashpartitioning(customer_id#26, 5), ENSURE_REQUIREMENTS, [id=#30]
 
 (44) Sort [codegen id : 16]
 Input [4]: [customer_id#26, customer_first_name#27, customer_last_name#28, year_total#29]
@@ -321,7 +321,7 @@ Input [5]: [ws_sold_date_sk#31, ws_bill_customer_sk#32, ws_net_paid#33, d_date_s
 
 (52) Exchange
 Input [3]: [ws_bill_customer_sk#32, ws_net_paid#33, d_year#5]
-Arguments: hashpartitioning(ws_bill_customer_sk#32, 5), true, [id=#34]
+Arguments: hashpartitioning(ws_bill_customer_sk#32, 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (53) Sort [codegen id : 20]
 Input [3]: [ws_bill_customer_sk#32, ws_net_paid#33, d_year#5]
@@ -352,7 +352,7 @@ Results [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#36
 
 (59) Exchange
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#36]
-Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), true, [id=#37]
+Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), ENSURE_REQUIREMENTS, [id=#37]
 
 (60) HashAggregate [codegen id : 24]
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#36]
@@ -371,7 +371,7 @@ Input [2]: [customer_id#39, year_total#40]
 
 (63) Exchange
 Input [2]: [customer_id#41, year_total#42]
-Arguments: hashpartitioning(customer_id#41, 5), true, [id=#43]
+Arguments: hashpartitioning(customer_id#41, 5), ENSURE_REQUIREMENTS, [id=#43]
 
 (64) Sort [codegen id : 25]
 Input [2]: [customer_id#41, year_total#42]
@@ -414,7 +414,7 @@ Input [5]: [ws_sold_date_sk#31, ws_bill_customer_sk#32, ws_net_paid#33, d_date_s
 
 (73) Exchange
 Input [3]: [ws_bill_customer_sk#32, ws_net_paid#33, d_year#5]
-Arguments: hashpartitioning(ws_bill_customer_sk#32, 5), true, [id=#44]
+Arguments: hashpartitioning(ws_bill_customer_sk#32, 5), ENSURE_REQUIREMENTS, [id=#44]
 
 (74) Sort [codegen id : 29]
 Input [3]: [ws_bill_customer_sk#32, ws_net_paid#33, d_year#5]
@@ -445,7 +445,7 @@ Results [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#46
 
 (80) Exchange
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#46]
-Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), true, [id=#47]
+Arguments: hashpartitioning(c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, 5), ENSURE_REQUIREMENTS, [id=#47]
 
 (81) HashAggregate [codegen id : 33]
 Input [5]: [c_customer_id#9, c_first_name#10, c_last_name#11, d_year#5, sum#46]
@@ -456,7 +456,7 @@ Results [2]: [c_customer_id#9 AS customer_id#49, MakeDecimal(sum(UnscaledValue(w
 
 (82) Exchange
 Input [2]: [customer_id#49, year_total#50]
-Arguments: hashpartitioning(customer_id#49, 5), true, [id=#51]
+Arguments: hashpartitioning(customer_id#49, 5), ENSURE_REQUIREMENTS, [id=#51]
 
 (83) Sort [codegen id : 34]
 Input [2]: [customer_id#49, year_total#50]
