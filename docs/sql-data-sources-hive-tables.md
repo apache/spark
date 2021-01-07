@@ -139,7 +139,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>builtin</code></td>
     <td>
       Location of the jars that should be used to instantiate the HiveMetastoreClient. This
-      property can be one of three options:
+      property can be one of four options:
       <ol>
         <li><code>builtin</code></li>
         Use Hive 2.3.7, which is bundled with the Spark assembly when <code>-Phive</code> is
