@@ -1517,11 +1517,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
-      // When we construct ScriptTransformation, we pass UnresolvedStart as ScriptTransformation's
-      // input and handle query block like normal SELECT Clause as ScriptTransformation's child.
-      // In analyzer level, after child resolved, we just pass child's output as
-      // ScriptTransformation's input, then we can support using transformation with
-      // aggregation/having/window/lateral view and other features.
+      // TODO: Remove this logic and see SPARK-34035
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(input = t.child.output)
       case g: Generate if containsStar(g.generator.children) =>
