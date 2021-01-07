@@ -119,7 +119,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>hadoop-common</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
