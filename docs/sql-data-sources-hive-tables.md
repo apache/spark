@@ -149,7 +149,7 @@ The following options can be used to configure the version of Hive that is used 
         Use Hive jars of specified version downloaded from Maven repositories. This configuration
         is not generally recommended for production deployments.
         <li><code>path</code></li>
-        Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
+        Use Hive jars configured by <code>spark.sql.hive.metastore.jars.path</code>
         in comma separated format. Support both local or remote paths.
         <li>A classpath in the standard format for the JVM. This classpath must include all of Hive
         and its dependencies, including the correct version of Hadoop. These jars only need to be
