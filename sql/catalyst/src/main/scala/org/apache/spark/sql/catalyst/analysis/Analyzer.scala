@@ -2408,10 +2408,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
             case (evaluated, order) =>
               val index = originalAggExprsForMatch.indexWhere {
-                case Alias(child, _) =>
-                  child semanticEquals evaluated.child
-                case other =>
-                  other semanticEquals evaluated.child
+                case Alias(child, _) => child semanticEquals evaluated.child
+                case other => other semanticEquals evaluated.child
               }
 
               if (index == -1) {
