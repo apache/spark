@@ -44,8 +44,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
   // Return data type.
   override def dataType: DataType = resultType
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>

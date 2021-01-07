@@ -39,8 +39,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(LongType, DoubleType, DecimalType))
+  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
   override def nullable: Boolean = true
 
