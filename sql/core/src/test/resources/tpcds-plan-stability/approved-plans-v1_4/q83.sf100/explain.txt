@@ -185,20 +185,20 @@ Input [4]: [sr_item_sk#2, sr_return_quantity#3, i_item_sk#12, i_item_id#13]
 (28) HashAggregate [codegen id : 5]
 Input [2]: [sr_return_quantity#3, i_item_id#13]
 Keys [1]: [i_item_id#13]
-Functions [1]: [partial_sum(cast(sr_return_quantity#3 as bigint))]
+Functions [1]: [partial_sum(sr_return_quantity#3)]
 Aggregate Attributes [1]: [sum#15]
 Results [2]: [i_item_id#13, sum#16]
 
 (29) Exchange
 Input [2]: [i_item_id#13, sum#16]
-Arguments: hashpartitioning(i_item_id#13, 5), true, [id=#17]
+Arguments: hashpartitioning(i_item_id#13, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (30) HashAggregate [codegen id : 18]
 Input [2]: [i_item_id#13, sum#16]
 Keys [1]: [i_item_id#13]
-Functions [1]: [sum(cast(sr_return_quantity#3 as bigint))]
-Aggregate Attributes [1]: [sum(cast(sr_return_quantity#3 as bigint))#18]
-Results [2]: [i_item_id#13 AS item_id#19, sum(cast(sr_return_quantity#3 as bigint))#18 AS sr_item_qty#20]
+Functions [1]: [sum(sr_return_quantity#3)]
+Aggregate Attributes [1]: [sum(sr_return_quantity#3)#18]
+Results [2]: [i_item_id#13 AS item_id#19, sum(sr_return_quantity#3)#18 AS sr_item_qty#20]
 
 (31) Scan parquet default.catalog_returns
 Output [3]: [cr_returned_date_sk#21, cr_item_sk#22, cr_return_quantity#23]
@@ -241,20 +241,20 @@ Input [4]: [cr_item_sk#22, cr_return_quantity#23, i_item_sk#12, i_item_id#13]
 (40) HashAggregate [codegen id : 10]
 Input [2]: [cr_return_quantity#23, i_item_id#13]
 Keys [1]: [i_item_id#13]
-Functions [1]: [partial_sum(cast(cr_return_quantity#23 as bigint))]
+Functions [1]: [partial_sum(cr_return_quantity#23)]
 Aggregate Attributes [1]: [sum#24]
 Results [2]: [i_item_id#13, sum#25]
 
 (41) Exchange
 Input [2]: [i_item_id#13, sum#25]
-Arguments: hashpartitioning(i_item_id#13, 5), true, [id=#26]
+Arguments: hashpartitioning(i_item_id#13, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (42) HashAggregate [codegen id : 11]
 Input [2]: [i_item_id#13, sum#25]
 Keys [1]: [i_item_id#13]
-Functions [1]: [sum(cast(cr_return_quantity#23 as bigint))]
-Aggregate Attributes [1]: [sum(cast(cr_return_quantity#23 as bigint))#27]
-Results [2]: [i_item_id#13 AS item_id#28, sum(cast(cr_return_quantity#23 as bigint))#27 AS cr_item_qty#29]
+Functions [1]: [sum(cr_return_quantity#23)]
+Aggregate Attributes [1]: [sum(cr_return_quantity#23)#27]
+Results [2]: [i_item_id#13 AS item_id#28, sum(cr_return_quantity#23)#27 AS cr_item_qty#29]
 
 (43) BroadcastExchange
 Input [2]: [item_id#28, cr_item_qty#29]
@@ -310,20 +310,20 @@ Input [4]: [wr_item_sk#32, wr_return_quantity#33, i_item_sk#12, i_item_id#13]
 (55) HashAggregate [codegen id : 16]
 Input [2]: [wr_return_quantity#33, i_item_id#13]
 Keys [1]: [i_item_id#13]
-Functions [1]: [partial_sum(cast(wr_return_quantity#33 as bigint))]
+Functions [1]: [partial_sum(wr_return_quantity#33)]
 Aggregate Attributes [1]: [sum#34]
 Results [2]: [i_item_id#13, sum#35]
 
 (56) Exchange
 Input [2]: [i_item_id#13, sum#35]
-Arguments: hashpartitioning(i_item_id#13, 5), true, [id=#36]
+Arguments: hashpartitioning(i_item_id#13, 5), ENSURE_REQUIREMENTS, [id=#36]
 
 (57) HashAggregate [codegen id : 17]
 Input [2]: [i_item_id#13, sum#35]
 Keys [1]: [i_item_id#13]
-Functions [1]: [sum(cast(wr_return_quantity#33 as bigint))]
-Aggregate Attributes [1]: [sum(cast(wr_return_quantity#33 as bigint))#37]
-Results [2]: [i_item_id#13 AS item_id#38, sum(cast(wr_return_quantity#33 as bigint))#37 AS wr_item_qty#39]
+Functions [1]: [sum(wr_return_quantity#33)]
+Aggregate Attributes [1]: [sum(wr_return_quantity#33)#37]
+Results [2]: [i_item_id#13 AS item_id#38, sum(wr_return_quantity#33)#37 AS wr_item_qty#39]
 
 (58) BroadcastExchange
 Input [2]: [item_id#38, wr_item_qty#39]

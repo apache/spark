@@ -8,7 +8,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
               InputAdapter
                 Exchange [i_brand_id,i_class_id,i_category_id,i_manufact_id] #1
                   WholeStageCodegen (24)
-                    HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sum,sum] [sum(cast(sales_cnt as bigint)),sum(UnscaledValue(sales_amt)),sales_cnt,sales_amt,sum,sum]
+                    HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sum,sum] [sum(sales_cnt),sum(UnscaledValue(sales_amt)),sales_cnt,sales_amt,sum,sum]
                       InputAdapter
                         Exchange [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id] #2
                           WholeStageCodegen (23)
@@ -127,7 +127,7 @@ TakeOrderedAndProject [sales_cnt_diff,prev_year,year,i_brand_id,i_class_id,i_cat
               InputAdapter
                 Exchange [i_brand_id,i_class_id,i_category_id,i_manufact_id] #12
                   WholeStageCodegen (49)
-                    HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sum,sum] [sum(cast(sales_cnt as bigint)),sum(UnscaledValue(sales_amt)),sales_cnt,sales_amt,sum,sum]
+                    HashAggregate [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id,sum,sum] [sum(sales_cnt),sum(UnscaledValue(sales_amt)),sales_cnt,sales_amt,sum,sum]
                       InputAdapter
                         Exchange [d_year,i_brand_id,i_class_id,i_category_id,i_manufact_id] #13
                           WholeStageCodegen (48)

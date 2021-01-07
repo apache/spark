@@ -1,6 +1,6 @@
 TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales_quantity,store_returns_quantity,catalog_sales_quantity]
   WholeStageCodegen (18)
-    HashAggregate [i_item_id,i_item_desc,s_store_id,s_store_name,sum,sum,sum] [sum(cast(ss_quantity as bigint)),sum(cast(sr_return_quantity as bigint)),sum(cast(cs_quantity as bigint)),store_sales_quantity,store_returns_quantity,catalog_sales_quantity,sum,sum,sum]
+    HashAggregate [i_item_id,i_item_desc,s_store_id,s_store_name,sum,sum,sum] [sum(ss_quantity),sum(sr_return_quantity),sum(cs_quantity),store_sales_quantity,store_returns_quantity,catalog_sales_quantity,sum,sum,sum]
       InputAdapter
         Exchange [i_item_id,i_item_desc,s_store_id,s_store_name] #1
           WholeStageCodegen (17)

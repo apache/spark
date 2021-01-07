@@ -1,6 +1,6 @@
 TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
   WholeStageCodegen (9)
-    HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,sum,count] [avg(cast(inv_quantity_on_hand as bigint)),qoh,sum,count]
+    HashAggregate [i_product_name,i_brand,i_class,i_category,spark_grouping_id,sum,count] [avg(inv_quantity_on_hand),qoh,sum,count]
       InputAdapter
         Exchange [i_product_name,i_brand,i_class,i_category,spark_grouping_id] #1
           WholeStageCodegen (8)
