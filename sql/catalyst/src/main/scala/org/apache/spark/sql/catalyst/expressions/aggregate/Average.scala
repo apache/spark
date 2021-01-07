@@ -42,10 +42,8 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
 
   override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
 
-
   override def checkInputDataTypes(): TypeCheckResult =
     TypeUtils.checkForNumericExpr(child.dataType, "function average")
-
 
   override def nullable: Boolean = true
 
