@@ -277,7 +277,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       s"${appSummary.numCompletedJobs}, only showing ${completedJobs.size}"
     }
 
-    // SPARK-33991 Avoid enumeration conversion error.
+    // SPARK-33991 Avoid enumeration conversion error
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
       .get(SCHEDULER_MODE.key)
       .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
