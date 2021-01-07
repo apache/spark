@@ -2384,6 +2384,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           val aliasedOrdering =
             unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
           val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
+          aggregatedOrdering.setAnalyzed()
           val resolvedAggregate: Aggregate =
             executeSameContext(aggregatedOrdering).asInstanceOf[Aggregate]
           val resolvedAliasedOrdering: Seq[Alias] =
