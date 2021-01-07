@@ -146,7 +146,8 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     val childrenSize = union.children.size
     val sizeInBytes = plan.size.get * childrenSize
     val rowCount = Some(plan.rowCount * childrenSize)
-    checkStats(union,
+    checkStats(
+      union,
       expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
