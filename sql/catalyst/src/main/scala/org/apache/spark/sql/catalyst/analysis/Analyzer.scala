@@ -2398,6 +2398,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           checkAnalysis(resolvedAggregate)
 
           val originalAggExprs = aggregate.aggregateExpressions.map(trimNonTopLevelAliases)
+          val originalAggExprsForMatch = executeSameContext(aggregate).asInstanceOf[Aggregate]
+            .aggregateExpressions.map(trimNonTopLevelAliases)
 
           // If the ordering expression is same with original aggregate expression, we don't need
           // to push down this ordering expression and can reference the original aggregate
@@ -2405,9 +2407,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
           val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
             case (evaluated, order) =>
-              val index = originalAggExprs.indexWhere {
-                case Alias(child, _) => child semanticEquals evaluated.child
-                case other => other semanticEquals evaluated.child
+              val index = originalAggExprsForMatch.indexWhere {
+                case Alias(child, _) =>
+                  child semanticEquals evaluated.child
+                case other =>
+                  other semanticEquals evaluated.child
               }
 
               if (index == -1) {
