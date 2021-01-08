@@ -649,6 +649,8 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
+    dropPartitions(catalog, fs)
+
     val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
     val pathFilter = getPathFilter(hadoopConf)
 
@@ -794,6 +796,19 @@ case class AlterTableRecoverPartitionsCommand(
       done += parts.length
       logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
+  }
+
+  // Drops the partitions that do not exist in the file system
+  private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Unit = {
+    val dropPartSpecs = ThreadUtils.parmap(
+      catalog.listPartitions(tableName),
+      "AlterTableRecoverPartitionsCommand: non-existing partitions",
+      maxThreads = 8) { partition =>
+      partition.storage.locationUri.flatMap { uri =>
+        if (fs.exists(new Path(uri))) None else Some(partition.spec)
+      }
+    }.flatten
+    catalog.dropPartitions(tableName, dropPartSpecs, true, false, false)
   }
 }
 
