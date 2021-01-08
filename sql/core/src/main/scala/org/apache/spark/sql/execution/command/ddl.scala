@@ -808,7 +808,12 @@ case class AlterTableRecoverPartitionsCommand(
         if (fs.exists(new Path(uri))) None else Some(partition.spec)
       }
     }.flatten
-    catalog.dropPartitions(tableName, dropPartSpecs, true, false, false)
+    catalog.dropPartitions(
+      tableName,
+      dropPartSpecs,
+      ignoreIfNotExists = true,
+      purge = false,
+      retainData = true)
   }
 }
 
