@@ -541,7 +541,12 @@ class InMemoryCatalog(
 
     listPartitions(db, table, partialSpec).map { partition =>
       partitionColumnNames.map { name =>
-        escapePathName(name) + "=" + escapePathName(partition.spec(name))
+        val partValue = if (partition.spec(name) == null) {
+          DEFAULT_PARTITION_NAME
+        } else {
+          escapePathName(partition.spec(name))
+        }
+        escapePathName(name) + "=" + partValue
       }.mkString("/")
     }.sorted
   }
