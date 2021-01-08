@@ -22,4 +22,13 @@ import org.apache.spark.sql.execution.command.v1
 /**
  * The class contains tests for the `SHOW TABLES` command to check V1 Hive external table catalog.
  */
-class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase
+class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
+  test("hive client calls") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      checkHiveClientCalls(expected = 3) {
+        sql(s"SHOW TABLES IN $catalog.ns")
+      }
+    }
+  }
+}
