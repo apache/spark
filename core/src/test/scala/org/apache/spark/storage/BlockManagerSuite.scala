@@ -1982,7 +1982,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       when(env.conf).thenReturn(conf)
       SparkEnv.set(env)
 
-      decomManager.refreshOffloadingShuffleBlocks()
+      decomManager.refreshMigratableShuffleBlocks()
 
       if (willReject) {
         eventually(timeout(1.second), interval(10.milliseconds)) {
@@ -2000,7 +2000,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } finally {
       mapOutputTracker.unregisterShuffle(0)
       // Avoid thread leak
-      decomManager.stopOffloadingShuffleBlocks()
+      decomManager.stopMigratingShuffleBlocks()
     }
   }
 
@@ -2074,7 +2074,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     when(bm.getPeers(mc.any())).thenReturn(Seq.empty)
 
     val decomManager = new BlockManagerDecommissioner(conf, bm)
-    decomManager.refreshOffloadingShuffleBlocks()
+    decomManager.refreshMigratableShuffleBlocks()
 
     assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
   }
