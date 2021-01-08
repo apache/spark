@@ -490,6 +490,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>
       Summary metrics of all tasks in the given stage attempt.
       <br><code>?quantiles</code> summarize the metrics with the given quantiles.
+      <br>The default value is <code>0.0,0.25,0.5,0.75,1.0</code>.
       <br>Example: <code>?quantiles=0.01,0.5,0.99</code>
     </td>
   </tr>
