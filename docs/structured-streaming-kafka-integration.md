@@ -880,8 +880,8 @@ group id, however, please read warnings for this option and use it with caution.
  topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
  streaming query is started, and that resuming will always pick up from where the query left off. Note
  that when the offsets consumed by a streaming application is not in Kafka (e.g., topics are deleted,
- offsets are out of range, or offsets are removed after offset retention period), because the offsets
- are not reset and the streaming application will see data lost. In extream cases, for example the
+ offsets are out of range, or offsets are removed after offset retention period), the offsets
+ are not reset and the streaming application will see data lost. In extreme cases, for example the
  throughput of the streaming application cannot catch up the retention speed of Kafka, the input rows
  of a batch might be gradually reduced until zero when the offset ranges of the batch are completely
  not in Kafka. Enabling `failOnDataLoss` option can ask Structured Streaming to fail the query for such
