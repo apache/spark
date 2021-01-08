@@ -310,7 +310,14 @@ class Dataset[T] private[sql](
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
             // Escapes meta-characters not to break the `showString` format
-            cell.toString.replaceAll("\n", "\\\\n").replaceAll("\t", "\\\\t")
+            cell.toString
+              .replaceAll("\n", "\\\\n")
+              .replaceAll("\r", "\\\\r")
+              .replaceAll("\t", "\\\\t")
+              .replaceAll("\f", "\\\\f")
+              .replaceAll("\b", "\\\\b")
+              .replaceAll("\u000B", "\\\\v")
+              .replaceAll("\u0007", "\\\\a")
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
