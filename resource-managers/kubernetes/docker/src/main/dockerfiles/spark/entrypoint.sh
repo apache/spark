@@ -44,11 +44,11 @@ if [ -n "$SPARK_EXTRA_CLASSPATH" ]; then
   SPARK_CLASSPATH="$SPARK_CLASSPATH:$SPARK_EXTRA_CLASSPATH"
 fi
 
-if [ "$PYSPARK_MAJOR_PYTHON_VERSION" == "3" ]; then
-    pyv3="$(python3 -V 2>&1)"
-    export PYTHON_VERSION="${pyv3:7}"
-    export PYSPARK_PYTHON="python3"
-    export PYSPARK_DRIVER_PYTHON="python3"
+if ! [ -z ${PYSPARK_PYTHON+x} ]; then
+    export PYSPARK_PYTHON
+fi
+if ! [ -z ${PYSPARK_DRIVER_PYTHON+x} ]; then
+    export PYSPARK_DRIVER_PYTHON
 fi
 
 # If HADOOP_HOME is set and SPARK_DIST_CLASSPATH is not set, set it here so Hadoop jars are available to the executor.

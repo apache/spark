@@ -921,10 +921,10 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
         val projects = planned.collect { case p: ProjectExec => p }
         assert(projects.exists(_.outputPartitioning match {
-          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
-            HashPartitioning(Seq(k2: AttributeReference), _))) if k1.name == "t1id" =>
+          case HashPartitioning(Seq(k1: AttributeReference), _) if k1.name == "t1id" =>
             true
-          case _ => false
+          case _ =>
+            false
         }))
       }
     }
@@ -1008,17 +1008,11 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
         val projects = planned.collect { case p: ProjectExec => p }
         assert(projects.exists(_.outputPartitioning match {
-          case PartitioningCollection(Seq(HashPartitioning(Seq(Multiply(ar1, _, _)), _),
-            HashPartitioning(Seq(Multiply(ar2, _, _)), _))) =>
-            Seq(ar1, ar2) match {
-              case Seq(ar1: AttributeReference, ar2: AttributeReference) =>
-                ar1.name == "t1id" && ar2.name == "id2"
-              case _ =>
-                false
-            }
-          case _ => false
+          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _) =>
+            ar1.name == "t1id"
+          case _ =>
+            false
         }))
-
       }
     }
   }
@@ -1233,6 +1227,40 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     val range = spark.range(1, 1, 1, 1000)
     val numPartitions = range.rdd.getNumPartitions
     assert(numPartitions == 0)
+  }
+
+  test("SPARK-33758: Prune unnecessary output partitioning") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        spark.range(10).repartition($"id").createTempView("t1")
+        spark.range(20).repartition($"id").createTempView("t2")
+        val planned = sql(
+          """
+            | SELECT t1.id as t1id, t2.id as t2id
+            | FROM t1, t2
+            | WHERE t1.id = t2.id
+          """.stripMargin).queryExecution.executedPlan
+
+        assert(planned.outputPartitioning match {
+          case PartitioningCollection(Seq(HashPartitioning(Seq(k1: AttributeReference), _),
+          HashPartitioning(Seq(k2: AttributeReference), _))) =>
+            k1.name == "t1id" && k2.name == "t2id"
+        })
+
+        val planned2 = sql(
+          """
+            | SELECT t1.id as t1id
+            | FROM t1, t2
+            | WHERE t1.id = t2.id
+          """.stripMargin).queryExecution.executedPlan
+        assert(planned2.outputPartitioning match {
+          case HashPartitioning(Seq(k1: AttributeReference), _) if k1.name == "t1id" =>
+            true
+        })
+      }
+    }
   }
 }
 

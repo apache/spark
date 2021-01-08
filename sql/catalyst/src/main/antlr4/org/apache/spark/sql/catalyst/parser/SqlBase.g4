@@ -21,7 +21,7 @@ grammar SqlBase;
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
-  public boolean legacy_setops_precedence_enbled = false;
+  public boolean legacy_setops_precedence_enabled = false;
 
   /**
    * When false, a literal with an exponent would be converted into
@@ -466,11 +466,11 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
-    | left=queryTerm {legacy_setops_precedence_enbled}?
+    | left=queryTerm {legacy_setops_precedence_enabled}?
         operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
