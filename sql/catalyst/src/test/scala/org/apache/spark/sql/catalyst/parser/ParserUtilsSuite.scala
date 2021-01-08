@@ -103,7 +103,7 @@ class ParserUtilsSuite extends SparkFunSuite {
     // String including a '\U00000000' style literal characters (\u732B is a cat in Kanji).
     assert(unescapeSQLString("\"\\U00000041B\\U000000312\\U0000732B\"") == "AB12\u732B")
 
-    // String including surrogate pair characters (U+1F408 and U+1F415 is a cat and dog in Emoji).
+    // String including surrogate pair characters (U+1F408 is a cat and U+1F415 is a dog in Emoji).
     assert(unescapeSQLString("\"\\U0001F408 \\U0001F415\"") == "\uD83D\uDC08 \uD83D\uDC15")
     // scalastyle:on nonascii
   }
