@@ -1839,6 +1839,22 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>*</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>net.hydromatic</groupId>
+            <artifactId>eigenbase-properties</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>commons-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>janino</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.pentaho</groupId>
+            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
+          </exclusion>
           <!-- End of Hive 2.3 exclusion -->
         </exclusions>
       </dependency>
