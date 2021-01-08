@@ -89,6 +89,9 @@ jobs:
       # In order to fetch changed files
       with:
         fetch-depth: 0
+    - uses: n1hility/cancel-previous-runs@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
     - name: Merge dispatched input branch
       if: ${{ github.event.inputs.target != '' }}
       run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
