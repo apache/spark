@@ -2310,6 +2310,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.6.0</td>
 </tr>
 <tr>
+  <td><code>spark.speculation.min.threshold</code></td>
+  <td>100ms</td>
+  <td>
+    Duplicate copies of a task will only be launched if the original copy has been running for
+    at least this amount of time. This is to avoid the overhead of launching speculative copies
+    of tasks that are very short.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
   <td><code>spark.speculation.task.duration.threshold</code></td>
   <td>None</td>
   <td>
