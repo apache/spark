@@ -79,7 +79,15 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitScriptTransform(p: ScriptTransformation): Statistics = default(p)
 
-  override def visitUnion(p: Union): Statistics = fallback(p)
+  override def visitUnion(p: Union): Statistics = {
+    val stats = p.children.map(_.stats)
+    val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+      None
+    } else {
+      Some(stats.map(_.rowCount.get).sum)
+    }
+    Statistics(sizeInBytes = stats.map(_.sizeInBytes).sum, rowCount = rowCount)
+  }
 
   override def visitWindow(p: Window): Statistics = fallback(p)
 
