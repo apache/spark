@@ -118,15 +118,16 @@ private[hive] object IsolatedClientLoader extends Logging {
       Seq("com.google.guava:guava:14.0.1",
         s"org.apache.hadoop:hadoop-client:$hadoopVersion")
 
-    val classpath = quietly {
+    val classpaths = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
         SparkSubmitUtils.buildIvySettings(
           Some(remoteRepos),
           ivyPath),
+        transitive = true,
         exclusions = version.exclusions)
     }
-    val allFiles = classpath.split(",").map(new File(_)).toSet
+    val allFiles = classpaths.map(new File(_)).toSet
 
     // TODO: Remove copy logic.
     val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")

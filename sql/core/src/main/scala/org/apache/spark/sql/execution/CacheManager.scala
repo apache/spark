@@ -88,12 +88,34 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = {
-    val planToCache = query.logicalPlan
+    cacheQuery(query.sparkSession, query.logicalPlan, tableName, storageLevel)
+  }
+
+  /**
+   * Caches the data produced by the given [[LogicalPlan]].
+   * Unlike `RDD.cache()`, the default storage level is set to be `MEMORY_AND_DISK` because
+   * recomputing the in-memory columnar representation of the underlying table is expensive.
+   */
+  def cacheQuery(
+      spark: SparkSession,
+      planToCache: LogicalPlan,
+      tableName: Option[String]): Unit = {
+    cacheQuery(spark, planToCache, tableName, MEMORY_AND_DISK)
+  }
+
+  /**
+   * Caches the data produced by the given [[LogicalPlan]].
+   */
+  def cacheQuery(
+      spark: SparkSession,
+      planToCache: LogicalPlan,
+      tableName: Option[String],
+      storageLevel: StorageLevel): Unit = {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
       val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
-        query.sparkSession, forceDisableConfigs)
+        spark, forceDisableConfigs)
       val inMemoryRelation = sessionWithConfigsOff.withActive {
         val qe = sessionWithConfigsOff.sessionState.executePlan(planToCache)
         InMemoryRelation(

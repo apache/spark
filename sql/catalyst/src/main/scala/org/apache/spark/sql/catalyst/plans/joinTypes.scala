@@ -102,7 +102,7 @@ case class NaturalJoin(tpe: JoinType) extends JoinType {
 }
 
 case class UsingJoin(tpe: JoinType, usingColumns: Seq[String]) extends JoinType {
-  require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti).contains(tpe),
+  require(Seq(Inner, LeftOuter, LeftSemi, RightOuter, FullOuter, LeftAnti, Cross).contains(tpe),
     "Unsupported using join type " + tpe)
   override def sql: String = "USING " + tpe.sql
 }

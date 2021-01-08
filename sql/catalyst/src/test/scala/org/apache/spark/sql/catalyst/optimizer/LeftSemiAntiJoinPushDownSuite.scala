@@ -60,7 +60,7 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("Project: LeftSemiAnti join no pushdown because of non-deterministic proj exprs") {
     val originalQuery = testRelation
-      .select(Rand('a), 'b, 'c)
+      .select(Rand(1), 'b, 'c)
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)

@@ -106,6 +106,34 @@ object ExecutorLifecycleTestUtils {
       .build()
   }
 
+  /**
+   * This creates a pod with a finished executor and running sidecar
+   */
+  def finishedExecutorWithRunningSidecar(
+      executorId: Long, exitCode: Int): Pod = {
+    new PodBuilder(podWithAttachedContainerForId(executorId, DEFAULT_RESOURCE_PROFILE_ID))
+      .editOrNewStatus()
+        .withPhase("running")
+        .addNewContainerStatus()
+          .withName(DEFAULT_EXECUTOR_CONTAINER_NAME)
+          .withNewState()
+            .withNewTerminated()
+              .withMessage("message")
+              .withExitCode(exitCode)
+            .endTerminated()
+          .endState()
+        .endContainerStatus()
+        .addNewContainerStatus()
+          .withName("SIDECARFRIEND")
+          .withNewState()
+            .withNewRunning()
+            .endRunning()
+          .endState()
+        .endContainerStatus()
+      .endStatus()
+      .build()
+  }
+
   def succeededExecutor(executorId: Long, rpId: Int = DEFAULT_RESOURCE_PROFILE_ID): Pod = {
     new PodBuilder(podWithAttachedContainerForId(executorId, rpId))
       .editOrNewStatus()

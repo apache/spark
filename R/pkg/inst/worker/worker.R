@@ -196,7 +196,7 @@ if (isEmpty != 0) {
         outputs <- list()
         for (i in seq_len(length(data))) {
           # Timing reading input data for execution
-          inputElap <- elapsedSecs()
+          computeStart <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],
                       colNames, computeFunc, data[[i]])
           computeElap <- elapsedSecs()
@@ -204,17 +204,18 @@ if (isEmpty != 0) {
             outputs[[length(outputs) + 1L]] <- output
           } else {
             outputResult(serializer, output, outputCon)
+            outputComputeElapsDiff <- outputComputeElapsDiff + (elapsedSecs() - computeElap)
           }
-          outputElap <- elapsedSecs()
-          computeInputElapsDiff <-  computeInputElapsDiff + (computeElap - inputElap)
-          outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
+          computeInputElapsDiff <- computeInputElapsDiff + (computeElap - computeStart)
         }
 
         if (serializer == "arrow") {
           # See https://stat.ethz.ch/pipermail/r-help/2010-September/252046.html
           # rbind.fill might be an alternative to make it faster if plyr is installed.
+          outputStart <- elapsedSecs()
           combined <- do.call("rbind", outputs)
           SparkR:::writeSerializeInArrow(outputCon, combined)
+          outputComputeElapsDiff <- elapsedSecs() - outputStart
         }
       }
     } else {

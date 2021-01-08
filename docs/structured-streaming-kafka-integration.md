@@ -1005,6 +1005,14 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
     <td>3.0.0</td>
   </tr>
   <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.type</code></td>
+    <td>None</td>
+    <td>
+      The file format of the trust store file. For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+    <td>3.2.0</td>
+  </tr>
+  <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.truststore.location</code></td>
     <td>None</td>
     <td>
@@ -1020,6 +1028,15 @@ Delegation tokens can be obtained from multiple clusters and <code>${cluster}</c
       For further details please see Kafka documentation. Only used to obtain delegation token.
     </td>
     <td>3.0.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.type</code></td>
+    <td>None</td>
+    <td>
+      The file format of the key store file. This is optional for client.
+      For further details please see Kafka documentation. Only used to obtain delegation token.
+    </td>
+    <td>3.2.0</td>
   </tr>
   <tr>
     <td><code>spark.kafka.clusters.${cluster}.ssl.keystore.location</code></td>
