@@ -16,11 +16,11 @@
     under the License.
 
 
-ML
-==
+MLlib (DataFrame-based)
+=======================
 
-ML Pipeline APIs
-----------------
+Pipeline APIs
+-------------
 
 .. currentmodule:: pyspark.ml
 
@@ -188,8 +188,8 @@ Clustering
     PowerIterationClustering
 
 
-ML Functions
-----------------------------
+Functions
+---------
 
 .. currentmodule:: pyspark.ml.functions
 
