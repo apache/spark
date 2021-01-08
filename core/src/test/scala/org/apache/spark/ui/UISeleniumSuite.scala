@@ -45,7 +45,9 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
+import org.apache.spark.ui.jobs.AllJobsPage
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -121,6 +123,18 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
+  }
+
+  test("all jobs page should be rendered ") {
+    // Regression test for SPARK-33991
+    val conf = new SparkConf().set("spark.scheduler.mode", "fair")
+    val appStatusSource = AppStatusSource.createSource(conf)
+    val store = AppStatusStore.createLiveStore(conf, appStatusSource)
+    val jobsPage = new AllJobsPage(null, store)
+    val scheduleMode = jobsPage.getScheduleMode()
+
+    assert("FAIR".equals(scheduleMode))
+
   }
 
   test("effects of unpersist() / persist() should be reflected") {
