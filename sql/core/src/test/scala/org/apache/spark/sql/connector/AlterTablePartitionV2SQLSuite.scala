@@ -281,4 +281,19 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       }
     }
   }
+
+  test("SPARK-33591: null as a partition value") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING foo PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = null)")
+
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      assert(partTable.partitionExists(InternalRow(null)))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      assert(!partTable.partitionExists(InternalRow(null)))
+    }
+  }
 }
