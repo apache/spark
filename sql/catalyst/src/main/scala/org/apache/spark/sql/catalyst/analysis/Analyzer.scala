@@ -308,7 +308,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def setCastTag(plan: LogicalPlan): Unit = {
       plan.resolveOperators { case p =>
         p.transformExpressions {
-          case cast: Cast =>
+          case cast: CastBase =>
             cast.setTagValue(Cast.AUTO_GENERATED_TAG, false)
             cast
           case subquery: SubqueryExpression =>
