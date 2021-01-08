@@ -304,8 +304,13 @@ case class ExpressionEncoder[T](
     StructField(s.name, s.dataType, s.nullable)
   })
 
+  /**
+   * This is used for `ScalaUDF` (see `UDFRegistration`). As the serialization in `ScalaUDF` is for
+   * individual column, not the whole row, we just take the data type of vanilla object serializer,
+   * not `serializer` which is transformed somehow.
+   */
   def dataTypeAndNullable: Schema = {
-    val dataType = if (isSerializedAsStruct) schema else schema.head.dataType
+    val dataType = objSerializer.dataType
     Schema(dataType, objSerializer.nullable)
   }
 
