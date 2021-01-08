@@ -1891,8 +1891,8 @@ package object config {
 
   private[spark] val SPECULATION_MIN_THRESHOLD =
     ConfigBuilder("spark.speculation.min.threshold")
+      .doc("Minimum amount of time a task runs before being considered for speculation.")
       .version("3.2.0")
-      .doc("Minimum amount of time a task runs before being considered for speculation.s")
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
