@@ -45,9 +45,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Status._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
-import org.apache.spark.ui.jobs.AllJobsPage
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -125,16 +123,23 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     sc
   }
 
-  test("all jobs page should be rendered ") {
+  test("all jobs page should be rendered even though we configure the scheduling mode to fair") {
     // Regression test for SPARK-33991
-    val conf = new SparkConf().set("spark.scheduler.mode", "fair")
-    val appStatusSource = AppStatusSource.createSource(conf)
-    val store = AppStatusStore.createLiveStore(conf, appStatusSource)
-    val jobsPage = new AllJobsPage(null, store)
-    val scheduleMode = jobsPage.getScheduleMode()
+    val conf = Map("spark.scheduler.mode" -> "fair")
+    withSpark(newSparkContext(additionalConfs = conf)) { sc =>
+      val rdd = sc.parallelize(0 to 100, 100).repartition(10).cache()
+      rdd.count()
 
-    assert("FAIR".equals(scheduleMode))
-
+      eventually(timeout(5.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs")
+        // The completed jobs table should have one row. The first row will be the most recent job:
+        val firstRow = find(cssSelector("tbody tr")).get.underlying
+        val firstRowColumns = firstRow.findElements(By.tagName("td"))
+        // if first row can get the id 0, the page is rendered and the scheduling mode is displayed with no error when we visit http://localhost:4040/jobs/
+        // even though we configure the scheduling mode like spark.scheduler.mode=fair instead of spark.scheculer.mode=FAIR
+        firstRowColumns.get(0).getText should be ("0")
+      }
+    }
   }
 
   test("effects of unpersist() / persist() should be reflected") {

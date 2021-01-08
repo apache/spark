@@ -239,16 +239,6 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
   }
 
-  // SPARK-33991 Avoid enumeration conversion error
-  def getScheduleMode(): String = {
-    val schedulingMode = store.environmentInfo().sparkProperties.toMap
-      .get(SCHEDULER_MODE.key)
-      .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
-      .getOrElse("Unknown")
-
-    schedulingMode
-  }
-
   def render(request: HttpServletRequest): Seq[Node] = {
     val appInfo = store.applicationInfo()
     val startTime = appInfo.attempts.head.startTime.getTime()
@@ -287,7 +277,11 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       s"${appSummary.numCompletedJobs}, only showing ${completedJobs.size}"
     }
 
-    val schedulingMode = getScheduleMode()
+    // SPARK-33991 Avoid enumeration conversion error.
+    val schedulingMode = store.environmentInfo().sparkProperties.toMap
+      .get(SCHEDULER_MODE.key)
+      .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
+      .getOrElse("Unknown")
 
     val summary: NodeSeq =
       <div>
