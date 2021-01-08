@@ -161,7 +161,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_na
      ```sql
      SELECT `(a|b)?+.+` FROM (
        SELECT 1 as a, 2 as b, 3 as c
-     ) src
+     )
      ```
 
 ### Related Statements
