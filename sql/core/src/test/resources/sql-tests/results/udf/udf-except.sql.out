@@ -32,7 +32,7 @@ struct<>
 -- !query
 SELECT udf(k), udf(v) FROM t1 EXCEPT SELECT udf(k), udf(v) FROM t2
 -- !query schema
-struct<udf(cast(k as string)):string,udf(cast(v as string)):int>
+struct<udf(k):string,udf(v):int>
 -- !query output
 three	3
 two	2
