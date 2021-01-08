@@ -24,20 +24,20 @@ trait HigherOrderFunctionsHelper {
   self: SparkFunSuite =>
 
   protected def createLambda(
-    dt: DataType,
-    nullable: Boolean,
-    f: Expression => Expression): Expression = {
+      dt: DataType,
+      nullable: Boolean,
+      f: Expression => Expression): Expression = {
     val lv = NamedLambdaVariable("arg", dt, nullable)
     val function = f(lv)
     LambdaFunction(function, Seq(lv))
   }
 
   protected def createLambda(
-    dt1: DataType,
-    nullable1: Boolean,
-    dt2: DataType,
-    nullable2: Boolean,
-    f: (Expression, Expression) => Expression): Expression = {
+      dt1: DataType,
+      nullable1: Boolean,
+      dt2: DataType,
+      nullable2: Boolean,
+      f: (Expression, Expression) => Expression): Expression = {
     val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
     val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
     val function = f(lv1, lv2)
@@ -45,13 +45,13 @@ trait HigherOrderFunctionsHelper {
   }
 
   protected def createLambda(
-    dt1: DataType,
-    nullable1: Boolean,
-    dt2: DataType,
-    nullable2: Boolean,
-    dt3: DataType,
-    nullable3: Boolean,
-    f: (Expression, Expression, Expression) => Expression): Expression = {
+      dt1: DataType,
+      nullable1: Boolean,
+      dt2: DataType,
+      nullable2: Boolean,
+      dt3: DataType,
+      nullable3: Boolean,
+      f: (Expression, Expression, Expression) => Expression): Expression = {
     val lv1 = NamedLambdaVariable("arg1", dt1, nullable1)
     val lv2 = NamedLambdaVariable("arg2", dt2, nullable2)
     val lv3 = NamedLambdaVariable("arg3", dt3, nullable3)
@@ -60,8 +60,8 @@ trait HigherOrderFunctionsHelper {
   }
 
   protected def validateBinding(
-    e: Expression,
-    argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
+      e: Expression,
+      argInfo: Seq[(DataType, Boolean)]): LambdaFunction = e match {
     case f: LambdaFunction =>
       assert(f.arguments.size === argInfo.size)
       f.arguments.zip(argInfo).foreach {
@@ -78,8 +78,8 @@ trait HigherOrderFunctionsHelper {
   }
 
   protected def transform(
-    expr: Expression,
-    f: (Expression, Expression) => Expression): Expression = {
+      expr: Expression,
+      f: (Expression, Expression) => Expression): Expression = {
 
     val ArrayType(et, cn) = expr.dataType
     ArrayTransform(expr, createLambda(et, cn, IntegerType, false, f)).bind(validateBinding)
@@ -108,8 +108,8 @@ trait HigherOrderFunctionsHelper {
   }
 
   protected def mapFilter(
-    expr: Expression,
-    f: (Expression, Expression) => Expression): Expression = {
+      expr: Expression,
+      f: (Expression, Expression) => Expression): Expression = {
 
     val MapType(kt, vt, vcn) = expr.dataType
     MapFilter(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
@@ -117,18 +117,18 @@ trait HigherOrderFunctionsHelper {
 
 
   protected def transformKeys(
-    expr: Expression,
-    f: (Expression, Expression) => Expression): Expression = {
+      expr: Expression,
+      f: (Expression, Expression) => Expression): Expression = {
 
     val MapType(kt, vt, vcn) = expr.dataType
     TransformKeys(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
   }
 
   protected def aggregate(
-    expr: Expression,
-    zero: Expression,
-    merge: (Expression, Expression) => Expression,
-    finish: Expression => Expression): Expression = {
+      expr: Expression,
+      zero: Expression,
+      merge: (Expression, Expression) => Expression,
+      finish: Expression => Expression): Expression = {
     val ArrayType(et, cn) = expr.dataType
     val zeroType = zero.dataType
     ArrayAggregate(
@@ -140,15 +140,15 @@ trait HigherOrderFunctionsHelper {
   }
 
   protected def aggregate(
-    expr: Expression,
-    zero: Expression,
-    merge: (Expression, Expression) => Expression): Expression = {
+      expr: Expression,
+      zero: Expression,
+      merge: (Expression, Expression) => Expression): Expression = {
     aggregate(expr, zero, merge, identity)
   }
 
   protected def transformValues(
-    expr: Expression,
-    f: (Expression, Expression) => Expression): Expression = {
+      expr: Expression,
+      f: (Expression, Expression) => Expression): Expression = {
 
     val MapType(kt, vt, vcn) = expr.dataType
     TransformValues(expr, createLambda(kt, false, vt, vcn, f)).bind(validateBinding)
