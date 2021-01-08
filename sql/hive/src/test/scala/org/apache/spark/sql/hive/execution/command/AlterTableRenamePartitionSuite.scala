@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -25,4 +26,24 @@ import org.apache.spark.sql.execution.command.v1
  */
 class AlterTableRenamePartitionSuite
   extends v1.AlterTableRenamePartitionSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+
+  test("hive client calls") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+
+      val callsAmount = 21
+      HiveCatalogMetrics.reset()
+      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
+      sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=1)")
+      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === callsAmount)
+
+      sql(s"CACHE TABLE $t")
+      HiveCatalogMetrics.reset()
+      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
+      sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=2)")
+      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === callsAmount + 3)
+    }
+  }
+}

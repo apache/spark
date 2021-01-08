@@ -33,6 +33,7 @@ class AlterTableDropPartitionSuite
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
       sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+
       val callsAmount = 19
       HiveCatalogMetrics.reset()
       assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
