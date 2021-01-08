@@ -1235,12 +1235,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), ".hiddenFile"))  // file
     fs.mkdirs(new Path(new Path(root, "A=2/B=6/C=31"), "_temporary"))
 
-    val parts = (10 to 100).map { a =>
+    val parts = (10 to 100).flatMap { a =>
       val part = Map("a" -> a.toString, "b" -> "5", "c" -> "42")
-      fs.mkdirs(new Path(new Path(new Path(root, s"a=$a"), "b=5"), "c=42"))
+      val partPath = new Path(new Path(new Path(root, s"a=$a"), "b=5"), "c=42")
+      fs.mkdirs(partPath)
       fs.createNewFile(new Path(new Path(root, s"a=$a/b=5/c=42"), "a.csv"))  // file
       createTablePartition(catalog, part, tableIdent)
-      part
+      if (a >= 90) {
+        fs.delete(partPath, true)
+        None
+      } else {
+        Some (part)
+      }
     }
 
     // invalid
