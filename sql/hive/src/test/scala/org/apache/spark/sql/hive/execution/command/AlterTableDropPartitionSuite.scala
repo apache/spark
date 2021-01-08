@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -34,17 +33,13 @@ class AlterTableDropPartitionSuite
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
       sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
 
-      val callsAmount = 19
-      HiveCatalogMetrics.reset()
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
-      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === callsAmount)
-
+      checkHiveClientCalls(expected = 19) {
+        sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      }
       sql(s"CACHE TABLE $t")
-      HiveCatalogMetrics.reset()
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
-      sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === callsAmount + 3)
+      checkHiveClientCalls(expected = 22) {
+        sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+      }
     }
   }
 }

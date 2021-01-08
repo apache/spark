@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.execution.command.v1
 
 /**
@@ -33,17 +32,13 @@ class AlterTableAddPartitionSuite
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
 
-      val callsAmount = 14
-      HiveCatalogMetrics.reset()
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
-      sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === callsAmount)
-
+      checkHiveClientCalls(expected = 14) {
+        sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
+      }
       sql(s"CACHE TABLE $t")
-      HiveCatalogMetrics.reset()
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === 0)
-      sql(s"ALTER TABLE $t ADD PARTITION (part=2)")
-      assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount === callsAmount)
+      checkHiveClientCalls(expected = 14) {
+        sql(s"ALTER TABLE $t ADD PARTITION (part=2)")
+      }
     }
   }
 }
