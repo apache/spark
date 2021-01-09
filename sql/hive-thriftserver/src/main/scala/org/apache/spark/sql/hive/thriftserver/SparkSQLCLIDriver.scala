@@ -530,15 +530,24 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     var bracketedCommentLevel = 0
     var escape = false
     var beginIndex = 0
-    var includingStatement = false
+    var leavingBracketedComment = false
+    var isStatement = false
     val ret = new JArrayList[String]
 
     def insideBracketedComment: Boolean = bracketedCommentLevel > 0
     def insideComment: Boolean = insideSimpleComment || insideBracketedComment
-    def statementBegin(index: Int): Boolean = includingStatement || (!insideComment &&
+    def statementInProgress(index: Int): Boolean = isStatement || (!insideComment &&
       index > beginIndex && !s"${line.charAt(index)}".trim.isEmpty)
 
     for (index <- 0 until line.length) {
+      // Checks if we need to decrement a bracketed comment level; the last character '/' of
+      // bracketed comments is still inside the comment, so `insideBracketedComment` must keep true
+      // in the previous loop and we decrement the level here if needed.
+      if (leavingBracketedComment) {
+        bracketedCommentLevel -= 1
+        leavingBracketedComment = false
+      }
+
       if (line.charAt(index) == '\'' && !insideComment) {
         // take a look to see if it is escaped
         // See the comment above about SPARK-31595
@@ -568,12 +577,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (insideSingleQuote || insideDoubleQuote || insideComment) {
           // do not split
         } else {
-          if (includingStatement) {
+          if (isStatement) {
             // split, do not include ; itself
             ret.add(line.substring(beginIndex, index))
           }
           beginIndex = index + 1
-          includingStatement = false
+          isStatement = false
         }
       } else if (line.charAt(index) == '\n') {
         // with a new line the inline simple comment should end.
@@ -585,7 +594,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         if (insideSingleQuote || insideDoubleQuote) {
           // Ignores '/' in any case of quotes
         } else if (insideBracketedComment && line.charAt(index - 1) == '*' ) {
-          bracketedCommentLevel -= 1
+          // Decrements `bracketedCommentLevel` at the beginning of the next loop
+          leavingBracketedComment = true
         } else if (hasNext && !insideBracketedComment && line.charAt(index + 1) == '*') {
           bracketedCommentLevel += 1
         }
@@ -597,9 +607,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         escape = true
       }
 
-      includingStatement = statementBegin(index)
+      isStatement = statementInProgress(index)
     }
-    if (includingStatement) {
+    if (isStatement) {
       ret.add(line.substring(beginIndex))
     }
     ret

@@ -217,7 +217,7 @@ object Union {
 }
 
 /**
- * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -1050,7 +1050,7 @@ case class RepartitionByExpression(
   val numPartitions = if (optNumPartitions.nonEmpty) {
     optNumPartitions.get
   } else {
-    if (partitionExpressions.forall(_.foldable)) {
+    if (partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable)) {
       1
     } else {
       SQLConf.get.numShufflePartitions

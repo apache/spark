@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.command
  */
 trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSuiteBase {
   override protected val notFullPartitionSpecErr = "The following partitions not found in table"
+  override protected def nullPartitionValue: String = "__HIVE_DEFAULT_PARTITION__"
 
   test("purge partition data") {
     withNamespaceAndTable("ns", "tbl") { t =>
