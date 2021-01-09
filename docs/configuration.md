@@ -2314,6 +2314,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>100ms</td>
   <td>
     Minimum amount of time a task runs before being considered for speculation.
+    This can be used to avoid launching speculative copies of tasks that are very short.
   </td>
   <td>3.2.0</td>
 </tr>
