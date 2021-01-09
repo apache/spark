@@ -272,7 +272,7 @@ private[sql] trait SQLTestUtilsBase
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
     Utils.tryWithSafeFinally(f) {
-      viewNames.foreach { viewName =>
+      viewNames.reverse.foreach { viewName =>
         try spark.catalog.dropTempView(viewName) catch {
           // If the test failed part way, we don't want to mask the failure by failing to remove
           // temp views that never got created.

@@ -833,6 +833,7 @@ case class CacheTable(
 case class CacheTableAsSelect(
     tempViewName: String,
     plan: LogicalPlan,
+    originalText: Option[String],
     isLazy: Boolean,
     options: Map[String, String]) extends Command
 

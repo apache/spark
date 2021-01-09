@@ -936,7 +936,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       assert(spark.catalog.isCached("t1"))
       assert(spark.catalog.isCached("t2"))
       sql("DROP VIEW t1")
-      assert(spark.catalog.isCached("t2"))
+
+      // t2 should become invalid after t1 is dropped
+      val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
+      assert(e.message.contains(s"Table or view not found"))
     }
   }
 
@@ -954,7 +957,10 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           assert(spark.catalog.isCached("t1"))
           assert(spark.catalog.isCached("t2"))
           sql("DROP VIEW t1")
-          assert(!spark.catalog.isCached("t2"))
+
+          // t2 should become invalid after t1 is dropped
+          val e = intercept[AnalysisException](spark.catalog.isCached("t2"))
+          assert(e.message.contains(s"Table or view not found"))
         }
       }
     }
@@ -1333,6 +1339,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       sql("ALTER TABLE t RECOVER PARTITIONS")
       assert(spark.catalog.isCached("t"))
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(0, 1)))
+    }
+  }
+
+  test("SPARK-34052: cached temp view should become invalid after the source table is dropped") {
+    val t = "t"
+    withTable(t) {
+      sql(s"CREATE TABLE $t USING parquet AS SELECT * FROM VALUES(1, 'a') AS $t(a, b)")
+      sql(s"CACHE TABLE v AS SELECT a FROM $t")
+      checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
+      sql(s"DROP TABLE $t")
+      val e = intercept[AnalysisException](sql("SELECT * FROM v"))
+      assert(e.message.contains(s"Table or view not found: $t"))
     }
   }
 }
