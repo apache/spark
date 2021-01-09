@@ -89,14 +89,6 @@ jobs:
       # In order to fetch changed files
       with:
         fetch-depth: 0
-    - uses: actions/checkout@v2
-      name: checkout n1hility/cancel-previous-runs
-      with:
-        repository: n1hility/cancel-previous-runs
-        path: ./build/.actions/n1hility/cancel-previous-runs
-        ref: 953c92201f368370112ea2754545cb4468d89f12 # v2
-        fetch-depth: 1
-    - uses: ./build/.actionsn1hility/cancel-previous-runs
     - name: Merge dispatched input branch
       if: ${{ github.event.inputs.target != '' }}
       run: git merge --progress --ff-only origin/${{ github.event.inputs.target }}
