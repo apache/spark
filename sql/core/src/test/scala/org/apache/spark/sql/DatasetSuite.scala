@@ -1992,19 +1992,20 @@ class DatasetSuite extends QueryTest
       bar
     }
 
-    val udf1: UserDefinedFunction = udf(f1 _).withName("f1")
-    val udf2: UserDefinedFunction = udf(f2 _).withName("f2")
+    val udf1 = udf(f1 _).withName("f1")
+    val udf2 = udf(f2 _).withName("f2")
 
     val df = (1 to 2).map(i => Tuple1(Bar(1))).toDF("c0")
-    val newDf = df
+    val withUDF = df
       .withColumn("c1", udf1(col("c0")))
       .withColumn("c2", udf2(col("c1")))
-    val schema = newDf.schema
-    assert(schema == StructType(
+
+    assert(withUDF.schema == StructType(
       StructField("c0", StructType(StructField("a", IntegerType, false) :: Nil)) ::
         StructField("c1", StructType(StructField("a", IntegerType, false) :: Nil)) ::
         StructField("c2", StructType(StructField("a", IntegerType, false) :: Nil)) :: Nil))
-    checkAnswer(newDf, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
+
+    checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
   }
 }
 
