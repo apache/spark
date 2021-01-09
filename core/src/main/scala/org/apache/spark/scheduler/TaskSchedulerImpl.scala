@@ -670,6 +670,15 @@ private[spark] class TaskSchedulerImpl(
           val barrierPendingLaunchTasks = taskSet.barrierPendingLaunchTasks.values.toArray
           // Check whether the barrier tasks are partially launched.
           if (barrierPendingLaunchTasks.length != taskSet.numTasks) {
+            val curTime = clock.getTimeMillis()
+            if (curTime - taskSet.lastResourceOfferFailTime >
+                TaskSetManager.BARRIER_LOGGING_INTERVAL) {
+              logInfo(s"Fail resource offers for barrier stage ${taskSet.stageId} " +
+                s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
+                s"of ${taskSet.numTasks} tasks got resource offers. Waiting for later round " +
+                s"resource offers.")
+            }
+            taskSet.lastResourceOfferFailTime = curTime
             barrierPendingLaunchTasks.foreach { task =>
               // revert all assigned resources
               availableCpus(task.assignedOfferIndex) += task.assignedCores

@@ -162,6 +162,9 @@ private[spark] class TaskSetManager(
   // revert everything we did during task scheduling.
   private[scheduler] val barrierPendingLaunchTasks = new HashMap[Int, BarrierPendingLaunchTask]()
 
+  // Record the last time of the barrier TaskSetManager that failed to get all tasks launched.
+  private[scheduler] var lastResourceOfferFailTime = clock.getTimeMillis()
+
   // Store tasks waiting to be scheduled by locality preferences
   private[scheduler] val pendingTasks = new PendingTasksByLocality()
 
@@ -1202,6 +1205,9 @@ private[spark] object TaskSetManager {
   // The user will be warned if any stages contain a task that has a serialized size greater than
   // this.
   val TASK_SIZE_TO_WARN_KIB = 1000
+
+  // 1 minute
+  val BARRIER_LOGGING_INTERVAL = 60000
 }
 
 /**
