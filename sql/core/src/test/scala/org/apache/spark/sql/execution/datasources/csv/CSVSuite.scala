@@ -36,12 +36,20 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvData {
+abstract class CSVSuite
+  extends QueryTest
+  with SharedSparkSession
+  with TestCsvData
+  with CommonFileDataSourceSuite {
+
   import testImplicits._
+
+  override protected def dataSourceFormat = "csv"
 
   private val carsFile = "test-data/cars.csv"
   private val carsMalformedFile = "test-data/cars-malformed.csv"
@@ -2418,6 +2426,30 @@ abstract class CSVSuite extends QueryTest with SharedSparkSession with TestCsvDa
       val readback = spark.read
         .csv(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(csvTableName, """\\$1""")}")
       assert(readback.collect sameElements Array(Row("0"), Row("1"), Row("2")))
+    }
+  }
+
+  test("SPARK-33566: configure UnescapedQuoteHandling to parse " +
+    "unescaped quotes and unescaped delimiter data correctly") {
+    withTempPath { path =>
+      val dataPath = path.getCanonicalPath
+      val row1 = Row("""a,""b,c""", "xyz")
+      val row2 = Row("""a,b,c""", """x""yz""")
+      // Generate the test data, use `,` as delimiter and `"` as quotes, but they didn't escape.
+      Seq(
+        """c1,c2""",
+        s""""${row1.getString(0)}","${row1.getString(1)}"""",
+        s""""${row2.getString(0)}","${row2.getString(1)}"""")
+        .toDF().repartition(1).write.text(dataPath)
+      // Without configure UnescapedQuoteHandling to STOP_AT_CLOSING_QUOTE,
+      // the result will be Row(""""a,""b""", """c""""), Row("""a,b,c""", """"x""yz"""")
+      val result = spark.read
+        .option("inferSchema", "true")
+        .option("header", "true")
+        .option("unescapedQuoteHandling", "STOP_AT_CLOSING_QUOTE")
+        .csv(dataPath).collect()
+      val exceptResults = Array(row1, row2)
+      assert(result.sameElements(exceptResults))
     }
   }
 }

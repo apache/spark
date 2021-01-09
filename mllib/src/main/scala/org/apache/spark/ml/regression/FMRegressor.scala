@@ -555,7 +555,7 @@ object FMRegressionModel extends MLReadable[FMRegressionModel] {
  *   \hat{y} = p\left( y_{fm} \right)
  * }}}
  * p is the prediction function, for binary classification task is sigmoid.
- * The loss funcation gradient formula:
+ * The loss function gradient formula:
  * {{{
  *   \frac{\partial}{\partial\theta} l\left( \hat{y},y \right) =
  *   \frac{\partial}{\partial\theta} l\left( p\left( y_{fm} \right),y \right) =

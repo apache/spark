@@ -175,7 +175,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
     val testParams = Seq(
       (50, 5, 1.0, 0.75),
       (50, 10, 1.0, 0.75),
-      (50, 10, 0.95, 0.78)
+      (50, 10, 0.95, 0.75)
     )
 
     for ((numTrees, maxDepth, subsamplingRate, tol) <- testParams) {
@@ -220,6 +220,18 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
     testEstimatorAndModelReadWrite(rf, continuousData, allParamSettings,
       allParamSettings, checkModelData)
+  }
+
+  test("SPARK-33398: Load RandomForestRegressionModel prior to Spark 3.0") {
+    val path = testFile("ml-models/rfr-2.4.7")
+    val model = RandomForestRegressionModel.load(path)
+    assert(model.numFeatures === 692)
+    assert(model.totalNumNodes === 8)
+    assert(model.trees.map(_.numNodes) === Array(5, 3))
+
+    val metadata = spark.read.json(s"$path/metadata")
+    val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
+    assert(sparkVersionStr === "2.4.7")
   }
 }
 

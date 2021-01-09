@@ -203,7 +203,7 @@ getSchema <- function(schema, firstRow = NULL, rdd = NULL) {
       })
     }
 
-    # SPAKR-SQL does not support '.' in column name, so replace it with '_'
+    # SPARK-SQL does not support '.' in column name, so replace it with '_'
     # TODO(davies): remove this once SPARK-2775 is fixed
     names <- lapply(names, function(n) {
       nn <- gsub(".", "_", n, fixed = TRUE)
@@ -374,7 +374,7 @@ setMethod("toDF", signature(x = "RDD"),
 #' Create a SparkDataFrame from a JSON file.
 #'
 #' Loads a JSON file, returning the result as a SparkDataFrame
-#' By default, (\href{http://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
+#' By default, (\href{https://jsonlines.org/}{JSON Lines text format or newline-delimited JSON}
 #' ) is supported. For JSON (one record per file), set a named property \code{multiLine} to
 #' \code{TRUE}.
 #' It goes through the entire dataset once to determine the schema.

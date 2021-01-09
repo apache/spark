@@ -26,7 +26,7 @@ The `INSERT OVERWRITE` statement overwrites the existing data in the table using
 ### Syntax
 
 ```sql
-INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
+INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ] [ ( column_list ) ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 ```
 
@@ -40,10 +40,20 @@ INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
 
 * **partition_spec**
 
-    An optional parameter that specifies a comma separated list of key and value pairs
+    An optional parameter that specifies a comma-separated list of key and value pairs
     for partitions.
 
     **Syntax:** `PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )`
+
+* **column_list**
+
+    An optional parameter that specifies a comma-separated list of columns belonging to the `table_identifier` table. Spark will reorder the columns of the input query to match the table schema according to the specified column list.
+
+    **Note**
+
+    The current behaviour has some limitations:
+    - All specified columns should exist in the table and not be duplicated from each other. It includes all columns except the static partition columns.
+    - The size of the column list should be exactly the size of the data from `VALUES` clause or query.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
@@ -64,18 +74,18 @@ INSERT OVERWRITE [ TABLE ] table_identifier [ partition_spec [ IF NOT EXISTS ] ]
 ```sql
 -- Assuming the students table has already been created and populated.
 SELECT * FROM students;
-+-------------+-------------------------+----------+
-|         name|                  address|student_id|
-+-------------+-------------------------+----------+
-|    Amy Smith|   123 Park Ave, San Jose|    111111|
-|    Bob Brown| 456 Taylor St, Cupertino|    222222|
-|Cathy Johnson|  789 Race Ave, Palo Alto|    333333|
-|Dora Williams|134 Forest Ave, Melo Park|    444444|
-|Fleur Laurent|    345 Copper St, London|    777777|
-|Gordon Martin|     779 Lake Ave, Oxford|    888888|
-|  Helen Davis|469 Mission St, San Diego|    999999|
-|   Jason Wang|    908 Bird St, Saratoga|    121212|
-+-------------+-------------------------+----------+
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|    Amy Smith|    123 Park Ave, San Jose|    111111|
+|    Bob Brown|  456 Taylor St, Cupertino|    222222|
+|Cathy Johnson|   789 Race Ave, Palo Alto|    333333|
+|Dora Williams|134 Forest Ave, Menlo Park|    444444|
+|Fleur Laurent|     345 Copper St, London|    777777|
+|Gordon Martin|      779 Lake Ave, Oxford|    888888|
+|  Helen Davis| 469 Mission St, San Diego|    999999|
+|   Jason Wang|     908 Bird St, Saratoga|    121212|
++-------------+--------------------------+----------+
 
 INSERT OVERWRITE students VALUES
     ('Ashua Hill', '456 Erica Ct, Cupertino', 111111),
@@ -95,25 +105,25 @@ SELECT * FROM students;
 ```sql
 -- Assuming the persons table has already been created and populated.
 SELECT * FROM persons;
-+-------------+-------------------------+---------+
-|         name|                  address|      ssn|
-+-------------+-------------------------+---------+
-|Dora Williams|134 Forest Ave, Melo Park|123456789|
-+-------------+-------------------------+---------+
-|  Eddie Davis|   245 Market St,Milpitas|345678901|
-+-------------+-------------------------+---------+
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|Dora Williams|134 Forest Ave, Menlo Park|123456789|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
 
 INSERT OVERWRITE students PARTITION (student_id = 222222)
     SELECT name, address FROM persons WHERE name = "Dora Williams";
 
 SELECT * FROM students;
-+-------------+-------------------------+----------+
-|         name|                  address|student_id|
-+-------------+-------------------------+----------+
-|   Ashua Hill|  456 Erica Ct, Cupertino|    111111|
-+-------------+-------------------------+----------+
-|Dora Williams|134 Forest Ave, Melo Park|    222222|
-+-------------+-------------------------+----------+
++-------------+--------------------------+----------+
+|         name|                   address|student_id|
++-------------+--------------------------+----------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|    111111|
++-------------+--------------------------+----------+
+|Dora Williams|134 Forest Ave, Menlo Park|    222222|
++-------------+--------------------------+----------+
 ```
 
 #### Insert Using a TABLE Statement
@@ -167,6 +177,34 @@ SELECT * FROM students;
 +-----------+-------------------------+----------+
 | Jason Wang|    908 Bird St, Saratoga|    121212|
 +-----------+-------------------------+----------+
+```
+
+#### Insert with a column list
+
+```sql
+INSERT OVERWRITE students (address, name, student_id) VALUES
+    ('Hangzhou, China', 'Kent Yao', 11215016);
+
+SELECT * FROM students WHERE name = 'Kent Yao';
++---------+----------------------+----------+
+|     name|               address|student_id|
++---------+----------------------+----------+
+|Kent Yao |       Hangzhou, China|  11215016|
++---------+----------------------+----------+
+```
+
+#### Insert with both a partition spec and a column list
+
+```sql
+INSERT OVERWRITE students PARTITION (student_id = 11215016) (address, name) VALUES
+    ('Hangzhou, China', 'Kent Yao Jr.');
+
+SELECT * FROM students WHERE student_id = 11215016;
++------------+----------------------+----------+
+|        name|               address|student_id|
++------------+----------------------+----------+
+|Kent Yao Jr.|       Hangzhou, China|  11215016|
++------------+----------------------+----------+
 ```
 
 ### Related Statements

@@ -46,15 +46,13 @@ private[client] object HiveClientBuilder {
   def buildClient(
       version: String,
       hadoopConf: Configuration,
-      extraConf: Map[String, String] = Map.empty,
-      sharesHadoopClasses: Boolean = true): HiveClient = {
+      extraConf: Map[String, String] = Map.empty): HiveClient = {
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = version,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = new SparkConf(),
       hadoopConf = hadoopConf,
       config = buildConf(extraConf),
-      ivyPath = ivyPath,
-      sharesHadoopClasses = sharesHadoopClasses).createClient()
+      ivyPath = ivyPath).createClient()
   }
 }

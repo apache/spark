@@ -112,7 +112,7 @@ SHOW USER FUNCTIONS;
 +------------------+
 
 -- Invoke the function. Every selected value should be incremented by 10.
-SELECT simple_udf(c1) AS function_return_value FROM t1;
+SELECT simple_udf(c1) AS function_return_value FROM test;
 +---------------------+
 |function_return_value|
 +---------------------+
@@ -150,7 +150,7 @@ CREATE OR REPLACE FUNCTION simple_udf AS 'SimpleUdfR'
     USING JAR '/tmp/SimpleUdfR.jar';
 
 -- Invoke the function. Every selected value should be incremented by 20.
-SELECT simple_udf(c1) AS function_return_value FROM t1;
+SELECT simple_udf(c1) AS function_return_value FROM test;
 +---------------------+
 |function_return_value|
 +---------------------+

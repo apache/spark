@@ -18,9 +18,10 @@
 package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
-abstract class Rule[TreeType <: TreeNode[_]] extends Logging {
+abstract class Rule[TreeType <: TreeNode[_]] extends SQLConfHelper with Logging {
 
   /** Name for this rule, automatically inferred based on class name. */
   val ruleName: String = {

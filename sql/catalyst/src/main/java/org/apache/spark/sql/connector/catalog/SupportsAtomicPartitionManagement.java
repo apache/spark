@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
 
@@ -33,6 +34,9 @@ import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
  *     add an array of partitions and any data they contain to the table
  * ${@link #dropPartitions}:
  *     remove an array of partitions and any data they contain from the table
+ * ${@link #purgePartitions}:
+ *     remove an array of partitions and any data they contain from the table by skipping
+ *     a trash even if it is supported
  *
  * @since 3.1.0
  */
@@ -82,4 +86,23 @@ public interface SupportsAtomicPartitionManagement extends SupportsPartitionMana
    * @return true if partitions were deleted, false if any partition not exists
    */
   boolean dropPartitions(InternalRow[] idents);
+
+  /**
+   * Drop an array of partitions atomically from table, and completely remove partitions data
+   * by skipping a trash even if it is supported.
+   * <p>
+   * If any partition doesn't exists,
+   * the operation of purgePartitions need to be safely rolled back.
+   *
+   * @param idents an array of partition identifiers
+   * @return true if partitions were deleted, false if any partition not exists
+   * @throws NoSuchPartitionException If any partition identifier to alter doesn't exist
+   * @throws UnsupportedOperationException If partition purging is not supported
+   *
+   * @since 3.2.0
+   */
+  default boolean purgePartitions(InternalRow[] idents)
+    throws NoSuchPartitionException, UnsupportedOperationException {
+    throw new UnsupportedOperationException("Partition purge is not supported");
+  }
 }

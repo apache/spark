@@ -19,12 +19,9 @@ package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
 
-import org.apache.kafka.clients.consumer.ConsumerConfig
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Network.NETWORK_TIMEOUT
-import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
@@ -67,6 +64,8 @@ private[kafka010] class KafkaMicroBatchStream(
 
   private var endPartitionOffsets: KafkaSourceOffset = _
 
+  private var latestPartitionOffsets: PartitionOffsetMap = _
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -80,6 +79,10 @@ private[kafka010] class KafkaMicroBatchStream(
     maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
   }
 
+  override def reportLatestOffset(): Offset = {
+    KafkaSourceOffset(latestPartitionOffsets)
+  }
+
   override def latestOffset(): Offset = {
     throw new UnsupportedOperationException(
       "latestOffset(Offset, ReadLimit) should be called instead of this method")
@@ -87,7 +90,7 @@ private[kafka010] class KafkaMicroBatchStream(
 
   override def latestOffset(start: Offset, readLimit: ReadLimit): Offset = {
     val startPartitionOffsets = start.asInstanceOf[KafkaSourceOffset].partitionToOffsets
-    val latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
+    latestPartitionOffsets = kafkaOffsetReader.fetchLatestOffsets(Some(startPartitionOffsets))
     endPartitionOffsets = KafkaSourceOffset(readLimit match {
       case rows: ReadMaxRows =>
         rateLimit(rows.maxRows(), startPartitionOffsets, latestPartitionOffsets)
@@ -167,7 +170,7 @@ private[kafka010] class KafkaMicroBatchStream(
       limit: Long,
       from: PartitionOffsetMap,
       until: PartitionOffsetMap): PartitionOffsetMap = {
-    val fromNew = kafkaOffsetReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
+    lazy val fromNew = kafkaOffsetReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
     val sizes = until.flatMap {
       case (tp, end) =>
         // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it

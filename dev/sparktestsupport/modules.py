@@ -31,9 +31,10 @@ class Module(object):
     files have changed.
     """
 
-    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(), environ={},
-                 sbt_test_goals=(), python_test_goals=(), excluded_python_implementations=(),
-                 test_tags=(), should_run_r_tests=False, should_run_build_tests=False):
+    def __init__(self, name, dependencies, source_file_regexes, build_profile_flags=(),
+                 environ=None, sbt_test_goals=(), python_test_goals=(),
+                 excluded_python_implementations=(), test_tags=(), should_run_r_tests=False,
+                 should_run_build_tests=False):
         """
         Define a new module.
 
@@ -62,7 +63,7 @@ class Module(object):
         self.source_file_prefixes = source_file_regexes
         self.sbt_test_goals = sbt_test_goals
         self.build_profile_flags = build_profile_flags
-        self.environ = environ
+        self.environ = environ or {}
         self.python_test_goals = python_test_goals
         self.excluded_python_implementations = excluded_python_implementations
         self.test_tags = test_tags
@@ -386,6 +387,7 @@ pyspark_core = Module(
         "pyspark.tests.test_conf",
         "pyspark.tests.test_context",
         "pyspark.tests.test_daemon",
+        "pyspark.tests.test_install_spark",
         "pyspark.tests.test_join",
         "pyspark.tests.test_profiler",
         "pyspark.tests.test_rdd",
@@ -563,6 +565,7 @@ pyspark_ml = Module(
         "pyspark.ml.tests.test_stat",
         "pyspark.ml.tests.test_training_summary",
         "pyspark.ml.tests.test_tuning",
+        "pyspark.ml.tests.test_util",
         "pyspark.ml.tests.test_wrapper",
     ],
     excluded_python_implementations=[

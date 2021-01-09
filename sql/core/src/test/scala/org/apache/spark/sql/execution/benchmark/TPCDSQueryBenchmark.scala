@@ -24,21 +24,28 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure TPCDS query performance.
  * To run this:
  * {{{
  *   1. without sbt:
- *        bin/spark-submit --class <this class> <spark sql test jar> --data-location <location>
+ *        bin/spark-submit --jars <spark core test jar>,<spark catalyst test jar>
+ *          --class <this class> <spark sql test jar> --data-location <location>
  *   2. build/sbt "sql/test:runMain <this class> --data-location <TPCDS data location>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt
  *        "sql/test:runMain <this class> --data-location <location>"
  *      Results will be written to "benchmarks/TPCDSQueryBenchmark-results.txt".
  * }}}
  */
-object TPCDSQueryBenchmark extends SqlBasedBenchmark {
+object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
+
+  private lazy val warehousePath =
+    Utils.createTempDir(namePrefix = "spark-warehouse").getAbsolutePath
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
@@ -50,6 +57,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
       .set("spark.sql.crossJoin.enabled", "true")
+      .set("spark.sql.warehouse.dir", warehousePath)
 
     SparkSession.builder.config(conf).getOrCreate()
   }
@@ -60,9 +68,14 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
     "web_returns", "web_site", "reason", "call_center", "warehouse", "ship_mode", "income_band",
     "time_dim", "web_page")
 
-  def setupTables(dataLocation: String): Map[String, Long] = {
+  def setupTables(dataLocation: String, createTempView: Boolean): Map[String, Long] = {
     tables.map { tableName =>
-      spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
+      val df = spark.read.parquet(s"$dataLocation/$tableName")
+      if (createTempView) {
+        df.createOrReplaceTempView(tableName)
+      } else {
+        df.write.saveAsTable(tableName)
+      }
       tableName -> spark.table(tableName).count()
     }.toMap
   }
@@ -97,11 +110,16 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def filterQueries(
+  private def filterQueries(
       origQueries: Seq[String],
-      args: TPCDSQueryBenchmarkArguments): Seq[String] = {
-    if (args.queryFilter.nonEmpty) {
-      origQueries.filter(args.queryFilter.contains)
+      queryFilter: Set[String],
+      nameSuffix: String = ""): Seq[String] = {
+    if (queryFilter.nonEmpty) {
+      if (nameSuffix.nonEmpty) {
+        origQueries.filter { name => queryFilter.contains(s"$name$nameSuffix") }
+      } else {
+        origQueries.filter(queryFilter.contains)
+      }
     } else {
       origQueries
     }
@@ -124,6 +142,7 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
       "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
     // This list only includes TPC-DS v2.7 queries that are different from v1.4 ones
+    val nameSuffixForQueriesV2_7 = "-v2.7"
     val tpcdsQueriesV2_7 = Seq(
       "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
       "q20", "q22", "q22a", "q24", "q27a", "q34", "q35", "q35a", "q36a", "q47", "q49",
@@ -131,17 +150,36 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
       "q80a", "q86a", "q98")
 
     // If `--query-filter` defined, filters the queries that this option selects
-    val queriesV1_4ToRun = filterQueries(tpcdsQueries, benchmarkArgs)
-    val queriesV2_7ToRun = filterQueries(tpcdsQueriesV2_7, benchmarkArgs)
+    val queriesV1_4ToRun = filterQueries(tpcdsQueries, benchmarkArgs.queryFilter)
+    val queriesV2_7ToRun = filterQueries(tpcdsQueriesV2_7, benchmarkArgs.queryFilter,
+      nameSuffix = nameSuffixForQueriesV2_7)
 
     if ((queriesV1_4ToRun ++ queriesV2_7ToRun).isEmpty) {
       throw new RuntimeException(
         s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
     }
 
-    val tableSizes = setupTables(benchmarkArgs.dataLocation)
+    val tableSizes = setupTables(benchmarkArgs.dataLocation,
+      createTempView = !benchmarkArgs.cboEnabled)
+    if (benchmarkArgs.cboEnabled) {
+      spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.PLAN_STATS_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.JOIN_REORDER_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.HISTOGRAM_ENABLED.key}=true")
+
+      // Analyze all the tables before running TPCDS queries
+      val startTime = System.nanoTime()
+      tables.foreach { tableName =>
+        spark.sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR ALL COLUMNS")
+      }
+      logInfo("The elapsed time to analyze all the tables is " +
+        s"${(System.nanoTime() - startTime) / NANOS_PER_SECOND.toDouble} seconds")
+    } else {
+      spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=false")
+    }
+
     runTpcdsQueries(queryLocation = "tpcds", queries = queriesV1_4ToRun, tableSizes)
     runTpcdsQueries(queryLocation = "tpcds-v2.7.0", queries = queriesV2_7ToRun, tableSizes,
-      nameSuffix = "-v2.7")
+      nameSuffix = nameSuffixForQueriesV2_7)
   }
 }

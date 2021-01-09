@@ -64,6 +64,12 @@ private case object OracleDialect extends JdbcDialect {
         => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
       case BINARY_FLOAT => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
+      // scalastyle:off line.size.limit
+      // According to the documentation for Oracle Database 19c:
+      // "Values of the ROWID pseudocolumn are strings representing the address of each row."
+      // https://docs.oracle.com/en/database/oracle/oracle-database/19/sqlrf/Data-Types.html#GUID-AEF1FE4C-2DE5-4BE7-BB53-83AD8F1E34EF
+      // scalastyle:on line.size.limit
+      case Types.ROWID => Some(StringType)
       case _ => None
     }
   }
@@ -111,5 +117,27 @@ private case object OracleDialect extends JdbcDialect {
       case Some(true) => s"TRUNCATE TABLE $table CASCADE"
       case _ => s"TRUNCATE TABLE $table"
     }
+  }
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getAddColumnQuery(
+      tableName: String,
+      columnName: String,
+      dataType: String): String =
+    s"ALTER TABLE $tableName ADD ${quoteIdentifier(columnName)} $dataType"
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getUpdateColumnTypeQuery(
+    tableName: String,
+    columnName: String,
+    newDataType: String): String =
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $newDataType"
+
+  override def getUpdateColumnNullabilityQuery(
+    tableName: String,
+    columnName: String,
+    isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
   }
 }

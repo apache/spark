@@ -18,11 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.io._
-import java.nio.charset.StandardCharsets
 
-import org.apache.commons.io.IOUtils
-import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkContext
@@ -35,7 +31,6 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxRows, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.types._
 
@@ -120,7 +115,12 @@ private[kafka010] class KafkaSource(
     maxOffsetsPerTrigger.map(ReadLimit.maxRows).getOrElse(super.getDefaultReadLimit)
   }
 
+  // The offsets for each topic-partition currently read to process. Note this maybe not necessarily
+  // to be latest offsets because we possibly apply a read limit.
   private var currentPartitionOffsets: Option[Map[TopicPartition, Long]] = None
+
+  // The latest offsets for each topic-partition.
+  private var latestPartitionOffsets: Option[Map[TopicPartition, Long]] = None
 
   private val converter = new KafkaRecordToRowConverter()
 
@@ -130,6 +130,10 @@ private[kafka010] class KafkaSource(
   override def getOffset: Option[Offset] = {
     throw new UnsupportedOperationException(
       "latestOffset(Offset, ReadLimit) should be called instead of this method")
+  }
+
+  override def reportLatestOffset(): streaming.Offset = {
+    latestPartitionOffsets.map(KafkaSourceOffset(_)).getOrElse(null)
   }
 
   override def latestOffset(startOffset: streaming.Offset, limit: ReadLimit): streaming.Offset = {
@@ -150,6 +154,7 @@ private[kafka010] class KafkaSource(
     }
 
     currentPartitionOffsets = Some(offsets)
+    latestPartitionOffsets = Some(latest)
     logDebug(s"GetOffset: ${offsets.toSeq.map(_.toString).sorted}")
     KafkaSourceOffset(offsets)
   }
@@ -159,7 +164,7 @@ private[kafka010] class KafkaSource(
       limit: Long,
       from: Map[TopicPartition, Long],
       until: Map[TopicPartition, Long]): Map[TopicPartition, Long] = {
-    val fromNew = kafkaReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
+    lazy val fromNew = kafkaReader.fetchEarliestOffsets(until.keySet.diff(from.keySet).toSeq)
     val sizes = until.flatMap {
       case (tp, end) =>
         // If begin isn't defined, something's wrong, but let alert logic in getBatch handle it

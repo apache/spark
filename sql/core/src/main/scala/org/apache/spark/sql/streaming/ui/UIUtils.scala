@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming.ui
 
 import java.text.SimpleDateFormat
-import java.util.Locale
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
 
@@ -47,19 +46,19 @@ private[ui] object UIUtils {
     }
   }
 
-  def getQueryName(query: StreamingQueryUIData): String = {
-    if (query.name == null || query.name.isEmpty) {
+  def getQueryName(uiData: StreamingQueryUIData): String = {
+    if (uiData.summary.name == null || uiData.summary.name.isEmpty) {
       "<no name>"
     } else {
-      query.name
+      uiData.summary.name
     }
   }
 
-  def getQueryStatus(query: StreamingQueryUIData): String = {
-    if (query.isActive) {
+  def getQueryStatus(uiData: StreamingQueryUIData): String = {
+    if (uiData.summary.isActive) {
       "RUNNING"
     } else {
-      query.exception.map(_ => "FAILED").getOrElse("FINISHED")
+      uiData.summary.exception.map(_ => "FAILED").getOrElse("FINISHED")
     }
   }
 

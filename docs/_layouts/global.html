@@ -30,6 +30,8 @@
         <script src="js/vendor/modernizr-2.6.1-respond-1.1.0.min.js"></script>
 
         <link rel="stylesheet" href="css/pygments-default.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.css" />
+        <link rel="stylesheet" href="css/docsearch.css">
 
         {% production %}
         <!-- Google analytics script -->
@@ -82,6 +84,7 @@
                                 <a class="dropdown-item" href="ml-guide.html">MLlib (Machine Learning)</a>
                                 <a class="dropdown-item" href="graphx-programming-guide.html">GraphX (Graph Processing)</a>
                                 <a class="dropdown-item" href="sparkr.html">SparkR (R on Spark)</a>
+                                <a class="dropdown-item" href="api/python/getting_started/index.html">PySpark (Python on Spark)</a>
                             </div>
                         </li>
 
@@ -110,7 +113,7 @@
                         </li>
 
                         <li class="nav-item dropdown">
-                            <a href="api.html" class="nav-link dropdown-toggle" id="navbarMore" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">More</a>
+                            <a href="#" class="nav-link dropdown-toggle" id="navbarMore" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">More</a>
                             <div class="dropdown-menu" aria-labelledby="navbarMore">
                                 <a class="dropdown-item" href="configuration.html">Configuration</a>
                                 <a class="dropdown-item" href="monitoring.html">Monitoring</a>
@@ -124,6 +127,10 @@
                                 <a class="dropdown-item" href="https://spark.apache.org/contributing.html">Contributing to Spark</a>
                                 <a class="dropdown-item" href="https://spark.apache.org/third-party-projects.html">Third Party Projects</a>
                             </div>
+                        </li>
+
+                        <li class="nav-item">
+                            <input type="text" id="docsearch-input" placeholder="Search the docs…">
                         </li>
                     </ul>
                     <!--<span class="navbar-text navbar-right"><span class="version-text">v{{site.SPARK_VERSION_SHORT}}</span></span>-->
@@ -168,10 +175,21 @@
              <!-- /container -->
         </div>
 
-        <script src="js/vendor/jquery-3.4.1.min.js"></script>
+        <script src="js/vendor/jquery-3.5.1.min.js"></script>
         <script src="js/vendor/bootstrap.bundle.min.js"></script>
         <script src="js/vendor/anchor.min.js"></script>
         <script src="js/main.js"></script>
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/docsearch.js@2/dist/cdn/docsearch.min.js"></script>
+        <script type="text/javascript">
+            // DocSearch is entirely free and automated. DocSearch is built in two parts:
+            // 1. a crawler which we run on our own infrastructure every 24 hours. It follows every link
+            //    in your website and extract content from every page it traverses. It then pushes this
+            //    content to an Algolia index.
+            // 2. a JavaScript snippet to be inserted in your website that will bind this Algolia index
+            //    to your search input and display its results in a dropdown UI. If you want to find more
+            //    details on how works DocSearch, check the docs of DocSearch.
+            {{site.DOCSEARCH_SCRIPT}}
+        </script>
 
         <!-- MathJax Section -->
         <script type="text/x-mathjax-config">

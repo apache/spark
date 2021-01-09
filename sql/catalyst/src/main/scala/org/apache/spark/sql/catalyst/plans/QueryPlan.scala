@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode, TreeNodeTag}
 import org.apache.spark.sql.internal.SQLConf
@@ -35,14 +36,9 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * The tree traverse APIs like `transform`, `foreach`, `collect`, etc. that are
  * inherited from `TreeNode`, do not traverse into query plans inside subqueries.
  */
-abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
+  extends TreeNode[PlanType] with SQLConfHelper {
   self: PlanType =>
-
-  /**
-   * The active config object within the current scope.
-   * See [[SQLConf.get]] for more information.
-   */
-  def conf: SQLConf = SQLConf.get
 
   def output: Seq[Attribute]
 
@@ -180,10 +176,14 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    *             rewrite attribute references in the parent nodes.
    * @param skipCond a boolean condition to indicate if we can skip transforming a plan node to save
    *                 time.
+   * @param canGetOutput a boolean condition to indicate if we can get the output of a plan node
+   *                     to prune the attributes mapping to be propagated. The default value is true
+   *                     as only unresolved logical plan can't get output.
    */
   def transformUpWithNewOutput(
       rule: PartialFunction[PlanType, (PlanType, Seq[(Attribute, Attribute)])],
-      skipCond: PlanType => Boolean = _ => false): PlanType = {
+      skipCond: PlanType => Boolean = _ => false,
+      canGetOutput: PlanType => Boolean = _ => true): PlanType = {
     def rewrite(plan: PlanType): (PlanType, Seq[(Attribute, Attribute)]) = {
       if (skipCond(plan)) {
         plan -> Nil
@@ -201,11 +201,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
           case (oldAttr, _) => plan.references.contains(oldAttr)
         }
 
-        val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
-        }
-        newPlan = planAfterRule
-
         if (attrMappingForCurrentPlan.nonEmpty) {
           assert(!attrMappingForCurrentPlan.groupBy(_._1.exprId)
             .exists(_._2.map(_._2.exprId).distinct.length > 1),
@@ -222,10 +217,36 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
           }
         }
 
-        attrMapping ++= newAttrMapping.filter {
+        val (planAfterRule, newAttrMapping) = CurrentOrigin.withOrigin(origin) {
+          rule.applyOrElse(newPlan, (plan: PlanType) => plan -> Nil)
+        }
+
+        val newValidAttrMapping = newAttrMapping.filter {
           case (a1, a2) => a1.exprId != a2.exprId
         }
-        newPlan -> attrMapping.toSeq
+
+        // Updates the `attrMapping` entries that are obsoleted by generated entries in `rule`.
+        // For example, `attrMapping` has a mapping entry 'id#1 -> id#2' and `rule`
+        // generates a new entry 'id#2 -> id#3'. In this case, we need to update
+        // the corresponding old entry from 'id#1 -> id#2' to '#id#1 -> #id#3'.
+        val updatedAttrMap = AttributeMap(newValidAttrMapping)
+        val transferAttrMapping = attrMapping.map {
+          case (a1, a2) => (a1, updatedAttrMap.getOrElse(a2, a2))
+        }
+        val newOtherAttrMapping = {
+          val existingAttrMappingSet = transferAttrMapping.map(_._2).toSet
+          newValidAttrMapping.filterNot { case (_, a) => existingAttrMappingSet.contains(a) }
+        }
+        val resultAttrMapping = if (canGetOutput(plan)) {
+          // We propagate the attributes mapping to the parent plan node to update attributes, so
+          // the `newAttr` must be part of this plan's output.
+          (transferAttrMapping ++ newOtherAttrMapping).filter {
+            case (_, newAttr) => planAfterRule.outputSet.contains(newAttr)
+          }
+        } else {
+          transferAttrMapping ++ newOtherAttrMapping
+        }
+        planAfterRule -> resultAttrMapping.toSeq
       }
     }
     rewrite(this)._1
@@ -376,7 +397,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
       case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
         // Top level `AttributeReference` may also be used for output like `Alias`, we should
-        // normalize the epxrId too.
+        // normalize the exprId too.
         id += 1
         ar.withExprId(ExprId(id)).canonicalized
 

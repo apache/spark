@@ -45,7 +45,6 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -229,7 +228,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
-      checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+      checkAnswer(sql("SHOW functions `a function doesn't exist`"), Nil)
       checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
 
       // this probably will failed if we add more function with `sha` prefixing.
@@ -713,8 +712,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
-          "the partition columns of the target table"))
+        assert(e.contains("Partition column types may not be specified in Create Table As Select"))
       }
     }
   }
@@ -770,7 +768,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql("SELECT * FROM nested").collect().toSeq)
 
         intercept[AnalysisException] {
-          sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+          sql("CREATE TABLE test_ctas_1234 AS SELECT * from nonexistent").collect()
         }
       }
     }
@@ -1741,12 +1739,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |SELECT 'blarr'
          """.stripMargin)
 
-      // project list is the same order of paritioning columns in table definition
+      // project list is the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
         Row("a", "b", "c", "d", "e", "blarr") :: Nil)
 
-      // project list does not have the same order of paritioning columns in table definition
+      // project list does not have the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
         Row("b", "c", "d", "a", "e", "blarr") :: Nil)
@@ -2028,6 +2026,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql(
             """
               |CREATE TABLE part_table (c STRING)
+              |STORED AS textfile
               |PARTITIONED BY (d STRING)
             """.stripMargin)
           sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +
@@ -2206,38 +2205,62 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
+  test("SPARK-21912 Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      Seq("ORC", "PARQUET").foreach { source =>
-        withTable("t21912") {
-          val m = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
-          }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+      val source = "PARQUET"
+      withTable("t21912") {
+        val m = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
+        }.getMessage
+        assert(m.contains(s"contains invalid character(s)"))
 
-          val m1 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
-          }.getMessage
-          assert(m1.contains(s"contains invalid character(s)"))
+        val m1 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912 STORED AS $source AS SELECT 1 `col$name`")
+        }.getMessage
+        assert(m1.contains(s"contains invalid character(s)"))
 
-          val m2 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
-          }.getMessage
-          assert(m2.contains(s"contains invalid character(s)"))
+        val m2 = intercept[AnalysisException] {
+          sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
+        }.getMessage
+        assert(m2.contains(s"contains invalid character(s)"))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
-            val m3 = intercept[AnalysisException] {
-              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
-            }.getMessage
-            assert(m3.contains(s"contains invalid character(s)"))
-          }
-
-          sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m4 = intercept[AnalysisException] {
-            sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+        withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+          val m3 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
           }.getMessage
-          assert(m4.contains(s"contains invalid character(s)"))
+          assert(m3.contains(s"contains invalid character(s)"))
         }
+
+        sql(s"CREATE TABLE t21912(`col` INT) USING $source")
+        val m4 = intercept[AnalysisException] {
+          sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+        }.getMessage
+        assert(m4.contains(s"contains invalid character(s)"))
+      }
+    }
+  }
+
+  test("SPARK-32889: ORC table column name supports special characters") {
+    // " " "," is not allowed.
+    Seq("$", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+      val source = "ORC"
+      Seq(s"CREATE TABLE t32889(`$name` INT) USING $source",
+          s"CREATE TABLE t32889 STORED AS $source AS SELECT 1 `$name`",
+          s"CREATE TABLE t32889 USING $source AS SELECT 1 `$name`",
+          s"CREATE TABLE t32889(`$name` INT) USING hive OPTIONS (fileFormat '$source')")
+      .foreach { command =>
+        withTable("t32889") {
+          sql(command)
+          assertResult(name)(
+            sessionState.catalog.getTableMetadata(TableIdentifier("t32889")).schema.fields(0).name)
+        }
+      }
+
+      withTable("t32889") {
+        sql(s"CREATE TABLE t32889(`col` INT) USING $source")
+        sql(s"ALTER TABLE t32889 ADD COLUMNS(`$name` INT)")
+        assertResult(name)(
+          sessionState.catalog.getTableMetadata(TableIdentifier("t32889")).schema.fields(1).name)
       }
     }
   }

@@ -400,10 +400,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("thresholds prediction") {
-    val blr = new LogisticRegression().setFamily("binomial")
+    val blr = new LogisticRegression().setFamily("binomial").setThreshold(1.0)
     val binaryModel = blr.fit(smallBinaryDataset)
 
-    binaryModel.setThreshold(1.0)
     testTransformer[(Double, Vector)](smallBinaryDataset.toDF(), binaryModel, "prediction") {
       row => assert(row.getDouble(0) === 0.0)
     }
@@ -594,8 +593,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         .setMaxIter(5)
         .setFamily("multinomial")
       val model = mlor.fit(dataset)
-      Seq(4, 16, 64).foreach { blockSize =>
-        val model2 = mlor.setBlockSize(blockSize).fit(dataset)
+      Seq(0, 0.01, 0.1, 1, 2, 4).foreach { s =>
+        val model2 = mlor.setMaxBlockSizeInMB(s).fit(dataset)
         assert(model.interceptVector ~== model2.interceptVector relTol 1e-6)
         assert(model.coefficientMatrix ~== model2.coefficientMatrix relTol 1e-6)
       }
@@ -607,8 +606,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
         .setMaxIter(5)
         .setFamily("binomial")
       val model = blor.fit(dataset)
-      Seq(4, 16, 64).foreach { blockSize =>
-        val model2 = blor.setBlockSize(blockSize).fit(dataset)
+      Seq(0, 0.01, 0.1, 1, 2, 4).foreach { s =>
+        val model2 = blor.setMaxBlockSizeInMB(s).fit(dataset)
         assert(model.intercept ~== model2.intercept relTol 1e-6)
         assert(model.coefficients ~== model2.coefficients relTol 1e-6)
       }
@@ -1549,9 +1548,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val interceptsExpected1 = Vectors.dense(
       1.0000152482448372, 3.591773288423673, 5.079685953744937)
 
-    checkCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected1)
+    checkBoundedMLORCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected1)
     assert(model1.interceptVector ~== interceptsExpected1 relTol 0.01)
-    checkCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected1)
+    checkBoundedMLORCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected1)
     assert(model2.interceptVector ~== interceptsExpected1 relTol 0.01)
 
     // Bound constrained optimization with bound on both side.
@@ -1586,9 +1585,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       isTransposed = true)
     val interceptsExpected3 = Vectors.dense(1.0, 2.0, 2.0)
 
-    checkCoefficientsEquivalent(model3.coefficientMatrix, coefficientsExpected3)
+    checkBoundedMLORCoefficientsEquivalent(model3.coefficientMatrix, coefficientsExpected3)
     assert(model3.interceptVector ~== interceptsExpected3 relTol 0.01)
-    checkCoefficientsEquivalent(model4.coefficientMatrix, coefficientsExpected3)
+    checkBoundedMLORCoefficientsEquivalent(model4.coefficientMatrix, coefficientsExpected3)
     assert(model4.interceptVector ~== interceptsExpected3 relTol 0.01)
 
     // Bound constrained optimization with infinite bound on both side.
@@ -1622,9 +1621,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val interceptsExpected5 = Vectors.dense(
       -2.2231282183460723, 0.3669496747012527, 1.856178543644802)
 
-    checkCoefficientsEquivalent(model5.coefficientMatrix, coefficientsExpected5)
+    checkBoundedMLORCoefficientsEquivalent(model5.coefficientMatrix, coefficientsExpected5)
     assert(model5.interceptVector ~== interceptsExpected5 relTol 0.01)
-    checkCoefficientsEquivalent(model6.coefficientMatrix, coefficientsExpected5)
+    checkBoundedMLORCoefficientsEquivalent(model6.coefficientMatrix, coefficientsExpected5)
     assert(model6.interceptVector ~== interceptsExpected5 relTol 0.01)
   }
 
@@ -1720,9 +1719,9 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       1.7524631428961193, 1.2292565990448736, 1.3433784431904323, 1.5846063017678864),
       isTransposed = true)
 
-    checkCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected)
+    checkBoundedMLORCoefficientsEquivalent(model1.coefficientMatrix, coefficientsExpected)
     assert(model1.interceptVector.toArray === Array.fill(3)(0.0))
-    checkCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected)
+    checkBoundedMLORCoefficientsEquivalent(model2.coefficientMatrix, coefficientsExpected)
     assert(model2.interceptVector.toArray === Array.fill(3)(0.0))
   }
 
@@ -2954,16 +2953,17 @@ object LogisticRegressionSuite {
   }
 
   /**
+   * Note: This method is only used in Bounded MLOR (without regularization) test
    * When no regularization is applied, the multinomial coefficients lack identifiability
    * because we do not use a pivot class. We can add any constant value to the coefficients
    * and get the same likelihood. If fitting under bound constrained optimization, we don't
    * choose the mean centered coefficients like what we do for unbound problems, since they
    * may out of the bounds. We use this function to check whether two coefficients are equivalent.
    */
-  def checkCoefficientsEquivalent(coefficients1: Matrix, coefficients2: Matrix): Unit = {
+  def checkBoundedMLORCoefficientsEquivalent(coefficients1: Matrix, coefficients2: Matrix): Unit = {
     coefficients1.colIter.zip(coefficients2.colIter).foreach { case (col1: Vector, col2: Vector) =>
       (col1.asBreeze - col2.asBreeze).toArray.toSeq.sliding(2).foreach {
-        case Seq(v1, v2) => assert(v1 ~= v2 absTol 1E-3)
+        case Seq(v1, v2) => assert(v1 ~= v2 absTol 1E-2)
       }
     }
   }

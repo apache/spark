@@ -18,17 +18,21 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession with SQLTestUtils {
+abstract class RemoveRedundantProjectsSuiteBase
+  extends QueryTest
+    with SharedSparkSession
+    with AdaptiveSparkPlanHelper {
 
   private def assertProjectExecCount(df: DataFrame, expected: Int): Unit = {
     withClue(df.queryExecution) {
       val plan = df.queryExecution.executedPlan
-      val actual = plan.collectWithSubqueries { case p: ProjectExec => p }.size
+      val actual = collectWithSubqueries(plan) { case p: ProjectExec => p }.size
       assert(actual == expected)
     }
   }
@@ -115,9 +119,41 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession wit
     assertProjectExec(query, 1, 2)
   }
 
-  test("generate") {
-    val query = "select a, key, explode(d) from testView where a > 10"
-    assertProjectExec(query, 0, 1)
+  test("generate should require column ordering") {
+    withTempView("testData") {
+      spark.range(0, 10, 1)
+        .selectExpr("id as key", "id * 2 as a", "id * 3 as b")
+        .createOrReplaceTempView("testData")
+
+      val data = sql("select key, a, b, count(*) from testData group by key, a, b limit 2")
+      val df = data.selectExpr("a", "b", "key", "explode(array(key, a, b)) as d").filter("d > 0")
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+      val numProjects = collectWithSubqueries(plan) { case p: ProjectExec => p }.length
+
+      // Create a new plan that reverse the GenerateExec output and add a new ProjectExec between
+      // GenerateExec and its child. This is to test if the ProjectExec is removed, the output of
+      // the query will be incorrect.
+      val newPlan = stripAQEPlan(plan) transform {
+        case g @ GenerateExec(_, requiredChildOutput, _, _, child) =>
+          g.copy(requiredChildOutput = requiredChildOutput.reverse,
+            child = ProjectExec(requiredChildOutput.reverse, child))
+      }
+
+      // Re-apply remove redundant project rule.
+      val rule = RemoveRedundantProjects
+      val newExecutedPlan = rule.apply(newPlan)
+      // The manually added ProjectExec node shouldn't be removed.
+      assert(collectWithSubqueries(newExecutedPlan) {
+        case p: ProjectExec => p
+      }.size == numProjects + 1)
+
+      // Check the original plan's output and the new plan's output are the same.
+      val expectedRows = plan.executeCollect()
+      val actualRows = newExecutedPlan.executeCollect()
+      assert(expectedRows.length == actualRows.length)
+      expectedRows.zip(actualRows).foreach { case (expected, actual) => assert(expected == actual) }
+    }
   }
 
   test("subquery") {
@@ -130,4 +166,57 @@ class RemoveRedundantProjectsSuite extends QueryTest with SharedSparkSession wit
       assertProjectExec(query, 0, 1)
     }
   }
+
+  test("SPARK-33697: UnionExec should require column ordering") {
+    withTable("t1", "t2") {
+      spark.range(-10, 20)
+        .selectExpr(
+          "id",
+          "date_add(date '1950-01-01', cast(id as int)) as datecol",
+          "cast(id as string) strcol")
+        .write.mode("overwrite").format("parquet").saveAsTable("t1")
+      spark.range(-10, 20)
+        .selectExpr(
+          "cast(id as string) strcol",
+          "id",
+          "date_add(date '1950-01-01', cast(id as int)) as datecol")
+        .write.mode("overwrite").format("parquet").saveAsTable("t2")
+
+      val queryTemplate =
+        """
+          |SELECT DISTINCT datecol, strcol FROM
+          |(
+          |(SELECT datecol, id, strcol from t1)
+          | %s
+          |(SELECT datecol, id, strcol from t2)
+          |)
+          |""".stripMargin
+
+      Seq(("UNION", 2, 2), ("UNION ALL", 1, 2)).foreach { case (setOperation, enabled, disabled) =>
+        val query = queryTemplate.format(setOperation)
+        assertProjectExec(query, enabled = enabled, disabled = disabled)
+      }
+    }
+  }
+
+  test("SPARK-33697: remove redundant projects under expand") {
+    val query =
+      """
+        |SELECT t1.key, t2.key, sum(t1.a) AS s1, sum(t2.b) AS s2 FROM
+        |(SELECT a, key FROM testView) t1
+        |JOIN
+        |(SELECT b, key FROM testView) t2
+        |ON t1.key = t2.key
+        |GROUP BY t1.key, t2.key GROUPING SETS(t1.key, t2.key)
+        |ORDER BY t1.key, t2.key, s1, s2
+        |LIMIT 10
+        |""".stripMargin
+    assertProjectExec(query, 0, 3)
+  }
 }
+
+class RemoveRedundantProjectsSuite extends RemoveRedundantProjectsSuiteBase
+  with DisableAdaptiveExecutionSuite
+
+class RemoveRedundantProjectsSuiteAE extends RemoveRedundantProjectsSuiteBase
+  with EnableAdaptiveExecutionSuite

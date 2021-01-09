@@ -89,10 +89,15 @@ case class OffsetSeqMetadata(
 
 object OffsetSeqMetadata extends Logging {
   private implicit val format = Serialization.formats(NoTypeHints)
+  /**
+   * These configs are related to streaming query execution and should not be changed across
+   * batches of a streaming query. The values of these configs are persisted into the offset
+   * log in the checkpoint position.
+   */
   private val relevantSQLConfs = Seq(
     SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS, STREAMING_MULTIPLE_WATERMARK_POLICY,
     FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION, STREAMING_AGGREGATION_STATE_FORMAT_VERSION,
-    STREAMING_JOIN_STATE_FORMAT_VERSION)
+    STREAMING_JOIN_STATE_FORMAT_VERSION, STATE_STORE_COMPRESSION_CODEC)
 
   /**
    * Default values of relevant configurations that are used for backward compatibility.
@@ -111,7 +116,8 @@ object OffsetSeqMetadata extends Logging {
     STREAMING_AGGREGATION_STATE_FORMAT_VERSION.key ->
       StreamingAggregationStateManager.legacyVersion.toString,
     STREAMING_JOIN_STATE_FORMAT_VERSION.key ->
-      SymmetricHashJoinStateManager.legacyVersion.toString
+      SymmetricHashJoinStateManager.legacyVersion.toString,
+    STATE_STORE_COMPRESSION_CODEC.key -> "lz4"
   )
 
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
