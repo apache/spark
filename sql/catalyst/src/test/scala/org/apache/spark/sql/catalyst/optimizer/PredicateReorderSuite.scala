@@ -172,6 +172,26 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
     }
   }
 
+  test("Reduce SubqueryExpression priority") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    import org.apache.spark.sql.catalyst.dsl.plans._
+    val subPlan = table("t1")
+      .where("v-1-10 > 1")
+      .select(max("k-1-2"))
+    val originPlan =
+      table("t1")
+        .where(ScalarSubquery(subPlan) === 1 && "k-1-2 >2")
+        .select("v-1-10")
+    val expectedPlan =
+      table("t1")
+        .where( "k-1-2 >2" && ScalarSubquery(subPlan) === 1)
+        .select("v-1-10")
+
+    withSQLConf(CBO_ENABLED.key -> false.toString) {
+      assert(normalizeExprIds(Optimize.execute(originPlan)) === normalizeExprIds(expectedPlan))
+    }
+  }
+
   test("Should not reduce MultiLikeBase priority if only one expression") {
     val likeAll = nameToAttr("t1.k-1-2").cast(StringType).likeAll(Literal("%1%"))
     Seq(true, false).foreach { cboEnabled =>
@@ -219,6 +239,23 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
             originalCondition,
             nameToAttr("t1.v-1-10") > 3 && nameToAttr("t1.v-1-10") > 7 && caseWhen && likeAny &&
               nameToAttr("t1.k-1-2") > intUdf)
+        }
+      }
+    }
+  }
+
+  test("Reorder disjunctive predicates") {
+    val originalCondition = (nameToAttr("t1.v-1-10") > 1 && nameToAttr("t1.v-1-10") > 2) ||
+      (nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4)
+    Seq(true, false).foreach { cboEnabled =>
+      withSQLConf(CBO_ENABLED.key -> cboEnabled.toString) {
+        if (cboEnabled) {
+          assertPredicatesOrder(
+            originalCondition,
+            (nameToAttr("t1.v-1-10") > 2 && nameToAttr("t1.v-1-10") > 1) ||
+              (nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4))
+        } else {
+          assertPredicatesOrder(originalCondition, originalCondition)
         }
       }
     }
