@@ -3799,12 +3799,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val namespace = Option(ctx.ns).map(visitMultipartIdentifier)
     // Use namespace only if table name doesn't specify it. If namespace is already specified
     // in the table name, it's checked against the given namespace after table/view is resolved.
-    val tableWithNamespace = CurrentOrigin.withOrigin(table.origin) {
-      if (namespace.isDefined && table.multipartIdentifier.length == 1) {
+    val tableWithNamespace = if (namespace.isDefined && table.multipartIdentifier.length == 1) {
+      CurrentOrigin.withOrigin(table.origin) {
         table.copy(multipartIdentifier = namespace.get ++ table.multipartIdentifier)
-      } else {
-        table
       }
+    } else {
+      table
     }
     ShowColumns(tableWithNamespace, namespace)
   }
