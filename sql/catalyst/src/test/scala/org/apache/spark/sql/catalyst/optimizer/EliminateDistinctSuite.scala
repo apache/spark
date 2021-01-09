@@ -35,24 +35,25 @@ class EliminateDistinctSuite extends PlanTest {
   val testRelation = LocalRelation('a.int)
 
   Seq(
-    ("max", Max(_)),
-    ("min", Min(_)),
-    ("first", First(_, ignoreNulls = true)),
-    ("last", Last(_, ignoreNulls = true)),
-    ("bit_and", BitAndAgg(_)),
-    ("bit_or", BitOrAgg(_)),
-    ("collect_set", CollectSet(_: Expression))
+    Max(_),
+    Min(_),
+    First(_, ignoreNulls = true),
+    Last(_, ignoreNulls = true),
+    BitAndAgg(_),
+    BitOrAgg(_),
+    CollectSet(_: Expression)
   ).foreach {
-    case (name, agg) =>
-      test(s"Eliminate Distinct in $name") {
+    aggBuilder =>
+      val agg = aggBuilder('a)
+      test(s"Eliminate Distinct in ${agg.prettyName}") {
         val query = testRelation
-          .select(agg('a).toAggregateExpression(isDistinct = true).as('result))
+          .select(agg.toAggregateExpression(isDistinct = true).as('result))
           .analyze
         val answer = testRelation
-          .select(agg('a).toAggregateExpression(isDistinct = false).as('result))
+          .select(agg.toAggregateExpression(isDistinct = false).as('result))
           .analyze
         assert(query != answer)
         comparePlans(Optimize.execute(query), answer)
-    }
+      }
   }
 }
