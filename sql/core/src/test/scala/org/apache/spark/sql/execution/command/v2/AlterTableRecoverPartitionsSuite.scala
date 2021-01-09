@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -27,4 +28,13 @@ class AlterTableRecoverPartitionsSuite
   extends command.AlterTableRecoverPartitionsSuiteBase
   with CommandSuiteBase {
 
+  test("partition recovering of v2 tables is not supported") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
+      }.getMessage
+      assert(errMsg.contains("ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables"))
+    }
+  }
 }
