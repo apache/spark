@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -29,7 +30,14 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableRecoverPartitionsSuite`
  */
-trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPartitionsSuiteBase
+trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPartitionsSuiteBase {
+  test("table does not exist") {
+    val errMsg = intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
+    }.getMessage
+    assert(errMsg.contains("Table not found"))
+  }
+}
 
 /**
  * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command to check

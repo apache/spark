@@ -1210,10 +1210,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   protected def testRecoverPartitions(): Unit = {
     val catalog = spark.sessionState.catalog
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
-    }
 
     val tableIdent = TableIdentifier("tab1")
     createTable(catalog, tableIdent, partitionCols = Seq("a", "b", "c"))

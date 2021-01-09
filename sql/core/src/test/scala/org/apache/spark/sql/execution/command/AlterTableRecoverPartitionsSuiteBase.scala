@@ -33,6 +33,6 @@ import org.apache.spark.sql.QueryTest
  *     - V1 Hive External catalog:
  *       `org.apache.spark.sql.hive.execution.command.AlterTableRecoverPartitionsSuite`
  */
-trait AlterTableRecoverPartitionsSuiteBase  extends QueryTest with DDLCommandTestUtils {
+trait AlterTableRecoverPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. RECOVER PARTITIONS"
 }
