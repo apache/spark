@@ -879,7 +879,7 @@ group id, however, please read warnings for this option and use it with caution.
  than rely on the kafka Consumer to do it. This will ensure that no data is missed when new
  topics/partitions are dynamically subscribed. Note that `startingOffsets` only applies when a new
  streaming query is started, and that resuming will always pick up from where the query left off. Note
- that when the offsets consumed by a streaming application are not in Kafka (e.g., topics are deleted,
+ that when the offsets consumed by a streaming application no longer exist in Kafka (e.g., topics are deleted,
  offsets are out of range, or offsets are removed after retention period), the offsets will not be reset
  and the streaming application will see data loss. In extreme cases, for example the throughput of the
  streaming application cannot catch up the retention speed of Kafka, the input rows of a batch might be
