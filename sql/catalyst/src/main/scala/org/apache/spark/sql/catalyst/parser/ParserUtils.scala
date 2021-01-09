@@ -172,11 +172,11 @@ object ParserUtils {
           }
           sb.append(code.asInstanceOf[Char])
           i += 5
-        } else if ((i + 10 < strLength) && b.charAt(i + 1) == 'U') {
+        } else if ((i + 10 < strLength) && b.charAt(i + 1) == 'U' &&
+                   (2 until 10).forall(j => Character.digit(b.charAt(i + j), 16) != -1)) {
           // \U00000000 style 32-bit unicode character literals.
 
           val codePoint = Integer.parseInt(b.substring(i + 2, i + 10), 16)
-
           if (codePoint < 0x10000) {
             sb.append((codePoint & 0xFFFF).toChar)
           } else {
