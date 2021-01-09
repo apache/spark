@@ -20,6 +20,7 @@ import shutil
 import tempfile
 import time
 
+from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -569,13 +570,36 @@ class StreamingTests(ReusedSQLTestCase):
             if q:
                 q.stop()
 
+    def test_streaming_read_from_table(self):
+        with self.table("input_table", "this_query"):
+            self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
+            self.spark.sql("INSERT INTO input_table VALUES ('aaa'), ('bbb'), ('ccc')")
+            df = self.spark.readStream.table("input_table")
+            self.assertTrue(df.isStreaming)
+            q = df.writeStream.format('memory').queryName('this_query').start()
+            q.processAllAvailable()
+            q.stop()
+            result = self.spark.sql("SELECT * FROM this_query ORDER BY value").collect()
+            self.assertEqual(
+                set([Row(value='aaa'), Row(value='bbb'), Row(value='ccc')]), set(result))
+
+    def test_streaming_write_to_table(self):
+        with self.table("output_table"), tempfile.TemporaryDirectory() as tmpdir:
+            df = self.spark.readStream.format("rate").option("rowsPerSecond", 10).load()
+            q = df.writeStream.toTable("output_table", format='parquet', checkpointLocation=tmpdir)
+            self.assertTrue(q.isActive)
+            time.sleep(3)
+            q.stop()
+            result = self.spark.sql("SELECT value FROM output_table").collect()
+            self.assertTrue(len(result) > 0)
+
 
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_streaming import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

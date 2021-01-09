@@ -18,8 +18,13 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.SQLException
+import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.hive.service.cli.HiveSQLException
+
+import org.apache.spark.TaskKilled
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.sql.internal.SQLConf
 
 trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
 
@@ -77,6 +82,39 @@ trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
         .contains("The second argument of 'date_sub' function needs to be an integer."))
       assert(e.getMessage.contains("" +
         "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+    }
+  }
+
+  test("SPARK-33526: Add config to control if cancel invoke interrupt task on thriftserver") {
+    withJdbcStatement { statement =>
+      val forceCancel = new AtomicBoolean(false)
+      val listener = new SparkListener {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          assert(taskEnd.reason.isInstanceOf[TaskKilled])
+          if (forceCancel.get()) {
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          } else {
+            // avoid accuracy, we check 2s instead of 3s.
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2000)
+          }
+        }
+      }
+
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        Seq(true, false).foreach { force =>
+          statement.setQueryTimeout(0)
+          statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=$force")
+          statement.setQueryTimeout(1)
+          forceCancel.set(force)
+          val e = intercept[SQLException] {
+            statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+          }.getMessage
+          assert(e.contains("Query timed out"))
+        }
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
+      }
     }
   }
 }

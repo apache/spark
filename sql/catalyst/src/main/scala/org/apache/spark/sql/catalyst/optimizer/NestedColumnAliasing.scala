@@ -227,7 +227,7 @@ object NestedColumnAliasing {
 }
 
 /**
- * This prunes unnessary nested columns from `Generate` and optional `Project` on top
+ * This prunes unnecessary nested columns from `Generate` and optional `Project` on top
  * of it.
  */
 object GeneratorNestedColumnAliasing {

@@ -80,16 +80,16 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   test("schema_of_csv - infers schemas") {
     checkAnswer(
       spark.range(1).select(schema_of_csv(lit("0.1,1"))),
-      Seq(Row("struct<_c0:double,_c1:int>")))
+      Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
     checkAnswer(
       spark.range(1).select(schema_of_csv("0.1,1")),
-      Seq(Row("struct<_c0:double,_c1:int>")))
+      Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
   }
 
   test("schema_of_csv - infers schemas using options") {
     val df = spark.range(1)
       .select(schema_of_csv(lit("0.1 1"), Map("sep" -> " ").asJava))
-    checkAnswer(df, Seq(Row("struct<_c0:double,_c1:int>")))
+    checkAnswer(df, Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
   }
 
   test("to_csv - struct") {
@@ -236,7 +236,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
     val input = concat_ws(",", lit(0.1), lit(1))
     checkAnswer(
       spark.range(1).select(schema_of_csv(input)),
-      Seq(Row("struct<_c0:double,_c1:int>")))
+      Seq(Row("STRUCT<`_c0`: DOUBLE, `_c1`: INT>")))
   }
 
   test("optional datetime parser does not affect csv time formatting") {
@@ -249,5 +249,53 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
          | )
          | """.stripMargin)
     checkAnswer(toDF("yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), toDF("yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]"))
+  }
+
+  test("SPARK-32968: Pruning csv field should not change result") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val df1 = sparkContext.parallelize(Seq("a,b")).toDF("csv")
+          .selectExpr("from_csv(csv, 'a string, b string', map('mode', 'failfast')) as parsed")
+        checkAnswer(df1.selectExpr("parsed.a"), Seq(Row("a")))
+        checkAnswer(df1.selectExpr("parsed.b"), Seq(Row("b")))
+
+        val df2 = sparkContext.parallelize(Seq("a,b")).toDF("csv")
+          .selectExpr("from_csv(csv, 'a string, b string') as parsed")
+        checkAnswer(df2.selectExpr("parsed.a"), Seq(Row("a")))
+        checkAnswer(df2.selectExpr("parsed.b"), Seq(Row("b")))
+      }
+    }
+  }
+
+  test("SPARK-32968: bad csv input with csv pruning optimization") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val df = sparkContext.parallelize(Seq("1,\u0001\u0000\u0001234")).toDF("csv")
+          .selectExpr("from_csv(csv, 'a int, b int', map('mode', 'failfast')) as parsed")
+
+        val err1 = intercept[SparkException] {
+          df.selectExpr("parsed.a").collect
+        }
+
+        val err2 = intercept[SparkException] {
+          df.selectExpr("parsed.b").collect
+        }
+
+        assert(err1.getMessage.contains("Malformed records are detected in record parsing"))
+        assert(err2.getMessage.contains("Malformed records are detected in record parsing"))
+      }
+    }
+  }
+
+  test("SPARK-32968: csv pruning optimization with corrupt record field") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        val df = sparkContext.parallelize(Seq("a,b,c,d")).toDF("csv")
+          .selectExpr("from_csv(csv, 'a string, b string, _corrupt_record string') as parsed")
+          .selectExpr("parsed._corrupt_record")
+
+        checkAnswer(df, Seq(Row("a,b,c,d")))
+      }
+    }
   }
 }

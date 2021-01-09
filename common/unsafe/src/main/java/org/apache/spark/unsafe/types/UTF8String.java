@@ -563,7 +563,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Trims whitespaces (<= ASCII 32) from both ends of this string.
+   * Trims whitespaces ({@literal <=} ASCII 32) from both ends of this string.
    *
    * Note that, this method is the same as java's {@link String#trim}, and different from
    * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
@@ -635,13 +635,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String trimLeft(UTF8String trimString) {
     if (trimString == null) return null;
     // the searching byte position in the source string
-    int srchIdx = 0;
+    int searchIdx = 0;
     // the first beginning byte position of a non-matching character
     int trimIdx = 0;
 
-    while (srchIdx < numBytes) {
+    while (searchIdx < numBytes) {
       UTF8String searchChar = copyUTF8String(
-          srchIdx, srchIdx + numBytesForFirstByte(this.getByte(srchIdx)) - 1);
+          searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
       int searchCharBytes = searchChar.numBytes;
       // try to find the matching for the searchChar in the trimString set
       if (trimString.find(searchChar, 0) >= 0) {
@@ -650,9 +650,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         // no matching, exit the search
         break;
       }
-      srchIdx += searchCharBytes;
+      searchIdx += searchCharBytes;
     }
-    if (srchIdx == 0) {
+    if (searchIdx == 0) {
       // Nothing trimmed
       return this;
     }

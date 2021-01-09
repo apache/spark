@@ -21,26 +21,20 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table, TableCatalog}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
     isExtended: Boolean) extends V2CommandExec {
-
-  private val toRow = {
-    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
-  }
-
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
     addPartitioning(rows)
 
     if (isExtended) {
+      addMetadataColumns(rows)
       addTableDetails(rows)
     }
     rows.toSeq
@@ -72,6 +66,19 @@ case class DescribeTableExec(
     }
   }
 
+  private def addMetadataColumns(rows: ArrayBuffer[InternalRow]): Unit = table match {
+    case hasMeta: SupportsMetadataColumns if hasMeta.metadataColumns.nonEmpty =>
+      rows += emptyRow()
+      rows += toCatalystRow("# Metadata Columns", "", "")
+      rows ++= hasMeta.metadataColumns.map { column =>
+        toCatalystRow(
+          column.name,
+          column.dataType.simpleString,
+          Option(column.comment()).getOrElse(""))
+      }
+    case _ =>
+  }
+
   private def addPartitioning(rows: ArrayBuffer[InternalRow]): Unit = {
     rows += emptyRow()
     rows += toCatalystRow("# Partitioning", "", "")
@@ -85,8 +92,4 @@ case class DescribeTableExec(
   }
 
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
-  }
 }

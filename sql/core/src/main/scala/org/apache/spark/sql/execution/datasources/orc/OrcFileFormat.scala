@@ -45,7 +45,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
     try {
-      TypeDescription.fromString(s"struct<$name:int>")
+      TypeDescription.fromString(s"struct<`$name`:int>")
     } catch {
       case _: IllegalArgumentException =>
         throw new AnalysisException(
@@ -184,8 +184,8 @@ class OrcFileFormat
         Iterator.empty
       } else {
         // ORC predicate pushdown
-        if (orcFilterPushDown) {
-          OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).map { fileSchema =>
+        if (orcFilterPushDown && filters.nonEmpty) {
+          OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
             OrcFilters.createFilter(fileSchema, filters).foreach { f =>
               OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
             }

@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 class MariaDBConnectionProviderSuite extends ConnectionProviderSuiteBase {
   test("setAuthenticationConfigIfNeeded must set authentication if not set") {
-    val driver = registerDriver(MariaDBConnectionProvider.driverClass)
-    val provider = new MariaDBConnectionProvider(driver, options("jdbc:mysql://localhost/mysql"))
+    val provider = new MariaDBConnectionProvider()
+    val driver = registerDriver(provider.driverClass)
 
-    testSecureConnectionProvider(provider)
+    testSecureConnectionProvider(provider, driver, options("jdbc:mysql://localhost/mysql"))
   }
 }

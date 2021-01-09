@@ -16,8 +16,8 @@
  */
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Expression, NamedExpression, SortOrder}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeReference, Expression, NamedExpression, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning}
 
 /**
  * A trait that provides functionality to handle aliases in the `outputExpressions`.
@@ -25,19 +25,15 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partition
 trait AliasAwareOutputExpression extends UnaryExecNode {
   protected def outputExpressions: Seq[NamedExpression]
 
-  protected def hasAlias: Boolean = outputExpressions.collectFirst { case _: Alias => }.isDefined
+  private lazy val aliasMap = AttributeMap(outputExpressions.collect {
+    case a @ Alias(child: AttributeReference, _) => (child, a.toAttribute)
+  })
 
-  protected def replaceAliases(exprs: Seq[Expression]): Seq[Expression] = {
-    exprs.map {
-      case a: AttributeReference => replaceAlias(a).getOrElse(a)
-      case other => other
-    }
-  }
+  protected def hasAlias: Boolean = aliasMap.nonEmpty
 
-  protected def replaceAlias(attr: AttributeReference): Option[Attribute] = {
-    outputExpressions.collectFirst {
-      case a @ Alias(child: AttributeReference, _) if child.semanticEquals(attr) =>
-        a.toAttribute
+  protected def normalizeExpression(exp: Expression): Expression = {
+    exp.transform {
+      case attr: AttributeReference => aliasMap.getOrElse(attr, attr)
     }
   }
 }
@@ -48,13 +44,32 @@ trait AliasAwareOutputExpression extends UnaryExecNode {
  */
 trait AliasAwareOutputPartitioning extends AliasAwareOutputExpression {
   final override def outputPartitioning: Partitioning = {
-    if (hasAlias) {
+    val normalizedOutputPartitioning = if (hasAlias) {
       child.outputPartitioning match {
-        case h: HashPartitioning => h.copy(expressions = replaceAliases(h.expressions))
+        case e: Expression =>
+          normalizeExpression(e).asInstanceOf[Partitioning]
         case other => other
       }
     } else {
       child.outputPartitioning
+    }
+
+    flattenPartitioning(normalizedOutputPartitioning).filter {
+      case hashPartitioning: HashPartitioning => hashPartitioning.references.subsetOf(outputSet)
+      case _ => true
+    } match {
+      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+      case Seq(singlePartitioning) => singlePartitioning
+      case seqWithMultiplePartitionings => PartitioningCollection(seqWithMultiplePartitionings)
+    }
+  }
+
+  private def flattenPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
+    partitioning match {
+      case PartitioningCollection(childPartitionings) =>
+        childPartitionings.flatMap(flattenPartitioning)
+      case rest =>
+        rest +: Nil
     }
   }
 }
@@ -68,12 +83,7 @@ trait AliasAwareOutputOrdering extends AliasAwareOutputExpression {
 
   final override def outputOrdering: Seq[SortOrder] = {
     if (hasAlias) {
-      orderingExpressions.map { s =>
-        s.child match {
-          case a: AttributeReference => s.copy(child = replaceAlias(a).getOrElse(a))
-          case _ => s
-        }
-      }
+      orderingExpressions.map(normalizeExpression(_).asInstanceOf[SortOrder])
     } else {
       orderingExpressions
     }

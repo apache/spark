@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -36,7 +38,23 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
  * Holds the name of a table that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedTable]] during analysis.
  */
-case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTable(
+    multipartIdentifier: Seq[String],
+    commandName: String) extends LeafNode {
+  override lazy val resolved: Boolean = false
+
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * Holds the name of a view that has yet to be looked up in a catalog. It will be resolved to
+ * [[ResolvedView]] during analysis.
+ */
+case class UnresolvedView(
+    multipartIdentifier: Seq[String],
+    commandName: String,
+    allowTemp: Boolean,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil
@@ -46,10 +64,19 @@ case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
  */
-case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTableOrView(
+    multipartIdentifier: Seq[String],
+    commandName: String,
+    allowTempView: Boolean = true) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
+
+sealed trait PartitionSpec
+
+case class UnresolvedPartitionSpec(
+    spec: TablePartitionSpec,
+    location: Option[String] = None) extends PartitionSpec
 
 /**
  * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
@@ -71,17 +98,39 @@ case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
 /**
  * A plan containing resolved table.
  */
-case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
+case class ResolvedTable(
+    catalog: TableCatalog,
+    identifier: Identifier,
+    table: Table,
+    outputAttributes: Seq[Attribute])
   extends LeafNode {
-  override def output: Seq[Attribute] = Nil
+  override def output: Seq[Attribute] = {
+    val qualifier = catalog.name +: identifier.namespace :+ identifier.name
+    outputAttributes.map(_.withQualifier(qualifier))
+  }
 }
+
+object ResolvedTable {
+  def create(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      table: Table): ResolvedTable = {
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+  }
+}
+
+case class ResolvedPartitionSpec(
+    names: Seq[String],
+    ident: InternalRow,
+    location: Option[String] = None) extends PartitionSpec
 
 /**
  * A plan containing resolved (temp) views.
  */
 // TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier) extends LeafNode {
+case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 

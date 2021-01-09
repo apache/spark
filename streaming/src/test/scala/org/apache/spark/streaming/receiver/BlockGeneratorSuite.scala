@@ -25,7 +25,6 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 
