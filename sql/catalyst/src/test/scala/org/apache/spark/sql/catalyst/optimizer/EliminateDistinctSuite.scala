@@ -37,7 +37,6 @@ class EliminateDistinctSuite extends PlanTest {
   Seq(
     ("max", Max(_)),
     ("min", Min(_)),
-    ("approx_count_distinct", HyperLogLogPlusPlus(_: Expression)),
     ("first", First(_, ignoreNulls = true)),
     ("last", Last(_, ignoreNulls = true)),
     ("bit_and", BitAndAgg(_)),

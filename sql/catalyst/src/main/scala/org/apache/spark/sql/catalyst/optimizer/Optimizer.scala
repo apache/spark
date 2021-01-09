@@ -360,7 +360,6 @@ object EliminateDistinct extends Rule[LogicalPlan] {
     case _: BitOrAgg => true
     case _: First => true
     case _: Last => true
-    case _: HyperLogLogPlusPlus => true
     case _: CollectSet => true
     case _ => false
   }
