@@ -484,6 +484,7 @@ case class AlterTableAddPartitionCommand(
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     if (table.stats.nonEmpty) {
       if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
         val addedSize = CommandUtils.calculateTotalLocationSize(sparkSession, table.identifier,
