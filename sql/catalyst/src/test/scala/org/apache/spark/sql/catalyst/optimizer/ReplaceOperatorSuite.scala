@@ -42,19 +42,24 @@ class ReplaceOperatorSuite extends PlanTest {
   test("replace Intersect with Left-semi Join") {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)
+    Seq(
+      Intersect(table1, table2, isAll = false),
+      Intersect(Distinct(table1), table2, isAll = false),
+      Intersect(table1, Distinct(table2), isAll = false),
+      Intersect(Distinct(table1), Distinct(table2), isAll = false)
+    ).foreach { query =>
+      val optimized = Optimize.execute(query.analyze)
 
-    val query = Intersect(table1, table2, isAll = false)
-    val optimized = Optimize.execute(query.analyze)
+      val correctAnswer =
+        Join(
+          Aggregate(table1.output, table1.output, table1),
+          Aggregate(table2.output, table2.output, table2),
+          LeftSemi,
+          Option('a <=> 'c && 'b <=> 'd),
+          JoinHint.NONE).analyze
 
-    val correctAnswer =
-      Join(
-        Aggregate(table1.output, table1.output, table1),
-        Aggregate(table2.output, table2.output, table2),
-        LeftSemi,
-        Option('a <=> 'c && 'b <=> 'd),
-        JoinHint.NONE).analyze
-
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("replace Except with Filter while both the nodes are of type Filter") {

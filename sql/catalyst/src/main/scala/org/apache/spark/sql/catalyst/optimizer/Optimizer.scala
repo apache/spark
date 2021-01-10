@@ -1677,11 +1677,22 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
  *    join conditions will be incorrect.
  */
 object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
+  private def maybeAddDistinct(logicalPlan: LogicalPlan) = logicalPlan match {
+    case _: Distinct => logicalPlan
+    case Aggregate(groups, aggs, _) if groups.equals(aggs) => logicalPlan
+    case _ => Distinct(logicalPlan)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Intersect(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Join(Distinct(left), Distinct(right), LeftSemi, joinCond.reduceLeftOption(And), JoinHint.NONE)
+      Join(
+        maybeAddDistinct(left),
+        maybeAddDistinct(right),
+        LeftSemi,
+        joinCond.reduceLeftOption(And),
+        JoinHint.NONE)
   }
 }
 
@@ -1702,7 +1713,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
     case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Join(Distinct(left), Distinct(right), LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE)
+      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE))
   }
 }
 
