@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 
