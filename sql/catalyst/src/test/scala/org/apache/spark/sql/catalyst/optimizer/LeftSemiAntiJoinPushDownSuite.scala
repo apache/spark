@@ -443,4 +443,13 @@ class LeftSemiPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-34061: Should not pushdown as it may from ReplaceIntersectWithSemiJoin") {
+    val originalQuery = testRelation
+      .groupBy('b)('b)
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b <=> 'd))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
+  }
+
 }

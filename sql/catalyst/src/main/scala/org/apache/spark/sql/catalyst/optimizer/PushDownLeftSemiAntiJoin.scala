@@ -52,9 +52,11 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
       }
 
     // LeftSemi/LeftAnti over Aggregate
-    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
-        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
-        !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
+    case join @ Join(agg @ Aggregate(groups, aggs, _), rightOp, LeftSemiOrAnti(_), cond, _)
+      if aggs.forall(_.deterministic) && groups.nonEmpty &&
+        !aggs.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
+        !groups.equals(aggs) &&
+        !cond.forall(e => splitConjunctivePredicates(e).forall(_.isInstanceOf[EqualNullSafe])) =>
       val aliasMap = getAliasMap(agg)
       val canPushDownPredicate = (predicate: Expression) => {
         val replaced = replaceAlias(predicate, aliasMap)
