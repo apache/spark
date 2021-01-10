@@ -45,7 +45,7 @@ class AlterTableDropPartitionSuite
     }
   }
 
-  test("SPARK-XXXXX: update stats of cached table") {
+  test("SPARK-34060: update stats of cached table") {
     withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
         def checkTableSize(expected: String): Unit = {
