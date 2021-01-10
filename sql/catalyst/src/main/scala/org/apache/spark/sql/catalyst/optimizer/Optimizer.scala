@@ -1663,8 +1663,12 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
 /**
  * Replaces logical [[Intersect]] operator with a left-semi [[Join]] operator.
  * {{{
- *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2
- *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1<=>b1 AND a2<=>b2
+ *   SELECT a1, a2 FROM Tab1 INTERSECT SELECT b1, b2 FROM Tab2 ==>
+ *   SELECT a1, a2 FROM
+ *     (SELECT DISTINCT a1, a2 FROM Tab1)
+ *   LEFT SEMI JOIN
+ *     (SELECT DISTINCT b1, b2 FROM Tab2)
+ *   ON a1<=>b1 AND a2<=>b2
  * }}}
  *
  * Note:
@@ -1698,7 +1702,7 @@ object ReplaceExceptWithAntiJoin extends Rule[LogicalPlan] {
     case Except(left, right, false) =>
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
-      Distinct(Join(left, right, LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE))
+      Join(Distinct(left), Distinct(right), LeftAnti, joinCond.reduceLeftOption(And), JoinHint.NONE)
   }
 }
 
