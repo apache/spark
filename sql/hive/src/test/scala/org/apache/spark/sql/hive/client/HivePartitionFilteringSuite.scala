@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTIT
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
@@ -40,10 +40,13 @@ class HivePartitionFilteringSuite(version: String)
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
+  // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
+  private val defaultPartition = if (version.toDouble > 1) Some(DEFAULT_PARTITION_NAME) else None
+
   private val dsValue = 20170101 to 20170103
   private val hValue = 0 to 4
-  private val chunkValue = Seq("aa", "ab", "ba", "bb", DEFAULT_PARTITION_NAME)
-  private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03")
+  private val chunkValue = Seq("aa", "ab", "ba", "bb")
+  private val dateValue = Seq("2019-01-01", "2019-01-02", "2019-01-03") ++ defaultPartition
   private val dateStrValue = Seq("2020-01-01", "2020-01-02", "2020-01-03")
   private val testPartitionCount =
     dsValue.size * hValue.size * chunkValue.size * dateValue.size * dateStrValue.size
@@ -415,9 +418,19 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
-  test("getPartitionsByFilter returns all partitions: IS NULL / IS NOT NULL") {
-    Seq(attr("chunk").isNull, attr("chunk").isNotNull,
-      attr("d").isNull, attr("d").isNotNull).foreach { filterExpr =>
+  test("getPartitionsByFilter: cast(datestr as date)= 2020-01-01") {
+    testMetastorePartitionFiltering(
+      attr("datestr").cast(DateType) === Date.valueOf("2020-01-01"),
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      dateStrValue)
+  }
+
+  test("getPartitionsByFilter: IS NULL / IS NOT NULL") {
+    // returns all partitions
+    Seq(attr("d").isNull, attr("d").isNotNull).foreach { filterExpr =>
       testMetastorePartitionFiltering(
         filterExpr,
         dsValue,
@@ -426,6 +439,58 @@ class HivePartitionFilteringSuite(version: String)
         dateValue,
         dateStrValue)
     }
+  }
+
+  test("getPartitionsByFilter: IS NULL / IS NOT NULL with other filter") {
+    Seq(attr("d").isNull, attr("d").isNotNull).foreach { filterExpr =>
+      testMetastorePartitionFiltering(
+        filterExpr && attr("d") === Date.valueOf("2019-01-01"),
+        dsValue,
+        hValue,
+        chunkValue,
+        Seq("2019-01-01"),
+        dateStrValue)
+    }
+  }
+
+  test("getPartitionsByFilter: d =!= 2019-01-01") {
+    testMetastorePartitionFiltering(
+      attr("d") =!= Date.valueOf("2019-01-01"),
+      dsValue,
+      hValue,
+      chunkValue,
+      Seq("2019-01-02", "2019-01-03"),
+      dateStrValue)
+  }
+
+  test("getPartitionsByFilter: d =!= 2019-01-01 || IS NULL") {
+    testMetastorePartitionFiltering(
+      attr("d") =!= Date.valueOf("2019-01-01") || attr("d").isNull,
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      dateStrValue)
+  }
+
+  test("getPartitionsByFilter: d <=> 2019-01-01") {
+    testMetastorePartitionFiltering(
+      attr("d") <=> Date.valueOf("2019-01-01"),
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      dateStrValue)
+  }
+
+  test("getPartitionsByFilter: d <=> null") {
+    testMetastorePartitionFiltering(
+      attr("d") <=> Literal(null, DateType),
+      dsValue,
+      hValue,
+      chunkValue,
+      dateValue,
+      dateStrValue)
   }
 
   private def testMetastorePartitionFiltering(
