@@ -24,5 +24,21 @@ import org.apache.spark.sql.execution.command.v1
  * V1 Hive external table catalog.
  */
 class AlterTableAddPartitionSuite
-    extends v1.AlterTableAddPartitionSuiteBase
-    with CommandSuiteBase
+  extends v1.AlterTableAddPartitionSuiteBase
+  with CommandSuiteBase {
+
+  test("hive client calls") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+
+      checkHiveClientCalls(expected = 20) {
+        sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
+      }
+      sql(s"CACHE TABLE $t")
+      checkHiveClientCalls(expected = 23) {
+        sql(s"ALTER TABLE $t ADD PARTITION (part=2)")
+      }
+    }
+  }
+}

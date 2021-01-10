@@ -25,4 +25,21 @@ import org.apache.spark.sql.execution.command.v1
  */
 class AlterTableDropPartitionSuite
   extends v1.AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+
+  test("hive client calls") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+
+      checkHiveClientCalls(expected = 19) {
+        sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      }
+      sql(s"CACHE TABLE $t")
+      checkHiveClientCalls(expected = 22) {
+        sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+      }
+    }
+  }
+}

@@ -274,11 +274,13 @@ class InMemoryTable(
         this
       }
 
-      override def buildForBatch(): BatchWrite = writer
+      override def build(): Write = new Write {
+        override def toBatch: BatchWrite = writer
 
-      override def buildForStreaming(): StreamingWrite = streamingWriter match {
-        case exc: StreamingNotSupportedOperation => exc.throwsException()
-        case s => s
+        override def toStreaming: StreamingWrite = streamingWriter match {
+          case exc: StreamingNotSupportedOperation => exc.throwsException()
+          case s => s
+        }
       }
     }
   }
