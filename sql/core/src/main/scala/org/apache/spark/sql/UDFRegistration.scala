@@ -1124,7 +1124,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
 
 }
 
-object UDFRegistration {
+private[sql] object UDFRegistration {
   /**
    * Obtaining the schema of output encoder for `ScalaUDF`.
    *
