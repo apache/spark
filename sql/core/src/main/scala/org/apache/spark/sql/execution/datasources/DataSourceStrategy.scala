@@ -737,6 +737,8 @@ abstract class PushableColumnBase {
         }
       case s: GetStructField if nestedPredicatePushdownEnabled =>
         helper(s.child).map(_ :+ s.childSchema(s.ordinal).name)
+      case GetJsonObject(col, field) if nestedPredicatePushdownEnabled =>
+        Some(Seq("GetJsonObject(" + col + "," + field + ")"))
       case _ => None
     }
     helper(e).map(_.quoted)

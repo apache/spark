@@ -139,7 +139,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 
   @transient private lazy val parsedPath = parsePath(path.eval().asInstanceOf[UTF8String])
 
-  override def eval(input: InternalRow): Any = {
+  override def eval(input: InternalRow): UTF8String = {
     val jsonStr = json.eval(input).asInstanceOf[UTF8String]
     if (jsonStr == null) {
       return null
