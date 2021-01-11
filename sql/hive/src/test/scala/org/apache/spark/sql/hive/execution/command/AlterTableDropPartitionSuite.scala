@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command.v1
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
@@ -41,42 +39,6 @@ class AlterTableDropPartitionSuite
       sql(s"CACHE TABLE $t")
       checkHiveClientCalls(expected = 22) {
         sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
-      }
-    }
-  }
-
-  test("SPARK-34060: update stats of cached table") {
-    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
-      withNamespaceAndTable("ns", "tbl") { t =>
-        def getTableSize(t: String): Int = {
-          val stats =
-            sql(s"DESCRIBE TABLE EXTENDED $t")
-              .select("data_type")
-              .where("col_name = 'Statistics'")
-              .first()
-              .getString(0)
-          val tableSizeInStats = ".*(\\d) bytes.*".r
-          val size = stats match {
-            case tableSizeInStats(s) => s.toInt
-            case _ => throw new IllegalArgumentException("Not found table size in stats")
-          }
-          size
-        }
-
-        sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
-        sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
-        assert(!spark.catalog.isCached(t))
-        sql(s"CACHE TABLE $t")
-        assert(spark.catalog.isCached(t))
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
-        val twoPartSize = getTableSize(t)
-        assert(twoPartSize > 0)
-
-        sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
-        assert(spark.catalog.isCached(t))
-        assert(getTableSize(t) < twoPartSize)
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
       }
     }
   }
