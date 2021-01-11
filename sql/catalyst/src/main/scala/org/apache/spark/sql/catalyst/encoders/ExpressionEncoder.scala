@@ -22,7 +22,6 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
@@ -303,11 +302,6 @@ case class ExpressionEncoder[T](
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
-
-  def dataTypeAndNullable: Schema = {
-    val dataType = if (isSerializedAsStruct) schema else schema.head.dataType
-    Schema(dataType, objSerializer.nullable)
-  }
 
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.
