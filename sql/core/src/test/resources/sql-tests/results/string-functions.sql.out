@@ -298,7 +298,7 @@ select decode()
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 0;; line 1 pos 7
+Invalid number of arguments for function decode. Expected: 2; Found: 0; line 1 pos 7
 
 
 -- !query
@@ -307,7 +307,7 @@ select decode(encode('abc', 'utf-8'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid number of arguments for function decode. Expected: 2; Found: 1;; line 1 pos 7
+Invalid number of arguments for function decode. Expected: 2; Found: 1; line 1 pos 7
 
 
 -- !query

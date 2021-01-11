@@ -82,17 +82,22 @@ case class StructField(
     if (metadata.contains("comment")) Option(metadata.getString("comment")) else None
   }
 
+  private def getDDLComment = getComment()
+    .map(escapeSingleQuotedString)
+    .map(" COMMENT '" + _ + "'")
+    .getOrElse("")
+
+  /**
+   * Returns a string containing a schema in SQL format. For example the following value:
+   * `StructField("eventId", IntegerType)` will be converted to `eventId`: INT.
+   */
+  private[sql] def sql = s"${quoteIdentifier(name)}: ${dataType.sql}$getDDLComment"
+
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
    * `StructField("eventId", IntegerType)` will be converted to `eventId` INT.
    *
    * @since 2.4.0
    */
-  def toDDL: String = {
-    val comment = getComment()
-      .map(escapeSingleQuotedString)
-      .map(" COMMENT '" + _ + "'")
-
-    s"${quoteIdentifier(name)} ${dataType.sql}${comment.getOrElse("")}"
-  }
+  def toDDL: String = s"${quoteIdentifier(name)} ${dataType.sql}$getDDLComment"
 }

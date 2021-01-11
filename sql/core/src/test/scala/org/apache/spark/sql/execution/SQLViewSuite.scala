@@ -140,11 +140,21 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     val viewName = "testView"
     withTempView(viewName) {
       spark.range(10).createTempView(viewName)
-      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDE 'whatever'")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'")
-      assertNoSuchTable(s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')")
-      assertNoSuchTable(s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')")
-      assertNoSuchTable(s"ALTER TABLE $viewName RECOVER PARTITIONS")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName SET SERDE 'whatever'",
+        s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a=1, b=2) SET SERDE 'whatever'",
+        s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
+        s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')",
+        s"$viewName is a temp view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName RECOVER PARTITIONS",
+        s"$viewName is a temp view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table")
 
       // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
       assertAnalysisError(
@@ -450,11 +460,11 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("should not allow ALTER VIEW AS when the view does not exist") {
     assertAnalysisError(
       "ALTER VIEW testView AS SELECT 1, 2",
-      "View not found for 'ALTER VIEW ... AS': testView")
+      "View not found: testView")
 
     assertAnalysisError(
       "ALTER VIEW default.testView AS SELECT 1, 2",
-      "View not found for 'ALTER VIEW ... AS': default.testView")
+      "View not found: default.testView")
   }
 
   test("ALTER VIEW AS should try to alter temp view first if view name has no database part") {

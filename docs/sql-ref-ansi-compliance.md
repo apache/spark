@@ -156,6 +156,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `make_date`: This function should fail with an exception if the result date is invalid.
   - `make_timestamp`: This function should fail with an exception if the result timestamp is invalid.
   - `make_interval`:  This function should fail with an exception if the result interval is invalid.
+  - `next_day`: This function throws `IllegalArgumentException` if input is not a valid day of week.
 
 ### SQL Operators
 
@@ -363,6 +364,7 @@ Below is a list of all the keywords in Spark SQL.
 |REPAIR|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
+|RESPECT|non-reserved|non-reserved|non-reserved|
 |RESTRICT|non-reserved|non-reserved|non-reserved|
 |REVOKE|non-reserved|non-reserved|reserved|
 |RIGHT|reserved|strict-non-reserved|reserved|

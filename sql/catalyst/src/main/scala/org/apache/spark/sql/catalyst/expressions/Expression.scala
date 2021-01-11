@@ -536,6 +536,12 @@ abstract class UnaryExpression extends Expression {
   }
 }
 
+
+object UnaryExpression {
+  def unapply(e: UnaryExpression): Option[Expression] = Some(e.child)
+}
+
+
 /**
  * An expression with two inputs and one output. The output is by default evaluated to null
  * if any input is evaluated to null.
@@ -633,6 +639,11 @@ abstract class BinaryExpression extends Expression {
         $resultCode""", isNull = FalseLiteral)
     }
   }
+}
+
+
+object BinaryExpression {
+  def unapply(e: BinaryExpression): Option[(Expression, Expression)] = Some((e.left, e.right))
 }
 
 

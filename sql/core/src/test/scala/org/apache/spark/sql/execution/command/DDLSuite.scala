@@ -29,7 +29,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -332,18 +332,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("alter table: change column (datasource table)") {
     testChangeColumn(isDatasourceTable = true)
-  }
-
-  test("alter table: drop partition (datasource table)") {
-    testDropPartitions(isDatasourceTable = true)
-  }
-
-  test("alter table: rename partition (datasource table)") {
-    testRenamePartitions(isDatasourceTable = true)
-  }
-
-  test("drop table - data source table") {
-    testDropTable(isDatasourceTable = true)
   }
 
   test("the qualified path of a database is stored in the catalog") {
@@ -1289,36 +1277,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
   }
 
-
-  test("show databases") {
-    sql("CREATE DATABASE showdb2B")
-    sql("CREATE DATABASE showdb1A")
-
-    // check the result as well as its order
-    checkDataset(sql("SHOW DATABASES"), Row("default"), Row("showdb1a"), Row("showdb2b"))
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE '*db1A'"),
-      Row("showdb1a") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES '*db1A'"),
-      Row("showdb1a") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE 'showdb1A'"),
-      Row("showdb1a") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
-      Row("showdb1a") ::
-        Row("showdb2b") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE 'non-existentdb'"),
-      Nil)
-  }
-
   test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
@@ -1334,23 +1292,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     sql("DROP VIEW tab1")
     assert(catalog.listTables("default") == Nil)
-  }
-
-  protected def testDropTable(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    assert(catalog.listTables("dbx") == Seq(tableIdent))
-    sql("DROP TABLE dbx.tab1")
-    assert(catalog.listTables("dbx") == Nil)
-    sql("DROP TABLE IF EXISTS dbx.tab1")
-    intercept[AnalysisException] {
-      sql("DROP TABLE dbx.tab1")
-    }
   }
 
   test("drop view") {
@@ -1615,103 +1556,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
     }
-  }
-
-  protected def testDropPartitions(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val part1 = Map("a" -> "1", "b" -> "5")
-    val part2 = Map("a" -> "2", "b" -> "6")
-    val part3 = Map("a" -> "3", "b" -> "7")
-    val part4 = Map("a" -> "4", "b" -> "8")
-    val part5 = Map("a" -> "9", "b" -> "9")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, part1, tableIdent)
-    createTablePartition(catalog, part2, tableIdent)
-    createTablePartition(catalog, part3, tableIdent)
-    createTablePartition(catalog, part4, tableIdent)
-    createTablePartition(catalog, part5, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(part1, part2, part3, part4, part5))
-
-    // basic drop partition
-    sql("ALTER TABLE dbx.tab1 DROP IF EXISTS PARTITION (a='4', b='8'), PARTITION (a='3', b='7')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part5))
-
-    // drop partitions without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='2', b ='6')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
-
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist DROP IF EXISTS PARTITION (a='2')")
-    }
-
-    // partition to drop does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 DROP PARTITION (a='300')")
-    }
-
-    // partition to drop does not exist when using IF EXISTS
-    sql("ALTER TABLE tab1 DROP IF EXISTS PARTITION (a='300')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part5))
-
-    // partition spec in DROP PARTITION should be case insensitive by default
-    sql("ALTER TABLE tab1 DROP PARTITION (A='1', B='5')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part5))
-
-    // use int literal as partition value for int type partition column
-    sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
-    assert(catalog.listPartitions(tableIdent).isEmpty)
-  }
-
-  protected def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
-    if (!isUsingHiveMetastore) {
-      assert(isDatasourceTable, "InMemoryCatalog only supports data source tables")
-    }
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    val part1 = Map("a" -> "1", "b" -> "q")
-    val part2 = Map("a" -> "2", "b" -> "c")
-    val part3 = Map("a" -> "3", "b" -> "p")
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent, isDatasourceTable)
-    createTablePartition(catalog, part1, tableIdent)
-    createTablePartition(catalog, part2, tableIdent)
-    createTablePartition(catalog, part3, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1, part2, part3))
-
-    // basic rename partition
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='q') RENAME TO PARTITION (a='100', b='p')")
-    sql("ALTER TABLE dbx.tab1 PARTITION (a='2', b='c') RENAME TO PARTITION (a='20', b='c')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "100", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
-
-    // rename without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 PARTITION (a='100', b='p') RENAME TO PARTITION (a='10', b='p')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "10", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
-
-    // table to alter does not exist
-    intercept[NoSuchTableException] {
-      sql("ALTER TABLE does_not_exist PARTITION (c='3') RENAME TO PARTITION (c='333')")
-    }
-
-    // partition to rename does not exist
-    intercept[NoSuchPartitionException] {
-      sql("ALTER TABLE tab1 PARTITION (a='not_found', b='1') RENAME TO PARTITION (a='1', b='2')")
-    }
-
-    // partition spec in RENAME PARTITION should be case insensitive by default
-    sql("ALTER TABLE tab1 PARTITION (A='10', B='p') RENAME TO PARTITION (A='1', B='p')")
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> "1", "b" -> "p"), Map("a" -> "20", "b" -> "c"), Map("a" -> "3", "b" -> "p")))
   }
 
   protected def testChangeColumn(isDatasourceTable: Boolean): Unit = {
