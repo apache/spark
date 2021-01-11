@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 object Cast {
 
   /**
-   * A tag to decide if a CAST is generated during analysis.
+   * A tag to decide if a CAST is specified by user.
    */
   val USER_SPECIFIED_CAST = new TreeNodeTag[Boolean]("user_specified_cast")
 
