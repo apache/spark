@@ -47,8 +47,8 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
     }
   }
 
-  private def copyPartition(t: String, from: String, to: String): String = {
-    val idents = t.split('.')
+  private def copyPartition(tableName: String, from: String, to: String): String = {
+    val idents = tableName.split('.')
     val table = idents.last
     val catalogAndNs = idents.init
     val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"

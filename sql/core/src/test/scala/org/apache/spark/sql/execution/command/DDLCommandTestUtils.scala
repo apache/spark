@@ -93,9 +93,9 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   // Getting the total table size in the filesystem in bytes
-  def getTableSize(t: String): Int = {
+  def getTableSize(tableName: String): Int = {
     val stats =
-      sql(s"DESCRIBE TABLE EXTENDED $t")
+      sql(s"DESCRIBE TABLE EXTENDED $tableName")
         .select("data_type")
         .where("col_name = 'Statistics'")
         .first()
