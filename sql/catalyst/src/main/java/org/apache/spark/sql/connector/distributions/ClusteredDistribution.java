@@ -32,4 +32,13 @@ public interface ClusteredDistribution extends Distribution {
    * Returns clustering expressions.
    */
   Expression[] clustering();
+
+  /**
+   * Returns the number of partitions required by this write.
+   * <p>
+   * Implementations may want to override this if it requires the specific number of partitions.
+   *
+   * @return the required number of partitions, 0 as no requirement
+   */
+  default int requiredNumPartitions() { return 0; }
 }

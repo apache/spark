@@ -29,8 +29,16 @@ private[sql] object LogicalDistributions {
     ClusteredDistributionImpl(clustering)
   }
 
+  def clustered(clustering: Array[Expression], numPartitions: Int): ClusteredDistribution = {
+    ClusteredDistributionImpl(clustering, Some(numPartitions))
+  }
+
   def ordered(ordering: Array[SortOrder]): OrderedDistribution = {
     OrderedDistributionImpl(ordering)
+  }
+
+  def ordered(ordering: Array[SortOrder], numPartitions: Int): OrderedDistribution = {
+    OrderedDistributionImpl(ordering, Some(numPartitions))
   }
 }
 
@@ -39,21 +47,29 @@ private[sql] object UnspecifiedDistributionImpl extends UnspecifiedDistribution 
 }
 
 private[sql] final case class ClusteredDistributionImpl(
-    clusteringExprs: Seq[Expression]) extends ClusteredDistribution {
+    clusteringExprs: Seq[Expression],
+    numPartitions: Option[Int] = None) extends ClusteredDistribution {
 
   override def clustering: Array[Expression] = clusteringExprs.toArray
 
+  override def requiredNumPartitions(): Int = numPartitions.getOrElse(0)
+
   override def toString: String = {
-    s"ClusteredDistribution(${clusteringExprs.map(_.describe).mkString(", ")})"
+    s"ClusteredDistribution(${clusteringExprs.map(_.describe).mkString(", ")}" +
+      s" / numPartitions=$numPartitions)"
   }
 }
 
 private[sql] final case class OrderedDistributionImpl(
-    orderingExprs: Seq[SortOrder]) extends OrderedDistribution {
+    orderingExprs: Seq[SortOrder],
+    numPartitions: Option[Int] = None) extends OrderedDistribution {
 
   override def ordering: Array[SortOrder] = orderingExprs.toArray
 
+  override def requiredNumPartitions(): Int = numPartitions.getOrElse(0)
+
   override def toString: String = {
-    s"OrderedDistribution(${orderingExprs.map(_.describe).mkString(", ")})"
+    s"OrderedDistribution(${orderingExprs.map(_.describe).mkString(", ")} " +
+      s"/ numPartitions=$numPartitions)"
   }
 }

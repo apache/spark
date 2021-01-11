@@ -47,10 +47,26 @@ public class Distributions {
   }
 
   /**
+   * Creates a distribution where tuples that share the same values for clustering expressions are
+   * co-located in the same partition.
+   */
+  public static ClusteredDistribution clustered(Expression[] clustering, int numPartitions) {
+    return LogicalDistributions.clustered(clustering, numPartitions);
+  }
+
+  /**
    * Creates a distribution where tuples have been ordered across partitions according
    * to ordering expressions, but not necessarily within a given partition.
    */
   public static OrderedDistribution ordered(SortOrder[] ordering) {
     return LogicalDistributions.ordered(ordering);
+  }
+
+  /**
+   * Creates a distribution where tuples have been ordered across partitions according
+   * to ordering expressions, but not necessarily within a given partition.
+   */
+  public static OrderedDistribution ordered(SortOrder[] ordering, int numPartitions) {
+    return LogicalDistributions.ordered(ordering, numPartitions);
   }
 }
