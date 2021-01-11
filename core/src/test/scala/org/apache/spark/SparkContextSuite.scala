@@ -1067,17 +1067,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
 
       assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "Added dependency jars of Ivy URI" +
-          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+        "Added dependency jars of Ivy URI " +
+          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
 
       // test dependency jars exist
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
       assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI" +
-          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+        "The dependency jars of Ivy URI " +
+          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
       val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI" +
-          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
+        "The dependency jars of Ivy URI " +
+          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
         .head.getRenderedMessage
       dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
     }
@@ -1109,8 +1109,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         "invalidParam1=foo&invalidParam2=boo")
       assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
       assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
-        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query" +
-          " `invalidParam1=foo&invalidParam2=boo`.")))
+        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query " +
+          "`invalidParam1=foo&invalidParam2=boo`.")))
     }
   }
 
