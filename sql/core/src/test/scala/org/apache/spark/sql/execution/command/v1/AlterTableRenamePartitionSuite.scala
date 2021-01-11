@@ -48,7 +48,7 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
     }
   }
 
-  test("SPARK-34060: update stats of cached table") {
+  test("SPARK-34060, SPARK-34071: update stats of cached table") {
     withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
         sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
