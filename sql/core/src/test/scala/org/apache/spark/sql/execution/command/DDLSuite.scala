@@ -1730,6 +1730,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // use int literal as partition value for int type partition column
     sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
     assert(catalog.listPartitions(tableIdent).isEmpty)
+
+    // null partition values
+    createTablePartition(catalog, Map("a" -> null, "b" -> null), tableIdent)
+    val nullPartValue = if (isUsingHiveMetastore) "__HIVE_DEFAULT_PARTITION__" else null
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> nullPartValue, "b" -> nullPartValue)))
+    sql("ALTER TABLE tab1 DROP PARTITION (a = null, b = null)")
+    assert(catalog.listPartitions(tableIdent).isEmpty)
   }
 
   protected def testRenamePartitions(isDatasourceTable: Boolean): Unit = {
