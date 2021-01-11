@@ -162,8 +162,8 @@ private[spark] class TaskSetManager(
   // revert everything we did during task scheduling.
   private[scheduler] val barrierPendingLaunchTasks = new HashMap[Int, BarrierPendingLaunchTask]()
 
-  // Record the last time of the barrier TaskSetManager that failed to get all tasks launched.
-  private[scheduler] var lastResourceOfferFailTime = clock.getTimeMillis()
+  // Record the last log time of the barrier TaskSetManager that failed to get all tasks launched.
+  private[scheduler] var lastResourceOfferFailLogTime = clock.getTimeMillis()
 
   // Store tasks waiting to be scheduled by locality preferences
   private[scheduler] val pendingTasks = new PendingTasksByLocality()
