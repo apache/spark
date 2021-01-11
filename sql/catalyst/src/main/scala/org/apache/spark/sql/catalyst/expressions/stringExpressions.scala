@@ -892,11 +892,11 @@ object StringTrim {
 case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(srcStr: Expression, trimStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
-  override def prettyName: String = "trim"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("trim")
 
   override protected def direction: String = "BOTH"
 

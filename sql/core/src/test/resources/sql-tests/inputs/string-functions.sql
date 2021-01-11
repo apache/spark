@@ -50,6 +50,12 @@ SELECT trim(TRAILING 'xyz' FROM 'testxxzx');
 SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx');
 SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy');
 
+-- btrim
+SELECT btrim('xyxtrimyyx', 'xy');
+SELECT btrim(encode(" xyz ", 'utf-8'));
+SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'));
+SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'));
+
 -- Check lpad/rpad with invalid length parameter
 SELECT lpad('hi', 'invalid_length');
 SELECT rpad('hi', 'invalid_length');
