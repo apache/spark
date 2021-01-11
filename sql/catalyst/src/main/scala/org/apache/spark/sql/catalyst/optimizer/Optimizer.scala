@@ -519,8 +519,8 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
       lower
         .aggregateExpressions
-        .filter(!isAggregate(_))
         .filter(_.deterministic)
+        .filter(!isAggregate(_))
         .map(_.toAttribute)
     ))
 
