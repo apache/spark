@@ -1256,7 +1256,7 @@ class Dataset[T] private[sql](
    * @param joinType Type of join to perform. Must be one of: `left_semi`, `left_anti`.
    *
    * @group typedrel
-   * @since 3.1.0
+   * @since 3.2.0
    */
   def joinPartial[U](other: Dataset[U], condition: Column, joinType: String): Dataset[T] = {
     val joinedType = JoinType(joinType)
