@@ -7,6 +7,7 @@ on:
 
 jobs:
   cancel-duplicate-workflow-runs:
+    if: github.event.workflow_run.event == 'pull_request'
     name: "Cancel duplicate workflow runs"
     runs-on: ubuntu-latest
     steps:
