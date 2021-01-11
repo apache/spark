@@ -287,7 +287,7 @@ trim
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query schema
-struct<trim(CAST(encode( xyz , utf-8) AS STRING)):string>
+struct<btrim(CAST(encode( xyz , utf-8) AS STRING)):string>
 -- !query output
 xyz
 

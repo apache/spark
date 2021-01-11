@@ -872,20 +872,10 @@ object StringTrim {
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
-      > SELECT _FUNC_(BOTH FROM '    SparkSQL   ');
+      > SELECT _FUNC_('    SparkSQL   ', ' ');
        SparkSQL
-      > SELECT _FUNC_(LEADING FROM '    SparkSQL   ');
-       SparkSQL
-      > SELECT _FUNC_(TRAILING FROM '    SparkSQL   ');
-           SparkSQL
-      > SELECT _FUNC_('SL' FROM 'SSparkSQLS');
+      > SELECT _FUNC_('SSparkSQLS', 'SL');
        parkSQ
-      > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
-       parkSQ
-      > SELECT _FUNC_(LEADING 'SL' FROM 'SSparkSQLS');
-       parkSQLS
-      > SELECT _FUNC_(TRAILING 'SL' FROM 'SSparkSQLS');
-       SSparkSQ
   """,
   since = "1.5.0",
   group = "string_funcs")
