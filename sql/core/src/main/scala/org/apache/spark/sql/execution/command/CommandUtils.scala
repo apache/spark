@@ -57,11 +57,8 @@ object CommandUtils extends Logging {
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-      val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
-      if (isNewStats) {
-        val newStats = CatalogStatistics(sizeInBytes = newSize)
-        catalog.alterTableStats(table.identifier, Some(newStats))
-      }
+      val newStats = CatalogStatistics(sizeInBytes = newSize)
+      catalog.alterTableStats(table.identifier, Some(newStats))
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
     } else {
