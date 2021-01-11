@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.types.StructType
 
 /**
  * Simplify redundant [[CreateNamedStruct]], [[CreateArray]] and [[CreateMap]] expressions.
@@ -46,7 +45,12 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // if the struct itself is null, then any value extracted from it (expr) will be null
           // so we don't need to wrap expr in If(IsNull(struct), Literal(null, expr.dataType), expr)
           case expr: GetStructField if expr.child.semanticEquals(structExpr) => expr
-          case expr => If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+          case expr =>
+            if (structExpr.nullable) {
+              If(IsNull(structExpr), Literal(null, expr.dataType), expr)
+            } else {
+              expr
+            }
         }
       // Remove redundant array indexing.
       case GetArrayStructFields(CreateArray(elems, useStringTypeWhenEmpty), field, ordinal, _, _) =>
@@ -56,7 +60,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
         CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))), useStringTypeWhenEmpty)
 
       // Remove redundant map lookup.
-      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx)) =>
+      case ga @ GetArrayItem(CreateArray(elems, _), IntegerLiteral(idx), _) =>
         // Instead of creating the array and then selecting one row, remove array creation
         // altogether.
         if (idx >= 0 && idx < elems.size) {
@@ -66,7 +70,7 @@ object SimplifyExtractValueOps extends Rule[LogicalPlan] {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)
         }
-      case GetMapValue(CreateMap(elems, _), key) => CaseKeyWhen(key, elems)
+      case GetMapValue(CreateMap(elems, _), key, _) => CaseKeyWhen(key, elems)
     }
   }
 }

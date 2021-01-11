@@ -130,7 +130,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Table Properties    	[t=test, e=3]       	                    
+Table Properties    	[e=3, t=test]       	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
@@ -162,7 +162,7 @@ Num Buckets         	2
 Bucket Columns      	[`a`]               	                    
 Sort Columns        	[`b`]               	                    
 Comment             	table_comment       	                    
-Table Properties    	[t=test, e=3]       	                    
+Table Properties    	[e=3, t=test]       	                    
 Location [not included in comparison]/{warehouse_dir}/t	                    
 Storage Properties  	[a=1, b=2]          	                    
 Partition Provider  	Catalog
@@ -332,7 +332,7 @@ struct<>
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 Partition not found in table 't' database 'default':
 c -> Us
-d -> 2;
+d -> 2
 
 
 -- !query
@@ -341,7 +341,7 @@ DESC t PARTITION (c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`default`.`t`';
+Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`default`.`t`'
 
 
 -- !query
@@ -431,7 +431,7 @@ DESC temp_v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-DESC PARTITION is not allowed on a temporary view: temp_v;
+DESC PARTITION is not allowed on a temporary view: temp_v
 
 
 -- !query
@@ -477,7 +477,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Table Properties    	[view.query.out.col.3=d, view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=4, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=c, view.catalogAndNamespace.part.1=default]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=a, view.query.out.col.1=b, view.query.out.col.2=c, view.query.out.col.3=d, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
 
 
 -- !query
@@ -501,7 +501,7 @@ View Text           	SELECT * FROM t
 View Original Text  	SELECT * FROM t     	                    
 View Catalog and Namespace	spark_catalog.default	                    
 View Query Output Columns	[a, b, c, d]        	                    
-Table Properties    	[view.query.out.col.3=d, view.catalogAndNamespace.numParts=2, view.query.out.col.0=a, view.query.out.numCols=4, view.query.out.col.1=b, view.catalogAndNamespace.part.0=spark_catalog, view.query.out.col.2=c, view.catalogAndNamespace.part.1=default]
+Table Properties    	[view.catalogAndNamespace.numParts=2, view.catalogAndNamespace.part.0=spark_catalog, view.catalogAndNamespace.part.1=default, view.query.out.col.0=a, view.query.out.col.1=b, view.query.out.col.2=c, view.query.out.col.3=d, view.query.out.numCols=4, view.referredTempFunctionsNames=[], view.referredTempViewNames=[]]
 
 
 -- !query
@@ -510,7 +510,7 @@ DESC v PARTITION (c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-DESC PARTITION is not allowed on a view: v;
+DESC PARTITION is not allowed on a view: v
 
 
 -- !query
@@ -540,7 +540,7 @@ struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
 'DescribeRelation false
-+- 'UnresolvedTableOrView [t]
++- 'UnresolvedTableOrView [t], DESCRIBE TABLE, true
 
 == Analyzed Logical Plan ==
 col_name: string, data_type: string, comment: string
@@ -561,7 +561,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeColumnCommand
-   +- DescribeColumnCommand `default`.`t`, [b], false
+   +- DescribeColumnCommand `default`.`t`, [spark_catalog, default, t, b], false
 
 
 -- !query

@@ -90,6 +90,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @Nullable private MapTaskResult taskResult;
   @Nullable private ShuffleExternalSorter sorter;
+  @Nullable private long[] partitionLengths;
   private long peakMemoryUsedBytes = 0;
 
   /** Subclass of ByteArrayOutputStream that exposes `buf` directly. */
@@ -224,6 +225,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final MapOutputCommitMessage mapOutputCommitMessage;
     try {
       mapOutputCommitMessage = mergeSpills(spills);
+      partitionLengths = mapOutputCommitMessage.getPartitionLengths();
     } finally {
       for (SpillInfo spill : spills) {
         if (spill.file.exists() && !spill.file.delete()) {
@@ -550,5 +552,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     public void close() throws IOException {
       channel.close();
     }
+  }
+
+  @Override
+  public long[] getPartitionLengths() {
+    return partitionLengths;
   }
 }

@@ -249,6 +249,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
   checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
+  checkDataTypeFromJson(CharType(1))
+  checkDataTypeFromDDL(CharType(1))
+
+  checkDataTypeFromJson(VarcharType(10))
+  checkDataTypeFromDDL(VarcharType(11))
+
   val metadata = new MetadataBuilder()
     .putString("name", "age")
     .build()
@@ -310,6 +316,10 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(MapType(IntegerType, StringType, true), 24)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
   checkDefaultSize(structType, 20)
+  checkDefaultSize(CharType(5), 5)
+  checkDefaultSize(CharType(100), 100)
+  checkDefaultSize(VarcharType(5), 5)
+  checkDefaultSize(VarcharType(10), 10)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,

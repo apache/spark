@@ -45,6 +45,8 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
+ * @param child logical plan whose output is transformed.
+ * @param ioschema the class set that defines how to handle input/output data.
  */
 case class HiveScriptTransformationExec(
     input: Seq[Expression],
@@ -92,7 +94,7 @@ case class HiveScriptTransformationExec(
                 scriptOutputWritable.readFields(scriptOutputStream)
               } catch {
                 case _: EOFException =>
-                  // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
+                  // This means that the stdout of `proc` (i.e. TRANSFORM process) has exhausted.
                   // Ideally the proc should *not* be alive at this point but
                   // there can be a lag between EOF being written out and the process
                   // being terminated. So explicitly waiting for the process to be done.

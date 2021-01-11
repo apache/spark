@@ -45,5 +45,3 @@ libraryDependencies += "org.ow2.asm"  % "asm-commons" % "7.2"
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.2")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-pom-reader" % "2.2.0")
-
-// TODO(SPARK-33109) Upgrade to SBT 1.4 and support `dependencyTree` back

@@ -193,6 +193,11 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     return mapOutputCommitMessage;
   }
 
+  @Override
+  public long[] getPartitionLengths() {
+    return mapOutputCommitMessage.getPartitionLengths();
+  }
+
   /**
    * Concatenate all of the per-partition files into a single combined file.
    *

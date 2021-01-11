@@ -17,14 +17,11 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.io.ObjectInputStream
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.ScalaReflection.Schema
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder.{Deserializer, Serializer}
 import org.apache.spark.sql.catalyst.expressions._
@@ -33,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Initial
 import org.apache.spark.sql.catalyst.optimizer.{ReassignLambdaVariableID, SimplifyCasts}
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LeafNode, LocalRelation}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, ObjectType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ObjectType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -191,7 +188,7 @@ object ExpressionEncoder {
   }
 
   /**
-   * Function that serializesa an object of type `T` to an [[InternalRow]]. This class is not
+   * Function that serializes an object of type `T` to an [[InternalRow]]. This class is not
    * thread-safe. Note that multiple calls to `apply(..)` return the same actual [[InternalRow]]
    * object.  Thus, the caller should copy the result before making another call if required.
    */
@@ -305,11 +302,6 @@ case class ExpressionEncoder[T](
   val schema: StructType = StructType(serializer.map { s =>
     StructField(s.name, s.dataType, s.nullable)
   })
-
-  def dataTypeAndNullable: Schema = {
-    val dataType = if (isSerializedAsStruct) schema else schema.head.dataType
-    Schema(dataType, objSerializer.nullable)
-  }
 
   /**
    * Returns true if the type `T` is serialized as a struct by `objSerializer`.

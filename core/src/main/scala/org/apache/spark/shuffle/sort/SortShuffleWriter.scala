@@ -47,6 +47,8 @@ private[spark] class SortShuffleWriter[K, V, C](
 
   private var taskResult: MapTaskResult = null
 
+  private var partitionLengths: Array[Long] = _
+
   private val writeMetrics = context.taskMetrics().shuffleWriteMetrics
 
   /** Write a bunch of records to this task's output */
@@ -70,6 +72,7 @@ private[spark] class SortShuffleWriter[K, V, C](
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter)
     val mapOutputCommitMessage = mapOutputWriter.commitAllPartitions()
+    partitionLengths = mapOutputCommitMessage.getPartitionLengths()
     taskResult = MapTaskResult(
       MapStatus(
         blockManager.shuffleServerId,
@@ -100,6 +103,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
     }
   }
+
+  override def getPartitionLengths(): Array[Long] = partitionLengths
 }
 
 private[spark] object SortShuffleWriter {

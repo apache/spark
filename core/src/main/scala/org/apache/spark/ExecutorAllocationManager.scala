@@ -248,7 +248,7 @@ private[spark] class ExecutorAllocationManager(
       executor.scheduleWithFixedDelay(scheduleTask, 0, intervalMillis, TimeUnit.MILLISECONDS)
     }
 
-    // copy the maps inside synchonize to ensure not being modified
+    // copy the maps inside synchronize to ensure not being modified
     val (numExecutorsTarget, numLocalityAware) = synchronized {
       val numTarget = numExecutorsTargetPerResourceProfileId.toMap
       val numLocality = numLocalityAwareTasksPerResourceProfileId.toMap
@@ -312,8 +312,8 @@ private[spark] class ExecutorAllocationManager(
 
     if (unschedulableTaskSets > 0) {
       // Request additional executors to account for task sets having tasks that are unschedulable
-      // due to blacklisting when the active executor count has already reached the max needed
-      // which we would normally get.
+      // due to executors excluded for failures when the active executor count has already reached
+      // the max needed which we would normally get.
       val maxNeededForUnschedulables = math.ceil(unschedulableTaskSets * executorAllocationRatio /
         tasksPerExecutor).toInt
       math.max(maxNeededWithSpeculationLocalityOffset,
@@ -379,7 +379,7 @@ private[spark] class ExecutorAllocationManager(
 
           // We lower the target number of executors but don't actively kill any yet.  Killing is
           // controlled separately by an idle timeout.  It's still helpful to reduce
-          // the target number in case an executor just happens to get lost (eg., bad hardware,
+          // the target number in case an executor just happens to get lost (e.g., bad hardware,
           // or the cluster manager preempts it) -- in that case, there is no point in trying
           // to immediately  get a new executor, since we wouldn't even use it yet.
           decrementExecutorsFromTarget(maxNeeded, rpId, updatesNeeded)
@@ -580,7 +580,10 @@ private[spark] class ExecutorAllocationManager(
       if (decommissionEnabled) {
         val executorIdsWithoutHostLoss = executorIdsToBeRemoved.toSeq.map(
           id => (id, ExecutorDecommissionInfo("spark scale down"))).toArray
-        client.decommissionExecutors(executorIdsWithoutHostLoss, adjustTargetNumExecutors = false)
+        client.decommissionExecutors(
+          executorIdsWithoutHostLoss,
+          adjustTargetNumExecutors = false,
+          triggeredByExecutor = false)
       } else {
         client.killExecutors(executorIdsToBeRemoved.toSeq, adjustTargetNumExecutors = false,
           countFailures = false, force = false)
@@ -659,10 +662,10 @@ private[spark] class ExecutorAllocationManager(
     private val resourceProfileIdToStageAttempt =
       new mutable.HashMap[Int, mutable.Set[StageAttempt]]
 
-    // Keep track of unschedulable task sets due to blacklisting. This is a Set of StageAttempt's
-    // because we'll only take the last unschedulable task in a taskset although there can be more.
-    // This is done in order to avoid costly loops in the scheduling.
-    // Check TaskSetManager#getCompletelyBlacklistedTaskIfAny for more details.
+    // Keep track of unschedulable task sets because of executor/node exclusions from too many task
+    // failures. This is a Set of StageAttempt's because we'll only take the last unschedulable task
+    // in a taskset although there can be more. This is done in order to avoid costly loops in the
+    // scheduling. Check TaskSetManager#getCompletelyExcludedTaskIfAny for more details.
     private val unschedulableTaskSets = new mutable.HashSet[StageAttempt]
 
     // stageAttempt to tuple (the number of task with locality preferences, a map where each pair
@@ -795,7 +798,11 @@ private[spark] class ExecutorAllocationManager(
         }
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
-          stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
+          // If the previous task attempt succeeded first and it was the last task in a stage,
+          // the stage may have been removed before handing this speculative TaskEnd event.
+          if (stageAttemptToNumSpeculativeTasks.contains(stageAttempt)) {
+            stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
+          }
         }
 
         taskEnd.reason match {

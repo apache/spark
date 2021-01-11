@@ -27,7 +27,10 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.metrics.source.Source
 
 private[spark]
-class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
+class ExecutorSource(
+    threadPool: ThreadPoolExecutor,
+    executorId: String,
+    fileSystemSchemes: Array[String]) extends Source {
 
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics.asScala.find(s => s.getScheme.equals(scheme))
@@ -70,7 +73,7 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   })
 
   // Gauge for file system stats of this executor
-  for (scheme <- Array("hdfs", "file")) {
+  for (scheme <- fileSystemSchemes) {
     registerFileSystemStat(scheme, "read_bytes", _.getBytesRead(), 0L)
     registerFileSystemStat(scheme, "write_bytes", _.getBytesWritten(), 0L)
     registerFileSystemStat(scheme, "read_ops", _.getReadOps(), 0)

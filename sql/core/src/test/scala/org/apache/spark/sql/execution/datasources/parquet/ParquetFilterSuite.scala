@@ -45,6 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 /**
@@ -585,7 +586,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     Seq(true, false).foreach { java8Api =>
       withSQLConf(
         SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
+        SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
         // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
         val millisData = Seq(
           "1000-06-14 08:28:53.123",
@@ -1571,6 +1573,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 }
 
+@ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
   override protected def sparkConf: SparkConf =
     super
@@ -1650,6 +1653,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
   }
 }
 
+@ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =

@@ -29,8 +29,17 @@ import org.apache.spark.sql.types._
 
 class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
+  private var jsonExpressionOptimizeEnabled: Boolean = _
+  protected override def beforeAll(): Unit = {
+    jsonExpressionOptimizeEnabled = SQLConf.get.jsonExpressionOptimization
+  }
+
+  protected override def afterAll(): Unit = {
+    SQLConf.get.setConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION, jsonExpressionOptimizeEnabled)
+  }
+
   object Optimizer extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("Json optimization", FixedPoint(10), OptimizeJsonExprs) :: Nil
+    val batches = Batch("Json optimization", FixedPoint(10), OptimizeCsvJsonExprs) :: Nil
   }
 
   val schema = StructType.fromDDL("a int, b int")
@@ -200,6 +209,26 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized2, expected2)
   }
 
+  test("SPARK-33907: do not prune unnecessary columns if options is not empty") {
+    val options = Map("mode" -> "failfast")
+
+    val query1 = testRelation2
+      .select(GetStructField(JsonToStructs(schema, options, 'json), 0))
+    val optimized1 = Optimizer.execute(query1.analyze)
+
+    comparePlans(optimized1, query1.analyze)
+
+    val schema1 = ArrayType(StructType.fromDDL("a int, b int"), containsNull = true)
+    val field1 = schema1.elementType.asInstanceOf[StructType](0)
+
+    val query2 = testRelation2
+      .select(GetArrayStructFields(
+        JsonToStructs(schema1, options, 'json), field1, 0, 2, true).as("a"))
+    val optimized2 = Optimizer.execute(query2.analyze)
+
+    comparePlans(optimized2, query2.analyze)
+  }
+
   test("SPARK-33007: simplify named_struct + from_json") {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int, b int, c long, d string")
@@ -265,5 +294,17 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
       val row = create_row(v)
       checkEvaluation(e1, e2.eval(row), row)
     })
+  }
+
+  test("SPARK-33078: disable json optimization") {
+    withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "false") {
+      val options = Map.empty[String, String]
+
+      val query = testRelation
+        .select(JsonToStructs(schema, options, StructsToJson(options, 'struct)).as("struct"))
+      val optimized = Optimizer.execute(query.analyze)
+
+      comparePlans(optimized, query.analyze)
+    }
   }
 }

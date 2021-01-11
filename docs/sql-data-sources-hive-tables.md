@@ -139,7 +139,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>builtin</code></td>
     <td>
       Location of the jars that should be used to instantiate the HiveMetastoreClient. This
-      property can be one of three options:
+      property can be one of four options:
       <ol>
         <li><code>builtin</code></li>
         Use Hive 2.3.7, which is bundled with the Spark assembly when <code>-Phive</code> is
@@ -148,6 +148,9 @@ The following options can be used to configure the version of Hive that is used 
         <li><code>maven</code></li>
         Use Hive jars of specified version downloaded from Maven repositories. This configuration
         is not generally recommended for production deployments.
+        <li><code>path</code></li>
+        Use Hive jars configured by <code>spark.sql.hive.metastore.jars.path</code>
+        in comma separated format. Support both local or remote paths.
         <li>A classpath in the standard format for the JVM. This classpath must include all of Hive
         and its dependencies, including the correct version of Hadoop. These jars only need to be
         present on the driver, but if you are running in yarn cluster mode then you must ensure
@@ -155,6 +158,28 @@ The following options can be used to configure the version of Hive that is used 
       </ol>
     </td>
     <td>1.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.hive.metastore.jars.path</code></td>
+    <td><code>(empty)</code></td>
+    <td>
+      Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
+      This configuration is useful only when <code>spark.sql.hive.metastore.jars</code> is set as <code>path</code>. 
+      <br/>
+      The paths can be any of the following format:
+      <ol>
+        <li><code>file://path/to/jar/foo.jar</code></li>
+        <li><code>hdfs://nameservice/path/to/jar/foo.jar</code></li>
+        <li><code>/path/to/jar/</code>(path without URI scheme follow conf <code>fs.defaultFS</code>'s URI schema)</li>
+        <li><code>[http/https/ftp]://path/to/jar/foo.jar</code></li>
+      </ol>
+      Note that 1, 2, and 3 support wildcard. For example:
+      <ol>
+        <li><code>file://path/to/jar/*,file://path2/to/jar/*/*.jar</code></li>
+        <li><code>hdfs://nameservice/path/to/jar/*,hdfs://nameservice2/path/to/jar/*/*.jar</code></li>
+      </ol>
+    </td>
+    <td>3.1.0</td>
   </tr>
   <tr>
     <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>

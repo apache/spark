@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Prune hive table partitions using partition filters on [[HiveTableRelation]]. The pruned
@@ -35,15 +34,13 @@ import org.apache.spark.sql.internal.SQLConf
  * the hive table relation will be updated based on pruned partitions.
  *
  * This rule is executed in optimization phase, so the statistics can be updated before physical
- * planning, which is useful for some spark strategy, eg.
+ * planning, which is useful for some spark strategy, e.g.
  * [[org.apache.spark.sql.execution.SparkStrategies.JoinSelection]].
  *
  * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
  */
 private[sql] class PruneHiveTablePartitions(session: SparkSession)
   extends Rule[LogicalPlan] with CastSupport with PredicateHelper {
-
-  override val conf: SQLConf = session.sessionState.conf
 
   /**
    * Extract the partition filters from the filters on the table.

@@ -40,6 +40,46 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
   val TaskEnded = "TASK_ENDED"
   val JobEnded = "JOB_ENDED"
 
+  Seq(false, true).foreach { isEnabled =>
+    test(s"SPARK-32850: BlockManager decommission should respect the configuration " +
+      s"(enabled=${isEnabled})") {
+      val conf = new SparkConf()
+        .setAppName("test-blockmanager-decommissioner")
+        .setMaster("local-cluster[2, 1, 1024]")
+        .set(config.DECOMMISSION_ENABLED, true)
+        .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 6000)
+      val executors = sc.getExecutorIds().toArray
+      val decommissionListener = new SparkListener {
+        override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+          // ensure Tasks launched at executors before they're marked as decommissioned by driver
+          Thread.sleep(3000)
+          sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
+            .decommissionExecutors(
+              executors.map { id => (id, ExecutorDecommissionInfo("test")) },
+              true,
+              false)
+        }
+      }
+      sc.addSparkListener(decommissionListener)
+
+      val decommissionStatus: Seq[Boolean] = sc.parallelize(1 to 100, 2).mapPartitions { _ =>
+        val startTime = System.currentTimeMillis()
+        while (SparkEnv.get.blockManager.decommissioner.isEmpty &&
+          // wait at most 6 seconds for BlockManager to start to decommission (if enabled)
+          System.currentTimeMillis() - startTime < 6000) {
+          Thread.sleep(300)
+        }
+        val blockManagerDecommissionStatus =
+          if (SparkEnv.get.blockManager.decommissioner.isEmpty) false else true
+        Iterator.single(blockManagerDecommissionStatus)
+      }.collect()
+      assert(decommissionStatus.forall(_ == isEnabled))
+      sc.removeSparkListener(decommissionListener)
+    }
+  }
+
   testRetry(s"verify that an already running task which is going to cache data succeeds " +
     s"on a decommissioned executor after task start") {
     runDecomTest(true, false, TaskStarted)

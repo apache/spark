@@ -15,21 +15,30 @@
 # limitations under the License.
 #
 
-from pyspark import since, SparkContext
+from pyspark import SparkContext
 from pyspark.sql.column import Column, _to_java_column
 
 
-@since("3.0.0")
 def vector_to_array(col, dtype="float64"):
     """
     Converts a column of MLlib sparse/dense vectors into a column of dense arrays.
 
-    :param col: A string of the column name or a Column
-    :param dtype: The data type of the output array. Valid values: "float64" or "float32".
-    :return: The converted column of dense arrays.
-
     .. versionadded:: 3.0.0
 
+    Parameters
+    ----------
+    col : :py:class:`pyspark.sql.Column` or str
+        Input column
+    dtype : str, optional
+        The data type of the output array. Valid values: "float64" or "float32".
+
+    Returns
+    -------
+    :py:class:`pyspark.sql.Column`
+        The converted column of dense arrays.
+
+    Examples
+    --------
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.functions import vector_to_array
     >>> from pyspark.mllib.linalg import Vectors as OldVectors
@@ -58,6 +67,40 @@ def vector_to_array(col, dtype="float64"):
     sc = SparkContext._active_spark_context
     return Column(
         sc._jvm.org.apache.spark.ml.functions.vector_to_array(_to_java_column(col), dtype))
+
+
+def array_to_vector(col):
+    """
+    Converts a column of array of numeric type into a column of dense vectors in MLlib
+
+    .. versionadded:: 3.1.0
+
+    Parameters
+    ----------
+    col : :py:class:`pyspark.sql.Column` or str
+        Input column
+
+    Returns
+    -------
+    :py:class:`pyspark.sql.Column`
+        The converted column of MLlib dense vectors.
+
+    Examples
+    --------
+    >>> from pyspark.ml.functions import array_to_vector
+    >>> df1 = spark.createDataFrame([([1.5, 2.5],),], schema='v1 array<double>')
+    >>> df1.select(array_to_vector('v1').alias('vec1')).collect()
+    [Row(vec1=DenseVector([1.5, 2.5]))]
+    >>> df2 = spark.createDataFrame([([1.5, 3.5],),], schema='v1 array<float>')
+    >>> df2.select(array_to_vector('v1').alias('vec1')).collect()
+    [Row(vec1=DenseVector([1.5, 3.5]))]
+    >>> df3 = spark.createDataFrame([([1, 3],),], schema='v1 array<int>')
+    >>> df3.select(array_to_vector('v1').alias('vec1')).collect()
+    [Row(vec1=DenseVector([1.0, 3.0]))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(
+        sc._jvm.org.apache.spark.ml.functions.array_to_vector(_to_java_column(col)))
 
 
 def _test():

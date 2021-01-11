@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -232,6 +231,11 @@ object ScalaReflection extends ScalaReflection {
 
       case t if isSubtype(t, localTypeOf[java.time.Instant]) =>
         createDeserializerForInstant(path)
+
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) =>
+        createDeserializerForTypesSupportValueOf(
+          Invoke(path, "toString", ObjectType(classOf[String]), returnNullable = false),
+          getClassFromType(t))
 
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         createDeserializerForSqlTimestamp(path)
@@ -527,6 +531,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.math.BigInteger]) =>
         createSerializerForJavaBigInteger(inputObject)
 
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) =>
+        createSerializerForJavaEnum(inputObject)
+
       case t if isSubtype(t, localTypeOf[scala.math.BigInt]) =>
         createSerializerForScalaBigInt(inputObject)
 
@@ -750,6 +757,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.lang.Short]) => Schema(ShortType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.lang.Byte]) => Schema(ByteType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.lang.Boolean]) => Schema(BooleanType, nullable = true)
+      case t if isSubtype(t, localTypeOf[java.lang.Enum[_]]) => Schema(StringType, nullable = true)
       case t if isSubtype(t, definitions.IntTpe) => Schema(IntegerType, nullable = false)
       case t if isSubtype(t, definitions.LongTpe) => Schema(LongType, nullable = false)
       case t if isSubtype(t, definitions.DoubleTpe) => Schema(DoubleType, nullable = false)
@@ -893,10 +901,6 @@ trait ScalaReflection extends Logging {
   def mirror: universe.Mirror
 
   import universe._
-
-  // The Predef.Map is scala.collection.immutable.Map.
-  // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
-  import scala.collection.Map
 
   /**
    * Any codes calling `scala.reflect.api.Types.TypeApi.<:<` should be wrapped by this method to

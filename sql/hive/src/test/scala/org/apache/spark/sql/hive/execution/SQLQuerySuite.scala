@@ -45,7 +45,6 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowHiveTest
-import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -229,7 +228,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
-      checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+      checkAnswer(sql("SHOW functions `a function doesn't exist`"), Nil)
       checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
 
       // this probably will failed if we add more function with `sha` prefixing.
@@ -713,8 +712,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
               |AS SELECT key, value FROM mytable1
             """.stripMargin)
         }.getMessage
-        assert(e.contains("Create Partitioned Table As Select cannot specify data type for " +
-          "the partition columns of the target table"))
+        assert(e.contains("Partition column types may not be specified in Create Table As Select"))
       }
     }
   }
@@ -770,7 +768,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql("SELECT * FROM nested").collect().toSeq)
 
         intercept[AnalysisException] {
-          sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+          sql("CREATE TABLE test_ctas_1234 AS SELECT * from nonexistent").collect()
         }
       }
     }
@@ -1741,12 +1739,12 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
            |SELECT 'blarr'
          """.stripMargin)
 
-      // project list is the same order of paritioning columns in table definition
+      // project list is the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
         Row("a", "b", "c", "d", "e", "blarr") :: Nil)
 
-      // project list does not have the same order of paritioning columns in table definition
+      // project list does not have the same order of partitioning columns in table definition
       checkAnswer(
         sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
         Row("b", "c", "d", "a", "e", "blarr") :: Nil)
@@ -2028,6 +2026,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql(
             """
               |CREATE TABLE part_table (c STRING)
+              |STORED AS textfile
               |PARTITIONED BY (d STRING)
             """.stripMargin)
           sql(s"LOAD DATA LOCAL INPATH '$path/part-r-000011' " +
@@ -2158,32 +2157,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       checkAnswer(table.filter($"p" === "'").select($"a"), Row(2))
       checkAnswer(table.filter($"p" === "\"").select($"a"), Row(3))
       checkAnswer(table.filter($"p" === "p1\" and q=\"q1").select($"a"), Row(4))
-    }
-  }
-
-  test("SPARK-21101 UDTF should override initialize(ObjectInspector[] args)") {
-    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
-      sql(
-        s"""
-           |CREATE TEMPORARY FUNCTION udtf_stack1
-           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
-        """.stripMargin)
-      val cnt =
-        sql("SELECT udtf_stack1(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')").count()
-      assert(cnt === 2)
-
-      sql(
-        s"""
-           |CREATE TEMPORARY FUNCTION udtf_stack2
-           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
-           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
-        """.stripMargin)
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        sql("SELECT udtf_stack2(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')")
-      }
-      assert(
-        e.getMessage.contains("public StructObjectInspector initialize(ObjectInspector[] args)"))
     }
   }
 
@@ -2581,6 +2554,30 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql("INSERT OVERWRITE TABLE t PARTITION(P1) VALUES(1, 'caseSensitive')")
           checkAnswer(sql("select * from t"), Row(1, "caseSensitive"))
         }
+      }
+    }
+  }
+
+  test("SPARK-32668: HiveGenericUDTF initialize UDTF should use StructObjectInspector method") {
+    withUserDefinedFunction("udtf_stack1" -> true, "udtf_stack2" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack1
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_stack2
+           |AS 'org.apache.spark.sql.hive.execution.UDTFStack2'
+           |USING JAR '${hiveContext.getHiveFile("SPARK-21101-1.0.jar").toURI}'
+        """.stripMargin)
+
+      Seq("udtf_stack1", "udtf_stack2").foreach { udf =>
+        checkAnswer(
+          sql(s"SELECT $udf(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')"),
+          Seq(Row("A", 10, Date.valueOf("2015-01-01")),
+            Row("B", 20, Date.valueOf("2016-01-01"))))
       }
     }
   }

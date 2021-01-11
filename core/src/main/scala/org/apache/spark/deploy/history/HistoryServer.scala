@@ -128,6 +128,11 @@ class HistoryServer(
     appCache.withSparkUI(appId, attemptId)(fn)
   }
 
+  override def checkUIViewPermissions(appId: String, attemptId: Option[String],
+      user: String): Boolean = {
+    provider.checkUIViewPermissions(appId, attemptId, user)
+  }
+
   initialize()
 
   /**
