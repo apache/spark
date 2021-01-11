@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
-import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.{broadcast, SparkContext, SparkException}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -74,7 +74,9 @@ case class BroadcastExchangeExec(
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
 
-  override val runId: UUID = UUID.randomUUID
+  private val groupId = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
+
+  override val runId: UUID = if (groupId == null) UUID.randomUUID else UUID.fromString(groupId)
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
@@ -113,7 +115,7 @@ case class BroadcastExchangeExec(
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
               interruptOnCancel = true)
-            val beforeCollect = System.nanoTime()
+            val beforeCollect = Sgystem.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
             longMetric("numOutputRows") += numRows
