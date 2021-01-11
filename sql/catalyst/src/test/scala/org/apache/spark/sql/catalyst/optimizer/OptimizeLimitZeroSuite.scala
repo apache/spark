@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, GlobalLimit, Join, JoinHint, LocalLimit, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{GlobalLimit, LocalLimit, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.IntegerType
 
@@ -32,6 +32,7 @@ class OptimizeLimitZeroSuite extends PlanTest {
     val batches =
       Batch("OptimizeLimitZero", Once,
         ReplaceIntersectWithSemiJoin,
+        ReplaceDistinctWithAggregate,
         OptimizeLimitZero,
         PropagateEmptyRelation) :: Nil
   }
@@ -98,16 +99,10 @@ class OptimizeLimitZeroSuite extends PlanTest {
 
   test("Limit 0: intersect") {
     val query = testRelation1
-      .intersect(testRelation2.limit(0), isAll = false)
+      .intersect(testRelation1.limit(0), isAll = false)
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer =
-      Join(
-      Distinct(testRelation1),
-      Distinct(LocalRelation('b.int)),
-      LeftSemi,
-      Option('a <=> 'b),
-      JoinHint.NONE).analyze
+    val correctAnswer = LocalRelation('a.int)
 
     comparePlans(optimized, correctAnswer)
   }
