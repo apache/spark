@@ -41,7 +41,8 @@ case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[Log
             filter.foreach(_.failAnalysis("FILTER predicate specified, " +
               s"but ${func.prettyName} is not an aggregate function"))
             if (ignoreNulls) {
-              throw QueryCompilationErrors.ignoreNullsWithUnsupportedFunctionError(func.prettyName)
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                func.prettyName, "IGNORE NULLS")
             }
             func
           case other => other.failAnalysis(

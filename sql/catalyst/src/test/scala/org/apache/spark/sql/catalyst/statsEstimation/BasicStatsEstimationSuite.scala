@@ -134,6 +134,24 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       expectedStatsCboOff = Statistics.DUMMY)
   }
 
+  test("SPARK-33954: Some operator missing rowCount when enable CBO") {
+    checkStats(
+      plan.repartition(10),
+      expectedStatsCboOn = Statistics(sizeInBytes = 120, rowCount = Some(10)),
+      expectedStatsCboOff = Statistics(sizeInBytes = 120))
+  }
+
+  test("SPARK-34031: Union operator missing rowCount when enable CBO") {
+    val union = Union(plan :: plan :: plan :: Nil)
+    val childrenSize = union.children.size
+    val sizeInBytes = plan.size.get * childrenSize
+    val rowCount = Some(plan.rowCount * childrenSize)
+    checkStats(
+      union,
+      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
   /** Check estimated stats when cbo is turned on/off. */
   private def checkStats(
       plan: LogicalPlan,

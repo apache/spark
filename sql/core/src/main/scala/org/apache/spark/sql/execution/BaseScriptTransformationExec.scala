@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.io.{BufferedReader, InputStream, InputStreamReader, OutputStream}
+import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStream}
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkException, SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -72,6 +72,10 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   protected def initProc: (OutputStream, Process, InputStream, CircularBuffer) = {
     val cmd = List("/bin/bash", "-c", script)
     val builder = new ProcessBuilder(cmd.asJava)
+      .directory(new File(SparkFiles.getRootDirectory()))
+    val path = System.getenv("PATH") + File.pathSeparator +
+      SparkFiles.getRootDirectory()
+    builder.environment().put("PATH", path)
 
     val proc = builder.start()
     val inputStream = proc.getInputStream

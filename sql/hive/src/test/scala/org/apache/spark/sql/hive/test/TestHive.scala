@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTable, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
@@ -596,13 +596,8 @@ private[hive] class TestHiveQueryExecution(
   }
 
   override lazy val analyzed: LogicalPlan = sparkSession.withActive {
-    val describedTables = logical match {
-      case CacheTable(_, tbl, _, _) => tbl.asTableIdentifier :: Nil
-      case _ => Nil
-    }
-
     // Make sure any test tables referenced are loaded.
-    val referencedTables = describedTables ++ logical.collect {
+    val referencedTables = logical.collect {
       case UnresolvedRelation(ident, _, _) =>
         if (ident.length > 1 && ident.head.equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)) {
           ident.tail.asTableIdentifier

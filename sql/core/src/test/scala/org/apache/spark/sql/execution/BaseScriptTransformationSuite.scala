@@ -470,6 +470,122 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           Row("3\u00014\u00015") :: Nil)
     }
   }
+
+  test("SPARK-33934: Add SparkFile's root dir to env property PATH") {
+    assume(TestUtils.testCommandAvailable("python"))
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+      df.createTempView("v")
+
+      // test 'python /path/to/script.py' with local file
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT
+             |TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      // test '/path/to/script.py' with script not executable
+      val e1 = intercept[TestFailedException] {
+        checkAnswer(
+          sql(
+            s"""
+               |SELECT
+               |TRANSFORM(a, b, c, d, e)
+               |  ROW FORMAT DELIMITED
+               |  FIELDS TERMINATED BY '\t'
+               |  USING '$scriptFilePath' AS (a, b, c, d, e)
+               |  ROW FORMAT DELIMITED
+               |  FIELDS TERMINATED BY '\t'
+               |FROM v
+        """.stripMargin), identity, df.select(
+            'a.cast("string"),
+            'b.cast("string"),
+            'c.cast("string"),
+            'd.cast("string"),
+            'e.cast("string")).collect())
+      }.getMessage
+      // Check with status exit code since in GA test, it may lose detail failed root cause.
+      // Different root cause's exitcode is not same.
+      // In this test, root cause is `Permission denied`
+      assert(e1.contains("Subprocess exited with status 126"))
+
+      // test `/path/to/script.py' with script executable
+      scriptFilePath.setExecutable(true)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT
+             |TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING '$scriptFilePath' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      scriptFilePath.setExecutable(false)
+      sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
+
+      // test `script.py` when file added
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING '${scriptFilePath.getName}' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      // test `python script.py` when file added
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING 'python ${scriptFilePath.getName}' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+    }
+  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {

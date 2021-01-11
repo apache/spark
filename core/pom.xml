@@ -414,7 +414,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.9</version>
+      <version>0.10.9.1</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>

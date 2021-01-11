@@ -885,7 +885,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
+   * shorten names(`none`, `snappy`, `zlib`, `lzo`, and `zstd`). This will override
    * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
    * it overrides `spark.sql.orc.compression.codec`.</li>
    * </ul>
