@@ -822,7 +822,7 @@ object DataSource extends Logging {
       }
     }
 
-    allPaths.toSeq
+    allPaths
   }
 
   /**
