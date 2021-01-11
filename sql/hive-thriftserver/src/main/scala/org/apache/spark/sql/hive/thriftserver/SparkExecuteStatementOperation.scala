@@ -31,6 +31,7 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
 import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
@@ -285,7 +286,9 @@ private[hive] class SparkExecuteStatementOperation(
       if (!runInBackground) {
         parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
       }
-
+      // In Spark thrift server, we override the job group id by statementId
+      sqlContext.sparkContext
+        .setLocalProperty(SparkContext.SPARK_JOB_GROUP_OVERRIDE_ID, statementId)
       sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement, forceCancel)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
