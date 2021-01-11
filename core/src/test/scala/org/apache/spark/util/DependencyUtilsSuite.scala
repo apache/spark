@@ -32,29 +32,29 @@ class DependencyUtilsSuite extends SparkFunSuite {
     val e2 = intercept[IllegalArgumentException] {
       DependencyUtils.resolveMavenDependencies(URI.create("ivy://org.apache.test:test-test"))
     }.getMessage
-    assert(e2.contains("Invalid Ivy URI authority in uri ivy://org.apache.test:test-test:" +
-      " Expected 'org:module:version', found org.apache.test:test-test."))
+    assert(e2.contains("Invalid Ivy URI authority in uri ivy://org.apache.test:test-test: " +
+      "Expected 'org:module:version', found org.apache.test:test-test."))
 
     val e3 = intercept[IllegalArgumentException] {
       DependencyUtils.resolveMavenDependencies(
         URI.create("ivy://org.apache.test:test-test:1.0.0?foo="))
     }.getMessage
-    assert(e3.contains("Invalid query string in Ivy URI" +
-      " ivy://org.apache.test:test-test:1.0.0?foo=:"))
+    assert(e3.contains("Invalid query string in Ivy URI " +
+      "ivy://org.apache.test:test-test:1.0.0?foo=:"))
 
     val e4 = intercept[IllegalArgumentException] {
       DependencyUtils.resolveMavenDependencies(
         URI.create("ivy://org.apache.test:test-test:1.0.0?bar=&baz=foo"))
     }.getMessage
-    assert(e4.contains("Invalid query string in Ivy URI" +
-      " ivy://org.apache.test:test-test:1.0.0?bar=&baz=foo: bar=&baz=foo"))
+    assert(e4.contains("Invalid query string in Ivy URI " +
+      "ivy://org.apache.test:test-test:1.0.0?bar=&baz=foo: bar=&baz=foo"))
 
     val e5 = intercept[IllegalArgumentException] {
       DependencyUtils.resolveMavenDependencies(
         URI.create("ivy://org.apache.test:test-test:1.0.0?exclude=org.apache"))
     }.getMessage
-    assert(e5.contains("Invalid exclude string in Ivy URI" +
-      " ivy://org.apache.test:test-test:1.0.0?exclude=org.apache:" +
-      " expected 'org:module,org:module,..', found org.apache"))
+    assert(e5.contains("Invalid exclude string in Ivy URI " +
+      "ivy://org.apache.test:test-test:1.0.0?exclude=org.apache: " +
+      "expected 'org:module,org:module,..', found org.apache"))
   }
 }
