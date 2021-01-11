@@ -48,14 +48,19 @@ class AlterTableDropPartitionSuite
   test("SPARK-34060: update stats of cached table") {
     withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
-        def checkTableSize(expected: String): Unit = {
+        def getTableSize(t: String): Int = {
           val stats =
             sql(s"DESCRIBE TABLE EXTENDED $t")
               .select("data_type")
               .where("col_name = 'Statistics'")
               .first()
               .getString(0)
-          assert(stats.contains(expected))
+          val tableSizeInStats = ".*(\\d) bytes.*".r
+          val size = stats match {
+            case tableSizeInStats(s) => s.toInt
+            case _ => throw new IllegalArgumentException("Not found table size in stats")
+          }
+          size
         }
 
         sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
@@ -65,11 +70,12 @@ class AlterTableDropPartitionSuite
         sql(s"CACHE TABLE $t")
         assert(spark.catalog.isCached(t))
         checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
-        checkTableSize("4 bytes")
+        val twoPartSize = getTableSize(t)
+        assert(twoPartSize > 0)
 
         sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
         assert(spark.catalog.isCached(t))
-        checkTableSize("2 bytes")
+        assert(getTableSize(t) < twoPartSize)
         checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
       }
     }
