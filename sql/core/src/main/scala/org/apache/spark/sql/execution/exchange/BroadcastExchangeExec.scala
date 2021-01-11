@@ -76,7 +76,7 @@ case class BroadcastExchangeExec(
 
   private val groupId = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
 
-  override val runId: UUID = if (groupId == null) UUID.randomUUID else UUID.fromString(groupId)
+  override val runId: UUID = Option(groupId).map(UUID.fromString).getOrElse(UUID.randomUUID)
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
