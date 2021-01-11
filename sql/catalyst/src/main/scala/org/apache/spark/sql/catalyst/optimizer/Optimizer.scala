@@ -516,10 +516,15 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
     val upperHasNoAggregateExpressions = upper.aggregateExpressions
       .forall(_.find(isAggregate).isEmpty)
 
-    lazy val upperReferencesOnlyGrouping = upper.references.subsetOf(AttributeSet(
-      lower.aggregateExpressions.filter(!isAggregate(_)).map(_.toAttribute)))
+    lazy val upperRefsOnlyDeterministicNonAgg = upper.references.subsetOf(AttributeSet(
+      lower
+        .aggregateExpressions
+        .filter(!isAggregate(_))
+        .filter(_.deterministic)
+        .map(_.toAttribute)
+    ))
 
-    upperHasNoAggregateExpressions && upperReferencesOnlyGrouping
+    upperHasNoAggregateExpressions && upperRefsOnlyDeterministicNonAgg
   }
 
   private def isAggregate(expr: Expression): Boolean = {
