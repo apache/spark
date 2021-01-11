@@ -221,7 +221,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Remove the cache entry before creating a new ones.
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
-    needToRecache.map { cd =>
+    needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       val sessionWithConfigsOff = SparkSession.getOrCloneSessionWithConfigsOff(
         spark, forceDisableConfigs)

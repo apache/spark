@@ -223,29 +223,6 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
-    def normalize(table: CatalogTable): CatalogTable = {
-      val nondeterministicProps = Set(
-        "CreateTime",
-        "transient_lastDdlTime",
-        "grantTime",
-        "lastUpdateTime",
-        "last_modified_by",
-        "last_modified_time",
-        "Owner:",
-        // The following are hive specific schema parameters which we do not need to match exactly.
-        "totalNumberFiles",
-        "maxFileSize",
-        "minFileSize"
-      )
-
-      table.copy(
-        createTime = 0L,
-        lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
-        stats = None,
-        ignoredProperties = Map.empty
-      )
-    }
-    assert(normalize(actual) == normalize(expected))
+    assert(CatalogTable.normalize(actual) == CatalogTable.normalize(expected))
   }
 }

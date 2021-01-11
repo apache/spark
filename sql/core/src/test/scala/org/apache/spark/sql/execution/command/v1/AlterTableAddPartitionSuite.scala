@@ -48,7 +48,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
 
   test("SPARK-34055: refresh cache in partition adding") {
     withTable("t") {
-      sql("CREATE TABLE t (id int, part int) USING parquet PARTITIONED BY (part)")
+      sql(s"CREATE TABLE t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql("INSERT INTO t PARTITION (part=0) SELECT 0")
       assert(!spark.catalog.isCached("t"))
       sql("CACHE TABLE t")
