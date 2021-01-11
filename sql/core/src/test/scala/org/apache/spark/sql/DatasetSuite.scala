@@ -1982,6 +1982,13 @@ class DatasetSuite extends QueryTest
       assert(timezone == "Asia/Shanghai")
     }
   }
+
+  test("SPARK-34072: Fix empty array failed in functions.lit()") {
+    checkAnswer(
+      spark.range(1).select(lit(Array())),
+      Row(Array())
+    )
+  }
 }
 
 object AssertExecutionId {

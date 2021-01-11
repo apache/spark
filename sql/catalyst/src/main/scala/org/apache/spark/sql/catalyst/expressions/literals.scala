@@ -130,6 +130,8 @@ object Literal {
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
+    case _ if clz == classOf[java.lang.Object] => NullType
+
     case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
   }
 

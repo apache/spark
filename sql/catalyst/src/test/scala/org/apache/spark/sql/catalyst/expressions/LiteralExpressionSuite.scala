@@ -337,4 +337,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Literal(Array("1", "2", "3")) ==
       Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
   }
+
+  test("SPARK-34072: Fix empty array failed in functions.lit()") {
+    assert(Literal(Array()) == Literal.create(Array()))
+  }
 }
