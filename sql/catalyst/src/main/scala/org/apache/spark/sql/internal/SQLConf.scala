@@ -905,6 +905,18 @@ object SQLConf {
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.NEVER_INFER.toString)
 
+  val HIVE_AVRO_SCHEMA_EVOLUTION_ENABLED =
+    buildConf("spark.sql.hive.avroSchemaEvolution.enabled")
+      .internal()
+      .doc("When true, enable Avro schema evolution support for partitioned Hive table by " +
+        "giving priority to Avro related table properties defined at table level over the " +
+        "the ones given at partition level. Thus when an evolved schema is set for the table " +
+        "this schema will be used for reading the partition data and not the original Avro " +
+        "schema which was used for writing the partition.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD =
     buildConf("spark.sql.hive.tablePropertyLengthThreshold")
       .internal()
@@ -3306,6 +3318,8 @@ class SQLConf extends Serializable with Logging {
 
   def caseSensitiveInferenceMode: HiveCaseSensitiveInferenceMode.Value =
     HiveCaseSensitiveInferenceMode.withName(getConf(HIVE_CASE_SENSITIVE_INFERENCE))
+
+  def avroSchemaEvolutionEnabled: Boolean = getConf(HIVE_AVRO_SCHEMA_EVOLUTION_ENABLED)
 
   def gatherFastStats: Boolean = getConf(GATHER_FASTSTAT)
 

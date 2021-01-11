@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
@@ -239,7 +240,8 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
-
+      val avroTablePropertyKeys = HadoopTableReader.avroTableProperties
+      val avroSchemaEvolutionEnabled = conf.avroSchemaEvolutionEnabled
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
       createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
@@ -248,11 +250,17 @@ class HadoopTableReader(
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
-        // properties take a higher priority here. For example, a partition may have a different
-        // SerDe as the one defined in table properties.
+        // properties take a higher priority here except for the Avro table properties when
+        // "spark.sql.hive.avroSchemaEvolution.enabled" is set because in that case the properties
+        // given at table level will be used (for details please check SPARK-26836).
+        // For example, a partition may have a different SerDe as the one defined in table
+        // properties.
         val props = new Properties(tableProperties)
-        partProps.asScala.foreach {
-          case (key, value) => props.setProperty(key, value)
+        partProps.asScala.foreach { case (key, value) =>
+          if (!avroSchemaEvolutionEnabled ||
+            !avroTablePropertyKeys.contains(key) || !tableProperties.containsKey(key)) {
+            props.setProperty(key, value)
+          }
         }
         DeserializerLock.synchronized {
           deserializer.initialize(hconf, props)
@@ -388,6 +396,9 @@ private[hive] object HiveTableUtil {
 private[hive] object DeserializerLock
 
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
+
+  val avroTableProperties = AvroTableProperties.values().map(_.getPropName()).toSet
+
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.
