@@ -75,7 +75,8 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
 
         sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
         assert(spark.catalog.isCached(t))
-        assert(getTableSize(t) < twoPartSize)
+        val onePartSize = getTableSize(t)
+        assert(0 < onePartSize && onePartSize < twoPartSize)
         checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
       }
     }
