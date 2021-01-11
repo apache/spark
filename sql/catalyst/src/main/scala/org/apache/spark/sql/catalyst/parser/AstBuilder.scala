@@ -1596,7 +1596,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val rawDataType = typedVisit[DataType](ctx.dataType())
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
     val cast = Cast(expression(ctx.expression), dataType)
-    cast.setTagValue(Cast.AUTO_GENERATED_TAG, false)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
     cast
   }
 

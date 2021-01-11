@@ -42,7 +42,7 @@ object Cast {
   /**
    * A tag to decide if a CAST is generated during analysis.
    */
-  val AUTO_GENERATED_TAG = new TreeNodeTag[Boolean]("auto-generated-cast")
+  val USER_SPECIFIED_CAST = new TreeNodeTag[Boolean]("user_specified_cast")
 
   /**
    * Returns true iff we can cast `from` type to `to` type.

@@ -136,7 +136,7 @@ package object util extends Logging {
       PrettyAttribute(usePrettyExpression(e.child) + "." + e.field.name, e.dataType)
     case r: RuntimeReplaceable =>
       PrettyAttribute(r.mkString(r.exprsReplaced.map(toPrettySQL)), r.dataType)
-    case c: CastBase if c.getTagValue(Cast.AUTO_GENERATED_TAG).getOrElse(true) =>
+    case c: CastBase if !c.getTagValue(Cast.USER_SPECIFIED_CAST).getOrElse(false) =>
       PrettyAttribute(usePrettyExpression(c.child).sql, c.dataType)
   }
 
