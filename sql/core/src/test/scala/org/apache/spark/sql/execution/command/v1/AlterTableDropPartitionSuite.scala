@@ -48,21 +48,6 @@ trait AlterTableDropPartitionSuiteBase extends command.AlterTableDropPartitionSu
   test("SPARK-34060: update stats of cached table") {
     withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
-        def getTableSize(t: String): Int = {
-          val stats =
-            sql(s"DESCRIBE TABLE EXTENDED $t")
-              .select("data_type")
-              .where("col_name = 'Statistics'")
-              .first()
-              .getString(0)
-          val tableSizeInStats = ".*(\\d) bytes.*".r
-          val size = stats match {
-            case tableSizeInStats(s) => s.toInt
-            case _ => throw new IllegalArgumentException("Not found table size in stats")
-          }
-          size
-        }
-
         sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
         sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
         sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
