@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRe
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.exchange.{REPARTITION, REPARTITION_WITH_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
@@ -452,22 +451,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        val aggPushdown = child match {
-          case r: DataSourceV2ScanRelation => r.scan match {
-            case v1scan: V1ScanWrapper =>
-              if (v1scan.pushedAggregates.aggregateExpressions.length > 0) true else false
-            case _ => false
-          }
-          case _ => false
-        }
-
-        val aggregateOperator = if (aggPushdown) {
-          AggUtils.planAggregateWithoutPartial(
-            normalizedGroupingExpressions,
-            aggregateExpressions,
-            resultExpressions,
-            planLater(child))
-        } else {
+        val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
             AggUtils.planAggregateWithoutDistinct(
               normalizedGroupingExpressions,
@@ -507,7 +491,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               resultExpressions,
               planLater(child))
           }
-        }
 
         aggregateOperator
 

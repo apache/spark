@@ -136,8 +136,8 @@ object JDBCRDD extends Logging {
   }
 
   def compileAggregates(
-                         aggregates: Seq[AggregateFunc],
-                         dialect: JdbcDialect): (Array[String]) = {
+      aggregates: Seq[AggregateFunc],
+      dialect: JdbcDialect): (Array[String]) = {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
     val aggBuilder = ArrayBuilder.make[String]
     aggregates.map {

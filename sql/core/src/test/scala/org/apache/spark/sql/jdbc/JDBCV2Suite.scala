@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.functions.{lit, sum, udf}
+import org.apache.spark.sql.functions.{avg, lit, sum, udf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -141,6 +141,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     val df3 = df2.groupBy().sum("c")
     // df3.explain(true)
     checkAnswer(df3, Seq(Row(41000.00)))
+
+    val df4 = df2.groupBy($"a").sum("c")
+    checkAnswer(df4, Seq(Row(1, 19000.00), Row(2, 22000.00)))
   }
 
   test("scan with aggregate push-down") {
@@ -269,7 +272,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     // df6.explain(true)
     checkAnswer(df6, Seq(Row(9000, 1000, 9000000)))
 
-    val df7 = sql("select MIN(SALARY), MIN(BONUS), SUM(SALARY * BONUS) FROM h2.test.employee")
+    val df7 = sql("select MIN(salary), MIN(bonus), SUM(SALARY * BONUS) FROM h2.test.employee")
     // df7.explain(true)
     checkAnswer(df7, Seq(Row(9000, 1000, 48200000)))
 
@@ -278,6 +281,16 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     // df8.explain(true)
     checkAnswer(df8, Seq(Row(1000, 11000, 10000), Row(1200, 13200, 12000),
       Row(1200, 10200, 9000), Row(1300, 11300, 10000)))
+
+    val df9 = spark.table("h2.test.employee")
+    val sub2 = udf { (x: String) => x.substring(0, 3) }
+    val name = udf { (x: String) => x.matches("cat|dav|amy") }
+    val df10 = df9.select($"SALARY", $"BONUS", sub2($"NAME").as("nsub2"))
+      .filter("SALARY > 100")
+      .filter(name($"nsub2"))
+      .agg(avg($"SALARY").as("avg_salary"))
+    // df10.explain(true)
+    checkAnswer(df10, Seq(Row(9666.666667)))
   }
 
   test("read/write with partition info") {
