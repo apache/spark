@@ -115,7 +115,7 @@ case class BroadcastExchangeExec(
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
               interruptOnCancel = true)
-            val beforeCollect = Sgystem.nanoTime()
+            val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
             longMetric("numOutputRows") += numRows
