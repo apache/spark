@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
@@ -496,6 +497,34 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql(s"ALTER TABLE t ADD PARTITION (part=1) LOCATION '$part1Loc'")
       assert(spark.catalog.isCached("t"))
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(0, 1)))
+    }
+  }
+
+  test("SPARK-34060: update stats of cached table") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      def checkTableSize(expected: String): Unit = {
+        val stats =
+          sql("DESCRIBE TABLE EXTENDED t")
+            .select("data_type")
+            .where("col_name = 'Statistics'")
+            .first()
+            .getString(0)
+        assert(stats.contains(expected))
+      }
+
+      sql("CREATE TABLE t (id int, part int) USING hive PARTITIONED BY (part)")
+      sql("INSERT INTO t PARTITION (part=0) SELECT 0")
+      sql("INSERT INTO t PARTITION (part=1) SELECT 1")
+      assert(!spark.catalog.isCached("t"))
+      sql("CACHE TABLE t")
+      assert(spark.catalog.isCached("t"))
+      checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(1, 1)))
+      checkTableSize("4 bytes")
+
+      sql("ALTER TABLE t DROP PARTITION (part=0)")
+      assert(spark.catalog.isCached("t"))
+      checkTableSize("2 bytes")
+      checkAnswer(sql("SELECT * FROM t"), Seq(Row(1, 1)))
     }
   }
 }
