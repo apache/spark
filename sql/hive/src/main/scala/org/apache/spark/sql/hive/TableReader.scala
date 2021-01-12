@@ -300,9 +300,9 @@ class HadoopTableReader(
   private def createHadoopRDD(localTableDesc: TableDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = localTableDesc.getInputFileFormatClass
     if (classOf[oldInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
-      createNewHadoopRDD(localTableDesc, inputPathStr)
-    } else {
       createOldHadoopRDD(localTableDesc, inputPathStr)
+    } else {
+      createNewHadoopRDD(localTableDesc, inputPathStr)
     }
   }
 
