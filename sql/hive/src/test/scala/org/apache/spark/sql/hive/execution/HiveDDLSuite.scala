@@ -1908,7 +1908,7 @@ class HiveDDLSuite
            |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
            |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
         """.stripMargin)
-      sql(s"INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
+      sql("INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
       val evolvedSchema =
         """
           |{
@@ -1929,8 +1929,8 @@ class HiveDDLSuite
           |}
         """.stripMargin
       sql(s"""ALTER TABLE t SET SERDEPROPERTIES ('avro.schema.literal'='$evolvedSchema')""")
-      sql(s"INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
-      withSQLConf("spark.sql.hive.avroSchemaEvolution.enabled" -> "true") {
+      sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
+      withSQLConf(SQLConf.HIVE_AVRO_SCHEMA_EVOLUTION_ENABLED.key -> "true") {
         checkAnswer(spark.table("t"), Row("col1_default", "col2_value", "1981-01-07")
           :: Row("col1_value", "col2_value", "1983-04-27") :: Nil)
       }
