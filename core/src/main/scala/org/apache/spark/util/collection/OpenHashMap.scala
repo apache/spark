@@ -37,7 +37,7 @@ class OpenHashMap[K : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
 
   def this() = this(64)
 
-  protected val _keySet = new OpenHashSet[K](initialCapacity)
+  protected var _keySet = new OpenHashSet[K](initialCapacity)
 
   // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
   // bug that would generate two arrays (one for Object and one for specialized T).
