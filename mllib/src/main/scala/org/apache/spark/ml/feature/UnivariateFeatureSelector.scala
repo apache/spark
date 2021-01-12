@@ -19,23 +19,85 @@ package org.apache.spark.ml.feature
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml._
-import org.apache.spark.ml.attribute.{AttributeGroup, _}
-import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasOutputCol}
+import org.apache.spark.ml.stat.{ANOVATest, ChiSquareTest, FValueTest}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions._
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 
 /**
- * Params for [[Selector]] and [[SelectorModel]].
+ * Params for [[UnivariateFeatureSelector]] and [[UnivariateFeatureSelectorModel]].
  */
-private[feature] trait SelectorParams extends Params
+private[feature] trait UnivariateFeatureSelectorParams extends Params
   with HasFeaturesCol with HasLabelCol with HasOutputCol {
+
+  /**
+   * The feature type.
+   * Supported options: "categorical", "continuous"
+   * @group param
+   */
+  @Since("3.1.0")
+  final val featureType = new Param[String](this, "featureType",
+    "Feature type. Supported options: categorical, continuous.",
+    ParamValidators.inArray(Array("categorical", "continuous")))
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getFeatureType: String = $(featureType)
+
+  /**
+   * The label type.
+   * Supported options: "categorical", "continuous"
+   * @group param
+   */
+  @Since("3.1.0")
+  final val labelType = new Param[String](this, "labelType",
+    "Label type. Supported options: categorical, continuous.",
+    ParamValidators.inArray(Array("categorical", "continuous")))
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getLabelType: String = $(labelType)
+
+  /**
+   * Score funcion.
+   * Supported options: "chi2" (for categorical features and categorical labels)
+   *                    "f_classif" (for continuous features and categorical labels)
+   *                    "f_regression" (for continuous features and continuous labels)
+   * @group param
+   */
+  @Since("3.1.0")
+  final val scoreFunction = new Param[String](this, "scoreFunction",
+    "Score Function. Supported options: chi2, f_classif, f_regression.",
+    ParamValidators.inArray(Array("chi2", "f_classif", "f_regression")))
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getScoreFunction: String = $(scoreFunction)
+
+  /**
+   * The selector type.
+   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe"
+   * @group param
+   */
+  @Since("3.1.0")
+  final val selectorType = new Param[String](this, "selectorType",
+    "The selector type. Supported options: numTopFeatures, percentile, fpr, fdr, fwe",
+    ParamValidators.inArray(Array("numTopFeatures", "percentile", "fpr", "fdr",
+      "fwe")))
+
+  /** @group getParam */
+  @Since("3.1.0")
+  def getSelectorType: String = $(selectorType)
 
   /**
    * Number of features that selector will select, ordered by ascending p-value. If the
@@ -110,31 +172,30 @@ private[feature] trait SelectorParams extends Params
   /** @group getParam */
   def getFwe: Double = $(fwe)
 
-  /**
-   * The selector type.
-   * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe"
-   * @group param
-   */
-  @Since("3.1.0")
-  final val selectorType = new Param[String](this, "selectorType",
-    "The selector type. Supported options: numTopFeatures, percentile, fpr, fdr, fwe",
-    ParamValidators.inArray(Array("numTopFeatures", "percentile", "fpr", "fdr",
-      "fwe")))
-
-  /** @group getParam */
-  @Since("3.1.0")
-  def getSelectorType: String = $(selectorType)
-
   setDefault(numTopFeatures -> 50, percentile -> 0.1, fpr -> 0.05, fdr -> 0.05, fwe -> 0.05,
     selectorType -> "numTopFeatures")
 }
 
 /**
- * Super class for feature selectors.
- * 1. Chi-Square Selector
- * This feature selector is for categorical features and categorical labels.
- * The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
- * `fdr`, `fwe`.
+ * UnivariateFeatureSelector
+ * User can either
+ * 1. set scoreFunction explicitly or
+ * 2. set featureType and labelType, and Spark will pick the scoreFunction based on
+ *    the specified featureType and labelType.
+ *
+ * 1. scoreFunction explicitly set:
+ *    The following scoreFunction are supported:
+ *    chi2 (for categorical features and categorical labels)
+ *    f_classif (for continuous features and categorical labels)
+ *    f_regression (for continuous features and continuous labels)
+ *
+ * 2. scoreFunction NOT set, featureType and labelType are explicitly set:
+ *    featureType categorical and labelType categorical, Spark uses chi2
+ *    featureType continuous and labelType categorical, Spark uses f_classif
+ *    featureType continuous and labelType continuous, Spark uses f_regression
+ *
+ * The UnivariateFeatureSelector supports different selection methods: `numTopFeatures`,
+ * `percentile`, `fpr`, `fdr`, `fwe`.
  *  - `numTopFeatures` chooses a fixed number of top features according to a hypothesis.
  *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
  *  - `fpr` chooses all features whose p-value are below a threshold, thus controlling the false
@@ -147,16 +208,13 @@ private[feature] trait SelectorParams extends Params
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */
-private[ml] abstract class Selector[T <: SelectorModel[T]]
-  extends Estimator[T] with SelectorParams with DefaultParamsWritable {
+@Since("3.1.0")
+final class UnivariateFeatureSelector @Since("3.1.0")(@Since("3.1.0") override val uid: String)
+  extends Estimator[UnivariateFeatureSelectorModel] with UnivariateFeatureSelectorParams
+    with DefaultParamsWritable {
 
-  /** @group setParam */
   @Since("3.1.0")
-  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
-
-  /** @group setParam */
-  @Since("3.1.0")
-  def setOutputCol(value: String): this.type = set(outputCol, value)
+  def this() = this(Identifiable.randomUID("UnivariateFeatureSelector"))
 
   /** @group setParam */
   @Since("3.1.0")
@@ -184,30 +242,74 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
 
   /** @group setParam */
   @Since("3.1.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  /**
-   * get the SelectionTestResult for every feature against the label
-   */
-  protected[this] def getSelectionTestResult(df: DataFrame): DataFrame
+  /** @group setParam */
+  @Since("3.1.0")
+  def setFeatureType(value: String): this.type = set(featureType, value)
 
-  /**
-   * Create a new instance of concrete SelectorModel.
-   * @param indices The indices of the selected features
-   * @return A new SelectorModel instance
-   */
-  protected[this] def createSelectorModel(
-      uid: String,
-      indices: Array[Int]): T
+  /** @group setParam */
+  @Since("3.1.0")
+  def setLabelType(value: String): this.type = set(labelType, value)
+
+  /** @group setParam */
+  @Since("3.1.0")
+  def setScoreFunction(value: String): this.type = set(scoreFunction, value)
 
   @Since("3.1.0")
-  override def fit(dataset: Dataset[_]): T = {
+  override def fit(dataset: Dataset[_]): UnivariateFeatureSelectorModel = {
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
     import spark.implicits._
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
-    val resultDF = getSelectionTestResult(dataset.toDF)
+
+    val resultDF = if (isSet(scoreFunction)) {
+      $(scoreFunction) match {
+        case "f_classif" =>
+          ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+        case "f_regression" =>
+          FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+        case "chi2" =>
+          ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+        case errorType =>
+          throw new IllegalStateException(s"Unknown Score Function: $errorType")
+      }
+    } else {
+      if (isSet(featureType) && isSet(labelType)) {
+        $(featureType) match {
+          case "categorical" =>
+            $(labelType) match {
+              case "categorical" =>
+                ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+              case errorType =>
+                throw new IllegalStateException(s"Unknown Label Type: $errorType")
+            }
+          case "continuous" =>
+            $(labelType) match {
+              case "categorical" =>
+                ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+              case "continuous" =>
+                FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+              case errorType =>
+                throw new IllegalStateException(s"Unknown Label Type: $errorType")
+            }
+          case errorType =>
+            throw new IllegalStateException(s"Unknown Feature Type: $errorType")
+        }
+      } else {
+        throw new IllegalStateException("Either need to set scoreFunction or featureType and" +
+          " labelType")
+      }
+    }
 
     def getTopIndices(k: Int): Array[Int] = {
       resultDF.sort("pValue", "featureIndex")
@@ -250,7 +352,7 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
         throw new IllegalStateException(s"Unknown Selector Type: $errorType")
     }
 
-    copyValues(createSelectorModel(uid, indices.sorted)
+    copyValues(new UnivariateFeatureSelectorModel(uid, indices)
       .setParent(this))
   }
 
@@ -262,18 +364,25 @@ private[ml] abstract class Selector[T <: SelectorModel[T]]
   }
 
   @Since("3.1.0")
-  override def copy(extra: ParamMap): Selector[T] = defaultCopy(extra)
+  override def copy(extra: ParamMap): UnivariateFeatureSelector = defaultCopy(extra)
+}
+
+@Since("3.1.0")
+object UnivariateFeatureSelector extends DefaultParamsReadable[UnivariateFeatureSelector] {
+
+  @Since("3.1.0")
+  override def load(path: String): UnivariateFeatureSelector = super.load(path)
 }
 
 /**
- * Model fitted by [[Selector]].
+ * Model fitted by [[UnivariateFeatureSelectorModel]].
  */
 @Since("3.1.0")
-private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
-    @Since("3.1.0") val uid: String,
+class UnivariateFeatureSelectorModel private[ml](
+    @Since("3.1.0") override val uid: String,
     @Since("3.1.0") val selectedFeatures: Array[Int])
-  extends Model[T] with SelectorParams with MLWritable {
-  self: T =>
+  extends Model[UnivariateFeatureSelectorModel] with UnivariateFeatureSelectorParams
+    with MLWritable {
 
   if (selectedFeatures.length >= 2) {
     require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),
@@ -294,20 +403,76 @@ private[ml] abstract class SelectorModel[T <: SelectorModel[T]] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    SelectorModel.transform(dataset, selectedFeatures, outputSchema, $(outputCol), $(featuresCol))
+    UnivariateFeatureSelectorModel
+      .transform(dataset, selectedFeatures, outputSchema, $(outputCol), $(featuresCol))
   }
 
   @Since("3.1.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
     val newField =
-      SelectorModel.prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol),
-        isNumericAttribute)
+      UnivariateFeatureSelectorModel
+        .prepOutputField(schema, selectedFeatures, $(outputCol), $(featuresCol), isNumericAttribute)
     SchemaUtils.appendColumn(schema, newField)
+  }
+
+  @Since("3.1.0")
+  override def copy(extra: ParamMap): UnivariateFeatureSelectorModel = {
+    val copied = new UnivariateFeatureSelectorModel(uid, selectedFeatures)
+      .setParent(parent)
+    copyValues(copied, extra)
+  }
+
+  @Since("3.1.0")
+  override def write: MLWriter =
+    new UnivariateFeatureSelectorModel.UnivariateFeatureSelectorModelWriter(this)
+
+  @Since("3.1.0")
+  override def toString: String = {
+    s"UnivariateFeatureSelectorModel: uid=$uid, numSelectedFeatures=${selectedFeatures.length}"
   }
 }
 
-private[feature] object SelectorModel {
+@Since("3.1.0")
+object UnivariateFeatureSelectorModel extends MLReadable[UnivariateFeatureSelectorModel] {
+
+  @Since("3.1.0")
+  override def read: MLReader[UnivariateFeatureSelectorModel] =
+    new UnivariateFeatureSelectorModelReader
+
+  @Since("3.1.0")
+  override def load(path: String): UnivariateFeatureSelectorModel = super.load(path)
+
+  private[UnivariateFeatureSelectorModel] class UnivariateFeatureSelectorModelWriter(
+      instance: UnivariateFeatureSelectorModel) extends MLWriter {
+
+    private case class Data(selectedFeatures: Seq[Int])
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.selectedFeatures.toSeq)
+      val dataPath = new Path(path, "data").toString
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class UnivariateFeatureSelectorModelReader
+    extends MLReader[UnivariateFeatureSelectorModel] {
+
+    /** Checked against metadata when loading model */
+    private val className = classOf[UnivariateFeatureSelectorModel].getName
+
+    override def load(path: String): UnivariateFeatureSelectorModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sparkSession.read.parquet(dataPath)
+        .select("selectedFeatures").head()
+      val selectedFeatures = data.getAs[Seq[Int]](0).toArray
+      val model = new UnivariateFeatureSelectorModel(metadata.uid, selectedFeatures)
+      metadata.getAndSetParams(model)
+      model
+    }
+  }
 
   def transform(
       dataset: Dataset[_],
@@ -387,4 +552,3 @@ private[feature] object SelectorModel {
     (newIndices.result(), newValues.result())
   }
 }
-

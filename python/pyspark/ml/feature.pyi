@@ -1456,38 +1456,6 @@ class _SelectorModel(JavaModel, _SelectorParams):
     @property
     def selectedFeatures(self) -> List[int]: ...
 
-class ANOVASelector(
-    _Selector[ANOVASelectorModel], JavaMLReadable[ANOVASelector], JavaMLWritable
-):
-    def __init__(
-        self,
-        numTopFeatures: int = ...,
-        featuresCol: str = ...,
-        outputCol: Optional[str] = ...,
-        labelCol: str = ...,
-        selectorType: str = ...,
-        percentile: float = ...,
-        fpr: float = ...,
-        fdr: float = ...,
-        fwe: float = ...,
-    ) -> None: ...
-    def setParams(
-        self,
-        numTopFeatures: int = ...,
-        featuresCol: str = ...,
-        outputCol: Optional[str] = ...,
-        labelCol: str = ...,
-        selectorType: str = ...,
-        percentile: float = ...,
-        fpr: float = ...,
-        fdr: float = ...,
-        fwe: float = ...,
-    ) -> ANOVASelector: ...
-
-class ANOVASelectorModel(
-    _SelectorModel, JavaMLReadable[ANOVASelectorModel], JavaMLWritable
-): ...
-
 class ChiSqSelector(
     _Selector[ChiSqSelectorModel],
     JavaMLReadable[ChiSqSelector],
@@ -1565,38 +1533,6 @@ class VectorSizeHint(
     def setInputCol(self, value: str) -> VectorSizeHint: ...
     def setHandleInvalid(self, value: str) -> VectorSizeHint: ...
 
-class FValueSelector(
-    _Selector[FValueSelectorModel], JavaMLReadable[FValueSelector], JavaMLWritable
-):
-    def __init__(
-        self,
-        numTopFeatures: int = ...,
-        featuresCol: str = ...,
-        outputCol: Optional[str] = ...,
-        labelCol: str = ...,
-        selectorType: str = ...,
-        percentile: float = ...,
-        fpr: float = ...,
-        fdr: float = ...,
-        fwe: float = ...,
-    ) -> None: ...
-    def setParams(
-        self,
-        numTopFeatures: int = ...,
-        featuresCol: str = ...,
-        outputCol: Optional[str] = ...,
-        labelCol: str = ...,
-        selectorType: str = ...,
-        percentile: float = ...,
-        fpr: float = ...,
-        fdr: float = ...,
-        fwe: float = ...,
-    ) -> FValueSelector: ...
-
-class FValueSelectorModel(
-    _SelectorModel, JavaMLReadable[FValueSelectorModel], JavaMLWritable
-): ...
-
 class _VarianceThresholdSelectorParams(HasFeaturesCol, HasOutputCol):
     varianceThreshold: Param[float] = ...
     def getVarianceThreshold(self) -> float: ...
@@ -1631,5 +1567,59 @@ class VarianceThresholdSelectorModel(
 ):
     def setFeaturesCol(self, value: str) -> VarianceThresholdSelectorModel: ...
     def setOutputCol(self, value: str) -> VarianceThresholdSelectorModel: ...
+    @property
+    def selectedFeatures(self) -> List[int]: ...
+
+class UnivariateFeatureSelector(
+    JavaEstimator[UnivariateFeatureSelectorModel],
+    _UnivariateFeatureSelectorParams,
+    JavaMLReadable[UnivariateFeatureSelector],
+    JavaMLWritable
+):
+    def __init__(
+        self,
+        numTopFeatures: int = ...,
+        featuresCol: str = ...,
+        outputCol: Optional[str] = ...,
+        labelCol: str = ...,
+        selectorType: str = ...,
+        percentile: float = ...,
+        fpr: float = ...,
+        fdr: float = ...,
+        fwe: float = ...,
+    ) -> None: ...
+    def setParams(
+        self,
+        numTopFeatures: int = ...,
+        featuresCol: str = ...,
+        outputCol: Optional[str] = ...,
+        labelCol: str = ...,
+        selectorType: str = ...,
+        percentile: float = ...,
+        fpr: float = ...,
+        fdr: float = ...,
+        fwe: float = ...,
+    ) -> UnivariateFeatureSelector: ...
+    def setFeatureType(self, value: str) -> UnivariateFeatureSelector: ...
+    def setLabelType(self, value: str) -> UnivariateFeatureSelector: ...
+    def setScoreFunction(self, value: str) -> UnivariateFeatureSelector: ...
+    def setSelectorType(self, value: str) -> UnivariateFeatureSelector: ...
+    def setNumTopFeatures(self, value: int) -> UnivariateFeatureSelector: ...
+    def setPercentile(self, value: float) -> UnivariateFeatureSelector: ...
+    def setFpr(self, value: float) -> UnivariateFeatureSelector: ...
+    def setFdr(self, value: float) -> UnivariateFeatureSelector: ...
+    def setFwe(self, value: float) -> UnivariateFeatureSelector: ...
+    def setFeaturesCol(self, value: str) -> UnivariateFeatureSelector: ...
+    def setOutputCol(self, value: str) -> UnivariateFeatureSelector: ...
+    def setLabelCol(self, value: str) -> UnivariateFeatureSelector: ...
+
+class UnivariateFeatureSelectorModel(
+    JavaModel,
+    _UnivariateFeatureSelectorParams,
+    JavaMLReadable[UnivariateFeatureSelectorModel],
+    JavaMLWritable
+):
+    def setFeaturesCol(self, value: str) -> UnivariateFeatureSelectorModel: ...
+    def setOutputCol(self, value: str) -> UnivariateFeatureSelectorModel: ...
     @property
     def selectedFeatures(self) -> List[int]: ...
