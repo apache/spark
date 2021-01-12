@@ -472,7 +472,7 @@ package object config {
       .createWithDefaultString("30s")
 
   private[spark] val STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH =
-    ConfigBuilder("spark.decommission.storage.fallbackStorage.path")
+    ConfigBuilder("spark.decommission.storage.fallbackStoragePath")
       .doc("The location for fallback storage during block manager decommissioning. " +
         "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
         "The storage should be managed by TTL because Spark will not clean it up.")
