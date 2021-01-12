@@ -2932,12 +2932,30 @@ class Analyzer(override val catalogManager: CatalogManager)
       Project(windowOps.output ++ newExpressionsWithWindowFunctions, windowOps)
     } // end of addWindow
 
+    private def windowFunctionAliasInCondition(
+        condition: Expression,
+        windowExpressions: Seq[NamedExpression]): Boolean = {
+      val referenceNames = condition.references.map(_.name).toSet
+      windowExpressions.exists {
+        case Alias(_, name) if referenceNames.exists(r => resolver(r, name)) => true
+        case _ => false
+      }
+    }
+
     // We have to use transformDown at here to make sure the rule of
     // "Aggregate with Having clause" will be triggered.
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
 
       case Filter(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
+
+      case p @ Project(projectList, Filter(condition, _)) if hasWindowFunction(projectList) =>
+        val (windowExpressions, _) = extract(projectList)
+        if (windowFunctionAliasInCondition(condition, windowExpressions)) {
+          throw QueryCompilationErrors.windowFunctionNotAllowedError("WHERE")
+        } else {
+          p
+        }
 
       case UnresolvedHaving(condition, _) if hasWindowFunction(condition) =>
         throw QueryCompilationErrors.windowFunctionNotAllowedError("HAVING")
@@ -2949,6 +2967,9 @@ class Analyzer(override val catalogManager: CatalogManager)
           hasWindowFunction(aggregateExprs) &&
           a.expressions.forall(_.resolved) =>
         val (windowExpressions, aggregateExpressions) = extract(aggregateExprs)
+        if (windowFunctionAliasInCondition(condition, windowExpressions)) {
+          throw QueryCompilationErrors.windowFunctionNotAllowedError("HAVING")
+        }
         // Create an Aggregate operator to evaluate aggregation functions.
         val withAggregate = Aggregate(groupingExprs, aggregateExpressions, child)
         // Add a Filter operator for conditions in the Having clause.

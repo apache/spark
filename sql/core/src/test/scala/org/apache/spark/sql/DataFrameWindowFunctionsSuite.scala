@@ -915,6 +915,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     checkAnalysisError(
       sql("SELECT * FROM testData2 WHERE b = 2 AND RANK() OVER(ORDER BY b) = 1"), "WHERE")
     checkAnalysisError(
+      sql("SELECT a, RANK() OVER(ORDER BY b) AS s FROM testData2 WHERE b = 2 AND s = 1"), "WHERE")
+    checkAnalysisError(
       sql("SELECT * FROM testData2 GROUP BY a HAVING a > AVG(b) AND RANK() OVER(ORDER BY a) = 1"),
       "HAVING")
     checkAnalysisError(
@@ -926,6 +928,13 @@ class DataFrameWindowFunctionsSuite extends QueryTest
            |FROM testData2
            |GROUP BY a
            |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin),
+      "HAVING")
+    checkAnalysisError(
+      sql(
+        s"""SELECT a, MAX(b), RANK() OVER(ORDER BY a) AS s
+           |FROM testData2
+           |GROUP BY a
+           |HAVING SUM(b) = 5 AND s = 1""".stripMargin),
       "HAVING")
   }
 
