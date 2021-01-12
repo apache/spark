@@ -17,12 +17,11 @@
 library(testthat)
 context("Daemon Initialization")
 test_that("Daemon Initialization", {
+  if (is_windows()) {
+    skip("Can't test daemon initialization if you don't use daemons.")
+  }
   sparkR.stop()
   sparkR.session(
-
-    # configurations written here are overridden by the command line parameters
-    # to spark-submit
-
     spark.r.daemonInit =
       'message("Initting the Daemon ..."); testInit <- "wow"'
   )
