@@ -208,7 +208,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             /* backlog */ 1,
             InetAddress.getByName("localhost")))
           // A call to accept() for ServerSocket shall block infinitely.
-          serverSocket.map(_.setSoTimeout(0))
+          serverSocket.foreach(_.setSoTimeout(0))
           new Thread("accept-connections") {
             setDaemon(true)
 
