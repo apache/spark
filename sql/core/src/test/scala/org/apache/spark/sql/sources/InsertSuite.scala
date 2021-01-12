@@ -321,23 +321,27 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
   }
 
 
-  test("SPARK-34006 : When insert rewrite is in the same Orc format hive table, sparksql does not allow it"){
-          withTable("insertOrcTable"){
+  test("SPARK-34006 : When insert rewrite is in the same Orc format hive table, " +
+    "sparksql does not allow it") {
+          withTable("insertOrcTable") {
             sql( """
                    |CREATE TABLE insertOrcTable(ly_1 int, ly_2 int, ly_3 string) USING ORC
                  """.stripMargin)
-            sql("insert into table insertLyOrcTable select 1 AS ly_1, 2 AS ly_2, 'dh' AS ly_3")
+            sql("""
+                  |insert into table insertLyOrcTable
+                  |select 1 AS ly_1, 2 AS ly_2, 'dh' AS ly_3
+                """.stripMargin)
             checkAnswer(spark.table("insertOrcTable"), Row(1, 1, "dh"))
-              val message = intercept[AnalysisException] {
-                sql(
-                  """
-                    |INSERT OVERWRITE TABLE insertLyOrcTable
-                    |SELECT ly_1 + 1, ly_2  + 2, ly_3 FROM insertLyOrcTable
-                  """.stripMargin)
-              }.getMessage
-              assert(
-                message.contains("Cannot overwrite a path that is also being read from."),
-                "INSERT OVERWRITE to a table while querying it should not be allowed.")
+            val message = intercept[AnalysisException] {
+              sql(
+                """
+                  |INSERT OVERWRITE TABLE insertLyOrcTable
+                  |SELECT ly_1 + 1, ly_2  + 2, ly_3 FROM insertLyOrcTable
+                """.stripMargin)
+            }.getMessage
+            assert(
+              message.contains("Cannot overwrite a path that is also being read from."),
+              "INSERT OVERWRITE to a table while querying it should not be allowed.")
           }
         }
 
