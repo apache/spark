@@ -1554,7 +1554,7 @@ object SQLConf {
   val ALLOW_PARAMETERLESS_COUNT =
     buildConf("spark.sql.legacy.allowParameterlessCount")
       .internal()
-      .doc("When true, the SQL function `Count` is allowed to take no parameters.")
+      .doc("When true, the SQL function 'count' is allowed to take no parameters.")
       .version("3.1.1")
       .booleanConf
       .createWithDefault(false)
