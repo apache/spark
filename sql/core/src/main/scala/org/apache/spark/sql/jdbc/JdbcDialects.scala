@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
+import java.time.{Instant, LocalDate}
 
 import scala.collection.mutable.ArrayBuilder
 
@@ -175,7 +176,9 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case timestampValue: Instant => "'" + timestampValue + "'"
     case dateValue: Date => "'" + dateValue + "'"
+    case dateValue: LocalDate => "'" + dateValue + "'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
   }
