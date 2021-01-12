@@ -52,8 +52,7 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
   override def dataType: DataType = LongType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val conf = SQLConf.get
-    if (children.isEmpty && !conf.getConf(SQLConf.ALLOW_PARAMETERLESS_COUNT)) {
+    if (children.isEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_PARAMETERLESS_COUNT)) {
       TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least one argument. " +
         s"If you have to call the function $prettyName without arguments, set the legacy " +
         s"configuration `${SQLConf.ALLOW_PARAMETERLESS_COUNT.key}` as true")
