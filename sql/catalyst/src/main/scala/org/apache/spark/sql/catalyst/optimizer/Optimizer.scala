@@ -88,6 +88,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
+        OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
         ConstantPropagation,
@@ -815,6 +816,19 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
+  }
+}
+
+/**
+ * Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
+ * and user not specify.
+ */
+object OptimizeRepartition extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
+      if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
+        numPartitions.isEmpty =>
+      r.copy(optNumPartitions = Some(1))
   }
 }
 

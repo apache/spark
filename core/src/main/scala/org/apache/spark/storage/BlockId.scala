@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.util.UUID
 
 import org.apache.spark.SparkException
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
  * :: DeveloperApi ::
@@ -81,6 +81,12 @@ case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) exten
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
+@Since("3.2.0")
+@DeveloperApi
+case class ShufflePushBlockId(shuffleId: Int, mapIndex: Int, reduceId: Int) extends BlockId {
+  override def name: String = "shufflePush_" + shuffleId + "_" + mapIndex + "_" + reduceId
+}
+
 @DeveloperApi
 case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   override def name: String = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
@@ -122,6 +128,7 @@ object BlockId {
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
+  val SHUFFLE_PUSH = "shufflePush_([0-9]+)_([0-9]+)_([0-9]+)".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
@@ -140,6 +147,8 @@ object BlockId {
       ShuffleDataBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
     case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
       ShuffleIndexBlockId(shuffleId.toInt, mapId.toLong, reduceId.toInt)
+    case SHUFFLE_PUSH(shuffleId, mapIndex, reduceId) =>
+      ShufflePushBlockId(shuffleId.toInt, mapIndex.toInt, reduceId.toInt)
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>

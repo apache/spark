@@ -161,6 +161,10 @@ object ExternalCatalogUtils {
     }
   }
 
+  private def isNullPartitionValue(value: String): Boolean = {
+    value == null || value == DEFAULT_PARTITION_NAME
+  }
+
   /**
    * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
    * partial partition spec w.r.t. PARTITION (a=1,b=2).
@@ -169,8 +173,14 @@ object ExternalCatalogUtils {
       spec1: TablePartitionSpec,
       spec2: TablePartitionSpec): Boolean = {
     spec1.forall {
+      case (partitionColumn, value) if isNullPartitionValue(value) =>
+        isNullPartitionValue(spec2(partitionColumn))
       case (partitionColumn, value) => spec2(partitionColumn) == value
     }
+  }
+
+  def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
+    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).toMap
   }
 }
 
