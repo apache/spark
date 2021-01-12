@@ -41,7 +41,8 @@ public abstract class MemoryConsumer {
   }
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
-    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(), MemoryMode.ON_HEAP);
+    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(),
+      taskMemoryManager.getTungstenMemoryMode());
   }
 
   /**
