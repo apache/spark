@@ -21,7 +21,6 @@ import java.math.BigDecimal
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
@@ -45,6 +44,7 @@ import org.apache.spark.unsafe.types.UTF8String
 private[sql] class AvroDeserializer(
     rootAvroType: Schema,
     rootCatalystType: DataType,
+    positionalFieldMatch: Boolean,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     filters: StructFilters) {
 
@@ -55,6 +55,7 @@ private[sql] class AvroDeserializer(
     this(
       rootAvroType,
       rootCatalystType,
+      positionalFieldMatch = false,
       LegacyBehaviorPolicy.withName(datetimeRebaseMode),
       new NoopFilters)
   }
@@ -335,21 +336,23 @@ private[sql] class AvroDeserializer(
       avroPath: Seq[String],
       catalystPath: Seq[String],
       applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
-    val validFieldIndexes = ArrayBuffer.empty[Int]
-    val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
-    val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(avroType, avroPath)
-    val length = catalystType.length
-    var i = 0
-    while (i < length) {
-      val catalystField = catalystType.fields(i)
-      avroSchemaHelper.getFieldByName(catalystField.name) match {
-        case Some(avroField) =>
-          validFieldIndexes += avroField.pos()
+    val avroSchemaHelper =
+      new AvroUtils.AvroSchemaHelper(avroType, catalystType, avroPath, positionalFieldMatch)
 
+    avroSchemaHelper.getCatalystFieldsWithoutMatch.filterNot(_.nullable) match {
+      case Seq() => // do nothing
+      case extraFields => throw new IncompatibleSchemaException(
+        s"Cannot find in Avro ${toFieldStr(avroPath)}: " + extraFields
+          .map(f => toFieldStr(catalystPath :+ f.name))
+          .mkString("[non-nullable ", ", non-nullable ", "]"))
+    }
+
+    val (validFieldIndexes, fieldWriters) =
+      avroSchemaHelper.getMatchedFields.map {
+        case (catalystField, ordinal, avroField) =>
           val baseWriter = newWriter(avroField.schema(), catalystField.dataType,
             avroPath :+ avroField.name, catalystPath :+ catalystField.name)
-          val ordinal = i
           val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
             if (value == null) {
               fieldUpdater.setNullAt(ordinal)
@@ -357,14 +360,8 @@ private[sql] class AvroDeserializer(
               baseWriter(fieldUpdater, ordinal, value)
             }
           }
-          fieldWriters += fieldWriter
-        case None if !catalystField.nullable =>
-          throw new IncompatibleSchemaException(s"Cannot find non-nullable " +
-              s"${toFieldStr(catalystPath :+ catalystField.name)} in Avro schema.")
-        case _ => // nothing to do
-      }
-      i += 1
-    }
+          (avroField.pos(), fieldWriter)
+      }.toArray.unzip
 
     (fieldUpdater, record) => {
       var i = 0

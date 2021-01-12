@@ -24,8 +24,7 @@ import java.sql.{Date, Timestamp}
 import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
-
-import org.apache.avro.{AvroTypeException, Schema}
+import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -39,7 +38,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.Filter
-import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{LA, UTC, withDefaultTimeZone}
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -1103,6 +1102,43 @@ abstract class AvroSuite
     }
   }
 
+  test("SPARK-34365: support reading renamed schema using positionalFieldMatching") {
+    val renamedSchema = new StructType()
+      .add("foo", StringType)
+      .add("foo_map", MapType(StringType, IntegerType))
+    val dfLoaded = spark
+      .read
+      .option("positionalFieldMatching", true.toString)
+      .schema(renamedSchema)
+      .format("avro")
+      .load(testAvro)
+    assert(dfLoaded.schema === renamedSchema)
+    val expectedDf = spark.read.format("avro").load(testAvro).select("string", "simple_map")
+    assert(dfLoaded.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
+      expectedDf.collect().toSet)
+  }
+
+  test("SPARK-34365: support writing with renamed schema using positionalFieldMatching") {
+    withTempDir { tempDir =>
+      val avroSchema = SchemaBuilder.record("renamed").fields()
+        .requiredString("foo")
+        .name("foo_map").`type`(Schema.createMap(Schema.create(Schema.Type.INT))).noDefault()
+        .endRecord()
+      val expectedDf = spark.read.format("avro").load(testAvro).select("string", "simple_map")
+      val savePath = s"$tempDir/save"
+      expectedDf.write
+        .option("avroSchema", avroSchema.toString)
+        .option("positionalFieldMatching", true.toString)
+        .format("avro")
+        .save(savePath)
+      val reloadedDf = spark.read.format("avro").load(savePath)
+      assert(reloadedDf.schema ===
+        new StructType().add("foo", StringType).add("foo_map", MapType(StringType, IntegerType)))
+      assert(reloadedDf.select($"foo".as("string"), $"foo_map".as("simple_map")).collect().toSet ===
+        expectedDf.collect().toSet)
+    }
+  }
+
   test("unsupported nullable avro type") {
     val catalystSchema =
       StructType(Seq(
@@ -1366,7 +1402,7 @@ abstract class AvroSuite
           df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
         }
         assertExceptionMsg[IncompatibleSchemaException](e,
-          "Cannot find field 'FOO' in Avro schema at top-level record")
+          "Cannot find in Avro top-level record: [field 'FOO', field 'bar']")
       }
     }
   }

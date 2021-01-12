@@ -20,6 +20,7 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.GenericRecordBuilder
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.NoopFilters
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
@@ -29,58 +30,70 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
  */
 class AvroSerdeSuite extends SparkFunSuite {
   import AvroSerdeSuite._
-
-  private val defaultRebaseMode = LegacyBehaviorPolicy.CORRECTED.toString
+  import AvroSerdeSuite.SerdeType._
+  import AvroSerdeSuite.FieldMatchType._
 
   test("Test basic conversion") {
-    val avro = createNestedAvroSchemaWithFields("foo", _.optionalInt("bar"))
-    val record = new GenericRecordBuilder(avro)
-        .set("foo", new GenericRecordBuilder(avro.getField("foo").schema()).set("bar", 42).build())
-        .build()
-    val serializer = new AvroSerializer(CATALYST_STRUCT, avro, false)
-    val deserializer = new AvroDeserializer(avro, CATALYST_STRUCT, defaultRebaseMode)
-    assert(serializer.serialize(deserializer.deserialize(record).get) === record)
+    withFieldMatchType { fieldMatch =>
+      val (top, nest) = fieldMatch match {
+        case BY_NAME => ("foo", "bar")
+        case BY_POSITION => ("NOTfoo", "NOTbar")
+      }
+      val avro = createNestedAvroSchemaWithFields(top, _.optionalInt(nest))
+      val record = new GenericRecordBuilder(avro)
+          .set(top, new GenericRecordBuilder(avro.getField(top).schema()).set(nest, 42).build())
+          .build()
+      val serializer = createSerde(CATALYST_STRUCT, avro, SERIALIZE, fieldMatch).left.get
+      val deserializer = createSerde(CATALYST_STRUCT, avro, DESERIALIZE, fieldMatch).right.get
+      assert(serializer.serialize(deserializer.deserialize(record).get) === record)
+    }
   }
 
   test("Fail to convert with field type mismatch") {
     val avro = createAvroSchemaWithTopLevelFields(_.requiredInt("foo"))
-
-    assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot convert Avro field 'foo' to SQL field 'foo' because schema is incompatible " +
+    withFieldMatchType { fieldMatch =>
+      assertFailedConversionMessage(avro, DESERIALIZE, fieldMatch,
+        "Cannot convert Avro field 'foo' to SQL field 'foo' because schema is incompatible " +
           s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType.sql})""")
 
-    assertFailedConversionMessage(avro, deserialize = false,
-      s"Cannot convert SQL field 'foo' to Avro field 'foo' because schema is incompatible " +
+      assertFailedConversionMessage(avro, SERIALIZE, fieldMatch,
+        s"Cannot convert SQL field 'foo' to Avro field 'foo' because schema is incompatible " +
           s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, avroType = "int")""")
+    }
   }
 
   test("Fail to convert with nested field type mismatch") {
     val avro = createNestedAvroSchemaWithFields("foo", _.optionalFloat("bar"))
 
-    assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot convert Avro field 'foo.bar' to SQL field 'foo.bar' because schema is " +
+    withFieldMatchType { fieldMatch =>
+      assertFailedConversionMessage(avro, DESERIALIZE, fieldMatch,
+        "Cannot convert Avro field 'foo.bar' to SQL field 'foo.bar' because schema is " +
           """incompatible (avroType = "float", sqlType = INT)""")
 
-    assertFailedConversionMessage(avro, deserialize = false,
-      "Cannot convert SQL field 'foo.bar' to Avro field 'foo.bar' because " +
-        """schema is incompatible (sqlType = INT, avroType = "float")""")
+      assertFailedConversionMessage(avro, SERIALIZE, fieldMatch,
+        "Cannot convert SQL field 'foo.bar' to Avro field 'foo.bar' because " +
+          """schema is incompatible (sqlType = INT, avroType = "float")""")
+    }
   }
 
-  test("Fail to convert with nested field name mismatch") {
-    val avro = createNestedAvroSchemaWithFields("foo", _.optionalInt("NOTbar"))
-    val nonnullCatalyst = new StructType()
-        .add("foo", new StructType().add("bar", IntegerType, nullable = false))
+  test("Conversion with field name matching detects missing Avro fields") {
+    val avro = createNestedAvroSchemaWithFields("foo", f => f)
+    val nonnullCatalyst = new StructType().add("foo", new StructType()
+      .add("bar", IntegerType)
+      .add("baz", IntegerType, nullable = false)
+      .add("qux", IntegerType, nullable = false))
 
-    // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
-    new AvroDeserializer(avro, CATALYST_STRUCT, defaultRebaseMode)
-    assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot find non-nullable field 'foo.bar' in Avro schema.",
-      nonnullCatalyst)
+    withFieldMatchType { fieldMatch =>
+      // serialization fails even when 'bar' is nullable
+      assertFailedConversionMessage(avro, SERIALIZE, fieldMatch,
+        "Cannot find in Avro field 'foo': [field 'foo.bar']")
 
-    // serialize fails whether or not 'bar' is nullable
-    val expectMsg = "Cannot find field 'foo.bar' in Avro schema at field 'foo'"
-    assertFailedConversionMessage(avro, deserialize = false, expectMsg)
-    assertFailedConversionMessage(avro, deserialize = false, expectMsg, nonnullCatalyst)
+      // deserialization should have no issues when 'bar' is nullable but fail when it is nonnull
+      createSerde(CATALYST_STRUCT, avro, DESERIALIZE, fieldMatch)
+      assertFailedConversionMessage(avro, DESERIALIZE, fieldMatch, "Cannot find in Avro " +
+        "field 'foo': [non-nullable field 'foo.baz', non-nullable field 'foo.qux']",
+        nonnullCatalyst)
+    }
   }
 
   test("Fail to convert with deeply nested field type mismatch") {
@@ -89,27 +102,27 @@ class AvroSerdeSuite extends SparkFunSuite {
         .noDefault().endRecord()
     val catalyst = new StructType().add("top", CATALYST_STRUCT)
 
-    assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot convert Avro field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
-        """is incompatible (avroType = "float", sqlType = INT)""",
-      catalyst)
+    withFieldMatchType { fieldMatch =>
+      assertFailedConversionMessage(avro, DESERIALIZE, fieldMatch,
+        "Cannot convert Avro field 'top.foo.bar' to SQL field 'top.foo.bar' because schema " +
+          """is incompatible (avroType = "float", sqlType = INT)""",
+        catalyst)
 
-    assertFailedConversionMessage(avro, deserialize = false,
-      "Cannot convert SQL field 'top.foo.bar' to Avro field 'top.foo.bar' because schema is " +
+      assertFailedConversionMessage(avro, SERIALIZE, fieldMatch,
+        "Cannot convert SQL field 'top.foo.bar' to Avro field 'top.foo.bar' because schema is " +
           """incompatible (sqlType = INT, avroType = "float")""",
-      catalyst)
+        catalyst)
+    }
   }
 
-  test("Fail to convert for serialization with field count mismatch") {
-    val tooManyFields = createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
-    assertFailedConversionMessage(tooManyFields, deserialize = false,
-      "Avro top-level record schema length (2) " +
-        "doesn't match SQL top-level record schema length (1)")
-
-    val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
-    assertFailedConversionMessage(tooFewFields, deserialize = false,
-      "Avro top-level record schema length (0) " +
-        "doesn't match SQL top-level record schema length (1)")
+  test("Fail to serialize with extra fields in Avro schema") {
+    // Note that this is allowed for deserialization, but not serialization
+    val avro = createNestedAvroSchemaWithFields("foo",
+      _.optionalInt("bar").optionalInt("qux").optionalInt("baz"))
+    withFieldMatchType { fieldMatch =>
+      assertFailedConversionMessage(avro, SERIALIZE, fieldMatch,
+        "Avro field(s) missing from SQL: [field 'foo.qux', field 'foo.baz']")
+    }
   }
 
   /**
@@ -118,23 +131,27 @@ class AvroSerdeSuite extends SparkFunSuite {
    * matching `expectedCauseMessage`.
    */
   private def assertFailedConversionMessage(avroSchema: Schema,
-      deserialize: Boolean,
+      serdeType: SerdeType,
+      fieldMatchType: FieldMatchType,
       expectedCauseMessage: String,
       catalystSchema: StructType = CATALYST_STRUCT): Unit = {
     val e = intercept[IncompatibleSchemaException] {
-      if (deserialize) {
-        new AvroDeserializer(avroSchema, catalystSchema, defaultRebaseMode)
-      } else {
-        new AvroSerializer(catalystSchema, avroSchema, false)
-      }
+      createSerde(catalystSchema, avroSchema, serdeType, fieldMatchType)
     }
-    val expectMsg = if (deserialize) {
-      s"Cannot convert Avro type $avroSchema to SQL type ${catalystSchema.sql}."
-    } else {
-      s"Cannot convert SQL type ${catalystSchema.sql} to Avro type $avroSchema."
+    val expectMsg = serdeType match {
+      case DESERIALIZE => s"Cannot convert Avro type $avroSchema to SQL type ${catalystSchema.sql}."
+      case SERIALIZE => s"Cannot convert SQL type ${catalystSchema.sql} to Avro type $avroSchema."
     }
     assert(e.getMessage === expectMsg)
     assert(e.getCause.getMessage === expectedCauseMessage)
+  }
+
+  def withFieldMatchType(f: FieldMatchType => Unit): Unit = {
+    FieldMatchType.values.foreach { fieldMatchType =>
+      withClue(s"fieldMatchType == $fieldMatchType") {
+        f(fieldMatchType)
+      }
+    }
   }
 }
 
@@ -143,6 +160,43 @@ object AvroSerdeSuite {
 
   private val CATALYST_STRUCT =
     new StructType().add("foo", new StructType().add("bar", IntegerType))
+
+  /**
+   * Specifier for type of serde to be used for easy creation of tests that do both
+   * serialization and deserialization.
+   */
+  object SerdeType extends Enumeration {
+    type SerdeType = Value
+    val SERIALIZE, DESERIALIZE = Value
+  }
+  import SerdeType._
+
+  /**
+   * Specifier for type of field matching to be used for easy creation of tests that do both
+   * positional and by-name field matching.
+   */
+  object FieldMatchType extends Enumeration {
+    type FieldMatchType = Value
+    val BY_NAME, BY_POSITION = Value
+  }
+  import FieldMatchType._
+
+  private def createSerde(
+      catalystSchema: StructType,
+      avroSchema: Schema,
+      serdeType: SerdeType,
+      fieldMatchType: FieldMatchType): Either[AvroSerializer, AvroDeserializer] = {
+    val positional = fieldMatchType match {
+      case BY_NAME => false
+      case BY_POSITION => true
+    }
+    serdeType match {
+      case SERIALIZE => Left(new AvroSerializer(catalystSchema, avroSchema, false, positional,
+        LegacyBehaviorPolicy.CORRECTED))
+      case DESERIALIZE => Right(new AvroDeserializer(avroSchema, catalystSchema, positional,
+        LegacyBehaviorPolicy.CORRECTED, new NoopFilters))
+    }
+  }
 
   /**
    * Convenience method to create a top-level Avro schema with a single nested record
