@@ -1178,7 +1178,7 @@ class SessionCatalog(
    */
   private def requireNonEmptyValueInPartitionSpec(specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
-      if (s.values.exists(_.isEmpty)) {
+      if (s.values.exists(v => v != null && v.isEmpty)) {
         val spec = s.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
         throw QueryCompilationErrors.invalidPartitionSpecError(
           s"The spec ($spec) contains an empty partition column value")
@@ -1552,7 +1552,6 @@ class SessionCatalog(
       externalCatalog.getFunction(database, name.funcName)
     } catch {
       case _: AnalysisException => failFunctionLookup(name)
-      case _: NoSuchPermanentFunctionException => failFunctionLookup(name)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,

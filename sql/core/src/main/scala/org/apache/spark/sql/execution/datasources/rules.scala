@@ -406,7 +406,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       catalogTable.get.tracksPartitionsInCatalog
     if (partitionsTrackedByCatalog && normalizedPartSpec.nonEmpty) {
       // empty partition column value
-      if (normalizedPartSpec.filter(_._2.isDefined).exists(_._2.get.isEmpty)) {
+      if (normalizedPartSpec.map(_._2)
+          .filter(_.isDefined).map(_.get).exists(v => v != null && v.isEmpty)) {
         val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
         throw new AnalysisException(
           s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
