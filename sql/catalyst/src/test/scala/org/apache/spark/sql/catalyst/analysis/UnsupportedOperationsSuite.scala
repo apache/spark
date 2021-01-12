@@ -694,7 +694,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       OutputMode.Append(),
       expectFailure = expectFailure)
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType2 =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType2 =>
       testGlobalWatermarkLimit(
         s"streaming-stream $joinType2 after stream-stream $joinType join in Append mode",
         streamRelation.join(
@@ -740,7 +740,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
         isMapGroupsWithState = false, null, streamRelation).groupBy("*")(count("*")),
       OutputMode.Append())
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertFailOnGlobalWatermarkLimit(
         s"stream-stream $joinType after FlatMapGroupsWithState in Append mode",
         streamRelation.join(
@@ -773,7 +773,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       Deduplicate(Seq(attribute), streamRelation).groupBy("a")(count("*")),
       OutputMode.Append())
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertPassOnGlobalWatermarkLimit(
         s"$joinType join after deduplicate in Append mode",
         streamRelation.join(Deduplicate(Seq(attribute), streamRelation), joinType = joinType,
