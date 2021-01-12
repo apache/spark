@@ -102,8 +102,7 @@ object LocalKMeans {
       }
 
       val newPoints = pointStats.map { mapping =>
-        (mapping._1, mapping._2._1 * (1.0 / mapping._2._2))
-      }
+        (mapping._1, mapping._2._1 * (1.0 / mapping._2._2))}
 
       tempDist = 0.0
       for (mapping <- newPoints) {
