@@ -23,6 +23,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. ADD PARTITION` command that
@@ -70,6 +71,23 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       sql(s"ALTER TABLE t ADD PARTITION (part=1) LOCATION '$part1Loc'")
       assert(spark.catalog.isCached("t"))
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(0, 1)))
+    }
+  }
+
+  test("SPARK-34084: auto update table stats") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false") {
+        sql(s"CREATE TABLE $t (col0 int, part int) $defaultUsing PARTITIONED BY (part)")
+        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+        val errMsg = intercept[IllegalArgumentException] {
+          getTableSize(t)
+        }.getMessage
+        assert(errMsg.contains(s"The table $t does not have stats"))
+      }
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
+        assert(getTableSize(t) > 0)
+      }
     }
   }
 }
