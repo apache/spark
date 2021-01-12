@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.lang.{Long => JLong}
 import java.util
 
 import scala.collection.mutable.StringBuilder
@@ -176,7 +177,8 @@ object ParserUtils {
                    (2 until 10).forall(j => Character.digit(b.charAt(i + j), 16) != -1)) {
           // \U00000000 style 32-bit unicode character literals.
 
-          val codePoint = Integer.parseInt(b.substring(i + 2, i + 10), 16)
+          // Use Long to treat codePoint as unsigned in the range of 32-bit.
+          val codePoint = JLong.parseLong(b.substring(i + 2, i + 10), 16)
           if (codePoint < 0x10000) {
             sb.append((codePoint & 0xFFFF).toChar)
           } else {
