@@ -18,11 +18,33 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `ALTER TABLE .. ADD PARTITION` command to check
  * V1 Hive external table catalog.
  */
 class AlterTableAddPartitionSuite
-    extends v1.AlterTableAddPartitionSuiteBase
-    with CommandSuiteBase
+  extends v1.AlterTableAddPartitionSuiteBase
+  with CommandSuiteBase {
+
+  test("hive client calls") {
+    Seq(false, true).foreach { statsOn =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> statsOn.toString) {
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+          sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+          assert(!statsOn || getTableSize(t) > 0)
+
+          checkHiveClientCalls(expected = 20) {
+            sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
+          }
+          sql(s"CACHE TABLE $t")
+          checkHiveClientCalls(expected = 23) {
+            sql(s"ALTER TABLE $t ADD PARTITION (part=2)")
+          }
+        }
+      }
+    }
+  }
+}

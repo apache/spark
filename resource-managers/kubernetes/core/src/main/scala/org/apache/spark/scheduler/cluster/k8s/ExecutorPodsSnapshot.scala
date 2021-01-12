@@ -29,13 +29,15 @@ import org.apache.spark.internal.Logging
 /**
  * An immutable view of the current executor pods that are running in the cluster.
  */
-private[spark] case class ExecutorPodsSnapshot(executorPods: Map[Long, ExecutorPodState]) {
+private[spark] case class ExecutorPodsSnapshot(
+    executorPods: Map[Long, ExecutorPodState],
+    fullSnapshotTs: Long) {
 
   import ExecutorPodsSnapshot._
 
   def withUpdate(updatedPod: Pod): ExecutorPodsSnapshot = {
     val newExecutorPods = executorPods ++ toStatesByExecutorId(Seq(updatedPod))
-    new ExecutorPodsSnapshot(newExecutorPods)
+    new ExecutorPodsSnapshot(newExecutorPods, fullSnapshotTs)
   }
 }
 
@@ -43,11 +45,11 @@ object ExecutorPodsSnapshot extends Logging {
   private var shouldCheckAllContainers: Boolean = _
   private var sparkContainerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME
 
-  def apply(executorPods: Seq[Pod]): ExecutorPodsSnapshot = {
-    ExecutorPodsSnapshot(toStatesByExecutorId(executorPods))
+  def apply(executorPods: Seq[Pod], fullSnapshotTs: Long): ExecutorPodsSnapshot = {
+    ExecutorPodsSnapshot(toStatesByExecutorId(executorPods), fullSnapshotTs)
   }
 
-  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState])
+  def apply(): ExecutorPodsSnapshot = ExecutorPodsSnapshot(Map.empty[Long, ExecutorPodState], 0)
 
   def setShouldCheckAllContainers(watchAllContainers: Boolean): Unit = {
     shouldCheckAllContainers = watchAllContainers
