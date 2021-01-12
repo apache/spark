@@ -83,6 +83,23 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
     }
   }
 
+  test("SPARK-34084: auto update table stats") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false") {
+        sql(s"CREATE TABLE $t (col0 int, part int) $defaultUsing PARTITIONED BY (part)")
+        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+        val errMsg = intercept[IllegalArgumentException] {
+          getTableSize(t)
+        }.getMessage
+        assert(errMsg.contains(s"The table $t does not have stats"))
+      }
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
+        assert(getTableSize(t) > 0)
+      }
+    }
+  }
+
   test("SPARK-34060, SPARK-34071: update stats of cached table") {
     withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
       withNamespaceAndTable("ns", "tbl") { t =>
