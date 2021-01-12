@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
