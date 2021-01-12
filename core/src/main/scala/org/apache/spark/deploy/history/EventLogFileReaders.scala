@@ -116,7 +116,7 @@ object EventLogFileReader {
 
   def apply(fs: FileSystem, status: FileStatus): Option[EventLogFileReader] = {
     if (isSingleEventLog(status)) {
-      Some(new SingleFileEventLogFileReader(fs, status.getPath), Some(Status))
+      Some(new SingleFileEventLogFileReader(fs, status.getPath, Some(status)))
     } else if (isRollingEventLogs(status)) {
       Some(new RollingEventLogFilesFileReader(fs, status.getPath))
     } else {
