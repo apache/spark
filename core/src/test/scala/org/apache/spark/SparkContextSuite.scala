@@ -1150,49 +1150,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
-
-  test("SPARK-34069: Kill barrier tasks should respect SPARK_JOB_INTERRUPT_ON_CANCEL") {
-    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
-    var index = 0
-    var checkDone = false
-    var startTime = 0L
-    val listener = new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
-        if (startTime == 0) {
-          startTime = taskStart.taskInfo.launchTime
-        }
-      }
-
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-        if (index == 0) {
-          assert(taskEnd.reason.isInstanceOf[ExceptionFailure])
-          assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
-          index = 1
-        } else if (index == 1) {
-          assert(taskEnd.reason.isInstanceOf[TaskKilled])
-          assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
-          index = 2
-          checkDone = true
-        }
-      }
-    }
-    sc.addSparkListener(listener)
-    sc.setJobGroup("test", "", true)
-    sc.parallelize(Seq(1, 2), 2).barrier().mapPartitions { it =>
-      if (TaskContext.get().stageAttemptNumber() == 0) {
-        if (it.hasNext && it.next() == 1) {
-          throw new RuntimeException("failed")
-        } else {
-          Thread.sleep(5000)
-        }
-      }
-      it
-    }.groupBy(x => x).collect()
-    sc.listenerBus.waitUntilEmpty()
-    assert(checkDone)
-    // double check we kill task success
-    assert(System.currentTimeMillis() - startTime < 5000)
-  }
 }
 
 object SparkContextSuite {
