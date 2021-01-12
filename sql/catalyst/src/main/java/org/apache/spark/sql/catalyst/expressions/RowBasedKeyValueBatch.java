@@ -79,10 +79,10 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
     boolean allFixedLength = true;
     // checking if there is any variable length fields
     // there is probably a more succinct impl of this
-    for (StructField field: keySchema.fields()) {
+    for (StructField field : keySchema.fields()) {
       allFixedLength = allFixedLength && UnsafeRow.isFixedLength(field.dataType());
     }
-    for (StructField field: valueSchema.fields()) {
+    for (StructField field : valueSchema.fields()) {
       allFixedLength = allFixedLength && UnsafeRow.isFixedLength(field.dataType());
     }
 
