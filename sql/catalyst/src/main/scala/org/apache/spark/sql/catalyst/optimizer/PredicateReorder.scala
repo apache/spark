@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, MultiLikeBase, Or, PredicateHelper, SubqueryExpression, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Expression, Or, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -28,43 +28,31 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object PredicateReorder extends Rule[LogicalPlan] with PredicateHelper {
   // Get priority from a Expression. Expressions with higher priority are executed in preference
   // to expressions with lower priority.
-  private def getPriority(exp: Expression, filterEstimation: Option[FilterEstimation]) = exp match {
-    case e: Expression if e.find(_.isInstanceOf[SubqueryExpression]).isDefined => 1.0
-    case e: Expression if e.find(_.isInstanceOf[UserDefinedExpression]).isDefined => 2.0
-    case e: Expression if e.find(_.isInstanceOf[MultiLikeBase]).isDefined ||
-      e.find(_.isInstanceOf[CaseWhen]).isDefined =>
-      val maxSize = e.collect {
-        case m: MultiLikeBase => m.patterns.length
-        case c: CaseWhen => c.branches.size
-      }.max
-      3.0 + (1.0 / maxSize)
-    case e =>
-      filterEstimation.flatMap(_.calculateFilterSelectivity(e, false).map(5.0 - _)).getOrElse(4.0)
+  private def getPriority(exp: Expression, filterEstimation: FilterEstimation) = {
+    filterEstimation.calculateFilterSelectivity(exp, false).map(1.0 - _).getOrElse(0.0)
   }
 
-  private def reorderPredicates(e: Expression, estimation: Option[FilterEstimation]): Expression = {
-    e match {
+  private def reorderPredicates(exp: Expression, filterEstimation: FilterEstimation): Expression = {
+    exp match {
       case _: Or =>
-        splitDisjunctivePredicates(e)
-          .map(reorderPredicates(_, estimation))
+        splitDisjunctivePredicates(exp)
+          .map(reorderPredicates(_, filterEstimation))
           .reduceLeft(Or)
       case _: And =>
-        splitConjunctivePredicates(e)
-          .map(e => (e, getPriority(e, estimation))).sortWith(_._2 > _._2).map(_._1)
+        splitConjunctivePredicates(exp)
+          .map(e => (e, getPriority(e, filterEstimation))).sortWith(_._2 > _._2).map(_._1)
           .reduceLeft(And)
-      case _ => e
+      case _ => exp
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.predicateReorder) {
-      plan
-    } else {
+    if (conf.cboEnabled && conf.predicateReorder) {
       plan transform {
-        case f @ Filter(cond, _) =>
-          val filterEstimation = if (conf.cboEnabled) Some(FilterEstimation(f)) else None
-          f.copy(condition = reorderPredicates(cond, filterEstimation))
+        case f @ Filter(cond, _) => f.copy(condition = reorderPredicates(cond, FilterEstimation(f)))
       }
+    } else {
+      plan
     }
   }
 }
