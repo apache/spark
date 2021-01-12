@@ -1917,8 +1917,7 @@ private[spark] class DAGScheduler(
             val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) " +
               "failed."
             val job = jobIdToActiveJob.get(failedStage.firstJobId)
-            val shouldInterrupt =
-              job.map(j => shouldInterruptTaskThread(j)).getOrElse(false)
+            val shouldInterrupt = job.exists(j => shouldInterruptTaskThread(j))
             taskScheduler.killAllTaskAttempts(stageId, shouldInterrupt, reason)
           } catch {
             case e: UnsupportedOperationException =>
