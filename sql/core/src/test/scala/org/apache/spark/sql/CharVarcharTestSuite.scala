@@ -474,6 +474,17 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       checkAnswer(sql("SELECT v, sum(i) FROM t GROUP BY v ORDER BY v"), Row("c", 1))
     }
   }
+
+  test("SPARK-34003: fix char/varchar fails w/ order by functions") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), i INT) USING $format")
+      sql("INSERT INTO t VALUES ('c', 1)")
+      checkAnswer(sql("SELECT substr(v, 1, 2), sum(i) FROM t GROUP BY v ORDER BY substr(v, 1, 2)"),
+        Row("c", 1))
+      checkAnswer(sql("SELECT sum(i) FROM t GROUP BY v ORDER BY substr(v, 1, 2)"),
+        Row(1))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
