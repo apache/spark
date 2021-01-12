@@ -86,18 +86,18 @@ class AvroSerdeSuite extends SparkFunSuite {
     // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
     Deserializer.create(CATALYST_STRUCT, avro, BY_NAME)
     assertFailedConversionMessage(avro, Deserializer, BY_NAME,
-      "Cannot find non-nullable field 'foo.bar' (at position 0) in Avro schema.",
+      "Cannot find SQL field(s) in Avro field 'foo': [field 'foo.bar' (position 0)]",
       nonnullCatalyst)
     assertFailedConversionMessage(avro, Deserializer, BY_POSITION,
-      "Cannot find non-nullable field at position 1 (field 'foo.baz') in Avro schema.",
+      "Cannot find SQL field(s) in Avro field 'foo': [position 1 (field 'foo.baz')]",
       extraNonnullCatalyst)
 
     // serialize fails whether or not 'bar' is nullable
-    val expectMsg = "Cannot find field 'foo.bar' (at position 0) in Avro schema at field 'foo'"
+    val expectMsg = "Cannot find SQL field(s) in Avro field 'foo': [field 'foo.bar' (position 0)]"
     assertFailedConversionMessage(avro, Serializer, BY_NAME, expectMsg)
     assertFailedConversionMessage(avro, Serializer, BY_NAME, expectMsg, nonnullCatalyst)
     assertFailedConversionMessage(avro, Serializer, BY_POSITION,
-      "Avro field 'foo' schema length (1) doesn't match SQL field 'foo' schema length (2)",
+      "Cannot find SQL field(s) in Avro field 'foo': [position 1 (field 'foo.baz')]",
       extraNonnullCatalyst)
   }
 
@@ -126,15 +126,19 @@ class AvroSerdeSuite extends SparkFunSuite {
       val tooManyFields =
         createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
       assertFailedConversionMessage(tooManyFields, Serializer, fieldMatch,
-        "Avro top-level record schema length (2) " +
-          "doesn't match SQL top-level record schema length (1)")
+        s"Avro field(s) missing from SQL top-level record: [${fieldDesc("bar", 1, fieldMatch)}]")
 
       val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
       assertFailedConversionMessage(tooFewFields, Serializer, fieldMatch,
-        "Avro top-level record schema length (0) " +
-          "doesn't match SQL top-level record schema length (1)")
+        s"Cannot find SQL field(s) in Avro top-level record: [${fieldDesc("foo", 0, fieldMatch)}]")
     }
   }
+
+  private def fieldDesc(fieldName: String, fieldPos: Int, matchType: MatchType): String =
+    matchType match {
+      case BY_POSITION => s"position $fieldPos (field '$fieldName')"
+      case BY_NAME => s"field '$fieldName' (position $fieldPos)"
+    }
 
   /**
    * Attempt to convert `catalystSchema` to `avroSchema` (or vice-versa if `deserialize` is true),

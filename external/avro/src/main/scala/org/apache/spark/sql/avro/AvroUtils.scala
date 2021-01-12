@@ -206,17 +206,25 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /**
-   * Wraps an Avro Schema object so that field lookups are faster.
+   * Helper class to perform field lookup/matching on Avro schemas.
+   *
+   * This will match `avroSchema` against `catalystSchema`, attempting to find a matching field in
+   * the Avro schema for each field in the Catalyst schema and vice-versa, respecting settings for
+   * case sensitivity. The match results can be accessed using the getter methods.
    *
    * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
+   * @param catalystSchema The Catalyst schema to use for matching.
    * @param avroPath The seq of parent field names leading to `avroSchema`.
+   * @param catalystPath The seq of parent field names leading to `catalystSchema`.
    * @param positionalFieldMatch If true, perform field matching in a positional fashion
    *                             (structural comparison between schemas, ignoring names);
    *                             otherwise, perform field matching using field names.
    */
   class AvroSchemaHelper(
       avroSchema: Schema,
+      catalystSchema: StructType,
       avroPath: Seq[String],
+      catalystPath: Seq[String],
       positionalFieldMatch: Boolean) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
@@ -227,6 +235,38 @@ private[sql] object AvroUtils extends Logging {
     private[this] val fieldMap = avroSchema.getFields.asScala
       .groupBy(_.name.toLowerCase(Locale.ROOT))
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
+
+    private[this] val fieldPairs = catalystSchema
+      .zipWithIndex
+      .map(fieldWithPos => (fieldWithPos, getAvroField(fieldWithPos._1.name, fieldWithPos._2)))
+
+    /**
+     * Get the fields which have matching equivalents in both Avro and Catalyst schemas.
+     *
+     * @return A sequence of `(catalystField, catalystPosition, avroField)` tuples.
+     */
+    def getMatchedFields: Seq[(StructField, Int, Schema.Field)] = fieldPairs.flatMap {
+      case ((sqlField, sqlPos), Some(avroField)) => Some((sqlField, sqlPos, avroField))
+      case (_, None) => None
+    }
+
+    def assertNoExtraSqlFields(includeNullable: Boolean): Unit =
+      fieldPairs.filter(_._2.isEmpty).map(_._1).filter(includeNullable || !_._1.nullable) match {
+        case Seq() => // do nothing
+        case fields => throw new IncompatibleSchemaException(
+          s"Cannot find SQL field(s) in Avro ${toFieldStr(avroPath)}: " +
+            fields.map(f => toFieldDescription(catalystPath :+ f._1.name, f._2))
+              .mkString("[", ", ", "]"))
+      }
+
+    def assertNoExtraAvroFields(): Unit =
+      (avroFieldArray.toSet -- getMatchedFields.map(_._3)).toSeq match {
+        case Seq() => // do nothing
+        case fields => throw new IncompatibleSchemaException(
+          s"Avro field(s) missing from SQL ${toFieldStr(catalystPath)}: " +
+            fields.map(f => toFieldDescription(avroPath :+ f.name(), f.pos()))
+              .mkString("[", ", ", "]"))
+      }
 
     /**
      * Extract a single field from the contained avro schema which has the desired field name,
@@ -259,21 +299,19 @@ private[sql] object AvroUtils extends Logging {
         getFieldByName(fieldName)
       }
     }
-  }
 
-  /**
-   * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
-   * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
-   * either the position or name will be emphasized (for true and false, respectively); both will
-   * be included in either case.
-   */
-  private[avro] def toFieldDescription(
-      names: Seq[String],
-      position: Int,
-      positionalFieldMatch: Boolean): String = if (positionalFieldMatch) {
-    s"field at position $position (${toFieldStr(names)})"
-  } else {
-    s"${toFieldStr(names)} (at position $position)"
+    /**
+     * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
+     * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
+     * either the position or name will be emphasized (for true and false, respectively); both will
+     * be included in either case.
+     */
+    private[this] def toFieldDescription(names: Seq[String], position: Int): String =
+      if (positionalFieldMatch) {
+        s"position $position (${toFieldStr(names)})"
+      } else {
+        s"${toFieldStr(names)} (position $position)"
+      }
   }
 
   /**
