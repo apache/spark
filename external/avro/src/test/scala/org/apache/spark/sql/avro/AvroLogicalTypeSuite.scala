@@ -246,7 +246,7 @@ class AvroLogicalTypeSuite extends QueryTest with SharedSQLContext with SQLTestU
     dataFileWriter.create(schema, new File(avroFile))
     val logicalType = LogicalTypes.decimal(precision, scale)
 
-    decimalInputData.map { x =>
+    decimalInputData.foreach { x =>
       val avroRec = new GenericData.Record(schema)
       val decimal = new java.math.BigDecimal(x).setScale(scale)
       val bytes =
