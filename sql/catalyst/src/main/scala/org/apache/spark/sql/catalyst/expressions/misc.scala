@@ -66,12 +66,11 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class RaiseError private[spark] (child: Expression, returnType: DataType)
+case class RaiseError private[spark] (child: Expression, dataType: DataType)
   extends UnaryExpression with ImplicitCastInputTypes {
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def dataType: DataType = returnType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"
