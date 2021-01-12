@@ -191,7 +191,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  protected[spark] def patterns: Seq[UTF8String]
+  protected def patterns: Seq[UTF8String]
 
   protected def isNotSpecified: Boolean
 
