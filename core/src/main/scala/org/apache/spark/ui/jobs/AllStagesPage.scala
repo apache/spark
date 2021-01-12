@@ -154,6 +154,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       </h4>
     </span> ++
       <div class={s"aggregated-all$classSuffix collapsible-table"}>
+        <button class="btn btn-spark" onclick="toggleStagesDetail(this)">Show All Stages Details</button>
         {stagesTable.toNodeSeq}
       </div>
   }

@@ -103,3 +103,14 @@ function onSearchStringChange() {
         });
     }
 }
+
+function toggleStagesDetail(obj) {
+  if (obj.innerHTML.indexOf("Show ") == 0) {
+    obj.innerHTML = "Hide All Stages Details"
+  } else {
+    obj.innerHTML = "Show All Stages Details"
+  }
+  obj.parentNode.querySelectorAll('.stage-details').forEach(function (item) {
+    item.classList.toggle('collapsed')
+  })
+}
