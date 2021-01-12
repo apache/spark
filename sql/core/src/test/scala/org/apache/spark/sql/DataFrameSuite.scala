@@ -1236,40 +1236,42 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-33690: showString: escape meta-characters") {
-    val df1 = Seq("aaa\nbbb\tccc").toDF("value")
+    val df1 = Seq("aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh").toDF("value")
     assert(df1.showString(1, truncate = 0) ===
-      """+-------------+
-        ||value        |
-        |+-------------+
-        ||aaa\nbbb\tccc|
-        |+-------------+
+      """+--------------------------------------+
+        ||value                                 |
+        |+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
         |""".stripMargin)
 
-    val df2 = Seq(Seq("aaa\nbbb\tccc")).toDF("value")
+    val df2 = Seq(Seq("aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh")).toDF("value")
     assert(df2.showString(1, truncate = 0) ===
-      """+---------------+
-        ||value          |
-        |+---------------+
-        ||[aaa\nbbb\tccc]|
-        |+---------------+
+      """+----------------------------------------+
+        ||value                                   |
+        |+----------------------------------------+
+        ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]|
+        |+----------------------------------------+
         |""".stripMargin)
 
-    val df3 = Seq(Map("aaa\nbbb\tccc" -> "aaa\nbbb\tccc")).toDF("value")
+    val df3 =
+      Seq(Map("aaa\nbbb\tccc" -> "aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh")).toDF("value")
     assert(df3.showString(1, truncate = 0) ===
-      """+--------------------------------+
-        ||value                           |
-        |+--------------------------------+
-        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc}|
-        |+--------------------------------+
+      """+---------------------------------------------------------+
+        ||value                                                    |
+        |+---------------------------------------------------------+
+        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}|
+        |+---------------------------------------------------------+
         |""".stripMargin)
 
-    val df4 = Seq("aaa\nbbb\tccc").toDF("value").selectExpr("named_struct('v', value)")
+    val df4 = Seq("aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh")
+      .toDF("value").selectExpr("named_struct('v', value)")
     assert(df4.showString(1, truncate = 0) ===
-      """+----------------------+
-        ||named_struct(v, value)|
-        |+----------------------+
-        ||{aaa\nbbb\tccc}       |
-        |+----------------------+
+      """+----------------------------------------+
+        ||named_struct(v, value)                  |
+        |+----------------------------------------+
+        ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}|
+        |+----------------------------------------+
         |""".stripMargin)
   }
 
