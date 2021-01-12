@@ -98,10 +98,11 @@ trait DDLCommandTestUtils extends SQLTestUtils {
       sql(s"DESCRIBE TABLE EXTENDED $tableName")
         .select("data_type")
         .where("col_name = 'Statistics'")
-        .first()
-        .getString(0)
+    if (stats.isEmpty) {
+      throw new IllegalArgumentException(s"The table $tableName does not have stats")
+    }
     val tableSizeInStats = ".*(\\d) bytes.*".r
-    val size = stats match {
+    val size = stats.first().getString(0) match {
       case tableSizeInStats(s) => s.toInt
       case _ => throw new IllegalArgumentException("Not found table size in stats")
     }
