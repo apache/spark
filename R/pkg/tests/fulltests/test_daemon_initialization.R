@@ -20,13 +20,11 @@ test_that("Daemon Initialization", {
   sparkR.stop()
   sparkR.session(
 
-    # the sparkConfig written here is overridden by the command line parameters
+    # configurations written here are overridden by the command line parameters
     # to spark-submit
 
-    sparkConfig =
-      list(spark.r.daemonInit =
-             'message("Initting the Daemon ..."); testInit <- "wow"')
-
+    spark.r.daemonInit =
+      'message("Initting the Daemon ..."); testInit <- "wow"'
   )
   data <-
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3))
@@ -45,7 +43,7 @@ test_that("Daemon Initialization", {
       structField("c", "string"),
       structField("avg", "double")
     )
-  df <- createDataFrame (data, inputColumnNames)
+  df <- createDataFrame(data, inputColumnNames)
   resultDF <-
     gapply(df, groupingColumnNames, workerFunction, outputSchema)
   result <- collect(resultDF)
