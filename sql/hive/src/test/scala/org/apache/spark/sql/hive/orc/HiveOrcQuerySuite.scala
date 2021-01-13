@@ -322,17 +322,55 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
-            Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
-            checkAnswer(spark.read.orc(path), Row(1, 2))
+            Seq((1, 2), (3, 4), (5, 6)).toDF("c1", "c2").write.orc(path)
+            val correctAnswer = Seq(Row(1, 2), Row(3, 4), Row(5, 6))
+            checkAnswer(spark.read.orc(path), correctAnswer)
 
             withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
               withTable("t") {
                 sql(s"CREATE EXTERNAL TABLE t(c3 INT, c4 INT) STORED AS ORC LOCATION '$path'")
 
                 val expected = if (forcePositionalEvolution) {
-                  Row(1, 2)
+                  correctAnswer
                 } else {
-                  Row(null, null)
+                  Seq(Row(null, null), Row(null, null), Row(null, null))
+                }
+
+                checkAnswer(spark.table("t"), expected)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32864: Support ORC forced positional evolution with partitioned table") {
+    Seq("native", "hive").foreach { orcImpl =>
+      Seq(true, false).foreach { forcePositionalEvolution =>
+        withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+          OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString) {
+          withTempPath { f =>
+            val path = f.getCanonicalPath
+            Seq((1, 2, 1), (3, 4, 2), (5, 6, 3)).toDF("c1", "c2", "p")
+              .write.partitionBy("p").orc(path)
+            val correctAnswer = Seq(Row(1, 2, 1), Row(3, 4, 2), Row(5, 6, 3))
+            checkAnswer(spark.read.orc(path), correctAnswer)
+
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+              withTable("t") {
+                sql(
+                  s"""
+                     |CREATE EXTERNAL TABLE t(c3 INT, c4 INT)
+                     |PARTITIONED BY (p int)
+                     |STORED AS ORC
+                     |LOCATION '$path'
+                     |""".stripMargin)
+                sql(s"MSCK REPAIR TABLE t")
+                val expected = if (forcePositionalEvolution) {
+                  correctAnswer
+                } else {
+                  Seq(Row(null, null, 1), Row(null, null, 2), Row(null, null, 3))
                 }
 
                 checkAnswer(spark.table("t"), expected)
