@@ -290,4 +290,6 @@ private[deploy] object DeployMessages {
 
   case object SendHeartbeat
 
+  case class KillApplication(appId: String)
+
 }

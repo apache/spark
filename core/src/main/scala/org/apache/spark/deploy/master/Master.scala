@@ -402,6 +402,9 @@ private[deploy] class Master(
     case CheckForWorkerTimeOut =>
       timeOutDeadWorkers()
 
+    case KillApplication(applicationId) =>
+      logInfo(s"Asked to kill application $applicationId")
+      idToApp.get(applicationId).foreach(removeApplication(_, ApplicationState.KILLED))
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
