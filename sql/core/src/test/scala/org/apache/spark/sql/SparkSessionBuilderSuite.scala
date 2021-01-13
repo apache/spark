@@ -196,6 +196,72 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(postFirstCreation == postSecondCreation)
   }
 
+  test("SPARK-32165: SparkContext only register one SQLAppStatusListener") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-register-one-SQLAppStatusListener")
+    val context = new SparkContext(conf)
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+      // Touches the sessionState so it initiate SQLAppStatusListener and ExecutionListenerBus
+      .sessionState
+
+    assert(countListener("SQLAppStatusListener", context) === 1)
+    assert(countListener("ExecutionListenerBus", context) === 1)
+    val postFirstCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+      .sessionState
+    assert(countListener("SQLAppStatusListener", context) === 1)
+    assert(countListener("ExecutionListenerBus", context) === 2)
+    val postSecondCreation = context.listenerBus.listeners.size()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+    // Minus 1 because the listener `ExecutionListenerBus` is created per SparkSession
+    assert(postFirstCreation == postSecondCreation - 1)
+    context.stop()
+  }
+
+  test("SPARK-32165: Ensure only initiates one SharedState") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test-initiates-one-shared-state")
+    val context = new SparkContext(conf)
+    val sharedState1 = SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+      .sharedState
+
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    val sharedState2 = SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+      .sharedState
+
+    assert(sharedState1.eq(sharedState2))
+  }
+
+  private def countListener(listener: String, context: SparkContext): Int = {
+    import scala.collection.JavaConverters._
+    val listeners = context.listenerBus.listeners.asScala
+    listeners.count(_.getClass.getSimpleName === listener)
+  }
+
   test("SPARK-31532: should not propagate static sql configs to the existing" +
     " active/default SparkSession") {
     val session = SparkSession.builder()
