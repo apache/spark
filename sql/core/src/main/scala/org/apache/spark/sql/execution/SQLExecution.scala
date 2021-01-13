@@ -91,14 +91,25 @@ object SQLExecution {
         var ex: Option[Throwable] = None
         val startTime = System.nanoTime()
         try {
-          sc.listenerBus.post(SparkListenerSQLExecutionStart(
+
+          // queryExecution.executedPlan may throw an exception and made the send event message
+          // failed. we should send SparkListenerSQLExecutionStart event to listener bus when we
+          // catch an exception.
+          val sparkPlanInfo = try {
+            SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan)
+          } catch {
+            case e: Exception =>
+              null
+          }
+
+          sparkSession.listenerManager.post(SparkListenerSQLExecutionStart(
             executionId = executionId,
             description = desc,
             details = callSite.longForm,
             physicalPlanDescription = queryExecution.explainString(planDescriptionMode),
             // `queryExecution.executedPlan` triggers query planning. If it fails, the exception
             // will be caught and reported in the `SparkListenerSQLExecutionEnd`
-            sparkPlanInfo = SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+            sparkPlanInfo = sparkPlanInfo,
             time = System.currentTimeMillis()))
           body
         } catch {

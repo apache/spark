@@ -86,6 +86,12 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
     }
   }
 
+
+  /** Post a listener event */
+  private[sql] def post(event: SparkListenerEvent): Unit = {
+    listenerBus.post(event)
+  }
+
   /**
    * Registers the specified [[QueryExecutionListener]].
    */
@@ -133,14 +139,18 @@ private[sql] class ExecutionListenerBus(sparkListenerBus: Option[LiveListenerBus
   private val activeQueryExecutionIds = new mutable.HashSet[Long]
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
-    case e: SparkListenerSQLExecutionStart =>
-      activeQueryExecutionIds.synchronized{
-        activeQueryExecutionIds += e.executionId
-      }
     case e: SparkListenerSQLExecutionEnd =>
       postToAll(e)
       activeQueryExecutionIds.synchronized{
         activeQueryExecutionIds -= e.executionId
+      }
+    case _ =>
+  }
+
+  def post(event: SparkListenerEvent): Unit = event match {
+    case e: SparkListenerSQLExecutionStart =>
+      activeQueryExecutionIds.synchronized{
+        activeQueryExecutionIds += e.executionId
       }
     case _ =>
   }
