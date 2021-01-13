@@ -233,7 +233,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     context.stop()
   }
 
-  test("SPARK-32165: Ensure only initiates one SharedState") {
+  test("SPARK-32165: Ensure only initiates SharedState once") {
     val conf = new SparkConf()
       .setMaster("local")
       .setAppName("test-initiates-one-shared-state")
