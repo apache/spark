@@ -1797,12 +1797,10 @@ for more details on the API.
 
 `UnivariateFeatureSelector` operates on categorical/continuous labels with categorical/continuous features. 
 User can set `featureType` and `labelType`, and Spark will pick the score function to use based on the specified 
-`featureType` and `labelType`. When setting It uses the
-[one-way ANOVA F-test](https://en.wikipedia.org/wiki/F-test#Multiple-comparison_ANOVA_problems) to decide which
-features to choose. When setting both `featureType` and `labelType` to `categorical`, Spark uses `chi2` as score 
+`featureType` and `labelType`. When setting both `featureType` and `labelType` to `categorical`, Spark uses `chi2` as the score 
 function. When setting `featureType` to `continuous` and `labelType` to `categorical`, Spark uses `f_classif` 
-as score function. When setting both `featureType` and `labelType` to `continuous`, Spark uses `f_regression` 
-as score function. 
+as the score function. When setting both `featureType` and `labelType` to `continuous`, Spark uses `f_regression` 
+as the score function. 
 It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
 * `numTopFeatures` chooses a fixed number of top features.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
@@ -1845,26 +1843,26 @@ id | features                       | label   | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [ANOVASelector Scala docs](api/scala/org/apache/spark/ml/feature/ANOVASelector.html)
+Refer to the [UnivariateFeatureSelector Scala docs](api/scala/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/ANOVASelectorExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/UnivariateFeatureSelectorExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [ANOVASelector Java docs](api/java/org/apache/spark/ml/feature/ANOVASelector.html)
+Refer to the [UnivariateFeatureSelector Java docs](api/java/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaANOVASelectorExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaUnivariateFeatureSelectorExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-Refer to the [ANOVASelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ANOVASelector)
+Refer to the [UnivariateFeatureSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.UnivariateFeatureSelector)
 for more details on the API.
 
-{% include_example python/ml/anova_selector_example.py %}
+{% include_example python/ml/univariateFeature_selector_example.py %}
 </div>
 </div>
 
@@ -1946,7 +1944,7 @@ d(p,q) \geq r2 \Rightarrow Pr(h(p)=h(q)) \leq p2
 This LSH family is called `(r1, r2, p1, p2)`-sensitive.
 
 In Spark, different LSH families are implemented in separate classes (e.g., `MinHash`), and APIs for feature transformation, approximate similarity join and approximate nearest neighbor are provided in each class.
-Chi
+
 In LSH, we define a false positive as a pair of distant input features (with `$d(p,q) \geq r2$`) which are hashed into the same bucket, and we define a false negative as a pair of nearby features (with `$d(p,q) \leq r1$`) which are hashed into different buckets.
 
 ## LSH Operations
