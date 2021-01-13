@@ -49,7 +49,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         .set(config.DECOMMISSION_ENABLED, true)
         .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 6000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       val executors = sc.getExecutorIds().toArray
       val decommissionListener = new SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
