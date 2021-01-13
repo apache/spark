@@ -572,7 +572,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           // Only unique expressions are included in the group by expressions and is determined
           // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
           // in grouping expression (a * b)
-          if (result.find(_.semanticEquals(currentExpr)).isDefined) {
+          if (result.exists(_.semanticEquals(currentExpr))) {
             result
           } else {
             result :+ currentExpr
