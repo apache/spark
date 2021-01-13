@@ -86,7 +86,7 @@ private[spark] class ExecutorPodsAllocator(
 
   private val hasPendingPods = new AtomicBoolean()
 
-  private var lastSnapshot = ExecutorPodsSnapshot(Nil)
+  private var lastSnapshot = ExecutorPodsSnapshot()
 
   // Executors that have been deleted by this allocator but not yet detected as deleted in
   // a snapshot from the API server. This is used to deny registration from these executors

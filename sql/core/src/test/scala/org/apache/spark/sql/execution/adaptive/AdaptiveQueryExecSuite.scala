@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1432,27 +1433,31 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-33933: AQE broadcast should not timeout with slow map tasks") {
-    val broadcastTimeoutInSec = 1
-    val df = spark.sparkContext.parallelize(Range(0, 100), 100)
-      .flatMap(x => {
-        Thread.sleep(20)
-        for (i <- Range(0, 100)) yield (x % 26, x % 10)
-      }).toDF("index", "pv")
-    val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
-      .toDF("index", "name")
-    val testDf = df.groupBy("index")
-      .agg(sum($"pv").alias("pv"))
-      .join(dim, Seq("index"))
-    withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> broadcastTimeoutInSec.toString,
-      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val startTime = System.currentTimeMillis()
-      val result = testDf.collect()
-      val queryTime = System.currentTimeMillis() - startTime
-      assert(result.length == 26)
-      // make sure the execution time is large enough
-      assert(queryTime > (broadcastTimeoutInSec + 1) * 1000)
+  test("SPARK-34091: Batch shuffle fetch in AQE partition coalescing") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10000",
+      SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "true") {
+      withTable("t1") {
+        spark.range(100).selectExpr("id + 1 as a").write.format("parquet").saveAsTable("t1")
+        val query = "SELECT SUM(a) FROM t1 GROUP BY a"
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val metricName = SQLShuffleReadMetricsReporter.LOCAL_BLOCKS_FETCHED
+        val blocksFetchedMetric = collectFirst(adaptivePlan) {
+          case p if p.metrics.contains(metricName) => p.metrics(metricName)
+        }
+        assert(blocksFetchedMetric.isDefined)
+        val blocksFetched = blocksFetchedMetric.get.value
+        withSQLConf(SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "false") {
+          val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(query)
+          val blocksFetchedMetric2 = collectFirst(adaptivePlan2) {
+            case p if p.metrics.contains(metricName) => p.metrics(metricName)
+          }
+          assert(blocksFetchedMetric2.isDefined)
+          val blocksFetched2 = blocksFetchedMetric2.get.value
+          assert(blocksFetched < blocksFetched2)
+        }
+      }
     }
   }
-
 }

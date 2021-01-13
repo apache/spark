@@ -29,6 +29,7 @@ import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaC
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.kafka010.{KafkaConfigUpdater, KafkaTokenUtil}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
@@ -225,6 +226,9 @@ private[kafka010] class KafkaDataConsumer(
     consumerPool: InternalKafkaConsumerPool,
     fetchedDataPool: FetchedDataPool) extends Logging {
   import KafkaDataConsumer._
+
+  private val isTokenProviderEnabled =
+    HadoopDelegationTokenManager.isServiceEnabled(SparkEnv.get.conf, "kafka")
 
   // Exposed for testing
   @volatile private[consumer] var _consumer: Option[InternalKafkaConsumer] = None
@@ -529,8 +533,8 @@ private[kafka010] class KafkaDataConsumer(
       retrieveConsumer()
     }
     require(_consumer.isDefined, "Consumer must be defined")
-    if (KafkaTokenUtil.needTokenUpdate(SparkEnv.get.conf, _consumer.get.kafkaParamsWithSecurity,
-        _consumer.get.clusterConfig)) {
+    if (isTokenProviderEnabled && KafkaTokenUtil.needTokenUpdate(
+        _consumer.get.kafkaParamsWithSecurity, _consumer.get.clusterConfig)) {
       logDebug("Cached consumer uses an old delegation token, invalidating.")
       releaseConsumer()
       consumerPool.invalidateKey(cacheKey)
