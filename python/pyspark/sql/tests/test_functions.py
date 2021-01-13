@@ -350,13 +350,22 @@ class FunctionsTests(ReusedSQLTestCase):
             self.assertEqual(result[0], '')
 
     def test_slice(self):
-        from pyspark.sql.functions import slice, lit
+        from pyspark.sql.functions import lit, size, slice
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([4, 5],)], ['x'])
 
         self.assertEqual(
             df.select(slice(df.x, 2, 2).alias("sliced")).collect(),
             df.select(slice(df.x, lit(2), lit(2)).alias("sliced")).collect(),
+        )
+
+        self.assertEqual(
+            df.select(slice(df.x, size(df.x) - 1, lit(1)).alias("sliced")).collect(),
+            [Row(sliced=[2]), Row(sliced=[4])]
+        )
+        self.assertEqual(
+            df.select(slice(df.x, lit(1), size(df.x) - 1).alias("sliced")).collect(),
+            [Row(sliced=[1, 2]), Row(sliced=[4])]
         )
 
     def test_array_repeat(self):
