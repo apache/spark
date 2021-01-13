@@ -174,7 +174,7 @@ Results [3]: [c_last_name#17, c_first_name#16, d_date#14]
 
 (27) Exchange
 Input [3]: [c_last_name#17, c_first_name#16, d_date#14]
-Arguments: hashpartitioning(c_last_name#17, c_first_name#16, d_date#14, 5), true, [id=#18]
+Arguments: hashpartitioning(c_last_name#17, c_first_name#16, d_date#14, 5), ENSURE_REQUIREMENTS, [id=#18]
 
 (28) HashAggregate [codegen id : 6]
 Input [3]: [c_last_name#17, c_first_name#16, d_date#14]
@@ -239,7 +239,7 @@ Results [3]: [c_last_name#26, c_first_name#25, d_date#23]
 
 (41) Exchange
 Input [3]: [c_last_name#26, c_first_name#25, d_date#23]
-Arguments: hashpartitioning(c_last_name#26, c_first_name#25, d_date#23, 5), true, [id=#27]
+Arguments: hashpartitioning(c_last_name#26, c_first_name#25, d_date#23, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (42) HashAggregate [codegen id : 10]
 Input [3]: [c_last_name#26, c_first_name#25, d_date#23]
@@ -266,7 +266,7 @@ Results [3]: [c_last_name#9, c_first_name#8, d_date#4]
 
 (46) Exchange
 Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
-Arguments: hashpartitioning(c_last_name#9, c_first_name#8, d_date#4, 5), true, [id=#29]
+Arguments: hashpartitioning(c_last_name#9, c_first_name#8, d_date#4, 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (47) HashAggregate [codegen id : 12]
 Input [3]: [c_last_name#9, c_first_name#8, d_date#4]
@@ -312,7 +312,7 @@ Results [1]: [count#31]
 
 (53) Exchange
 Input [1]: [count#31]
-Arguments: SinglePartition, true, [id=#32]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#32]
 
 (54) HashAggregate [codegen id : 13]
 Input [1]: [count#31]
