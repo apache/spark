@@ -72,13 +72,6 @@ class UISuite extends SparkFunSuite {
     (conf, securityMgr, securityMgr.getSSLOptions("ui"))
   }
 
-  test("test") {
-    withSpark(newSparkContext()) { sc =>
-      sc.parallelize(0 to 10).foreach(println)
-      Thread.sleep(500000)
-    }
-  }
-
   ignore("basic ui visibility") {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
