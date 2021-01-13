@@ -523,17 +523,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val tableMetadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
     val table = sparkSession.table(tableIdent)
 
-    if (tableMetadata.tableType == CatalogTableType.VIEW) {
-      // Temp or persistent views: refresh (or invalidate) any metadata/data cached
-      // in the plan recursively.
-      table.queryExecution.analyzed.refresh()
-    } else {
-      // Non-temp tables: refresh the metadata cache.
-      sessionCatalog.refreshTable(tableIdent)
-    }
+    sessionCatalog.refreshTable(tableIdent)
 
     // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
