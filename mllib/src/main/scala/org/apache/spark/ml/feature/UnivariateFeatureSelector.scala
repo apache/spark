@@ -243,29 +243,17 @@ final class UnivariateFeatureSelector @Since("3.1.0")(@Since("3.1.0") override v
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
-    val resultDF = if (isSet(featureType) && isSet(labelType)) {
-      $(featureType) match {
-        case "categorical" =>
-          $(labelType) match {
-            case "categorical" =>
-              ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-            case errorType =>
-              throw new IllegalStateException(s"Unknown Label Type: $errorType")
-          }
-        case "continuous" =>
-          $(labelType) match {
-            case "categorical" =>
-              ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-            case "continuous" =>
-              FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-            case errorType =>
-              throw new IllegalStateException(s"Unknown Label Type: $errorType")
-          }
-        case errorType =>
-          throw new IllegalStateException(s"Unknown Feature Type: $errorType")
-      }
-    } else {
-      throw new IllegalStateException("featureType and labelType need to be set")
+    require(isSet(featureType) && isSet(labelType), "featureType and labelType need to be set")
+    val resultDF = ($(featureType), $(labelType)) match {
+      case ("categorical", "categorical") =>
+        ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+      case ("continuous", "categorical") =>
+        ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+      case ("continuous", "continuous") =>
+        FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported combination:" +
+          s" featureType=${$(featureType)}, labelType=${$(labelType)}")
     }
 
     def getTopIndices(k: Int): Array[Int] = {
@@ -306,7 +294,7 @@ final class UnivariateFeatureSelector @Since("3.1.0")(@Since("3.1.0") override v
           .where(col("pValue") < $(fwe) / numFeatures)
           .as[Int].collect()
       case errorType =>
-        throw new IllegalStateException(s"Unknown Selector Type: $errorType")
+        throw new IllegalArgumentException(s"Unknown Selector Type: $errorType")
     }
 
     copyValues(new UnivariateFeatureSelectorModel(uid, indices)

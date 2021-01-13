@@ -1797,10 +1797,16 @@ for more details on the API.
 
 `UnivariateFeatureSelector` operates on categorical/continuous labels with categorical/continuous features. 
 User can set `featureType` and `labelType`, and Spark will pick the score function to use based on the specified 
-`featureType` and `labelType`. When setting both `featureType` and `labelType` to `categorical`, Spark uses `chi2` as the score 
-function. When setting `featureType` to `continuous` and `labelType` to `categorical`, Spark uses `f_classif` 
-as the score function. When setting both `featureType` and `labelType` to `continuous`, Spark uses `f_regression` 
-as the score function. 
+`featureType` and `labelType`. 
+
+~~~
+featureType |  labelType |score function
+------------|------------|--------------
+categorical |categorical | chi2
+continuous  |categorical | f_classif
+continuous  |continuous  | f_regression
+~~~
+
 It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
 * `numTopFeatures` chooses a fixed number of top features.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
