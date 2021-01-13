@@ -59,7 +59,9 @@ class AppClientSuite
    */
   override def beforeAll(): Unit = {
     super.beforeAll()
-    conf = new SparkConf().set(config.DECOMMISSION_ENABLED.key, "true")
+    conf = new SparkConf()
+      .set(config.DECOMMISSION_ENABLED.key, "true")
+      .set(config.EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL.key, "2")
     securityManager = new SecurityManager(conf)
     masterRpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
     workerRpcEnvs = (0 until numWorkers).map { i =>
@@ -137,22 +139,22 @@ class AppClientSuite
           s"$executorId should have been decommissioned along with its worker")
       }
 
-      // Send request to kill executor, verify request was made
-      whenReady(
-        ci.client.killExecutors(Seq(executorId)),
-        timeout(10.seconds),
-        interval(10.millis)) { acknowledged =>
-        assert(acknowledged)
-      }
-
       // Verify that asking for executors on the decommissioned workers fails
       whenReady(
-        ci.client.requestTotalExecutors(numExecutorsRequested),
+        ci.client.requestTotalExecutors(2),
         timeout(10.seconds),
         interval(10.millis)) { acknowledged =>
         assert(acknowledged)
       }
       assert(getApplications().head.executors.size === 0)
+      assert(ci.listener.execRemovedList.size == 0)
+      assert(ci.listener.execDecommissionedMap.size == 1)
+
+      // Verify the decommission turns into a kill
+      eventually(timeout(10.seconds), interval(10.millis)) {
+        assert(ci.listener.execRemovedList.size == 1)
+        assert(ci.listener.execDecommissionedMap.size == 0)
+      }
 
       // Issue stop command for Client to disconnect from Master
       ci.client.stop()
