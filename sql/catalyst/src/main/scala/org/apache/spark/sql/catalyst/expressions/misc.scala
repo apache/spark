@@ -63,8 +63,7 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        java.lang.RuntimeException
        custom error message
   """,
-  since = "3.1.0",
-  group = "misc_funcs")
+  since = "3.1.0")
 case class RaiseError(child: Expression, dataType: DataType)
   extends UnaryExpression with ImplicitCastInputTypes {
 
