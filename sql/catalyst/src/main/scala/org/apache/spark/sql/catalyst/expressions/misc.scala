@@ -66,8 +66,10 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
   """,
   since = "3.1.0",
   group = "misc_funcs")
-case class RaiseError private[spark] (child: Expression, dataType: DataType)
+case class RaiseError(child: Expression, dataType: DataType)
   extends UnaryExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, NullType)
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
@@ -101,7 +103,7 @@ case class RaiseError private[spark] (child: Expression, dataType: DataType)
 }
 
 object RaiseError {
-  def apply(child: Expression): RaiseError = new RaiseError(child, NullType)
+  def apply(child: Expression): RaiseError = new RaiseError(child)
 }
 
 /**
