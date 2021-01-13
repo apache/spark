@@ -34,9 +34,6 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   private var selector1: UnivariateFeatureSelector = _
   private var selector2: UnivariateFeatureSelector = _
   private var selector3: UnivariateFeatureSelector = _
-  private var selector4: UnivariateFeatureSelector = _
-  private var selector5: UnivariateFeatureSelector = _
-  private var selector6: UnivariateFeatureSelector = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -325,22 +322,13 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
 
     selector1 = new UnivariateFeatureSelector()
       .setOutputCol("filtered")
-      .setScoreFunction("f_classif")
+      .setFeatureType("continuous")
+      .setLabelType("categorical")
     selector2 = new UnivariateFeatureSelector()
       .setOutputCol("filtered")
       .setFeatureType("continuous")
-      .setLabelType("categorical")
-    selector3 = new UnivariateFeatureSelector()
-      .setOutputCol("filtered")
-      .setScoreFunction("f_regression")
-    selector4 = new UnivariateFeatureSelector()
-      .setOutputCol("filtered")
-      .setFeatureType("continuous")
       .setLabelType("continuous")
-    selector5 = new UnivariateFeatureSelector()
-      .setOutputCol("filtered")
-      .setScoreFunction("chi2")
-    selector6 = new UnivariateFeatureSelector()
+    selector3 = new UnivariateFeatureSelector()
       .setOutputCol("filtered")
       .setFeatureType("categorical")
       .setLabelType("categorical")
@@ -353,11 +341,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test numTopFeatures") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
       (selector1.setNumTopFeatures(1), datasetAnova),
-      (selector2.setNumTopFeatures(1), datasetAnova),
-      (selector3.setNumTopFeatures(1), datasetFRegression),
-      (selector4.setNumTopFeatures(1), datasetFRegression),
-      (selector5.setNumTopFeatures(1), datasetChi2),
-      (selector6.setNumTopFeatures(1), datasetChi2)
+      (selector2.setNumTopFeatures(1), datasetFRegression),
+      (selector3.setNumTopFeatures(1), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -368,11 +353,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test percentile") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
       (selector1.setSelectorType("percentile").setPercentile(0.17), datasetAnova),
-      (selector2.setSelectorType("percentile").setPercentile(0.17), datasetAnova),
-      (selector3.setSelectorType("percentile").setPercentile(0.17), datasetFRegression),
-      (selector4.setSelectorType("percentile").setPercentile(0.17), datasetFRegression),
-      (selector5.setSelectorType("percentile").setPercentile(0.17), datasetChi2),
-      (selector6.setSelectorType("percentile").setPercentile(0.17), datasetChi2)
+      (selector2.setSelectorType("percentile").setPercentile(0.17), datasetFRegression),
+      (selector3.setSelectorType("percentile").setPercentile(0.17), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -383,11 +365,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test fpr") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
       (selector1.setSelectorType("fpr").setFpr(1.0E-12), datasetAnova),
-      (selector2.setSelectorType("fpr").setFpr(1.0E-12), datasetAnova),
-      (selector3.setSelectorType("fpr").setFpr(0.01), datasetFRegression),
-      (selector4.setSelectorType("fpr").setFpr(0.01), datasetFRegression),
-      (selector5.setSelectorType("fpr").setFpr(0.02), datasetChi2),
-      (selector6.setSelectorType("fpr").setFpr(0.02), datasetChi2)
+      (selector2.setSelectorType("fpr").setFpr(0.01), datasetFRegression),
+      (selector3.setSelectorType("fpr").setFpr(0.02), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -398,11 +377,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test fdr") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
       (selector1.setSelectorType("fdr").setFdr(6.0E-12), datasetAnova),
-      (selector2.setSelectorType("fdr").setFdr(6.0E-12), datasetAnova),
-      (selector3.setSelectorType("fdr").setFdr(0.03), datasetFRegression),
-      (selector4.setSelectorType("fdr").setFdr(0.03), datasetFRegression),
-      (selector5.setSelectorType("fdr").setFdr(0.12), datasetChi2),
-      (selector6.setSelectorType("fdr").setFdr(0.12), datasetChi2)
+      (selector2.setSelectorType("fdr").setFdr(0.03), datasetFRegression),
+      (selector3.setSelectorType("fdr").setFdr(0.12), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -413,11 +389,8 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
   test("Test fwe") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
       (selector1.setSelectorType("fwe").setFwe(6.0E-12), datasetAnova),
-      (selector2.setSelectorType("fwe").setFwe(6.0E-12), datasetAnova),
-      (selector3.setSelectorType("fwe").setFwe(0.03), datasetFRegression),
-      (selector4.setSelectorType("fwe").setFwe(0.03), datasetFRegression),
-      (selector5.setSelectorType("fwe").setFwe(0.12), datasetChi2),
-      (selector6.setSelectorType("fwe").setFwe(0.12), datasetChi2)
+      (selector2.setSelectorType("fwe").setFwe(0.03), datasetFRegression),
+      (selector3.setSelectorType("fwe").setFwe(0.12), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -431,7 +404,9 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
         model2: UnivariateFeatureSelectorModel): Unit = {
       assert(model.selectedFeatures === model2.selectedFeatures)
     }
-    val selector = new UnivariateFeatureSelector().setScoreFunction("f_classif")
+    val selector = new UnivariateFeatureSelector()
+      .setFeatureType("continuous")
+      .setLabelType("categorical")
     testEstimatorAndModelReadWrite(selector, datasetAnova,
       UnivariateFeatureSelectorSuite.allParamSettings,
       UnivariateFeatureSelectorSuite.allParamSettings, checkModelData)

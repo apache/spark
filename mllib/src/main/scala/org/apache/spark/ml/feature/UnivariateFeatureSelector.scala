@@ -69,22 +69,6 @@ private[feature] trait UnivariateFeatureSelectorParams extends Params
   def getLabelType: String = $(labelType)
 
   /**
-   * Score funcion.
-   * Supported options: "chi2" (for categorical features and categorical labels)
-   *                    "f_classif" (for continuous features and categorical labels)
-   *                    "f_regression" (for continuous features and continuous labels)
-   * @group param
-   */
-  @Since("3.1.0")
-  final val scoreFunction = new Param[String](this, "scoreFunction",
-    "Score Function. Supported options: chi2, f_classif, f_regression.",
-    ParamValidators.inArray(Array("chi2", "f_classif", "f_regression")))
-
-  /** @group getParam */
-  @Since("3.1.0")
-  def getScoreFunction: String = $(scoreFunction)
-
-  /**
    * The selector type.
    * Supported options: "numTopFeatures" (default), "percentile", "fpr", "fdr", "fwe"
    * @group param
@@ -178,21 +162,12 @@ private[feature] trait UnivariateFeatureSelectorParams extends Params
 
 /**
  * UnivariateFeatureSelector
- * User can either
- * 1. set scoreFunction explicitly or
- * 2. set featureType and labelType, and Spark will pick the scoreFunction based on
- *    the specified featureType and labelType.
- *
- * 1. scoreFunction explicitly set:
- *    The following scoreFunction are supported:
- *    chi2 (for categorical features and categorical labels)
- *    f_classif (for continuous features and categorical labels)
- *    f_regression (for continuous features and continuous labels)
- *
- * 2. scoreFunction NOT set, featureType and labelType are explicitly set:
- *    featureType categorical and labelType categorical, Spark uses chi2
- *    featureType continuous and labelType categorical, Spark uses f_classif
- *    featureType continuous and labelType continuous, Spark uses f_regression
+ * User can set featureType and labelType, and Spark will pick the score function based on
+ * the specified featureType and labelType.
+ * The following combination of featureType and labelType are supported"
+ * 1. featureType categorical and labelType categorical, Spark uses chi2
+ * 2. featureType continuous and labelType categorical, Spark uses f_classif
+ * 3. featureType continuous and labelType continuous, Spark uses f_regression
  *
  * The UnivariateFeatureSelector supports different selection methods: `numTopFeatures`,
  * `percentile`, `fpr`, `fdr`, `fwe`.
@@ -260,10 +235,6 @@ final class UnivariateFeatureSelector @Since("3.1.0")(@Since("3.1.0") override v
   @Since("3.1.0")
   def setLabelType(value: String): this.type = set(labelType, value)
 
-  /** @group setParam */
-  @Since("3.1.0")
-  def setScoreFunction(value: String): this.type = set(scoreFunction, value)
-
   @Since("3.1.0")
   override def fit(dataset: Dataset[_]): UnivariateFeatureSelectorModel = {
     transformSchema(dataset.schema, logging = true)
@@ -272,43 +243,29 @@ final class UnivariateFeatureSelector @Since("3.1.0")(@Since("3.1.0") override v
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
-    val resultDF = if (isSet(scoreFunction)) {
-      $(scoreFunction) match {
-        case "f_classif" =>
-          ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-        case "f_regression" =>
-          FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-        case "chi2" =>
-          ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+    val resultDF = if (isSet(featureType) && isSet(labelType)) {
+      $(featureType) match {
+        case "categorical" =>
+          $(labelType) match {
+            case "categorical" =>
+              ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+            case errorType =>
+              throw new IllegalStateException(s"Unknown Label Type: $errorType")
+          }
+        case "continuous" =>
+          $(labelType) match {
+            case "categorical" =>
+              ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+            case "continuous" =>
+              FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
+            case errorType =>
+              throw new IllegalStateException(s"Unknown Label Type: $errorType")
+          }
         case errorType =>
-          throw new IllegalStateException(s"Unknown Score Function: $errorType")
+          throw new IllegalStateException(s"Unknown Feature Type: $errorType")
       }
     } else {
-      if (isSet(featureType) && isSet(labelType)) {
-        $(featureType) match {
-          case "categorical" =>
-            $(labelType) match {
-              case "categorical" =>
-                ChiSquareTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-              case errorType =>
-                throw new IllegalStateException(s"Unknown Label Type: $errorType")
-            }
-          case "continuous" =>
-            $(labelType) match {
-              case "categorical" =>
-                ANOVATest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-              case "continuous" =>
-                FValueTest.test(dataset.toDF, getFeaturesCol, getLabelCol, true)
-              case errorType =>
-                throw new IllegalStateException(s"Unknown Label Type: $errorType")
-            }
-          case errorType =>
-            throw new IllegalStateException(s"Unknown Feature Type: $errorType")
-        }
-      } else {
-        throw new IllegalStateException("Either need to set scoreFunction or featureType and" +
-          " labelType")
-      }
+      throw new IllegalStateException("featureType and labelType need to be set")
     }
 
     def getTopIndices(k: Int): Array[Int] = {

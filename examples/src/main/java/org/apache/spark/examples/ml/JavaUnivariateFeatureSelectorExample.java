@@ -17,33 +17,34 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.SparkSession;
-
-// $example on$
-import java.util.Arrays;
-import java.util.List;
-
-import org.apache.spark.ml.feature.ANOVASelector;
+import org.apache.spark.ml.feature.UnivariateFeatureSelector;
 import org.apache.spark.ml.linalg.VectorUDT;
 import org.apache.spark.ml.linalg.Vectors;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
+
+import java.util.Arrays;
+import java.util.List;
 // $example off$
 
 /**
- * An example for ANOVASelector.
+ * An example for UnivariateFeatureSelector.
  * Run with
  * <pre>
- * bin/run-example ml.JavaANOVASelectorExample
+ * bin/run-example ml.JavaUnivariateFeatureSelectorExample
  * </pre>
  */
-public class JavaANOVASelectorExample {
+public class JavaUnivariateFeatureSelectorExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaANOVASelectorExample")
+      .appName("JavaUnivariateFeatureSelectorExample")
       .getOrCreate();
 
     // $example on$
@@ -63,7 +64,9 @@ public class JavaANOVASelectorExample {
 
     Dataset<Row> df = spark.createDataFrame(data, schema);
 
-    ANOVASelector selector = new ANOVASelector()
+    UnivariateFeatureSelector selector = new UnivariateFeatureSelector()
+      .setFeatureType("continuous")
+      .setLabelType("categorical")
       .setNumTopFeatures(1)
       .setFeaturesCol("features")
       .setLabelCol("label")
@@ -71,8 +74,8 @@ public class JavaANOVASelectorExample {
 
     Dataset<Row> result = selector.fit(df).transform(df);
 
-    System.out.println("ANOVASelector output with top " + selector.getNumTopFeatures()
-        + " features selected");
+    System.out.println("UnivariateFeatureSelector output with top " + selector.getNumTopFeatures()
+        + " features selected using f_classif");
     result.show();
 
     // $example off$

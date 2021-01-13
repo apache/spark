@@ -1793,6 +1793,81 @@ for more details on the API.
 </div>
 </div>
 
+## UnivariateFeatureSelector
+
+`UnivariateFeatureSelector` operates on categorical/continuous labels with categorical/continuous features. 
+User can set `featureType` and `labelType`, and Spark will pick the score function to use based on the specified 
+`featureType` and `labelType`. When setting It uses the
+[one-way ANOVA F-test](https://en.wikipedia.org/wiki/F-test#Multiple-comparison_ANOVA_problems) to decide which
+features to choose. When setting both `featureType` and `labelType` to `categorical`, Spark uses `chi2` as score 
+function. When setting `featureType` to `continuous` and `labelType` to `categorical`, Spark uses `f_classif` 
+as score function. When setting both `featureType` and `labelType` to `continuous`, Spark uses `f_regression` 
+as score function. 
+It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
+* `numTopFeatures` chooses a fixed number of top features.
+* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
+* `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
+* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
+* `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
+
+**Examples**
+
+Assume that we have a DataFrame with the columns `id`, `features`, and `label`, which is used as
+our target to be predicted:
+
+~~~
+id | features                       | label
+---|--------------------------------|---------
+ 1 | [1.7, 4.4, 7.6, 5.8, 9.6, 2.3] | 3.0
+ 2 | [8.8, 7.3, 5.7, 7.3, 2.2, 4.1] | 2.0
+ 3 | [1.2, 9.5, 2.5, 3.1, 8.7, 2.5] | 3.0
+ 4 | [3.7, 9.2, 6.1, 4.1, 7.5, 3.8] | 2.0
+ 5 | [8.9, 5.2, 7.8, 8.3, 5.2, 3.0] | 4.0
+ 6 | [7.9, 8.5, 9.2, 4.0, 9.4, 2.1] | 4.0
+~~~
+
+If we set `featureType` to `continuous` and `labelType` to `categorical` with `numTopFeatures = 1`, the
+last column in our `features` is chosen as the most useful feature:
+
+~~~
+id | features                       | label   | selectedFeatures
+---|--------------------------------|---------|------------------
+ 1 | [1.7, 4.4, 7.6, 5.8, 9.6, 2.3] | 3.0     | [2.3]
+ 2 | [8.8, 7.3, 5.7, 7.3, 2.2, 4.1] | 2.0     | [4.1]
+ 3 | [1.2, 9.5, 2.5, 3.1, 8.7, 2.5] | 3.0     | [2.5]
+ 4 | [3.7, 9.2, 6.1, 4.1, 7.5, 3.8] | 2.0     | [3.8]
+ 5 | [8.9, 5.2, 7.8, 8.3, 5.2, 3.0] | 4.0     | [3.0]
+ 6 | [7.9, 8.5, 9.2, 4.0, 9.4, 2.1] | 4.0     | [2.1]
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [ANOVASelector Scala docs](api/scala/org/apache/spark/ml/feature/ANOVASelector.html)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ANOVASelectorExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [ANOVASelector Java docs](api/java/org/apache/spark/ml/feature/ANOVASelector.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaANOVASelectorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [ANOVASelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ANOVASelector)
+for more details on the API.
+
+{% include_example python/ml/anova_selector_example.py %}
+</div>
+</div>
+
 ## VarianceThresholdSelector
 
 `VarianceThresholdSelector` is a selector that removes low-variance features. Features with a
@@ -1834,7 +1909,7 @@ id | features                       | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector))
+Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.VarianceThresholdSelector))
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VarianceThresholdSelectorExample.scala %}
@@ -1871,7 +1946,7 @@ d(p,q) \geq r2 \Rightarrow Pr(h(p)=h(q)) \leq p2
 This LSH family is called `(r1, r2, p1, p2)`-sensitive.
 
 In Spark, different LSH families are implemented in separate classes (e.g., `MinHash`), and APIs for feature transformation, approximate similarity join and approximate nearest neighbor are provided in each class.
-
+Chi
 In LSH, we define a false positive as a pair of distant input features (with `$d(p,q) \geq r2$`) which are hashed into the same bucket, and we define a false negative as a pair of nearby features (with `$d(p,q) \leq r1$`) which are hashed into different buckets.
 
 ## LSH Operations

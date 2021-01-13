@@ -5768,11 +5768,6 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
                       "Supported options: categorical, continuous.",
                       typeConverter=TypeConverters.toString)
 
-    scoreFunction = Param(Params._dummy(), "scoreFunction",
-                          "The score function. " +
-                          "Supported options: chi2, f_classif, f_regression.",
-                          typeConverter=TypeConverters.toString)
-
     selectorType = Param(Params._dummy(), "selectorType",
                          "The selector type. " +
                          "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
@@ -5815,13 +5810,6 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
         Gets the value of labelType or its default value.
         """
         return self.getOrDefault(self.labelType)
-
-    @since("3.1.0")
-    def getScoreFunction(self):
-        """
-        Gets the value of scoreFunction or its default value.
-        """
-        return self.getOrDefault(self.scoreFunction)
 
     @since("3.1.0")
     def getSelectorType(self):
@@ -5871,26 +5859,18 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
                                 JavaMLWritable):
     """
     UnivariateFeatureSelector
-    User can either
-    - set `scoreFunction` explicitly or
-    - set `featureType` and `labelType`, and Spark will pick the `scoreFunction` based on
-       the specified `featureType` and `labelType`.
+    User can set `featureType` and `labelType`, and Spark will pick the score function based on
+    the specified `featureType` and `labelType`.
 
-    - `scoreFunction` explicitly set:
-       The following scoreFunction are supported:
-       `chi2` (for categorical features and categorical labels)
-       `f_classif` (for continuous features and categorical labels)
-       `f_regression` (for continuous features and continuous labels)
-
-    - `scoreFunction` NOT set, `featureType` and `labelType` are explicitly set:
-       `featureType` `categorical` and `labelType` `categorical`, Spark uses `chi2`
-       `featureType` `continuous` and `labelType` `categorical`, Spark uses `f_classif`
-       `featureType` `continuous` and `labelType` `continuous`, Spark uses `f_regression`
+    The following combination of featureType and labelType are supported"
+    - featureType categorical and labelType categorical, Spark uses chi2
+    - featureType continuous and labelType categorical, Spark uses f_classif
+    - featureType continuous and labelType continuous, Spark uses f_regression
 
     The `UnivariateFeatureSelector` supports different selection methods: `numTopFeatures`,
     `percentile`, `fpr`, fdr`, `fwe`.
-    - `numTopFeatures` chooses a fixed number of top features according to a F value
-      classification test.
+    - `numTopFeatures` chooses a fixed number of top features according to a according to a
+      hypothesis.
     - `percentile` is similar but chooses a fraction of all features
       instead of a fixed number.
     - `fpr` chooses all features whose p-values are below a threshold,
@@ -5918,7 +5898,7 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     ...     (Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0)],
     ...    ["features", "label"])
     >>> selector = UnivariateFeatureSelector(numTopFeatures=1, outputCol="selectedFeatures")
-    >>> selector.setScoreFunction("f_classif")
+    >>> selector.setFeatureType("continuous").setLabelType("categorical")
     UnivariateFeatureSelector...
     >>> model = selector.fit(df)
     >>> model.getFeaturesCol()
@@ -5985,13 +5965,6 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
         Sets the value of :py:attr:`labelType`.
         """
         return self._set(labelType=value)
-
-    @since("3.1.0")
-    def setScoreFunction(self, value):
-        """
-        Sets the value of :py:attr:`scoreFunction`.
-        """
-        return self._set(scoreFunction=value)
 
     @since("3.1.0")
     def setSelectorType(self, value):
