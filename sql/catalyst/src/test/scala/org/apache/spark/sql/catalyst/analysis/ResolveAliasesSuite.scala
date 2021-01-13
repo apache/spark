@@ -30,14 +30,14 @@ class ResolveAliasesSuite extends AnalysisTest {
   private lazy val t1 = LocalRelation("a".attr.int)
   private lazy val t2 = LocalRelation("b".attr.long)
 
-  private def checkAliasName(plan: LogicalPlan, name: String): Unit = {
+  private def checkAliasName(plan: LogicalPlan, expected: String): Unit = {
     val analyzed = getAnalyzer.execute(plan)
-    val correct = analyzed.find(_.isInstanceOf[Project]).get.asInstanceOf[Project]
+    val actual = analyzed.find(_.isInstanceOf[Project]).get.asInstanceOf[Project]
       .projectList.head.asInstanceOf[Alias].name
-    assert(correct == name)
+    assert(actual == expected)
   }
 
-  private def checkSubqueryAliasName(plan: LogicalPlan, name: String): Unit = {
+  private def checkSubqueryAliasName(plan: LogicalPlan, expected: String): Unit = {
     val analyzed = getAnalyzer.execute(plan)
     val subqueryExpression = new ArrayBuffer[SubqueryExpression]()
     analyzed.transformExpressions {
@@ -46,9 +46,9 @@ class ResolveAliasesSuite extends AnalysisTest {
         e
     }
     assert(subqueryExpression.length == 1)
-    val correct = subqueryExpression.head.plan.find(_.isInstanceOf[Project]).get
+    val actual = subqueryExpression.head.plan.find(_.isInstanceOf[Project]).get
       .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].name
-    assert(correct == name)
+    assert(actual == expected)
   }
 
   test("SPARK-33989: test unary expression") {
