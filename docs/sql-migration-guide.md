@@ -32,7 +32,7 @@ license: |
 
   - In Spark 3.2, script transform default FIELD DELIMIT is `\u0001` for no serde mode. In Spark 3.1 or earlier, the default FIELD DELIMIT is `\t`.
 
-  - In Spark 3.2, the auto-generated `Cast` which is introduced by Spark will be stripped. E.g., The default column name of `SELECT floor(1)` will be `FLOOR(1)` instead of `FLOOR(CAST(1 AS DOUBLE))`.
+  - In Spark 3.2, the auto-generated `Cast` (such as those added by type coercion rules) will be stripped when generating column alias names. E.g., `sql("SELECT floor(1)").columns` will be `FLOOR(1)` instead of `FLOOR(CAST(1 AS DOUBLE))`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
