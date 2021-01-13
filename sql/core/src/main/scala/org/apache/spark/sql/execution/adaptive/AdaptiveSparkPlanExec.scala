@@ -23,7 +23,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
@@ -190,7 +191,36 @@ case class AdaptiveSparkPlanExec(
           executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
           // Start materialization of all new stages and fail fast if any stages failed eagerly
-          result.newStages.foreach { stage =>
+
+          // SPARK-33933: we should materialize broadcast stages first and wait the
+          // materialization finish before materialize other stages, to avoid waiting
+          // for broadcast tasks to be scheduled and leading to broadcast timeout.
+          val broadcastMaterializationFutures = result.newStages
+            .filter(_.isInstanceOf[BroadcastQueryStageExec])
+            .map { stage =>
+            var future: Future[Any] = null
+            try {
+              future = stage.materialize()
+              future.onComplete { res =>
+                if (res.isSuccess) {
+                  events.offer(StageSuccess(stage, res.get))
+                } else {
+                  events.offer(StageFailure(stage, res.failed.get))
+                }
+              }(AdaptiveSparkPlanExec.executionContext)
+            } catch {
+              case e: Throwable =>
+                cleanUpAndThrowException(Seq(e), Some(stage.id))
+            }
+            future
+          }
+
+          // Wait the all the materialization of broadcast stages finish
+          broadcastMaterializationFutures.foreach(ThreadUtils.awaitReady(_, Duration.Inf))
+
+          // Start materialization of non-broadcast stages
+          result.newStages.filter(!_.isInstanceOf[BroadcastQueryStageExec])
+            .foreach { stage =>
             try {
               stage.materialize().onComplete { res =>
                 if (res.isSuccess) {
