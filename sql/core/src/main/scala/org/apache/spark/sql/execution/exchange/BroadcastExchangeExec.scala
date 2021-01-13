@@ -74,9 +74,10 @@ case class BroadcastExchangeExec(
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
 
-  private val groupId = sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-
-  override val runId: UUID = Option(groupId).map(UUID.fromString).getOrElse(UUID.randomUUID)
+  // Cancelling a SQL statement from Spark ThriftServer needs to cancel
+  // its related broadcast sub-jobs. So set the run id to job group id if exists.
+  override val runId: UUID = Option(sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID))
+      .map(UUID.fromString).getOrElse(UUID.randomUUID)
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
