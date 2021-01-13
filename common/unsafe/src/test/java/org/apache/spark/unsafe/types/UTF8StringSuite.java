@@ -478,7 +478,8 @@ public class UTF8StringSuite {
       fromString("translate").translate(ImmutableMap.of(
         "r", "\0",
         "n", "\0",
-        "l", "\0"
+        "l", "\0",
+        "t", "\0"
       )));
     assertEquals(
       fromString("aa世b"),
