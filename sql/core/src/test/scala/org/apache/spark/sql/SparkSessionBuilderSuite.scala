@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
@@ -257,7 +259,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   private def countListener(listener: String, context: SparkContext): Int = {
-    import scala.collection.JavaConverters._
     val listeners = context.listenerBus.listeners.asScala
     listeners.count(_.getClass.getSimpleName === listener)
   }
