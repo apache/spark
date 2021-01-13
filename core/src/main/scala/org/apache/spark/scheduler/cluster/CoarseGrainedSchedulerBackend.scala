@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import javax.annotation.concurrent.GuardedBy
 
@@ -115,6 +115,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
+  private val cleanupService: Option[ScheduledExecutorService] =
+    conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map { _ =>
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
+    }
+
+
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
@@ -176,9 +182,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case KillExecutorsOnHost(host) =>
-        scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
-          killExecutors(exec.toSeq, adjustTargetNumExecutors = false, countFailures = false,
+        scheduler.getExecutorsAliveOnHost(host).foreach { execs =>
+          killExecutors(execs.toSeq, adjustTargetNumExecutors = false, countFailures = false,
             force = true)
+        }
+
+      case DecommissionExecutorsOnHost(host) =>
+        val reason = ExecutorDecommissionInfo(s"Decommissioning all executors on $host.")
+        scheduler.getExecutorsAliveOnHost(host).foreach { execs =>
+          val execsWithReasons = execs.map { exec =>
+            (exec, reason)
+          }.toArray
+          decommissionExecutors(execsWithReasons, adjustTargetNumExecutors = false,
+            triggeredByExecutor = false)
         }
 
       case UpdateDelegationTokens(newDelegationTokens) =>
@@ -506,6 +522,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
+    conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map {
+      cleanup_interval =>
+      val cleanupTask = new Runnable() {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+          val stragglers = executorsToDecommission.filter(executorsPendingDecommission.contains(_))
+          if (!stragglers.isEmpty) {
+            killExecutors(stragglers, false, false, true)
+          }
+        }
+      }
+      cleanupService.map(_.schedule(cleanupTask, cleanup_interval, TimeUnit.SECONDS))
+    }
+
     executorsToDecommission
   }
 
@@ -548,6 +577,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   override def stop(): Unit = {
     reviveThread.shutdownNow()
+    cleanupService.foreach(_.shutdownNow())
     stopExecutors()
     delegationTokenManager.foreach(_.stop())
     try {
@@ -849,6 +879,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   protected def doKillExecutors(executorIds: Seq[String]): Future[Boolean] =
     Future.successful(false)
+
+  /**
+   * Request that the cluster manager decommission all executors on a given host.
+   * @return whether the decommission request is acknowledged.
+   */
+  final override def decommissionExecutorsOnHost(host: String): Boolean = {
+    logInfo(s"Requesting to kill any and all executors on host ${host}")
+    // A potential race exists if a new executor attempts to register on a host
+    // that is on the exclude list and is no no longer valid. To avoid this race,
+    // all executor registration and decommissioning happens in the event loop. This way, either
+    // an executor will fail to register, or will be decommed when all executors on a host
+    // are decommed.
+    // Decommission all the executors on this host in an event loop to ensure serialization.
+    driverEndpoint.send(DecommissionExecutorsOnHost(host))
+    true
+  }
 
   /**
    * Request that the cluster manager kill all executors on a given host.
