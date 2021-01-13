@@ -215,7 +215,7 @@ case class AdaptiveSparkPlanExec(
             future
           }
 
-          // Wait the all the materialization of broadcast stages finish
+          // Wait for the materialization of all broadcast stages finish
           broadcastMaterializationFutures.foreach(ThreadUtils.awaitReady(_, Duration.Inf))
 
           // Start materialization of non-broadcast stages
