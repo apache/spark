@@ -1554,4 +1554,20 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-34084: auto update table stats") {
+    Seq("parquet", "hive").foreach { format =>
+      withTable("t") {
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false") {
+          sql(s"CREATE TABLE t (col0 int, part int) USING $format PARTITIONED BY (part)")
+          sql("INSERT INTO t PARTITION (part=0) SELECT 0")
+          assert(getCatalogTable("t").stats.isEmpty)
+        }
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+          sql("ALTER TABLE t ADD PARTITION (part=1)")
+          assert(getTableStats("t").sizeInBytes > 0)
+        }
+      }
+    }
+  }
 }
