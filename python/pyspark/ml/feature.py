@@ -5437,6 +5437,9 @@ class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
+    .. deprecated:: 3.1.0
+        Use UnivariateFeatureSelector
+
     .. versionadded:: 2.0.0
 
     Examples
@@ -5793,6 +5796,11 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
 
     fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
                 typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_UnivariateFeatureSelectorParams, self).__init__(*args)
+        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
+                         fpr=0.05, fdr=0.05, fwe=0.05)
 
     @since("3.1.0")
     def getFeatureType(self):
