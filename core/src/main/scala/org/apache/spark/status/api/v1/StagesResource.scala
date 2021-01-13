@@ -36,9 +36,10 @@ private[v1] class StagesResource extends BaseAppResource {
   @Path("{stageId: \\d+}")
   def stageData(
       @PathParam("stageId") stageId: Int,
-      @QueryParam("details") @DefaultValue("true") details: Boolean): Seq[StageData] = {
+      @QueryParam("details") @DefaultValue("true") details: Boolean,
+      @QueryParam("taskStatus") taskStatus: JList[TaskStatus]): Seq[StageData] = {
     withUI { ui =>
-      val ret = ui.store.stageData(stageId, details = details)
+      val ret = ui.store.stageData(stageId, details = details, taskStatus)
       if (ret.nonEmpty) {
         ret
       } else {
@@ -52,13 +53,14 @@ private[v1] class StagesResource extends BaseAppResource {
   def oneAttemptData(
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int,
-      @QueryParam("details") @DefaultValue("true") details: Boolean): StageData = withUI { ui =>
+      @QueryParam("details") @DefaultValue("true") details: Boolean,
+      @QueryParam("taskStatus") taskStatus: JList[TaskStatus]): StageData = withUI { ui =>
     try {
-      ui.store.stageAttempt(stageId, stageAttemptId, details = details)._1
+      ui.store.stageAttempt(stageId, stageAttemptId, details = details, taskStatus)._1
     } catch {
       case _: NoSuchElementException =>
         // Change the message depending on whether there are any attempts for the requested stage.
-        val all = ui.store.stageData(stageId)
+        val all = ui.store.stageData(stageId, false, taskStatus)
         val msg = if (all.nonEmpty) {
           val ids = all.map(_.attemptId)
           s"unknown attempt for stage $stageId.  Found attempts: [${ids.mkString(",")}]"

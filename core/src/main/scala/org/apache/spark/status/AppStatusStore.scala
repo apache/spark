@@ -113,10 +113,13 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageData(stageId: Int, details: Boolean = false): Seq[v1.StageData] = {
+  def stageData(
+    stageId: Int,
+    details: Boolean = false,
+    taskStatus: JList[v1.TaskStatus] = List().asJava): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
       .asScala.map { s =>
-        if (details) stageWithDetails(s.info) else s.info
+        if (details) stageWithDetails(s.info, taskStatus) else s.info
       }.toSeq
   }
 
@@ -138,11 +141,18 @@ private[spark] class AppStatusStore(
     }
   }
 
-  def stageAttempt(stageId: Int, stageAttemptId: Int,
-      details: Boolean = false): (v1.StageData, Seq[Int]) = {
+  def stageAttempt(
+    stageId: Int,
+    stageAttemptId: Int,
+    details: Boolean = false,
+    taskStatus: JList[v1.TaskStatus] = List().asJava): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
-    val stage = if (details) stageWithDetails(stageDataWrapper.info) else stageDataWrapper.info
+    val stage = if (details) {
+      stageWithDetails(stageDataWrapper.info, taskStatus)
+    } else {
+      stageDataWrapper.info
+    }
     (stage, stageDataWrapper.jobIds.toSeq)
   }
 
@@ -453,8 +463,10 @@ private[spark] class AppStatusStore(
     }
   }
 
-  private def stageWithDetails(stage: v1.StageData): v1.StageData = {
-    val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
+  private def stageWithDetails(
+    stage: v1.StageData,
+    taskStatus: JList[v1.TaskStatus]): v1.StageData = {
+    val tasks = taskList(stage.stageId, stage.attemptId, 0, Int.MaxValue, None, false, taskStatus)
       .map { t => (t.taskId, t) }
       .toMap
 

@@ -138,7 +138,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
     "one stage json" -> "applications/local-1422981780767/stages/1",
+    "one stage json with details" ->
+      "applications/local-1422981780767/stages/1?details=true&taskStatus=success",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
+    "one stage attempt json details with failed task" ->
+      "applications/local-1422981780767/stages/1/0?details=true&taskStatus=failed",
 
     "stage task summary w shuffle write"
       -> "applications/local-1430917381534/stages/0/0/taskSummary",
