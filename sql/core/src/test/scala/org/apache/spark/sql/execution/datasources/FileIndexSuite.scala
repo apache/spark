@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.{HadoopFSUtilsSuite, KnownSizeEstimation}
+import org.apache.spark.util.KnownSizeEstimation
 
 class FileIndexSuite extends SharedSparkSession {
 
