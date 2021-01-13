@@ -24,6 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.Decimal._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper {
   /** Check that a Decimal has the given string representation, precision and scale */
@@ -255,5 +256,34 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     val decimalLong = Decimal(123456789123456789L, 18, 9)
     assert(decimalLong.toScalaBigInt == scala.math.BigInt("123456789"))
     assert(decimalLong.toJavaBigInteger == new java.math.BigInteger("123456789"))
+  }
+
+  test("UTF8String to Decimal") {
+    def checkFromString(string: String): Unit = {
+      assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
+      assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
+    }
+
+    def checkOutOfRangeFromString(string: String): Unit = {
+      assert(Decimal.fromString(UTF8String.fromString(string)) === null)
+      val e = intercept[ArithmeticException](Decimal.fromStringANSI(UTF8String.fromString(string)))
+      assert(e.getMessage.contains("out of decimal type range"))
+    }
+
+    checkFromString("12345678901234567890123456789012345678")
+    checkOutOfRangeFromString("123456789012345678901234567890123456789")
+
+    checkFromString("0.00000000000000000000000000000000000001")
+    checkFromString("0.000000000000000000000000000000000000000000000001")
+
+    checkFromString("6E-640")
+
+    checkFromString("6E+37")
+    checkOutOfRangeFromString("6E+38")
+    checkOutOfRangeFromString("6.0790316E+25569151")
+
+    assert(Decimal.fromString(UTF8String.fromString("str")) === null)
+    val e = intercept[NumberFormatException](Decimal.fromStringANSI(UTF8String.fromString("str")))
+    assert(e.getMessage.contains("invalid input syntax for type numeric"))
   }
 }

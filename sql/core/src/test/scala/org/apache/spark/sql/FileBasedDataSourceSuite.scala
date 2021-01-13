@@ -31,12 +31,14 @@ import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.TestingUDT.{IntervalUDT, NullData, NullUDT}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
+import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.execution.SimpleMode
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, FileScan}
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetTable
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -226,6 +228,20 @@ class FileBasedDataSourceSuite extends QueryTest
               }
               assert(exception.getMessage().contains("does not exist"))
             }
+        }
+      }
+    }
+  }
+
+  Seq("json", "orc").foreach { format =>
+    test(s"SPARK-32889: column name supports special characters using $format") {
+      Seq("$", " ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+        withTempDir { dir =>
+          val dataDir = new File(dir, "file").getCanonicalPath
+          Seq(1).toDF(name).write.format(format).save(dataDir)
+          val schema = spark.read.format(format).load(dataDir).schema
+          assert(schema.size == 1)
+          assertResult(name)(schema.head.name)
         }
       }
     }
@@ -561,38 +577,6 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("Option pathGlobFilter: filter files correctly") {
-    withTempPath { path =>
-      val dataDir = path.getCanonicalPath
-      Seq("foo").toDS().write.text(dataDir)
-      Seq("bar").toDS().write.mode("append").orc(dataDir)
-      val df = spark.read.option("pathGlobFilter", "*.txt").text(dataDir)
-      checkAnswer(df, Row("foo"))
-
-      // Both glob pattern in option and path should be effective to filter files.
-      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*.orc")
-      checkAnswer(df2, Seq.empty)
-
-      val df3 = spark.read.option("pathGlobFilter", "*.txt").text(dataDir + "/*xt")
-      checkAnswer(df3, Row("foo"))
-    }
-  }
-
-  test("Option pathGlobFilter: simple extension filtering should contains partition info") {
-    withTempPath { path =>
-      val input = Seq(("foo", 1), ("oof", 2)).toDF("a", "b")
-      input.write.partitionBy("b").text(path.getCanonicalPath)
-      Seq("bar").toDS().write.mode("append").orc(path.getCanonicalPath + "/b=1")
-
-      // If we use glob pattern in the path, the partition column won't be shown in the result.
-      val df = spark.read.text(path.getCanonicalPath + "/*/*.txt")
-      checkAnswer(df, input.select("a"))
-
-      val df2 = spark.read.option("pathGlobFilter", "*.txt").text(path.getCanonicalPath)
-      checkAnswer(df2, input)
-    }
-  }
-
   test("Option recursiveFileLookup: recursive loading correctly") {
 
     val expectedFileList = mutable.ListBuffer[String]()
@@ -826,22 +810,6 @@ class FileBasedDataSourceSuite extends QueryTest
     }
   }
 
-  test("SPARK-31935: Hadoop file system config should be effective in data source options") {
-    Seq("parquet", "").foreach { format =>
-      withSQLConf(
-        SQLConf.USE_V1_SOURCE_LIST.key -> format,
-        "fs.file.impl" -> classOf[FakeFileSystemRequiringDSOption].getName,
-        "fs.file.impl.disable.cache" -> "true") {
-        withTempDir { dir =>
-          val path = "file:" + dir.getCanonicalPath.stripPrefix("file:")
-          spark.range(10).write.option("ds_option", "value").mode("overwrite").parquet(path)
-          checkAnswer(
-            spark.read.option("ds_option", "value").parquet(path), spark.range(10).toDF())
-        }
-      }
-    }
-  }
-
   test("SPARK-31116: Select nested schema with case insensitive mode") {
     // This test case failed at only Parquet. ORC is added for test coverage parity.
     Seq("orc", "parquet").foreach { format =>
@@ -877,6 +845,114 @@ class FileBasedDataSourceSuite extends QueryTest
               spark.read.schema(rootColumnCaseInsensitiveSchema).format(format).load(path),
               Row(Row(0, 1)))
           }
+        }
+      }
+    }
+  }
+
+  test("test casts pushdown on orc/parquet for integral types") {
+    def checkPushedFilters(
+        format: String,
+        df: DataFrame,
+        filters: Array[sources.Filter],
+        noScan: Boolean = false): Unit = {
+      val scanExec = df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec])
+      if (noScan) {
+        assert(scanExec.isEmpty)
+        return
+      }
+      val scan = scanExec.get.asInstanceOf[BatchScanExec].scan
+      format match {
+        case "orc" =>
+          assert(scan.isInstanceOf[OrcScan])
+          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
+        case "parquet" =>
+          assert(scan.isInstanceOf[ParquetScan])
+          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
+        case _ =>
+          fail(s"unknown format $format")
+      }
+    }
+
+    Seq("orc", "parquet").foreach { format =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withTempPath { dir =>
+          spark.range(100).map(i => (i.toShort, i.toString)).toDF("id", "s")
+            .write
+            .format(format)
+            .save(dir.getCanonicalPath)
+          val df = spark.read.format(format).load(dir.getCanonicalPath)
+
+          // cases when value == MAX
+          var v = Short.MaxValue
+          checkPushedFilters(format, df.where('id > v.toInt), Array(), noScan = true)
+          checkPushedFilters(format, df.where('id >= v.toInt), Array(sources.IsNotNull("id"),
+            sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where('id === v.toInt), Array(sources.IsNotNull("id"),
+            sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where('id <=> v.toInt),
+            Array(sources.EqualNullSafe("id", v)))
+          checkPushedFilters(format, df.where('id <= v.toInt), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where('id < v.toInt), Array(sources.IsNotNull("id"),
+            sources.Not(sources.EqualTo("id", v))))
+
+          // cases when value > MAX
+          var v1: Int = positiveInt
+          checkPushedFilters(format, df.where('id > v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where('id >= v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where('id === v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where('id <=> v1), Array(), noScan = true)
+          checkPushedFilters(format, df.where('id <= v1), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where('id < v1), Array(sources.IsNotNull("id")))
+
+          // cases when value = MIN
+          v = Short.MinValue
+          checkPushedFilters(format, df.where(lit(v.toInt) < 'id), Array(sources.IsNotNull("id"),
+            sources.Not(sources.EqualTo("id", v))))
+          checkPushedFilters(format, df.where(lit(v.toInt) <= 'id), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v.toInt) === 'id), Array(sources.IsNotNull("id"),
+            sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) <=> 'id),
+            Array(sources.EqualNullSafe("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) >= 'id), Array(sources.IsNotNull("id"),
+            sources.EqualTo("id", v)))
+          checkPushedFilters(format, df.where(lit(v.toInt) > 'id), Array(), noScan = true)
+
+          // cases when value < MIN
+          v1 = negativeInt
+          checkPushedFilters(format, df.where(lit(v1) < 'id), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) <= 'id), Array(sources.IsNotNull("id")))
+          checkPushedFilters(format, df.where(lit(v1) === 'id), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) >= 'id), Array(), noScan = true)
+          checkPushedFilters(format, df.where(lit(v1) > 'id), Array(), noScan = true)
+
+          // cases when value is within range (MIN, MAX)
+          checkPushedFilters(format, df.where('id > 30), Array(sources.IsNotNull("id"),
+            sources.GreaterThan("id", 30)))
+          checkPushedFilters(format, df.where(lit(100) >= 'id), Array(sources.IsNotNull("id"),
+            sources.LessThanOrEqual("id", 100)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-32827: Set max metadata string length") {
+    withTempDir { dir =>
+      val tableName = "t"
+      val path = s"${dir.getCanonicalPath}/$tableName"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c INT) USING PARQUET LOCATION '$path'")
+        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "5") {
+          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
+          assert(!explain.contains(path))
+          // metadata has abbreviated by ...
+          assert(explain.contains("..."))
+        }
+
+        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
+          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
+          assert(explain.contains(path))
+          assert(!explain.contains("..."))
         }
       }
     }

@@ -220,7 +220,8 @@ class StringIndexer @Since("1.4.0") (
 
     val selectedCols = getSelectedCols(dataset, inputCols).map(collect_set(_))
     val allLabels = dataset.select(selectedCols: _*)
-      .collect().toSeq.flatMap(_.toSeq).asInstanceOf[Seq[Seq[String]]]
+      .collect().toSeq.flatMap(_.toSeq)
+      .asInstanceOf[scala.collection.Seq[scala.collection.Seq[String]]].toSeq
     ThreadUtils.parmap(allLabels, "sortingStringLabels", 8) { labels =>
       val sorted = labels.filter(_ != null).sorted
       if (ascending) {
@@ -522,7 +523,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         val data = sparkSession.read.parquet(dataPath)
           .select("labelsArray")
           .head()
-        data.getAs[Seq[Seq[String]]](0).map(_.toArray).toArray
+        data.getSeq[scala.collection.Seq[String]](0).map(_.toArray).toArray
       }
       val model = new StringIndexerModel(metadata.uid, labelsArray)
       metadata.getAndSetParams(model)

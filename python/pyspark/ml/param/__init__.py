@@ -223,15 +223,13 @@ class TypeConverters(object):
             raise TypeError("Boolean Param requires value of type bool. Found %s." % type(value))
 
 
-class Params(Identifiable):
+class Params(Identifiable, metaclass=ABCMeta):
     """
     Components that take parameters. This also provides an internal
     param map to store parameter values attached to the instance.
 
     .. versionadded:: 1.3.0
     """
-
-    __metaclass__ = ABCMeta
 
     def __init__(self):
         super(Params, self).__init__()
@@ -355,8 +353,15 @@ class Params(Identifiable):
         conflicts, i.e., with ordering: default param values <
         user-supplied values < extra.
 
-        :param extra: extra param values
-        :return: merged param map
+        Parameters
+        ----------
+        extra : dict, optional
+            extra param values
+
+        Returns
+        -------
+        dict
+            merged param map
         """
         if extra is None:
             extra = dict()
@@ -374,8 +379,15 @@ class Params(Identifiable):
         Subclasses should override this method if the default approach
         is not sufficient.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`Params`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -406,9 +418,16 @@ class Params(Identifiable):
         """
         Resolves a param and validates the ownership.
 
-        :param param: param name or the param instance, which must
-                      belong to this Params instance
-        :return: resolved param instance
+        Parameters
+        ----------
+        param : str or :py:class:`Param`
+            param name or the param instance, which must
+            belong to this Params instance
+
+        Returns
+        -------
+        :py:class:`Param`
+            resolved param instance
         """
         if isinstance(param, Param):
             self._shouldOwn(param)
@@ -417,6 +436,12 @@ class Params(Identifiable):
             return self.getParam(param)
         else:
             raise ValueError("Cannot resolve %r as a param." % param)
+
+    def _testOwnParam(self, param_parent, param_name):
+        """
+        Test the ownership. Return True or False
+        """
+        return self.uid == param_parent and self.hasParam(param_name)
 
     @staticmethod
     def _dummy():
@@ -469,9 +494,17 @@ class Params(Identifiable):
         Copies param values from this instance to another instance for
         params shared by them.
 
-        :param to: the target instance
-        :param extra: extra params to be copied
-        :return: the target instance with param values copied
+        Parameters
+        ----------
+        to : :py:class:`Params`
+            the target instance
+        extra : dict, optional
+            extra params to be copied
+
+        Returns
+        -------
+        :py:class:`Params`
+            the target instance with param values copied
         """
         paramMap = self._paramMap.copy()
         if isinstance(extra, dict):
@@ -498,9 +531,17 @@ class Params(Identifiable):
         Changes the uid of this instance. This updates both
         the stored uid and the parent uid of params and param maps.
         This is used by persistence (loading).
-        :param newUid: new uid to use, which is converted to unicode
-        :return: same instance, but with the uid and Param.parent values
-                 updated, including within param maps
+
+        Parameters
+        ----------
+        newUid
+            new uid to use, which is converted to unicode
+
+        Returns
+        -------
+        :py:class:`Params`
+            same instance, but with the uid and Param.parent values
+            updated, including within param maps
         """
         newUid = str(newUid)
         self.uid = newUid

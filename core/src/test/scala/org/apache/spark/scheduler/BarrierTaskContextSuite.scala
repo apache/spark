@@ -25,7 +25,6 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.internal.config
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
@@ -189,7 +188,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
     initLocalClusterSparkContext()
-    sc.conf.set("spark.barrier.sync.timeout", "1")
+    sc.conf.set("spark.barrier.sync.timeout", "5")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -212,7 +211,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1 second(s)"))
+    assert(error.contains("within 5 second(s)"))
   }
 
   def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {
@@ -289,5 +288,48 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       }.collect()
     }.getMessage
     assert(errorMsg.contains("Fail resource offers for barrier stage"))
+  }
+
+  test("SPARK-34069: Kill barrier tasks should respect SPARK_JOB_INTERRUPT_ON_CANCEL") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
+    var index = 0
+    var checkDone = false
+    var startTime = 0L
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        if (startTime == 0) {
+          startTime = taskStart.taskInfo.launchTime
+        }
+      }
+
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (index == 0) {
+          assert(taskEnd.reason.isInstanceOf[ExceptionFailure])
+          assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          index = 1
+        } else if (index == 1) {
+          assert(taskEnd.reason.isInstanceOf[TaskKilled])
+          assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          index = 2
+          checkDone = true
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    sc.setJobGroup("test", "", true)
+    sc.parallelize(Seq(1, 2), 2).barrier().mapPartitions { it =>
+      if (TaskContext.get().stageAttemptNumber() == 0) {
+        if (it.hasNext && it.next() == 1) {
+          throw new RuntimeException("failed")
+        } else {
+          Thread.sleep(5000)
+        }
+      }
+      it
+    }.groupBy(x => x).collect()
+    sc.listenerBus.waitUntilEmpty()
+    assert(checkDone)
+    // double check we kill task success
+    assert(System.currentTimeMillis() - startTime < 5000)
   }
 }

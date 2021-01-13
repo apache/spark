@@ -71,6 +71,11 @@ final class UnsafeSorterSpillMerger {
       }
 
       @Override
+      public long getCurrentPageNumber() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
       public boolean hasNext() {
         return !priorityQueue.isEmpty() || (spillReader != null && spillReader.hasNext());
       }

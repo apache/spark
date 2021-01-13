@@ -32,12 +32,12 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/test-only *ExpressionsSchemaSuite"
+ *   build/sbt "sql/testOnly *ExpressionsSchemaSuite"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *ExpressionsSchemaSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *ExpressionsSchemaSuite"
  * }}}
  *
  * For example:
@@ -178,7 +178,15 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           s"$numberOfQueries record in result file. Try regenerating the result files.")
 
       val numberOfMissingExamples = lines(3).split(":")(1).trim.toInt
-      val expectedMissingExamples = lines(4).split(":")(1).trim.split(",")
+      val expectedMissingExamples = {
+        val missingExamples = lines(4).split(":")(1).trim
+        // Splitting on a empty string would return [""]
+        if (missingExamples.nonEmpty) {
+          missingExamples.split(",")
+        } else {
+          Array.empty[String]
+        }
+      }
 
       assert(numberOfMissingExamples == expectedMissingExamples.size,
         s"expected missing examples size: ${expectedMissingExamples.size} not same as " +

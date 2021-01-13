@@ -24,7 +24,6 @@ import javax.security.auth.login.LoginException
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
@@ -37,7 +36,6 @@ import org.apache.hive.service.server.HiveServer2
 import org.slf4j.Logger
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
 private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLContext)
@@ -106,6 +104,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sqlContext.sparkContext.version)
+      case GetInfoType.CLI_ODBC_KEYWORDS => new GetInfoValue("Unimplemented")
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }
@@ -113,17 +112,10 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
 
-  private val logInfo = (msg: String) => if (HiveUtils.isHive23) {
-    getAncestorField[Logger](this, 3, "LOG").info(msg)
-  } else {
-    getAncestorField[Log](this, 3, "LOG").info(msg)
-  }
+  private val logInfo = (msg: String) => getAncestorField[Logger](this, 3, "LOG").info(msg)
 
-  private val logError = (msg: String, e: Throwable) => if (HiveUtils.isHive23) {
+  private val logError = (msg: String, e: Throwable) =>
     getAncestorField[Logger](this, 3, "LOG").error(msg, e)
-  } else {
-    getAncestorField[Log](this, 3, "LOG").error(msg, e)
-  }
 
   def initCompositeService(hiveConf: HiveConf): Unit = {
     // Emulating `CompositeService.init(hiveConf)`

@@ -425,7 +425,7 @@ setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "char
 #' predictions on new data, and \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' Only categorical data is supported.
 #' For more details, see
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html}{
 #'   Multilayer Perceptron}
 #'
 #' @param data a \code{SparkDataFrame} of observations and labels for model fitting.
@@ -574,7 +574,7 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' @rdname spark.naiveBayes
 #' @aliases spark.naiveBayes,SparkDataFrame,formula-method
 #' @name spark.naiveBayes
-#' @seealso e1071: \url{https://cran.r-project.org/package=e1071}
+#' @seealso e1071: \url{https://cran.r-project.org/web/packages/e1071/index.html}
 #' @examples
 #' \dontrun{
 #' data <- as.data.frame(UCBAdmissions)

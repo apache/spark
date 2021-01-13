@@ -30,7 +30,9 @@ import org.apache.spark.sql.types._
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
        a
-  """)
+  """,
+  since = "1.0.0",
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
   extends ComplexTypeMergingExpression {
@@ -116,7 +118,9 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
        2.0
       > SELECT CASE WHEN 1 < 0 THEN 1 WHEN 2 < 0 THEN 2.0 END;
        NULL
-  """)
+  """,
+  since = "1.0.1",
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class CaseWhen(
     branches: Seq[(Expression, Expression)],

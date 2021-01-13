@@ -19,7 +19,7 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.Date
+import java.util.{Date, Locale}
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.ListBuffer
@@ -85,7 +85,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       }
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
-      // extra layers of escaping in order to embed this in a Javascript string literal.
+      // extra layers of escaping in order to embed this in a JavaScript string literal.
       val escapedDesc = Utility.escape(jobDescription)
       val jsEscapedDescForTooltip = StringEscapeUtils.escapeEcmaScript(Utility.escape(escapedDesc))
       val jsEscapedDescForLabel = StringEscapeUtils.escapeEcmaScript(escapedDesc)
@@ -147,7 +147,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    'Removed at ${UIUtils.formatDate(removeTime)}' +
              |    '${
                       e.removeReason.map { reason =>
-                        s"""<br>Reason: ${reason.replace("\n", " ")}"""
+                        s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
+                          reason.replace("\n", " "))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-html="true">Executor ${e.id} removed</div>'
@@ -276,15 +277,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       s"${appSummary.numCompletedJobs}, only showing ${completedJobs.size}"
     }
 
+    // SPARK-33991 Avoid enumeration conversion error.
     val schedulingMode = store.environmentInfo().sparkProperties.toMap
       .get(SCHEDULER_MODE.key)
-      .map { mode => SchedulingMode.withName(mode).toString }
+      .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
       .getOrElse("Unknown")
 
     val summary: NodeSeq =
       <div>
         <ul class="list-unstyled">
           <li>
+
             <strong>User:</strong>
             {parent.getSparkUser}
           </li>

@@ -65,11 +65,82 @@ class EquivalentExpressions {
     }
   }
 
+  private def addExprToSet(expr: Expression, set: mutable.Set[Expr]): Boolean = {
+    if (expr.deterministic) {
+      val e = Expr(expr)
+      if (set.contains(e)) {
+        true
+      } else {
+        set.add(e)
+        false
+      }
+    } else {
+      false
+    }
+  }
+
+  /**
+   * Adds only expressions which are common in each of given expressions, in a recursive way.
+   * For example, given two expressions `(a + (b + (c + 1)))` and `(d + (e + (c + 1)))`,
+   * the common expression `(c + 1)` will be added into `equivalenceMap`.
+   */
+  private def addCommonExprs(
+      exprs: Seq[Expression],
+      addFunc: Expression => Boolean = addExpr): Unit = {
+    val exprSetForAll = mutable.Set[Expr]()
+    addExprTree(exprs.head, addExprToSet(_, exprSetForAll))
+
+    val commonExprSet = exprs.tail.foldLeft(exprSetForAll) { (exprSet, expr) =>
+      val otherExprSet = mutable.Set[Expr]()
+      addExprTree(expr, addExprToSet(_, otherExprSet))
+      exprSet.intersect(otherExprSet)
+    }
+
+    commonExprSet.foreach(expr => addFunc(expr.e))
+  }
+
+  // There are some special expressions that we should not recurse into all of its children.
+  //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
+  //   2. If: common subexpressions will always be evaluated at the beginning, but the true and
+  //          false expressions in `If` may not get accessed, according to the predicate
+  //          expression. We should only recurse into the predicate expression.
+  //   3. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
+  //                condition. We should only recurse into the first condition expression as it
+  //                will always get accessed.
+  //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
+  //                children, because others may not get accessed.
+  private def childrenToRecurse(expr: Expression): Seq[Expression] = expr match {
+    case _: CodegenFallback => Nil
+    case i: If => i.predicate :: Nil
+    case c: CaseWhen => c.children.head :: Nil
+    case c: Coalesce => c.children.head :: Nil
+    case other => other.children
+  }
+
+  // For some special expressions we cannot just recurse into all of its children, but we can
+  // recursively add the common expressions shared between all of its children.
+  private def commonChildrenToRecurse(expr: Expression): Seq[Seq[Expression]] = expr match {
+    case i: If => Seq(Seq(i.trueValue, i.falseValue))
+    case c: CaseWhen =>
+      // We look at subexpressions in conditions and values of `CaseWhen` separately. It is
+      // because a subexpression in conditions will be run no matter which condition is matched
+      // if it is shared among conditions, but it doesn't need to be shared in values. Similarly,
+      // a subexpression among values doesn't need to be in conditions because no matter which
+      // condition is true, it will be evaluated.
+      val conditions = c.branches.tail.map(_._1)
+      val values = c.branches.map(_._2) ++ c.elseValue
+      Seq(conditions, values)
+    case c: Coalesce => Seq(c.children.tail)
+    case _ => Nil
+  }
+
   /**
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
    */
-  def addExprTree(expr: Expression): Unit = {
+  def addExprTree(
+      expr: Expression,
+      addFunc: Expression => Boolean = addExpr): Unit = {
     val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
@@ -78,26 +149,9 @@ class EquivalentExpressions {
       // can cause error like NPE.
       (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
 
-    // There are some special expressions that we should not recurse into all of its children.
-    //   1. CodegenFallback: it's children will not be used to generate code (call eval() instead)
-    //   2. If: common subexpressions will always be evaluated at the beginning, but the true and
-    //          false expressions in `If` may not get accessed, according to the predicate
-    //          expression. We should only recurse into the predicate expression.
-    //   3. CaseWhen: like `If`, the children of `CaseWhen` only get accessed in a certain
-    //                condition. We should only recurse into the first condition expression as it
-    //                will always get accessed.
-    //   4. Coalesce: it's also a conditional expression, we should only recurse into the first
-    //                children, because others may not get accessed.
-    def childrenToRecurse: Seq[Expression] = expr match {
-      case _: CodegenFallback => Nil
-      case i: If => i.predicate :: Nil
-      case c: CaseWhen => c.children.head :: Nil
-      case c: Coalesce => c.children.head :: Nil
-      case other => other.children
-    }
-
-    if (!skip && !addExpr(expr)) {
-      childrenToRecurse.foreach(addExprTree)
+    if (!skip && !addFunc(expr)) {
+      childrenToRecurse(expr).foreach(addExprTree(_, addFunc))
+      commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(addCommonExprs(_, addFunc))
     }
   }
 

@@ -1,46 +1,42 @@
 == Physical Plan ==
-TakeOrderedAndProject (42)
-+- * Project (41)
-   +- Window (40)
-      +- * Sort (39)
-         +- Exchange (38)
-            +- * HashAggregate (37)
-               +- Exchange (36)
-                  +- * HashAggregate (35)
-                     +- Union (34)
-                        :- * HashAggregate (28)
-                        :  +- Exchange (27)
-                        :     +- * HashAggregate (26)
-                        :        +- Union (25)
-                        :           :- * HashAggregate (19)
-                        :           :  +- Exchange (18)
-                        :           :     +- * HashAggregate (17)
-                        :           :        +- * Project (16)
-                        :           :           +- * BroadcastHashJoin Inner BuildRight (15)
-                        :           :              :- * Project (10)
-                        :           :              :  +- * BroadcastHashJoin Inner BuildRight (9)
-                        :           :              :     :- * Filter (3)
-                        :           :              :     :  +- * ColumnarToRow (2)
-                        :           :              :     :     +- Scan parquet default.web_sales (1)
-                        :           :              :     +- BroadcastExchange (8)
-                        :           :              :        +- * Project (7)
-                        :           :              :           +- * Filter (6)
-                        :           :              :              +- * ColumnarToRow (5)
-                        :           :              :                 +- Scan parquet default.date_dim (4)
-                        :           :              +- BroadcastExchange (14)
-                        :           :                 +- * Filter (13)
-                        :           :                    +- * ColumnarToRow (12)
-                        :           :                       +- Scan parquet default.item (11)
-                        :           +- * HashAggregate (24)
-                        :              +- Exchange (23)
-                        :                 +- * HashAggregate (22)
-                        :                    +- * HashAggregate (21)
-                        :                       +- ReusedExchange (20)
-                        +- * HashAggregate (33)
-                           +- Exchange (32)
-                              +- * HashAggregate (31)
-                                 +- * HashAggregate (30)
-                                    +- ReusedExchange (29)
+TakeOrderedAndProject (38)
++- * Project (37)
+   +- Window (36)
+      +- * Sort (35)
+         +- Exchange (34)
+            +- * HashAggregate (33)
+               +- Exchange (32)
+                  +- * HashAggregate (31)
+                     +- Union (30)
+                        :- * HashAggregate (19)
+                        :  +- Exchange (18)
+                        :     +- * HashAggregate (17)
+                        :        +- * Project (16)
+                        :           +- * BroadcastHashJoin Inner BuildRight (15)
+                        :              :- * Project (10)
+                        :              :  +- * BroadcastHashJoin Inner BuildRight (9)
+                        :              :     :- * Filter (3)
+                        :              :     :  +- * ColumnarToRow (2)
+                        :              :     :     +- Scan parquet default.web_sales (1)
+                        :              :     +- BroadcastExchange (8)
+                        :              :        +- * Project (7)
+                        :              :           +- * Filter (6)
+                        :              :              +- * ColumnarToRow (5)
+                        :              :                 +- Scan parquet default.date_dim (4)
+                        :              +- BroadcastExchange (14)
+                        :                 +- * Filter (13)
+                        :                    +- * ColumnarToRow (12)
+                        :                       +- Scan parquet default.item (11)
+                        :- * HashAggregate (24)
+                        :  +- Exchange (23)
+                        :     +- * HashAggregate (22)
+                        :        +- * HashAggregate (21)
+                        :           +- ReusedExchange (20)
+                        +- * HashAggregate (29)
+                           +- Exchange (28)
+                              +- * HashAggregate (27)
+                                 +- * HashAggregate (26)
+                                    +- ReusedExchange (25)
 
 
 (1) Scan parquet default.web_sales
@@ -124,7 +120,7 @@ Results [3]: [i_category#9, i_class#8, sum#12]
 
 (18) Exchange
 Input [3]: [i_category#9, i_class#8, sum#12]
-Arguments: hashpartitioning(i_category#9, i_class#8, 5), true, [id=#13]
+Arguments: hashpartitioning(i_category#9, i_class#8, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (19) HashAggregate [codegen id : 4]
 Input [3]: [i_category#9, i_class#8, sum#12]
@@ -152,7 +148,7 @@ Results [3]: [i_category#9, sum#24, isEmpty#25]
 
 (23) Exchange
 Input [3]: [i_category#9, sum#24, isEmpty#25]
-Arguments: hashpartitioning(i_category#9, 5), true, [id=#26]
+Arguments: hashpartitioning(i_category#9, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (24) HashAggregate [codegen id : 9]
 Input [3]: [i_category#9, sum#24, isEmpty#25]
@@ -161,91 +157,71 @@ Functions [1]: [sum(total_sum#21)]
 Aggregate Attributes [1]: [sum(total_sum#21)#27]
 Results [6]: [sum(total_sum#21)#27 AS total_sum#28, i_category#9, null AS i_class#29, 0 AS g_category#30, 1 AS g_class#31, 1 AS lochierarchy#32]
 
-(25) Union
+(25) ReusedExchange [Reuses operator id: 18]
+Output [3]: [i_category#9, i_class#8, sum#33]
 
-(26) HashAggregate [codegen id : 10]
-Input [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-Keys [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-Functions: []
-Aggregate Attributes: []
-Results [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-
-(27) Exchange
-Input [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-Arguments: hashpartitioning(total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18, 5), true, [id=#33]
-
-(28) HashAggregate [codegen id : 11]
-Input [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-Keys [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-Functions: []
-Aggregate Attributes: []
-Results [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-
-(29) ReusedExchange [Reuses operator id: 18]
-Output [3]: [i_category#9, i_class#8, sum#34]
-
-(30) HashAggregate [codegen id : 15]
-Input [3]: [i_category#9, i_class#8, sum#34]
+(26) HashAggregate [codegen id : 13]
+Input [3]: [i_category#9, i_class#8, sum#33]
 Keys [2]: [i_category#9, i_class#8]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#3))#35]
-Results [1]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#35,17,2) AS total_sum#21]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#3))#34]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#34,17,2) AS total_sum#21]
 
-(31) HashAggregate [codegen id : 15]
+(27) HashAggregate [codegen id : 13]
 Input [1]: [total_sum#21]
 Keys: []
 Functions [1]: [partial_sum(total_sum#21)]
-Aggregate Attributes [2]: [sum#36, isEmpty#37]
-Results [2]: [sum#38, isEmpty#39]
+Aggregate Attributes [2]: [sum#35, isEmpty#36]
+Results [2]: [sum#37, isEmpty#38]
 
-(32) Exchange
-Input [2]: [sum#38, isEmpty#39]
-Arguments: SinglePartition, true, [id=#40]
+(28) Exchange
+Input [2]: [sum#37, isEmpty#38]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#39]
 
-(33) HashAggregate [codegen id : 16]
-Input [2]: [sum#38, isEmpty#39]
+(29) HashAggregate [codegen id : 14]
+Input [2]: [sum#37, isEmpty#38]
 Keys: []
 Functions [1]: [sum(total_sum#21)]
-Aggregate Attributes [1]: [sum(total_sum#21)#41]
-Results [6]: [sum(total_sum#21)#41 AS total_sum#42, null AS i_category#43, null AS i_class#44, 1 AS g_category#45, 1 AS g_class#46, 2 AS lochierarchy#47]
+Aggregate Attributes [1]: [sum(total_sum#21)#40]
+Results [6]: [sum(total_sum#21)#40 AS total_sum#41, null AS i_category#42, null AS i_class#43, 1 AS g_category#44, 1 AS g_class#45, 2 AS lochierarchy#46]
 
-(34) Union
+(30) Union
 
-(35) HashAggregate [codegen id : 17]
+(31) HashAggregate [codegen id : 15]
 Input [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
 Keys [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
 Functions: []
 Aggregate Attributes: []
 Results [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
 
-(36) Exchange
+(32) Exchange
 Input [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
-Arguments: hashpartitioning(total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18, 5), true, [id=#48]
+Arguments: hashpartitioning(total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18, 5), ENSURE_REQUIREMENTS, [id=#47]
 
-(37) HashAggregate [codegen id : 18]
+(33) HashAggregate [codegen id : 16]
 Input [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
 Keys [6]: [total_sum#15, i_category#9, i_class#8, g_category#16, g_class#17, lochierarchy#18]
 Functions: []
 Aggregate Attributes: []
-Results [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, CASE WHEN (g_class#17 = 0) THEN i_category#9 END AS _w0#49]
+Results [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, CASE WHEN (g_class#17 = 0) THEN i_category#9 END AS _w0#48]
 
-(38) Exchange
-Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#49]
-Arguments: hashpartitioning(lochierarchy#18, _w0#49, 5), true, [id=#50]
+(34) Exchange
+Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#48]
+Arguments: hashpartitioning(lochierarchy#18, _w0#48, 5), ENSURE_REQUIREMENTS, [id=#49]
 
-(39) Sort [codegen id : 19]
-Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#49]
-Arguments: [lochierarchy#18 ASC NULLS FIRST, _w0#49 ASC NULLS FIRST, total_sum#15 DESC NULLS LAST], false, 0
+(35) Sort [codegen id : 17]
+Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#48]
+Arguments: [lochierarchy#18 ASC NULLS FIRST, _w0#48 ASC NULLS FIRST, total_sum#15 DESC NULLS LAST], false, 0
 
-(40) Window
-Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#49]
-Arguments: [rank(total_sum#15) windowspecdefinition(lochierarchy#18, _w0#49, total_sum#15 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#51], [lochierarchy#18, _w0#49], [total_sum#15 DESC NULLS LAST]
+(36) Window
+Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#48]
+Arguments: [rank(total_sum#15) windowspecdefinition(lochierarchy#18, _w0#48, total_sum#15 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#50], [lochierarchy#18, _w0#48], [total_sum#15 DESC NULLS LAST]
 
-(41) Project [codegen id : 20]
-Output [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, rank_within_parent#51]
-Input [6]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#49, rank_within_parent#51]
+(37) Project [codegen id : 18]
+Output [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, rank_within_parent#50]
+Input [6]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, _w0#48, rank_within_parent#50]
 
-(42) TakeOrderedAndProject
-Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, rank_within_parent#51]
-Arguments: 100, [lochierarchy#18 DESC NULLS LAST, CASE WHEN (lochierarchy#18 = 0) THEN i_category#9 END ASC NULLS FIRST, rank_within_parent#51 ASC NULLS FIRST], [total_sum#15, i_category#9, i_class#8, lochierarchy#18, rank_within_parent#51]
+(38) TakeOrderedAndProject
+Input [5]: [total_sum#15, i_category#9, i_class#8, lochierarchy#18, rank_within_parent#50]
+Arguments: 100, [lochierarchy#18 DESC NULLS LAST, CASE WHEN (lochierarchy#18 = 0) THEN i_category#9 END ASC NULLS FIRST, rank_within_parent#50 ASC NULLS FIRST], [total_sum#15, i_category#9, i_class#8, lochierarchy#18, rank_within_parent#50]
 

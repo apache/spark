@@ -30,7 +30,6 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class DataSourceV2DataFrameSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)

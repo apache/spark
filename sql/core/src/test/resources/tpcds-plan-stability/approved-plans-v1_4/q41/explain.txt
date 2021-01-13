@@ -73,19 +73,19 @@ Input [2]: [i_manufact#2, count#9]
 Keys [1]: [i_manufact#2]
 Functions [1]: [count(1)]
 Aggregate Attributes [1]: [count(1)#11]
-Results [3]: [count(1)#11 AS item_cnt#12, i_manufact#2 AS i_manufact#2#13, true AS alwaysTrue#14]
+Results [2]: [count(1)#11 AS item_cnt#12, i_manufact#2 AS i_manufact#2#13]
 
 (12) Filter [codegen id : 2]
-Input [3]: [item_cnt#12, i_manufact#2#13, alwaysTrue#14]
-Condition : (if (isnull(alwaysTrue#14)) 0 else item_cnt#12 > 0)
+Input [2]: [item_cnt#12, i_manufact#2#13]
+Condition : (item_cnt#12 > 0)
 
 (13) Project [codegen id : 2]
 Output [1]: [i_manufact#2#13]
-Input [3]: [item_cnt#12, i_manufact#2#13, alwaysTrue#14]
+Input [2]: [item_cnt#12, i_manufact#2#13]
 
 (14) BroadcastExchange
 Input [1]: [i_manufact#2#13]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#14]
 
 (15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [i_manufact#2]
@@ -105,7 +105,7 @@ Results [1]: [i_product_name#3]
 
 (18) Exchange
 Input [1]: [i_product_name#3]
-Arguments: hashpartitioning(i_product_name#3, 5), true, [id=#16]
+Arguments: hashpartitioning(i_product_name#3, 5), true, [id=#15]
 
 (19) HashAggregate [codegen id : 4]
 Input [1]: [i_product_name#3]

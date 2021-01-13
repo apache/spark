@@ -34,19 +34,21 @@ class Window(object):
     """
     Utility functions for defining window in DataFrames.
 
-    For example:
+    .. versionadded:: 1.4
 
+    Notes
+    -----
+    When ordering is not defined, an unbounded window frame (rowFrame,
+    unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
+    a growing window frame (rangeFrame, unboundedPreceding, currentRow) is used by default.
+
+    Examples
+    --------
     >>> # ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     >>> window = Window.orderBy("date").rowsBetween(Window.unboundedPreceding, Window.currentRow)
 
     >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
-
-    .. note:: When ordering is not defined, an unbounded window frame (rowFrame,
-         unboundedPreceding, unboundedFollowing) is used by default. When ordering is defined,
-         a growing window frame (rangeFrame, unboundedPreceding, currentRow) is used by default.
-
-    .. versionadded:: 1.4
     """
 
     _JAVA_MIN_LONG = -(1 << 63)  # -9223372036854775808
@@ -81,7 +83,6 @@ class Window(object):
         return WindowSpec(jspec)
 
     @staticmethod
-    @since(2.1)
     def rowsBetween(start, end):
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -101,6 +102,21 @@ class Window(object):
         offset of -1 and a upper bound offset of +2. The frame for row with index 5 would range from
         index 4 to index 7.
 
+        .. versionadded:: 2.1.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to -9223372036854775808.
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to 9223372036854775807.
+
+        Examples
+        --------
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
         >>> from pyspark.sql import SQLContext
@@ -121,12 +137,6 @@ class Window(object):
         |  3|       b|  3|
         +---+--------+---+
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to -9223372036854775808.
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to 9223372036854775807.
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
@@ -137,7 +147,6 @@ class Window(object):
         return WindowSpec(jspec)
 
     @staticmethod
-    @since(2.1)
     def rangeBetween(start, end):
         """
         Creates a :class:`WindowSpec` with the frame boundaries defined,
@@ -160,6 +169,21 @@ class Window(object):
         unbounded, because no value modification is needed, in this case multiple and non-numeric
         ORDER BY expression are allowed.
 
+        .. versionadded:: 2.1.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+
+        Examples
+        --------
         >>> from pyspark.sql import Window
         >>> from pyspark.sql import functions as func
         >>> from pyspark.sql import SQLContext
@@ -180,12 +204,6 @@ class Window(object):
         |  3|       b|  3|
         +---+--------+---+
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
@@ -203,31 +221,38 @@ class WindowSpec(object):
 
     Use the static methods in :class:`Window` to create a :class:`WindowSpec`.
 
-    .. versionadded:: 1.4
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self, jspec):
         self._jspec = jspec
 
-    @since(1.4)
     def partitionBy(self, *cols):
         """
         Defines the partitioning columns in a :class:`WindowSpec`.
 
-        :param cols: names of columns or expressions
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
         """
         return WindowSpec(self._jspec.partitionBy(_to_java_cols(cols)))
 
-    @since(1.4)
     def orderBy(self, *cols):
         """
         Defines the ordering columns in a :class:`WindowSpec`.
 
-        :param cols: names of columns or expressions
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        cols : str, :class:`Column` or list
+            names of columns or expressions
         """
         return WindowSpec(self._jspec.orderBy(_to_java_cols(cols)))
 
-    @since(1.4)
     def rowsBetween(self, start, end):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -240,12 +265,18 @@ class WindowSpec(object):
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding
@@ -253,7 +284,6 @@ class WindowSpec(object):
             end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rowsBetween(start, end))
 
-    @since(1.4)
     def rangeBetween(self, start, end):
         """
         Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
@@ -266,12 +296,18 @@ class WindowSpec(object):
         and ``Window.currentRow`` to specify special boundary values, rather than using integral
         values directly.
 
-        :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
-                      any value less than or equal to max(-sys.maxsize, -9223372036854775808).
-        :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
-                    any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        start : int
+            boundary start, inclusive.
+            The frame is unbounded if this is ``Window.unboundedPreceding``, or
+            any value less than or equal to max(-sys.maxsize, -9223372036854775808).
+        end : int
+            boundary end, inclusive.
+            The frame is unbounded if this is ``Window.unboundedFollowing``, or
+            any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if start <= Window._PRECEDING_THRESHOLD:
             start = Window.unboundedPreceding

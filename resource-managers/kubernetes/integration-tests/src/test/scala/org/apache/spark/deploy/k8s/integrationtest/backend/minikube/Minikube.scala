@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
 
@@ -68,15 +68,23 @@ private[spark] object Minikube extends Logging {
   def getKubernetesClient: DefaultKubernetesClient = {
     val kubernetesMaster = s"https://${getMinikubeIp}:8443"
     val userHome = System.getProperty("user.home")
+    val minikubeBasePath = Paths.get(userHome, MINIKUBE_PATH).toString
+    val profileDir = if (Files.exists(Paths.get(minikubeBasePath, "apiserver.crt"))) {
+      // For Minikube <1.9
+      ""
+    } else {
+      // For Minikube >=1.9
+      Paths.get("profiles", executeMinikube("profile")(0)).toString
+    }
+    val apiServerCertPath = Paths.get(minikubeBasePath, profileDir, "apiserver.crt")
+    val apiServerKeyPath = Paths.get(minikubeBasePath, profileDir, "apiserver.key")
     val kubernetesConf = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(kubernetesMaster)
       .withCaCertFile(
         Paths.get(userHome, MINIKUBE_PATH, "ca.crt").toFile.getAbsolutePath)
-      .withClientCertFile(
-        Paths.get(userHome, MINIKUBE_PATH, "apiserver.crt").toFile.getAbsolutePath)
-      .withClientKeyFile(
-        Paths.get(userHome, MINIKUBE_PATH, "apiserver.key").toFile.getAbsolutePath)
+      .withClientCertFile(apiServerCertPath.toFile.getAbsolutePath)
+      .withClientKeyFile(apiServerKeyPath.toFile.getAbsolutePath)
       .build()
     new DefaultKubernetesClient(kubernetesConf)
   }
@@ -118,10 +126,13 @@ private[spark] object Minikube extends Logging {
     }
   }
 
-  private def executeMinikube(action: String, args: String*): Seq[String] = {
+  def executeMinikube(action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
-      Array("bash", "-c", s"minikube $action ${args.mkString(" ")}"),
-      MINIKUBE_STARTUP_TIMEOUT_SECONDS)
+      Array("bash", "-c", s"MINIKUBE_IN_STYLE=true minikube $action ${args.mkString(" ")}"),
+      MINIKUBE_STARTUP_TIMEOUT_SECONDS).filter{x =>
+      !x.contains("There is a newer version of minikube") &&
+      !x.contains("https://github.com/kubernetes")
+    }
   }
 
   def minikubeServiceAction(args: String*): String = {

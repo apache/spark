@@ -1,5 +1,5 @@
-TakeOrderedAndProject [count(1)]
-  WholeStageCodegen (5)
+WholeStageCodegen (5)
+  Sort [count(1)]
     HashAggregate [count] [count(1),count(1),count]
       InputAdapter
         Exchange #1

@@ -115,15 +115,14 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("logs")
   @Produces(Array(MediaType.APPLICATION_OCTET_STREAM))
   def getEventLogs(): Response = {
-    // Retrieve the UI for the application just to do access permission checks. For backwards
-    // compatibility, this code also tries with attemptId "1" if the UI without an attempt ID does
-    // not exist.
+    // For backwards compatibility, this code also tries with attemptId "1" if the UI
+    // without an attempt ID does not exist.
     try {
-      withUI { _ => }
+      checkUIViewPermissions()
     } catch {
       case _: NotFoundException if attemptId == null =>
         attemptId = "1"
-        withUI { _ => }
+        checkUIViewPermissions()
         attemptId = null
     }
 

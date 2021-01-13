@@ -21,13 +21,21 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.Row
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., mysql:5.7.31):
+ * {{{
+ *   MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mysql:5.7.28"
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
