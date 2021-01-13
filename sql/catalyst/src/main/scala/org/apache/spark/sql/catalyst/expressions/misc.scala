@@ -63,12 +63,15 @@ case class PrintToStderr(child: Expression) extends UnaryExpression {
        java.lang.RuntimeException
        custom error message
   """,
-  since = "3.1.0")
-case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+  since = "3.1.0",
+  group = "misc_funcs")
+case class RaiseError(child: Expression, dataType: DataType)
+  extends UnaryExpression with ImplicitCastInputTypes {
+
+  def this(child: Expression) = this(child, NullType)
 
   override def foldable: Boolean = false
   override def nullable: Boolean = true
-  override def dataType: DataType = NullType
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
 
   override def prettyName: String = "raise_error"
@@ -96,6 +99,10 @@ case class RaiseError(child: Expression) extends UnaryExpression with ImplicitCa
       value = JavaCode.defaultLiteral(dataType)
     )
   }
+}
+
+object RaiseError {
+  def apply(child: Expression): RaiseError = new RaiseError(child)
 }
 
 /**
