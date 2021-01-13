@@ -43,6 +43,9 @@ private[spark] class ExecutorPodsLifecycleManager(
   import ExecutorPodsLifecycleManager._
 
   private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
+  private lazy val missingPodDetectDelta = conf.get(KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA)
+
+  private var lastFullSnapshotTs: Long = 0
 
   // Keep track of which pods are inactive to avoid contacting the API server multiple times.
   // This set is cleaned up when a snapshot containing the updated pod is processed.
@@ -109,32 +112,32 @@ private[spark] class ExecutorPodsLifecycleManager(
     // Reconcile the case where Spark claims to know about an executor but the corresponding pod
     // is missing from the cluster. This would occur if we miss a deletion event and the pod
     // transitions immediately from running to absent. We only need to check against the latest
-    // snapshot for this, and we don't do this for executors in the deleted executors cache or
-    // that we just removed in this round.
-    val lostExecutors = if (snapshots.nonEmpty) {
-      schedulerBackend.getExecutorIds().map(_.toLong).toSet --
+    // fresh full snapshot (coming from ExecutorPodsPollingSnapshotSource) for this, and we don't
+    // do this for executors in the deleted executors cache or that we just removed in this round.
+    if (snapshots.nonEmpty && lastFullSnapshotTs != snapshots.last.fullSnapshotTs) {
+      lastFullSnapshotTs = snapshots.last.fullSnapshotTs
+      val lostExecutorsWithRegistrationTs =
+        schedulerBackend.getExecutorsWithRegistrationTs().map(t => (t._1.toLong, t._2)) --
         snapshots.last.executorPods.keySet -- execIdsRemovedInThisRound
-    } else {
-      Nil
-    }
 
-    lostExecutors.foreach { lostId =>
-      if (removedExecutorsCache.getIfPresent(lostId) == null) {
-        val exitReasonMessage = s"The executor with ID $lostId was not found in the" +
-          s" cluster but we didn't get a reason why. Marking the executor as failed. The" +
-          s" executor may have been deleted but the driver missed the deletion event."
-        logDebug(exitReasonMessage)
-        val exitReason = ExecutorExited(
-          UNKNOWN_EXIT_CODE,
-          exitCausedByApp = false,
-          exitReasonMessage)
-        schedulerBackend.doRemoveExecutor(lostId.toString, exitReason)
+      lostExecutorsWithRegistrationTs.foreach { case (lostExecId, lostExecRegistrationTs) =>
+        if (removedExecutorsCache.getIfPresent(lostExecId) == null &&
+            lastFullSnapshotTs - lostExecRegistrationTs > missingPodDetectDelta) {
+          val exitReasonMessage = s"The executor with ID $lostExecId (registered at " +
+            s"$lostExecRegistrationTs ms) was not found in the cluster at the polling time " +
+            s"($lastFullSnapshotTs ms) which is after the accepted detect delta time " +
+            s"($missingPodDetectDelta ms) configured by " +
+            s"`${KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA.key}`. " +
+            "The executor may have been deleted but the driver missed the deletion event. " +
+            "Marking this executor as failed."
+          logDebug(exitReasonMessage)
+          val exitReason = ExecutorExited(
+            UNKNOWN_EXIT_CODE,
+            exitCausedByApp = false,
+            exitReasonMessage)
+          schedulerBackend.doRemoveExecutor(lostExecId.toString, exitReason)
+        }
       }
-    }
-
-    if (lostExecutors.nonEmpty) {
-      logDebug(s"Removed executors with ids ${lostExecutors.mkString(",")}" +
-        s" from Spark that were either found to be deleted or non-existent in the cluster.")
     }
   }
 
@@ -238,4 +241,3 @@ private[spark] class ExecutorPodsLifecycleManager(
 private object ExecutorPodsLifecycleManager {
   val UNKNOWN_EXIT_CODE = -1
 }
-
