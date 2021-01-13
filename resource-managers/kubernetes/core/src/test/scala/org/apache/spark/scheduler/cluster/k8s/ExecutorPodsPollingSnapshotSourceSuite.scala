@@ -38,22 +38,22 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   private val pollingInterval = sparkConf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
 
   @Mock
-  private var kubernetesClient: KubernetesClient = _
+  private val kubernetesClient: KubernetesClient = null
 
   @Mock
-  private var podOperations: PODS = _
+  private val podOperations: PODS = null
 
   @Mock
-  private var appIdLabeledPods: LABELED_PODS = _
+  private val appIdLabeledPods: LABELED_PODS = null
 
   @Mock
-  private var executorRoleLabeledPods: LABELED_PODS = _
+  private val executorRoleLabeledPods: LABELED_PODS = null
 
   @Mock
-  private var activeExecutorPods: LABELED_PODS = _
+  private val activeExecutorPods: LABELED_PODS = null
 
   @Mock
-  private var eventQueue: ExecutorPodsSnapshotsStore = _
+  private val eventQueue: ExecutorPodsSnapshotsStore = null
 
   private var pollingExecutor: DeterministicScheduler = _
   private var pollingSourceUnderTest: ExecutorPodsPollingSnapshotSource = _

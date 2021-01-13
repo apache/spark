@@ -42,19 +42,19 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private val namespace = "test"
 
   @Mock
-  private var podOperations: PODS = _
+  private val podOperations: PODS = null
 
   @Mock
-  private var driverPodOperations1: PodResource[Pod, DoneablePod] = _
+  private val driverPodOperations1: PodResource[Pod, DoneablePod] = null
 
   @Mock
-  private var driverPodOperations2: PodResource[Pod, DoneablePod] = _
+  private val driverPodOperations2: PodResource[Pod, DoneablePod] = null
 
   @Mock
-  private var kubernetesClient: KubernetesClient = _
+  private val kubernetesClient: KubernetesClient = null
 
   @Mock
-  private var err: PrintStream = _
+  private val err: PrintStream = null
 
   before {
     MockitoAnnotations.initMocks(this)

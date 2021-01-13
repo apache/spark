@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with Matchers {
 
   @Mock(answer = RETURNS_SMART_NULLS)
-  private var blockManager: BlockManager = _
+  private val blockManager: BlockManager = null
 
   private val shuffleId = 0
   private val numMaps = 5

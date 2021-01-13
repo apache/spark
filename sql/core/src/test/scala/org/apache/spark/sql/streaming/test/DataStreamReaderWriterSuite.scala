@@ -40,8 +40,8 @@ import org.apache.spark.util.Utils
 
 object LastOptions {
 
-  var mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
-  var mockStreamSinkProvider = mock(classOf[StreamSinkProvider])
+  val mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
+  val mockStreamSinkProvider = mock(classOf[StreamSinkProvider])
   var parameters: Map[String, String] = null
   var sinkParameters: Map[String, String] = null
   var schema: Option[StructType] = null
@@ -430,8 +430,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .load()
 
-    var w = df.writeStream
-    var e = intercept[IllegalArgumentException](w.foreach(null))
+    val w = df.writeStream
+    val e = intercept[IllegalArgumentException](w.foreach(null))
     Seq("foreach", "null").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
@@ -447,8 +447,8 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       override def process(value: Row): Unit = {}
       override def close(errorOrNull: Throwable): Unit = {}
     }
-    var w = df.writeStream.partitionBy("value")
-    var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
+    val w = df.writeStream.partitionBy("value")
+    val e = intercept[AnalysisException](w.foreach(foreachWriter).start())
     Seq("foreach", "partitioning").foreach { s =>
       assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }

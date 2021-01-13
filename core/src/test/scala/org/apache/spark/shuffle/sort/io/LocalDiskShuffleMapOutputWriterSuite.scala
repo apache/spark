@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
 class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   @Mock(answer = RETURNS_SMART_NULLS)
-  private var blockResolver: IndexShuffleBlockResolver = _
+  private val blockResolver: IndexShuffleBlockResolver = null
 
   private val NUM_PARTITIONS = 4
   private val data: Array[Array[Byte]] = (0 until NUM_PARTITIONS).map { p =>

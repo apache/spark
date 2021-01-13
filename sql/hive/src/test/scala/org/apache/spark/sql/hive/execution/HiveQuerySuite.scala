@@ -208,7 +208,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       |FROM src LIMIT 1""".stripMargin)
 
   test("constant null testing timestamp") {
-    var r1 = sql(
+    val r1 = sql(
       """
         |SELECT IF(FALSE, CAST(NULL AS TIMESTAMP),
         |CAST('1969-12-31 16:00:01' AS TIMESTAMP)) AS COL20
