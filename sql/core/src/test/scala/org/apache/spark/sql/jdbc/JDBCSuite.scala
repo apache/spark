@@ -1038,7 +1038,7 @@ class JDBCSuite extends QueryTest
       val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
       val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
       assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
-      //8 hour difference since saved time was America/Los_Angeles and Instant is GMT
+      // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
       assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
     }
   }
