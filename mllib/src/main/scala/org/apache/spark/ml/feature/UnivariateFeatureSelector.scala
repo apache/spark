@@ -161,25 +161,26 @@ private[feature] trait UnivariateFeatureSelectorParams extends Params
 }
 
 /**
- * UnivariateFeatureSelector
- * The user can set featureType and labelType, and Spark will pick the score function based on
- * the specified featureType and labelType.
- * The following combination of featureType and labelType are supported:
- * 1. featureType categorical and labelType categorical: Spark uses chi2
- * 2. featureType continuous and labelType categorical: Spark uses f_classif
- * 3. featureType continuous and labelType continuous: Spark uses f_regression
+ * The user can set `featureType` and labelType`, and Spark will pick the score function based on
+ * the specified `featureType` and labelType`.
+ * The following combination of `featureType` and `labelType` are supported:
+ *  - `featureType` `categorical` and `labelType` `categorical`:  Spark uses chi2.
+ *  - `featureType` `continuous` and `labelType` `categorical`:  Spark uses f_classif.
+ *  - `featureType` `continuous` and `labelType` `continuous`:  Spark uses f_regression.
  *
- * The UnivariateFeatureSelector supports different selection methods: `numTopFeatures`,
+ * The `UnivariateFeatureSelector` supports different selection methods: `numTopFeatures`,
  * `percentile`, `fpr`, `fdr`, `fwe`.
  *  - `numTopFeatures` chooses a fixed number of top features according to a hypothesis.
  *  - `percentile` is similar but chooses a fraction of all features instead of a fixed number.
  *  - `fpr` chooses all features whose p-value are below a threshold, thus controlling the false
  *    positive rate of selection.
- *  - `fdr` uses the [Benjamini-Hochberg procedure]
- *    (https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure)
+ *  - `fdr` uses the <a href=
+ *  "https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure">
+ *  Benjamini-Hochberg procedure</a>
  *    to choose all features whose false discovery rate is below a threshold.
  *  - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
  *    1/numFeatures, thus controlling the family-wise error rate of selection.
+ *
  * By default, the selection method is `numTopFeatures`, with the default number of top features
  * set to 50.
  */

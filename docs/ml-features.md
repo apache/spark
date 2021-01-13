@@ -1865,10 +1865,10 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [UnivariateFeatureSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.UnivariateFeatureSelector)
+Refer to the [UnivariateFeatureSelector Python docs](api/python/reference/api/pyspark.ml.feature.UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example python/ml/univariateFeature_selector_example.py %}
+{% include_example python/ml/univariate_feature_selector_example.py %}
 </div>
 </div>
 

@@ -5859,16 +5859,18 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
                                 JavaMLWritable):
     """
     UnivariateFeatureSelector
-    User can set `featureType` and `labelType`, and Spark will pick the score function based on
+    The user can set `featureType` and `labelType`, and Spark will pick the score function based on
     the specified `featureType` and `labelType`.
 
-    The following combination of featureType and labelType are supported"
-    - featureType categorical and labelType categorical, Spark uses chi2
-    - featureType continuous and labelType categorical, Spark uses f_classif
-    - featureType continuous and labelType continuous, Spark uses f_regression
+    The following combination of `featureType` and `labelType` are supported:
+
+    - `featureType` `categorical` and `labelType` `categorical`, Spark uses chi2.
+    - `featureType` `continuous` and `labelType` `categorical`, Spark uses f_classif.
+    - `featureType` `continuous` and `labelType` `continuous`, Spark uses f_regression.
 
     The `UnivariateFeatureSelector` supports different selection methods: `numTopFeatures`,
-    `percentile`, `fpr`, fdr`, `fwe`.
+    `percentile`, `fpr`, `fdr`, `fwe`.
+
     - `numTopFeatures` chooses a fixed number of top features according to a according to a
       hypothesis.
     - `percentile` is similar but chooses a fraction of all features
