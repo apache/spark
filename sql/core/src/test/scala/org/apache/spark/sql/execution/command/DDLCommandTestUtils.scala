@@ -96,8 +96,8 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   def getTableSize(tableName: String): Int = {
     val stats =
       sql(s"DESCRIBE TABLE EXTENDED $tableName")
-        .select("data_type")
         .where("col_name = 'Statistics'")
+        .select("data_type")
     if (stats.isEmpty) {
       throw new IllegalArgumentException(s"The table $tableName does not have stats")
     }

@@ -47,6 +47,24 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
     }
   }
 
+  private def copyPartition(tableName: String, from: String, to: String): String = {
+    val idents = tableName.split('.')
+    val table = idents.last
+    val catalogAndNs = idents.init
+    val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"
+    val information = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($from)")
+      .select("information")
+      .first().getString(0)
+    val part0Loc = information
+      .split("\\r?\\n")
+      .filter(_.startsWith("Location:"))
+      .head
+      .replace("Location: file:", "")
+    val part1Loc = part0Loc.replace(from, to)
+    FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
+    part1Loc
+  }
+
   test("SPARK-34055: refresh cache in partition adding") {
     withTable("t") {
       sql(s"CREATE TABLE t (id int, part int) $defaultUsing PARTITIONED BY (part)")
@@ -57,16 +75,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0)))
 
       // Create new partition (part = 1) in the filesystem
-      val information = sql("SHOW TABLE EXTENDED LIKE 't' PARTITION (part = 0)")
-        .select("information")
-        .first().getString(0)
-      val part0Loc = information
-        .split("\\r?\\n")
-        .filter(_.startsWith("Location:"))
-        .head
-        .replace("Location: file:", "")
-      val part1Loc = part0Loc.replace("part=0", "part=1")
-      FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
+      val part1Loc = copyPartition("t", "part=0", "part=1")
 
       sql(s"ALTER TABLE t ADD PARTITION (part=1) LOCATION '$part1Loc'")
       assert(spark.catalog.isCached("t"))
@@ -87,6 +96,30 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
         sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
         assert(getTableSize(t) > 0)
+      }
+    }
+  }
+
+  test("SPARK-34060, SPARK-34071: update stats of cached table") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+        assert(!spark.catalog.isCached(t))
+        sql(s"CACHE TABLE $t")
+        assert(spark.catalog.isCached(t))
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0)))
+        val onePartSize = getTableSize(t)
+        assert(onePartSize > 0)
+
+        // Create new partition (part = 1) in the filesystem
+        val part1Loc = copyPartition(t, "part=0", "part=1")
+
+        sql(s"ALTER TABLE $t ADD PARTITION (part=1) LOCATION '$part1Loc'")
+        assert(spark.catalog.isCached(t))
+        val twoPartSize = getTableSize(t)
+        assert(onePartSize < twoPartSize)
+        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(0, 1)))
       }
     }
   }
