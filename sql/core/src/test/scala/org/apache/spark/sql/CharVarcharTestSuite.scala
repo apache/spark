@@ -666,6 +666,19 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
       assert(rest.contains("CHAR(5)"))
     }
   }
+
+  test("should not trim right for read-side length check and char padding") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val e = intercept[SparkException] { sql("select * from t").collect() }
+          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
+        }
+      }
+    }
+  }
 }
 
 class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
