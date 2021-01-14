@@ -1236,40 +1236,42 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-33690: showString: escape meta-characters") {
-    val df1 = Seq("aaa\nbbb\tccc").toDF("value")
+    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
     assert(df1.showString(1, truncate = 0) ===
-      """+-------------+
-        ||value        |
-        |+-------------+
-        ||aaa\nbbb\tccc|
-        |+-------------+
+      """+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
         |""".stripMargin)
 
-    val df2 = Seq(Seq("aaa\nbbb\tccc")).toDF("value")
+    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
     assert(df2.showString(1, truncate = 0) ===
-      """+---------------+
-        ||value          |
-        |+---------------+
-        ||[aaa\nbbb\tccc]|
-        |+---------------+
+      """+---------------------------------------------+
+        ||array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+---------------------------------------------+
+        ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]     |
+        |+---------------------------------------------+
         |""".stripMargin)
 
-    val df3 = Seq(Map("aaa\nbbb\tccc" -> "aaa\nbbb\tccc")).toDF("value")
+    val df3 =
+      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
     assert(df3.showString(1, truncate = 0) ===
-      """+--------------------------------+
-        ||value                           |
-        |+--------------------------------+
-        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc}|
-        |+--------------------------------+
+      """+----------------------------------------------------------+
+        ||map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+----------------------------------------------------------+
+        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh} |
+        |+----------------------------------------------------------+
         |""".stripMargin)
 
-    val df4 = Seq("aaa\nbbb\tccc").toDF("value").selectExpr("named_struct('v', value)")
+    val df4 =
+      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
     assert(df4.showString(1, truncate = 0) ===
-      """+----------------------+
-        ||named_struct(v, value)|
-        |+----------------------+
-        ||{aaa\nbbb\tccc}       |
-        |+----------------------+
+      """+-------------------------------------------------------+
+        ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+-------------------------------------------------------+
+        ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
+        |+-------------------------------------------------------+
         |""".stripMargin)
   }
 
