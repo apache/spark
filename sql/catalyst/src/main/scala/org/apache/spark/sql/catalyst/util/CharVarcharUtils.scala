@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object CharVarcharUtils extends Logging {
 
@@ -202,12 +203,9 @@ object CharVarcharUtils extends Logging {
     }.getOrElse(expr)
   }
 
-  private def raiseError(expr: Expression, typeName: String, length: Int): Expression = {
-    val errorMsg = Concat(Seq(
-      Literal("input string of length "),
-      Cast(Length(expr), StringType),
-      Literal(s" exceeds $typeName type length limitation: $length")))
-    Cast(RaiseError(errorMsg), StringType)
+  private def raiseError(typeName: String, length: Int): Expression = {
+    val errMsg = UTF8String.fromString(s"Exceeds $typeName type length limitation: $length")
+    RaiseError(Literal(errMsg, StringType), StringType)
   }
 
   private def stringLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
@@ -217,7 +215,7 @@ object CharVarcharUtils extends Logging {
       // spaces, as we will pad char type columns/fields at read time.
       If(
         GreaterThan(Length(trimmed), Literal(length)),
-        raiseError(expr, "char", length),
+        raiseError("char", length),
         trimmed)
 
     case VarcharType(length) =>
@@ -230,7 +228,7 @@ object CharVarcharUtils extends Logging {
         expr,
         If(
           GreaterThan(Length(trimmed), Literal(length)),
-          raiseError(expr, "varchar", length),
+          raiseError("varchar", length),
           StringRPad(trimmed, Literal(length))))
 
     case StructType(fields) =>
