@@ -178,7 +178,6 @@ object SharedState extends Logging {
     if (_sharedState == null) {
       synchronized {
         if (_sharedState == null) {
-          // Ensure that we only initiate SharedState once
           _sharedState = new SharedState(sparkContext, initialConfigs)
         }
       }
