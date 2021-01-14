@@ -173,9 +173,7 @@ object SharedState extends Logging {
   @volatile private var fsUrlStreamHandlerFactoryInitialized = false
   private var sharedState: SharedState = _
 
-  def getSharedState(
-      sparkContext: SparkContext,
-      initialConfigs: scala.collection.Map[String, String])
+  def get(sparkContext: SparkContext, initialConfigs: scala.collection.Map[String, String])
     : SharedState = synchronized {
     if (sharedState == null) {
       // Ensure that we only initiate SharedState once
