@@ -110,7 +110,8 @@ case class InsertIntoHiveDirCommand(
         plan = child,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
-        outputLocation = tmpPath.toString)
+        outputLocation = tmpPath.toString,
+        basicWriteJobStatsTracker = Seq(basicWriteJobStatsTracker(hadoopConf)))
 
       if (overwrite && fs.exists(writeToPath)) {
         fs.listStatus(writeToPath).foreach { existFile =>

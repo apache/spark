@@ -67,8 +67,8 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
       files: Int,
       bytes: Int): Unit = {
     val stats = finalStatus(tracker)
-    assert(files === stats.numFiles, "Wrong number of files")
-    assert(bytes === stats.numBytes, "Wrong byte count of file size")
+    assert(files === stats.totalNumFiles, "Wrong number of files")
+    assert(bytes === stats.totalNumBytes, "Wrong byte count of file size")
   }
 
   private def finalStatus(tracker: BasicWriteTaskStatsTracker): BasicWriteTaskStats = {
@@ -128,7 +128,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
       assertStats(tracker, 1, 0)
       stream.write(data1)
       stream.flush()
-      assert(1 === finalStatus(tracker).numFiles, "Wrong number of files")
+      assert(1 === finalStatus(tracker).totalNumFiles, "Wrong number of files")
     } finally {
       stream.close()
     }

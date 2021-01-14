@@ -2581,6 +2581,59 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("xxx") {
+    withSQLConf("hive.exec.dynamic.partition.mode"->"nonstrict",
+      HiveUtils.CONVERT_METASTORE_ORC.key -> "false",
+      HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "false",
+      SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1(a INT, b STRING) STORED AS ORC")
+        sql("INSERT INTO TABLE t1 SELECT 1, '2020-01-01'")
+        val tableStats1 = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("t1")).stats.get
+        assert(tableStats1.sizeInBytes == 708 && tableStats1.rowCount.get == 1)
+        sql("INSERT INTO TABLE t1 SELECT 2, '2020-01-02'")
+        val tableStats2 = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("t1")).stats.get
+        assert(tableStats2.sizeInBytes == 1062 && tableStats2.rowCount.get == 2)
+        sql("INSERT OVERWRITE TABLE t1 SELECT 1, '2020-01-01'")
+        val tableStats3 = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("t1")).stats.get
+        assert(tableStats3.sizeInBytes == 354 && tableStats3.rowCount.get == 1)
+        sql("INSERT INTO TABLE t1 SELECT 2, '2020-01-02'")
+
+        sql("CREATE TABLE t2(a INT) PARTITIONED BY (b string) STORED AS ORC")
+        sql("INSERT INTO TABLE t2 PARTITION(b = '2020-01-01') SELECT 100")
+        val tableStats4 = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("t2")).stats.get
+        assert(tableStats4.sizeInBytes == 203 && tableStats4.rowCount.get == 1)
+        val partStats1 = spark.sessionState.catalog
+            .getPartition(TableIdentifier("t2"), Map("b" -> "2020-01-01")).stats.get
+        assert(partStats1.sizeInBytes == 203 && partStats1.rowCount.get == 1)
+        sql("INSERT INTO TABLE t2 SELECT * FROM t1")
+        val tableStats5 = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("t2")).stats.get
+        assert(tableStats5.sizeInBytes == 591 && tableStats5.rowCount.get == 3)
+        val partStats2 = spark.sessionState.catalog
+            .getPartition(TableIdentifier("t2"), Map("b" -> "2020-01-01")).stats.get
+        assert(partStats2.sizeInBytes == 397 && partStats2.rowCount.get == 2)
+        val partStats3 = spark.sessionState.catalog
+            .getPartition(TableIdentifier("t2"), Map("b" -> "2020-01-02")).stats.get
+        assert(partStats3.sizeInBytes == 388 && partStats3.rowCount.get == 1)
+        sql("INSERT OVERWRITE TABLE t2 SELECT * FROM t1")
+        val tableStats6 = spark.sessionState.catalog
+            .getTableMetadata(TableIdentifier("t2")).stats.get
+        assert(tableStats6.sizeInBytes == 388 && tableStats6.rowCount.get == 2)
+        val partStats4 = spark.sessionState.catalog
+            .getPartition(TableIdentifier("t2"), Map("b" -> "2020-01-01")).stats.get
+        assert(partStats4.sizeInBytes == 194 && partStats4.rowCount.get == 1)
+        val partStats5 = spark.sessionState.catalog
+            .getPartition(TableIdentifier("t2"), Map("b" -> "2020-01-02")).stats.get
+        assert(partStats5.sizeInBytes == 194 && partStats5.rowCount.get == 1)
+      }
+    }
+  }
 }
 
 @SlowHiveTest

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 
 
 /**
@@ -54,7 +55,7 @@ trait WriteTaskStatsTracker {
    * Only triggered when the relation is partitioned by a (non-empty) sequence of columns.
    * @param partitionValues The values that define this new partition.
    */
-  def newPartition(partitionValues: InternalRow): Unit
+  def newPartition(partitionValues: TablePartitionSpec): Unit
 
   /**
    * Process the fact that a new bucket is about to written.
