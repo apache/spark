@@ -31,6 +31,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.scheduler.SparkListenerLogRollUp
 import org.apache.spark.util.Utils
 
 /**
@@ -321,14 +322,14 @@ class RollingEventLogFilesWriter(
     // SPARK-30860: use the class method to avoid the umask causing permission issues
     FileSystem.mkdirs(fileSystem, logDirForAppPath, EventLogFileWriter.LOG_FOLDER_PERMISSIONS)
     createAppStatusFile(inProgress = true)
-    rollEventLogFile()
+    rollEventLogFile(null)
   }
 
   override def writeEvent(eventJson: String, flushLogger: Boolean = false): Unit = {
     writer.foreach { w =>
       val currentLen = countingOutputStream.get.getBytesWritten
       if (currentLen + eventJson.length > eventFileMaxLength) {
-        rollEventLogFile()
+        rollEventLogFile(null)
       }
     }
 
@@ -336,10 +337,21 @@ class RollingEventLogFilesWriter(
   }
 
   /** exposed for testing only */
-  private[history] def rollEventLogFile(): Unit = {
+  def rollEventLogFile(logRollUp: SparkListenerLogRollUp): Unit = {
     closeWriter()
 
+    if (logRollUp != null && logRollUp.checkTime != null) {
+      SparkHadoopUtil.createFile(fileSystem, new Path(new Path(logBaseDir),
+        logRollUp.checkTime), sparkConf.get(EVENT_LOG_ALLOW_EC)).close()
+    }
+
     index += 1
+    val now = System.currentTimeMillis()
+    if (currentEventLogFilePath != null) {
+      fileSystem.rename(currentEventLogFilePath,
+        new Path(currentEventLogFilePath.toUri.getPath + "_" + now))
+    }
+
     currentEventLogFilePath = getEventLogFilePath(logDirForAppPath, appId, appAttemptId, index,
       compressionCodecName)
 
@@ -378,7 +390,8 @@ object RollingEventLogFilesWriter {
 
   def getAppEventLogDirPath(logBaseDir: URI, appId: String, appAttemptId: Option[String]): Path =
     new Path(new Path(logBaseDir), EVENT_LOG_DIR_NAME_PREFIX +
-      EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId))
+      EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
+      + "#" + System.currentTimeMillis())
 
   def getAppStatusFilePath(
       appLogDir: Path,
@@ -399,7 +412,7 @@ object RollingEventLogFilesWriter {
       codecName: Option[String]): Path = {
     val base = s"${EVENT_LOG_FILE_NAME_PREFIX}${index}_" +
       EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
-    val codec = codecName.map("." + _).getOrElse("")
+    val codec = codecName.map("." + _).getOrElse("") + "_" + System.currentTimeMillis()
     new Path(appLogDir, base + codec)
   }
 
