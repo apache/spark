@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class LeftSemiPushdownSuite extends PlanTest {
@@ -440,6 +441,30 @@ class LeftSemiPushdownSuite extends PlanTest {
         joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'e))
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { jt =>
+    test(s"SPARK-34081: $jt only push down if join can be planned as broadcast join") {
+      Seq(-1, 100000).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+          val originalQuery = testRelation
+            .groupBy('b)('b)
+            .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
+
+          val optimized = Optimize.execute(originalQuery.analyze)
+          val correctAnswer = if (threshold > 0) {
+            testRelation
+              .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
+              .groupBy('b)('b)
+              .analyze
+          } else {
+            originalQuery.analyze
+          }
+
+          comparePlans(optimized, correctAnswer)
+        }
+      }
     }
   }
 
