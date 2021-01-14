@@ -33,8 +33,7 @@ inputCon <- socketConnection(
 SparkR:::doServerAuth(inputCon, Sys.getenv("SPARKR_WORKER_SECRET"))
 
 # Application-specific daemon initialization. Typical use is loading libraries.
-DaemonInit <- Sys.getenv("SPARKR_DAEMON_INIT")
-if (DaemonInit != "NULL") eval(parse(text = DaemonInit))
+eval(parse(text = Sys.getenv("SPARKR_DAEMON_INIT")))
 
 # Waits indefinitely for a socket connection by default.
 selectTimeout <- NULL

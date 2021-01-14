@@ -24,9 +24,6 @@ import java.util.Arrays
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.log4j.Level.INFO
-import org.apache.log4j.Logger.getRootLogger
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -322,14 +319,6 @@ private[r] object BaseRRunner {
           // we expect one connections
           val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
           val daemonPort = serverSocket.getLocalPort
-
-          // Ensure daemon initialization is logged by ensuring
-          // org.apache.spark.api.r.BufferedStreamThread is at INFO level
-          val rootLogger = getRootLogger
-          val logLevel = rootLogger.getLevel
-          val raiseLogging = logLevel.getSyslogEquivalent < INFO.getSyslogEquivalent
-          if(raiseLogging) rootLogger.setLevel(INFO)
-
           errThread = createRProcess(daemonPort, "daemon.R")
           // the socket used to send out the input of task
           serverSocket.setSoTimeout(SparkEnv.get.conf.get(R_DAEMON_TIMEOUT))
@@ -339,7 +328,6 @@ private[r] object BaseRRunner {
             daemonChannel = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
           } finally {
             serverSocket.close()
-            if(raiseLogging) rootLogger.setLevel(logLevel)
           }
         }
         try {

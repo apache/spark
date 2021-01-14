@@ -2833,8 +2833,8 @@ External users can query the static sql config values via `SparkSession.conf` or
     <a href="sparkr.md#daemon-initialization">Daemon Initialization</a>.
     Increase spark.r.daemonTimeout if your initialization takes longer
     than the default.
-    </td>
-    <td>3.2.0</td>
+  </td>
+  <td>3.2.0</td>
 </tr>
 <tr>
   <td><code>spark.r.daemonTimeout</code></td>
