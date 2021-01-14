@@ -667,7 +667,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
     }
   }
 
-  test("should not trim right for read-side length check and char padding") {
+  test("SPARK-34114: should not trim right for read-side length check and char padding") {
     Seq("char", "varchar").foreach { typ =>
       withTempPath { dir =>
         withTable("t") {
