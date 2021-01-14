@@ -1070,14 +1070,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     StringBuilder sb = new StringBuilder();
     int charCount = 0;
-    for(int k = 0; k < srcStr.length(); k += charCount) {
+    for (int k = 0; k < srcStr.length(); k += charCount) {
       int codePoint = srcStr.codePointAt(k);
       charCount = Character.charCount(codePoint);
       String subStr = srcStr.substring(k, k + charCount);
-      if (null == dict.get(subStr)) {
+      String translated = dict.get(subStr);
+      if (null == translated) {
         sb.append(subStr);
-      } else if (!"\0".equals(dict.get(subStr))) {
-        sb.append(dict.get(subStr));
+      } else if (!"\0".equals(translated)) {
+        sb.append(translated);
       }
     }
     return fromString(sb.toString());
