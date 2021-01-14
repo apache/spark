@@ -2842,7 +2842,7 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Creates a datetime interval
+   * (Scala-specific) Creates a datetime interval
    *
    * @param years Number of years
    * @param months Number of months
