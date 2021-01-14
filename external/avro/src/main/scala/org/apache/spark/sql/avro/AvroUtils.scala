@@ -201,4 +201,42 @@ private[sql] object AvroUtils extends Logging {
       }
     }
   }
+
+  /**
+   * Extract a single field from `avroFields` which has the same name has `catalystField`,
+   * performing the matching with proper case sensitivity according to [[SQLConf.CASE_SENSITIVE]].
+   *
+   * @param avroFields The fields within which to search for a match.
+   * @param catalystField The catalyst field for which to search for a match.
+   * @param avroPath The seq of parent field names leading to the record containing `avroFields`.
+   * @param catalystPath The seq of parent field names leading to `catalystField`.
+   * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
+   */
+  private[avro] def getAvroFieldForCatalystField(
+    avroFields: Seq[Schema.Field],
+    catalystField: StructField,
+    avroPath: Seq[String],
+    catalystPath: Seq[String]): Option[Schema.Field] = {
+    val isEqual: (String, String) => Boolean =
+      if (SQLConf.get.caseSensitiveAnalysis) { _.equals(_) } else { _.equalsIgnoreCase(_) }
+    avroFields.filter(f => isEqual(f.name(), catalystField.name)) match {
+      case Seq(avroField) => Some(avroField)
+      case Seq() => None
+      case s => throw new IncompatibleSchemaException(
+        s"Searching for ${toFieldStr(catalystPath :+ catalystField.name)} in Avro " +
+            s"schema at ${toFieldStr(avroPath)} gave ${s.size} matches")
+    }
+  }
+
+  /**
+   * Convert a sequence of hierarchical field names (like `Seq(foo, bar)`) into a human-readable
+   * string representing the field, like "field 'foo.bar'". If `names` is empty, the string
+   * "top-level record" is returned.
+   */
+  private[avro] def toFieldStr(names: Seq[String]): String = {
+    names match {
+      case Seq() => "top-level record"
+      case n => s"field '${n.mkString(".")}'"
+    }
+  }
 }

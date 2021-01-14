@@ -30,6 +30,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.sql.avro.AvroUtils.toFieldStr
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
@@ -64,30 +65,35 @@ private[sql] class AvroDeserializer(
   private val timestampRebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInRead(
     datetimeRebaseMode, "Avro")
 
-  private val converter: Any => Option[Any] = rootCatalystType match {
-    // A shortcut for empty schema.
-    case st: StructType if st.isEmpty =>
-      (data: Any) => Some(InternalRow.empty)
+  private val converter: Any => Option[Any] = try {
+    rootCatalystType match {
+      // A shortcut for empty schema.
+      case st: StructType if st.isEmpty =>
+        (data: Any) => Some(InternalRow.empty)
 
-    case st: StructType =>
-      val resultRow = new SpecificInternalRow(st.map(_.dataType))
-      val fieldUpdater = new RowUpdater(resultRow)
-      val applyFilters = filters.skipRow(resultRow, _)
-      val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
-      (data: Any) => {
-        val record = data.asInstanceOf[GenericRecord]
-        val skipRow = writer(fieldUpdater, record)
-        if (skipRow) None else Some(resultRow)
-      }
+      case st: StructType =>
+        val resultRow = new SpecificInternalRow(st.map(_.dataType))
+        val fieldUpdater = new RowUpdater(resultRow)
+        val applyFilters = filters.skipRow(resultRow, _)
+        val writer = getRecordWriter(rootAvroType, st, Nil, applyFilters)
+        (data: Any) => {
+          val record = data.asInstanceOf[GenericRecord]
+          val skipRow = writer(fieldUpdater, record)
+          if (skipRow) None else Some(resultRow)
+        }
 
-    case _ =>
-      val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
-      val fieldUpdater = new RowUpdater(tmpRow)
-      val writer = newWriter(rootAvroType, rootCatalystType, Nil)
-      (data: Any) => {
-        writer(fieldUpdater, 0, data)
-        Some(tmpRow.get(0, rootCatalystType))
-      }
+      case _ =>
+        val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
+        val fieldUpdater = new RowUpdater(tmpRow)
+        val writer = newWriter(rootAvroType, rootCatalystType, Nil)
+        (data: Any) => {
+          writer(fieldUpdater, 0, data)
+          Some(tmpRow.get(0, rootCatalystType))
+        }
+    }
+  } catch {
+    case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
+      s"Cannot convert Avro type $rootAvroType to Catalyst type $rootCatalystType.", ise)
   }
 
   def deserialize(data: Any): Option[Any] = converter(data)
@@ -128,7 +134,7 @@ private[sql] class AvroDeserializer(
           val micros = value.asInstanceOf[Long]
           updater.setLong(ordinal, timestampRebaseFunc(micros))
         case other => throw new IncompatibleSchemaException(
-          s"Cannot convert Avro logical type ${other} to Catalyst Timestamp type.")
+          s"Cannot convert Avro logical type $other to Catalyst Timestamp type.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
@@ -203,7 +209,7 @@ private[sql] class AvroDeserializer(
             val element = iter.next()
             if (element == null) {
               if (!containsNull) {
-                throw new RuntimeException(s"Array value at path ${path.mkString(".")} is not " +
+                throw new RuntimeException(s"Array value at path ${toFieldStr(path)} is not " +
                   "allowed to be null")
               } else {
                 elementUpdater.setNullAt(i)
@@ -233,7 +239,7 @@ private[sql] class AvroDeserializer(
             keyWriter(keyUpdater, i, entry.getKey)
             if (entry.getValue == null) {
               if (!valueContainsNull) {
-                throw new RuntimeException(s"Map value at path ${path.mkString(".")} is not " +
+                throw new RuntimeException(s"Map value at path ${toFieldStr(path)} is not " +
                   "allowed to be null")
               } else {
                 valueUpdater.setNullAt(i)
@@ -287,11 +293,9 @@ private[sql] class AvroDeserializer(
 
                   case _ =>
                     throw new IncompatibleSchemaException(
-                      s"Cannot convert Avro to catalyst because schema at path " +
-                        s"${path.mkString(".")} is not compatible " +
-                        s"(avroType = $avroType, sqlType = $catalystType).\n" +
-                        s"Source Avro schema: $rootAvroType.\n" +
-                        s"Target Catalyst type: $rootCatalystType")
+                      s"Cannot convert Avro to Catalyst because schema of " +
+                        s"${toFieldStr(path)} is not compatible " +
+                        s"(avroType = $avroType, sqlType = $catalystType).")
                 }
             }
           }
@@ -301,10 +305,8 @@ private[sql] class AvroDeserializer(
 
       case _ =>
         throw new IncompatibleSchemaException(
-          s"Cannot convert Avro to catalyst because schema at path ${path.mkString(".")} " +
-            s"is not compatible (avroType = $avroType, sqlType = $catalystType).\n" +
-            s"Source Avro schema: $rootAvroType.\n" +
-            s"Target Catalyst type: $rootCatalystType")
+          s"Cannot convert Avro to Catalyst because schema of ${toFieldStr(path)} " +
+            s"is not compatible (avroType = $avroType, sqlType = $catalystType).")
     }
 
   // TODO: move the following method in Decimal object on creating Decimal from BigDecimal?
@@ -330,27 +332,26 @@ private[sql] class AvroDeserializer(
     var i = 0
     while (i < length) {
       val sqlField = sqlType.fields(i)
-      val avroField = avroType.getField(sqlField.name)
-      if (avroField != null) {
-        validFieldIndexes += avroField.pos()
+      AvroUtils.getAvroFieldForCatalystField(
+        avroType.getFields.asScala, sqlField, path, path) match {
 
-        val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
-        val ordinal = i
-        val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
-          if (value == null) {
-            fieldUpdater.setNullAt(ordinal)
-          } else {
-            baseWriter(fieldUpdater, ordinal, value)
+        case Some(avroField) =>
+          validFieldIndexes += avroField.pos()
+
+          val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
+          val ordinal = i
+          val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
+            if (value == null) {
+              fieldUpdater.setNullAt(ordinal)
+            } else {
+              baseWriter(fieldUpdater, ordinal, value)
+            }
           }
-        }
-        fieldWriters += fieldWriter
-      } else if (!sqlField.nullable) {
-        throw new IncompatibleSchemaException(
-          s"""
-             |Cannot find non-nullable field ${path.mkString(".")}.${sqlField.name} in Avro schema.
-             |Source Avro schema: $rootAvroType.
-             |Target Catalyst type: $rootCatalystType.
-           """.stripMargin)
+          fieldWriters += fieldWriter
+        case None if !sqlField.nullable =>
+          throw new IncompatibleSchemaException(s"Cannot find non-nullable " +
+              s"${toFieldStr(path :+ sqlField.name)} in Avro schema.")
+        case _ => // nothing to do
       }
       i += 1
     }
