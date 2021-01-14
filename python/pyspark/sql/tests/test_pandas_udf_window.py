@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.exceptions import AnalysisException
 from pyspark.sql.functions import array, explode, col, lit, mean, min, max, rank, \
     udf, pandas_udf, PandasUDFType
 from pyspark.sql.window import Window

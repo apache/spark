@@ -32,7 +32,7 @@ from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, panda
 from pyspark.sql.types import IntegerType, ByteType, StructType, ShortType, BooleanType, \
     LongType, FloatType, DoubleType, DecimalType, StringType, ArrayType, StructField, \
     Row, TimestampType, MapType, DateType, BinaryType
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.exceptions import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     test_not_compiled_message, have_pandas, have_pyarrow, pandas_requirement_message, \
     pyarrow_requirement_message

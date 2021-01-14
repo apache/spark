@@ -27,7 +27,7 @@ from pyspark.sql.functions import udf
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import StringType, IntegerType, BooleanType, DoubleType, LongType, \
     ArrayType, StructType, StructField
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.exceptions import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled, test_not_compiled_message
 from pyspark.testing.utils import QuietTest
 

@@ -24,7 +24,8 @@ from pyspark import since, keyword_only
 from pyspark.sql.column import _to_seq
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.types import StructType, StructField, StringType
-from pyspark.sql.utils import ForeachBatchFunction, StreamingQueryException
+from pyspark.sql.utils import ForeachBatchFunction
+from pyspark.sql.exceptions import StreamingQueryException
 
 __all__ = ["StreamingQuery", "StreamingQueryManager", "DataStreamReader", "DataStreamWriter"]
 

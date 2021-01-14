@@ -218,7 +218,7 @@ class StreamingTests(ReusedSQLTestCase):
             sq.stop()
 
         from pyspark.sql.functions import col, udf
-        from pyspark.sql.utils import StreamingQueryException
+        from pyspark.sql.exceptions import StreamingQueryException
         bad_udf = udf(lambda x: 1 / 0)
         sq = sdf.select(bad_udf(col("value")))\
             .writeStream\
@@ -460,7 +460,7 @@ class StreamingTests(ReusedSQLTestCase):
         self.assertEqual(len(tester.close_events()), 0)
 
     def test_streaming_foreach_with_process_throwing_error(self):
-        from pyspark.sql.utils import StreamingQueryException
+        from pyspark.sql.exceptions import StreamingQueryException
 
         tester = self.ForeachWriterTester(self.spark)
 
@@ -552,7 +552,7 @@ class StreamingTests(ReusedSQLTestCase):
                 q.stop()
 
     def test_streaming_foreachBatch_propagates_python_errors(self):
-        from pyspark.sql.utils import StreamingQueryException
+        from pyspark.sql.exceptions import StreamingQueryException
 
         q = None
 

@@ -47,6 +47,7 @@ from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.util import fail_on_stopiteration, _parse_memory
+from pyspark.exceptions import NonDriverReferenceError
 
 __all__ = ["RDD"]
 
@@ -259,7 +260,7 @@ class RDD(object):
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle an RDD, which is always an error:
-        raise Exception(
+        raise NonDriverReferenceError(
             "It appears that you are attempting to broadcast an RDD or reference an RDD from an "
             "action or transformation. RDD transformations and actions can only be invoked by the "
             "driver, not inside of other transformations; for example, "

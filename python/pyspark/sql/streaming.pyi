@@ -24,7 +24,7 @@ from pyspark.sql.context import SQLContext
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import OptionUtils
 from pyspark.sql.types import Row, StructType
-from pyspark.sql.utils import StreamingQueryException
+from pyspark.sql.exceptions import StreamingQueryException
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 

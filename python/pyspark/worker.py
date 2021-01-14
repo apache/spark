@@ -34,15 +34,17 @@ import warnings
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
+from pyspark.exceptions import SparkContextConfigurationError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
 from pyspark.resource import ResourceInformation
 from pyspark.rdd import PythonEvalType
-from pyspark.serializers import write_with_length, write_int, read_long, read_bool, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer
-from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
+from pyspark.serializers import write_with_length, write_int, read_long, \
+    read_bool, write_long, read_int, SpecialLengths, UTF8Deserializer, \
+    PickleSerializer, BatchedSerializer
+from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, \
+    CogroupUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
 from pyspark.util import fail_on_stopiteration, try_simplify_traceback
@@ -471,11 +473,12 @@ def main(infile, outfile):
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
-            raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions. " +
-                             "Please check environment variables PYSPARK_PYTHON and " +
-                             "PYSPARK_DRIVER_PYTHON are correctly set.") %
-                            ("%d.%d" % sys.version_info[:2], version))
+            raise SparkContextConfigurationError((
+                "Python in worker has different version %s than that in " +
+                "driver %s, PySpark cannot run with different minor versions. " +
+                "Please check environment variables PYSPARK_PYTHON and " +
+                "PYSPARK_DRIVER_PYTHON are correctly set.") %
+                ("%d.%d" % sys.version_info[:2], version))
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)

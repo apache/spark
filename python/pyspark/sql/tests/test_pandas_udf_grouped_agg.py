@@ -22,7 +22,7 @@ from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, mean, sum, \
     udf, pandas_udf, PandasUDFType
 from pyspark.sql.types import ArrayType, TimestampType
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.exceptions import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest

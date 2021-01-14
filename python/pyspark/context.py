@@ -43,6 +43,8 @@ from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
+from pyspark.exceptions import JavaGatewayError, NonDriverReferenceError, \
+    SparkContextConfigurationError, SparkContextInitializationError
 
 
 __all__ = ['SparkContext']
@@ -188,9 +190,11 @@ class SparkContext(object):
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise Exception("A master URL must be set in your configuration")
+            raise SparkContextConfigurationError(
+                "A master URL must be set in your configuration")
         if not self._conf.contains("spark.app.name"):
-            raise Exception("An application name must be set in your configuration")
+            raise SparkContextConfigurationError(
+                "An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
@@ -328,7 +332,12 @@ class SparkContext(object):
         """
         with SparkContext._lock:
             if not SparkContext._gateway:
-                SparkContext._gateway = gateway or launch_gateway(conf)
+                try:
+                    SparkContext._gateway = gateway or launch_gateway(conf)
+                except JavaGatewayError as java_gateway_error:
+                    raise SparkContextInitializationError(
+                        java_gateway_error) from java_gateway_error
+
                 SparkContext._jvm = SparkContext._gateway.jvm
 
             if instance:
@@ -350,7 +359,7 @@ class SparkContext(object):
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
-        raise Exception(
+        raise NonDriverReferenceError(
             "It appears that you are attempting to reference SparkContext from a broadcast "
             "variable, action, or transformation. SparkContext can only be used on the driver, "
             "not in code that it run on workers. For more information, see SPARK-5063."
@@ -1076,7 +1085,7 @@ class SparkContext(object):
         Returns a Java StorageLevel based on a pyspark.StorageLevel.
         """
         if not isinstance(storageLevel, StorageLevel):
-            raise Exception("storageLevel must be of type pyspark.StorageLevel")
+            raise TypeError("storageLevel must be of type pyspark.StorageLevel")
 
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(storageLevel.useDisk,
@@ -1238,8 +1247,8 @@ class SparkContext(object):
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
         else:
-            raise RuntimeError("'spark.python.profile' configuration must be set "
-                               "to 'true' to enable Python profile.")
+            raise SparkContextConfigurationError("'spark.python.profile' configuration must be set "
+                                                 "to 'true' to enable Python profile.")
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
@@ -1247,8 +1256,8 @@ class SparkContext(object):
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
         else:
-            raise RuntimeError("'spark.python.profile' configuration must be set "
-                               "to 'true' to enable Python profile.")
+            raise SparkContextConfigurationError("'spark.python.profile' configuration must be set "
+                                                 "to 'true' to enable Python profile.")
 
     def getConf(self):
         conf = SparkConf()
@@ -1274,7 +1283,8 @@ class SparkContext(object):
         Throws an exception if a SparkContext is about to be created in executors.
         """
         if TaskContext.get() is not None:
-            raise Exception("SparkContext should only be created and accessed on the driver.")
+            raise NonDriverReferenceError(
+                "SparkContext should only be created and accessed on the driver.")
 
 
 def _test():

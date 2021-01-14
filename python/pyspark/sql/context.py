@@ -24,7 +24,7 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.udf import UDFRegistration  # noqa: F401
-from pyspark.sql.utils import install_exception_handler
+from pyspark.sql.exceptions import install_exception_handler
 
 __all__ = ["SQLContext", "HiveContext"]
 

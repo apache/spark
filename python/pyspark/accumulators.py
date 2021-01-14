@@ -21,6 +21,7 @@ import struct
 import socketserver as SocketServer
 import threading
 from pyspark.serializers import read_int, PickleSerializer
+from pyspark.exceptions import NonDriverReferenceError
 
 
 __all__ = ['Accumulator', 'AccumulatorParam']
@@ -123,14 +124,16 @@ class Accumulator(object):
     def value(self):
         """Get the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise Exception("Accumulator.value cannot be accessed inside tasks")
+            raise NonDriverReferenceError(
+                "Accumulator.value cannot be accessed inside tasks")
         return self._value
 
     @value.setter
     def value(self, value):
         """Sets the accumulator's value; only usable in driver program"""
         if self._deserialized:
-            raise Exception("Accumulator.value cannot be accessed inside tasks")
+            raise NonDriverReferenceError(
+                "Accumulator.value cannot be accessed inside tasks")
         self._value = value
 
     def add(self, term):
@@ -253,7 +256,7 @@ class _UpdateRequestHandler(SocketServer.StreamRequestHandler):
                 # we've authenticated, we can break out of the first loop now
                 return True
             else:
-                raise Exception(
+                raise ValueError(
                     "The value of the provided token to the AccumulatorServer is not correct.")
 
         # first we keep polling till we've received the authentication token

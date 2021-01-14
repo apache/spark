@@ -25,7 +25,7 @@ import unittest
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
     BooleanType, DateType, TimestampType, FloatType
-from pyspark.sql.utils import AnalysisException, IllegalArgumentException
+from pyspark.sql.exceptions import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest

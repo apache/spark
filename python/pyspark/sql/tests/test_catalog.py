@@ -16,7 +16,7 @@
 #
 
 from pyspark.sql.types import StructType, StructField, IntegerType
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.exceptions import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

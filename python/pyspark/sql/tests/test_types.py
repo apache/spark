@@ -27,7 +27,7 @@ import unittest
 from pyspark.sql import Row
 from pyspark.sql.functions import col
 from pyspark.sql.udf import UserDefinedFunction
-from pyspark.sql.utils import AnalysisException
+from pyspark.sql.exceptions import AnalysisException
 from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
     TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
     DecimalType, BinaryType, BooleanType, NullType

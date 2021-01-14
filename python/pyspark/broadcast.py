@@ -25,6 +25,7 @@ import pickle
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.serializers import ChunkedStream, pickle_protocol
 from pyspark.util import print_exec
+from pyspark.exceptions import NonDriverReferenceError
 
 
 __all__ = ['Broadcast']
@@ -154,7 +155,7 @@ class Broadcast(object):
             Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
-            raise Exception("Broadcast can only be unpersisted in driver")
+            raise NonDriverReferenceError("Broadcast can only be unpersisted in driver")
         self._jbroadcast.unpersist(blocking)
 
     def destroy(self, blocking=False):
@@ -173,13 +174,13 @@ class Broadcast(object):
             Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
-            raise Exception("Broadcast can only be destroyed in driver")
+            raise NonDriverReferenceError("Broadcast can only be destroyed in driver")
         self._jbroadcast.destroy(blocking)
         os.unlink(self._path)
 
     def __reduce__(self):
         if self._jbroadcast is None:
-            raise Exception("Broadcast can only be serialized in driver")
+            raise NonDriverReferenceError("Broadcast can only be serialized in driver")
         self._pickle_registry.add(self)
         return _from_id, (self._jbroadcast.id(),)
 

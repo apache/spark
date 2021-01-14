@@ -17,7 +17,7 @@
 #
 
 from pyspark.sql.functions import sha2
-from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
+from pyspark.sql.exceptions import AnalysisException, ParseException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 

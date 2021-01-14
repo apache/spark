@@ -30,6 +30,7 @@ from py4j.java_gateway import java_import, JavaGateway, JavaObject, GatewayParam
 from py4j.clientserver import ClientServer, JavaParameters, PythonParameters
 from pyspark.find_spark_home import _find_spark_home
 from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
+from pyspark.exceptions import JavaGatewayError
 
 
 def launch_gateway(conf=None, popen_kwargs=None):
@@ -105,7 +106,7 @@ def launch_gateway(conf=None, popen_kwargs=None):
                 time.sleep(0.1)
 
             if not os.path.isfile(conn_info_file):
-                raise Exception("Java gateway process exited before sending its port number")
+                raise JavaGatewayError("Java gateway process exited before sending its port number")
 
             with open(conn_info_file, "rb") as info:
                 gateway_port = read_int(info)
@@ -175,7 +176,7 @@ def _do_server_auth(conn, auth_secret):
     reply = UTF8Deserializer().loads(conn)
     if reply != "ok":
         conn.close()
-        raise Exception("Unexpected reply from iterator server.")
+        raise JavaGatewayError("Unexpected reply from iterator server.")
 
 
 def local_connect_and_auth(port, auth_secret):
@@ -211,7 +212,7 @@ def local_connect_and_auth(port, auth_secret):
             errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
             sock.close()
             sock = None
-    raise Exception("could not open socket: %s" % errors)
+    raise JavaGatewayError("could not open socket: %s" % errors)
 
 
 def ensure_callback_server_started(gw):
