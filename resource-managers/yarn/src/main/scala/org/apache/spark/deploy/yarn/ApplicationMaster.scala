@@ -690,7 +690,7 @@ private[spark] class ApplicationMaster(
     val params = client.getAmIpFilterParams(yarnConf, proxyBase)
     driver match {
       case Some(d) =>
-        d.send(AddWebUIFilter(amFilter, params.toMap, proxyBase))
+        d.send(AddWebUIFilter(amFilter, params, proxyBase))
 
       case None =>
         System.setProperty(UI_FILTERS.key, amFilter)
