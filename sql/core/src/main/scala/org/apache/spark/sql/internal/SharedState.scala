@@ -171,15 +171,15 @@ private[sql] class SharedState(
 
 object SharedState extends Logging {
   @volatile private var fsUrlStreamHandlerFactoryInitialized = false
-  private var sharedState: SharedState = _
+  private var _sharedState: SharedState = _
 
   def get(sparkContext: SparkContext, initialConfigs: scala.collection.Map[String, String])
     : SharedState = synchronized {
-    if (sharedState == null) {
+    if (_sharedState == null) {
       // Ensure that we only initiate SharedState once
-      sharedState = new SharedState(sparkContext, initialConfigs)
+      _sharedState = new SharedState(sparkContext, initialConfigs)
     }
-    sharedState
+    _sharedState
   }
 
   private def setFsUrlStreamHandlerFactory(conf: SparkConf, hadoopConf: Configuration): Unit = {
