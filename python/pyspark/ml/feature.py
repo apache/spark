@@ -5769,9 +5769,10 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
                       typeConverter=TypeConverters.toString)
 
     selectionMode = Param(Params._dummy(), "selectionMode",
-                         "The selection mode. " +
-                         "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
-                         typeConverter=TypeConverters.toString)
+                          "The selection mode. " +
+                          "Supported options: numTopFeatures (default), percentile, fpr, " +
+                          "fdr, fwe.",
+                          typeConverter=TypeConverters.toString)
 
     selectionThreshold = Param(Params._dummy(), "selectionThreshold", "The upper bound of the " +
                                "features that selector will select.",
@@ -5839,8 +5840,8 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
       1 / `numFeatures`, thus controlling the family-wise error rate of selection.
 
-    By default, the selection mode is `numTopFeatures`, with the default number of selectionThreshold
-    sets to 50.
+    By default, the selection mode is `numTopFeatures`, with the default number of
+    selectionThreshold sets to 50.
 
     .. versionadded:: 3.1.1
 
