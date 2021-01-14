@@ -5780,7 +5780,7 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
 
     def __init__(self, *args):
         super(_UnivariateFeatureSelectorParams, self).__init__(*args)
-        self._setDefault(selectionMode="numTopFeatures", selectionThreshold=50)
+        self._setDefault(selectionMode="numTopFeatures")
 
     @since("3.1.1")
     def getFeatureType(self):
@@ -5840,8 +5840,7 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
       1 / `numFeatures`, thus controlling the family-wise error rate of selection.
 
-    By default, the selection mode is `numTopFeatures`, with the default number of
-    selectionThreshold sets to 50.
+    By default, the selection mode is `numTopFeatures`.
 
     .. versionadded:: 3.1.1
 
@@ -5856,8 +5855,8 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     ...     (Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0),
     ...     (Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0)],
     ...    ["features", "label"])
-    >>> selector = UnivariateFeatureSelector(selectionThreshold=1, outputCol="selectedFeatures")
-    >>> selector.setFeatureType("continuous").setLabelType("categorical")
+    >>> selector = UnivariateFeatureSelector(outputCol="selectedFeatures")
+    >>> selector.setFeatureType("continuous").setLabelType("categorical").setSelectionThreshold(1)
     UnivariateFeatureSelector...
     >>> model = selector.fit(df)
     >>> model.getFeaturesCol()
@@ -5884,10 +5883,10 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
 
     @keyword_only
     def __init__(self, *, featuresCol="features", outputCol=None,
-                 labelCol="label", selectionMode="numTopFeatures", selectionThreshold=50):
+                 labelCol="label", selectionMode="numTopFeatures"):
         """
         __init__(self, \\*, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectionMode="numTopFeatures", selectionThreshold=50)
+                 labelCol="label", selectionMode="numTopFeatures")
         """
         super(UnivariateFeatureSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.UnivariateFeatureSelector",
@@ -5898,10 +5897,10 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     @keyword_only
     @since("3.1.1")
     def setParams(self, *, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectionMode="numTopFeatures", selectionThreshold=50):
+                  labelCol="labels", selectionMode="numTopFeatures"):
         """
         setParams(self, \\*, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectionMode="numTopFeatures", selectionThreshold=50)
+                  labelCol="labels", selectionMode="numTopFeatures")
         Sets params for this UnivariateFeatureSelector.
         """
         kwargs = self._input_kwargs

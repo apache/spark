@@ -94,7 +94,7 @@ private[feature] trait UnivariateFeatureSelectorParams extends Params
   /** @group getParam */
   def getSelectionThreshold: Double = $(selectionThreshold)
 
-  setDefault(selectionMode -> "numTopFeatures", selectionThreshold -> 50)
+  setDefault(selectionMode -> "numTopFeatures")
 }
 
 /**
@@ -118,8 +118,7 @@ private[feature] trait UnivariateFeatureSelectorParams extends Params
  *  - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
  *    1/numFeatures, thus controlling the family-wise error rate of selection.
  *
- * By default, the selection mode is `numTopFeatures`, with the default selectionThreshold
- * sets to 50.
+ * By default, the selection mode is `numTopFeatures`.
  */
 @Since("3.1.1")
 final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override val uid: String)
@@ -164,6 +163,47 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
     import spark.implicits._
 
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
+
+    $(selectionMode) match {
+      case ("numTopFeatures") =>
+        if (!isSet(selectionThreshold)) {
+          set(selectionThreshold, 50.0)
+        } else {
+          require($(selectionThreshold) > 0 && $(selectionThreshold).toInt == $(selectionThreshold),
+            "selectionThreshold needs to be a positive Integer for selection mode numTopFeatures")
+        }
+      case ("percentile") =>
+        if (!isSet(selectionThreshold)) {
+          set(selectionThreshold, 0.1)
+        } else {
+          require($(selectionThreshold) >= 0 && $(selectionThreshold) <= 1,
+            "selectionThreshold needs to be in the range of 0 to 1 for selection mode percentile")
+        }
+      case ("fpr") =>
+        if (!isSet(selectionThreshold)) {
+          set(selectionThreshold, 0.05)
+        } else {
+          require($(selectionThreshold) >= 0 && $(selectionThreshold) <= 1,
+            "selectionThreshold needs to be in the range of 0 to 1 for selection mode fpr")
+        }
+      case ("fdr") =>
+        if (!isSet(selectionThreshold)) {
+          set(selectionThreshold, 0.05)
+        } else {
+          require($(selectionThreshold) >= 0 && $(selectionThreshold) <= 1,
+            "selectionThreshold needs to be in the range of 0 to 1 for selection mode fdr")
+        }
+      case ("fwe") =>
+        if (!isSet(selectionThreshold)) {
+          set(selectionThreshold, 0.05)
+        } else {
+          require($(selectionThreshold) >= 0 && $(selectionThreshold) <= 1,
+            "selectionThreshold needs to be in the range of 0 to 1 for selection mode fwe")
+        }
+      case _ =>
+        throw new IllegalArgumentException(s"Unsupported selection mode:" +
+          s" selectionMode=${$(selectionMode)}")
+    }
 
     require(isSet(featureType) && isSet(labelType), "featureType and labelType need to be set")
     val resultDF = ($(featureType), $(labelType)) match {
