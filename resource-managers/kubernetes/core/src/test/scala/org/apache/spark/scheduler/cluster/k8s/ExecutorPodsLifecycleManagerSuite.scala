@@ -41,13 +41,13 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
   private var namedExecutorPods: mutable.Map[String, PodResource[Pod, DoneablePod]] = _
 
   @Mock
-  private val kubernetesClient: KubernetesClient = null
+  private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private val podOperations: PODS = null
+  private var podOperations: PODS = _
 
   @Mock
-  private val schedulerBackend: KubernetesClusterSchedulerBackend = null
+  private var schedulerBackend: KubernetesClusterSchedulerBackend = _
 
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
   private var eventHandlerUnderTest: ExecutorPodsLifecycleManager = _

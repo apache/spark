@@ -67,19 +67,19 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   private var waitForExecutorPodsClock: ManualClock = _
 
   @Mock
-  private val kubernetesClient: KubernetesClient = null
+  private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private val podOperations: PODS = null
+  private var podOperations: PODS = _
 
   @Mock
-  private val labeledPods: LABELED_PODS = null
+  private var labeledPods: LABELED_PODS = _
 
   @Mock
-  private val driverPodOperations: PodResource[Pod, DoneablePod] = null
+  private var driverPodOperations: PodResource[Pod, DoneablePod] = _
 
   @Mock
-  private val executorBuilder: KubernetesExecutorBuilder = null
+  private var executorBuilder: KubernetesExecutorBuilder = _
 
   private var snapshotsStore: DeterministicExecutorPodsSnapshotsStore = _
 

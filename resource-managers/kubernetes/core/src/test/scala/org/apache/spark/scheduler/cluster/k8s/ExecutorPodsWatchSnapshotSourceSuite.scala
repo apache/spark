@@ -31,22 +31,22 @@ import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndAfter {
 
   @Mock
-  private val eventQueue: ExecutorPodsSnapshotsStore = null
+  private var eventQueue: ExecutorPodsSnapshotsStore = _
 
   @Mock
-  private val kubernetesClient: KubernetesClient = null
+  private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private val podOperations: PODS = null
+  private var podOperations: PODS = _
 
   @Mock
-  private val appIdLabeledPods: LABELED_PODS = null
+  private var appIdLabeledPods: LABELED_PODS = _
 
   @Mock
-  private val executorRoleLabeledPods: LABELED_PODS = null
+  private var executorRoleLabeledPods: LABELED_PODS = _
 
   @Mock
-  private val watchConnection: Watch = null
+  private var watchConnection: Watch = _
 
   private var watch: ArgumentCaptor[Watcher[Pod]] = _
 

@@ -51,7 +51,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
 
   import org.apache.spark.deploy.DeployTestUtils._
 
-  @Mock(answer = RETURNS_SMART_NULLS) private val shuffleService: ExternalShuffleService = null
+  @Mock(answer = RETURNS_SMART_NULLS) private var shuffleService: ExternalShuffleService = _
 
   def cmd(javaOpts: String*): Command = {
     Command("", Seq.empty, Map.empty, Seq.empty, Seq.empty, Seq(javaOpts : _*))

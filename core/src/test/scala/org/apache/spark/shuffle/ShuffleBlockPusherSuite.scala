@@ -42,12 +42,9 @@ import org.apache.spark.storage._
 
 class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val blockManager: BlockManager = null
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val dependency: ShuffleDependency[Int, Int, Int] = null
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val shuffleClient: BlockStoreClient = null
+  @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var shuffleClient: BlockStoreClient = _
 
   private var conf: SparkConf = _
   private var pushedBlocks = new ArrayBuffer[String]

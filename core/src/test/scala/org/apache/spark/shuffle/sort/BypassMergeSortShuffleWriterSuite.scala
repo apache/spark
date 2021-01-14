@@ -41,16 +41,11 @@ import org.apache.spark.util.Utils
 
 class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val blockManager: BlockManager = null
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val diskBlockManager: DiskBlockManager = null
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val taskContext: TaskContext = null
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val blockResolver: IndexShuffleBlockResolver = null
-  @Mock(answer = RETURNS_SMART_NULLS)
-  private val dependency: ShuffleDependency[Int, Int, Int] = null
+  @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var taskContext: TaskContext = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var blockResolver: IndexShuffleBlockResolver = _
+  @Mock(answer = RETURNS_SMART_NULLS) private var dependency: ShuffleDependency[Int, Int, Int] = _
 
   private var taskMetrics: TaskMetrics = _
   private var tempDir: File = _

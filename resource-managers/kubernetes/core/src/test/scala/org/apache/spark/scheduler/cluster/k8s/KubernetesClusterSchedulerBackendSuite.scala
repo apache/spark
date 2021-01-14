@@ -46,49 +46,49 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     .set("spark.app.id", TEST_SPARK_APP_ID)
 
   @Mock
-  private val sc: SparkContext = null
+  private var sc: SparkContext = _
 
   @Mock
-  private val env: SparkEnv = null
+  private var env: SparkEnv = _
 
   @Mock
-  private val rpcEnv: RpcEnv = null
+  private var rpcEnv: RpcEnv = _
 
   @Mock
-  private val driverEndpointRef: RpcEndpointRef = null
+  private var driverEndpointRef: RpcEndpointRef = _
 
   @Mock
-  private val kubernetesClient: KubernetesClient = null
+  private var kubernetesClient: KubernetesClient = _
 
   @Mock
-  private val podOperations: PODS = null
+  private var podOperations: PODS = _
 
   @Mock
-  private val labeledPods: LABELED_PODS = null
+  private var labeledPods: LABELED_PODS = _
 
   @Mock
-  private val configMapsOperations: CONFIG_MAPS = null
+  private var configMapsOperations: CONFIG_MAPS = _
 
   @Mock
-  private val labledConfigMaps: LABELED_CONFIG_MAPS = null
+  private var labledConfigMaps: LABELED_CONFIG_MAPS = _
 
   @Mock
-  private val taskScheduler: TaskSchedulerImpl = null
+  private var taskScheduler: TaskSchedulerImpl = _
 
   @Mock
-  private val eventQueue: ExecutorPodsSnapshotsStore = null
+  private var eventQueue: ExecutorPodsSnapshotsStore = _
 
   @Mock
-  private val podAllocator: ExecutorPodsAllocator = null
+  private var podAllocator: ExecutorPodsAllocator = _
 
   @Mock
-  private val lifecycleEventHandler: ExecutorPodsLifecycleManager = null
+  private var lifecycleEventHandler: ExecutorPodsLifecycleManager = _
 
   @Mock
-  private val watchEvents: ExecutorPodsWatchSnapshotSource = null
+  private var watchEvents: ExecutorPodsWatchSnapshotSource = _
 
   @Mock
-  private val pollEvents: ExecutorPodsPollingSnapshotSource = null
+  private var pollEvents: ExecutorPodsPollingSnapshotSource = _
 
   private var driverEndpoint: ArgumentCaptor[RpcEndpoint] = _
   private var schedulerBackendUnderTest: KubernetesClusterSchedulerBackend = _
