@@ -69,19 +69,19 @@ The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 
 
  The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
-    
-| From\To   | NumericType | StringType | DateType | TimestampType | IntervalType | BooleanType | BinaryType | ArrayType | MapType | StructType |
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| NumericType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| StringType    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
-| DateType      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| TimestampType | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| IntervalType  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
-| BooleanType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| BinaryType    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
-| ArrayType     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
-| MapType       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
-| StructType    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
+| Numeric   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| String    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
+| Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
+| Map       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
+| Struct    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
 
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
