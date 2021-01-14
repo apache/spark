@@ -29,12 +29,12 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.EventLogFileWriter
+import org.apache.spark.deploy.history.{EventLogFileWriter, RollingEventLogFilesWriter}
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{JsonProtocol, Utils}
-
+// scalastyle:off
 /**
  * A SparkListener that logs events to persistent storage.
  *
@@ -197,6 +197,10 @@ private[spark] class EventLoggingListener(
 
   override def onExecutorExcluded(event: SparkListenerExecutorExcluded): Unit = {
     logEvent(event, flushLogger = true)
+  }
+
+  override def onSparkListenerLogRollUp(logRollUp: SparkListenerLogRollUp): Unit = {
+    logWriter.asInstanceOf[RollingEventLogFilesWriter].rollEventLogFile(logRollUp)
   }
 
   override def onExecutorBlacklistedForStage(

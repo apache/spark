@@ -103,7 +103,7 @@ object EventLogTestHelper {
       events: Seq[SparkListenerEvent],
       rollFile: Boolean): Unit = {
     events.foreach { event => writer.writeEvent(convertEvent(event), flushLogger = true) }
-    if (rollFile) writer.rollEventLogFile()
+    if (rollFile) writer.rollEventLogFile(null)
   }
 
   def convertEvent(event: SparkListenerEvent): String = {
