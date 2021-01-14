@@ -472,6 +472,22 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         Row(1))
     }
   }
+
+  test("SPARK-34114: varchar type will strip tailing spaces to certain length at write time") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('c      ')")
+      checkAnswer(spark.table("t"), Row("c  "))
+    }
+  }
+
+  test("SPARK-34114: varchar type will remain the value length with spaces at read time") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('c ')")
+      checkAnswer(spark.table("t"), Row("c "))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.

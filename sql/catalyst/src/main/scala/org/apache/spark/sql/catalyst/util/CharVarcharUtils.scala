@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{StringTrimRight, _}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -221,17 +221,21 @@ object CharVarcharUtils extends Logging {
           trimmed)
 
       case VarcharType(length) =>
-        val trimmed = if (needTrim) StringTrimRight(expr) else expr
-        // Trailing spaces do not count in the length check. We need to retain the trailing spaces
-        // (truncate to length N), as there is no read-time padding for varchar type.
-        // TODO: create a special TrimRight function that can trim to a certain length.
-        If(
-          LessThanOrEqual(Length(expr), Literal(length)),
-          expr,
+        if (needTrim) {
+          val trimmed = StringTrimRight(expr)
+          // Trailing spaces do not count in the length check. We need to retain the trailing spaces
+          // (truncate to length N), as there is no read-time padding for varchar type.
+          // TODO: create a special TrimRight function that can trim to a certain length.
           If(
-            GreaterThan(Length(trimmed), Literal(length)),
-            raiseError("varchar", length),
-            StringRPad(trimmed, Literal(length))))
+            LessThanOrEqual(Length(expr), Literal(length)),
+            expr,
+            If(
+              GreaterThan(Length(trimmed), Literal(length)),
+              raiseError("varchar", length),
+              StringRPad(trimmed, Literal(length))))
+        } else {
+          If(GreaterThan(Length(expr), Literal(length)), raiseError("varchar", length), expr)
+        }
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
