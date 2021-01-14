@@ -112,7 +112,7 @@ private[spark] class AppStatusStore(
       it.toSeq
     }
   }
-  
+
   def stageData(
       stageId: Int,
       details: Boolean = false,
@@ -140,7 +140,7 @@ private[spark] class AppStatusStore(
       it.close()
     }
   }
-  
+
   def stageAttempt(
       stageId: Int,
       stageAttemptId: Int,
@@ -438,7 +438,7 @@ private[spark] class AppStatusStore(
 
     constructTaskDataList(taskDataWrapperIter)
   }
-  
+
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
@@ -462,7 +462,7 @@ private[spark] class AppStatusStore(
       case _: NoSuchElementException => None
     }
   }
-  
+
   private def stageWithDetails(
       stage: v1.StageData,
       taskStatus: JList[v1.TaskStatus]): v1.StageData = {
