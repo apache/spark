@@ -399,7 +399,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       try {
         val plan = sparkSession.sessionState.executePlan(viewDef)
         sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession, plan.analyzed, cascade = false)
+          sparkSession, plan.analyzed, cascade = true)
       } catch {
         case NonFatal(_) => // ignore
       }
@@ -420,7 +420,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       try {
         val plan = sparkSession.sessionState.executePlan(viewDef)
         sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession, plan.analyzed, cascade = false)
+          sparkSession, plan.analyzed, cascade = true)
       } catch {
         case NonFatal(_) => // ignore
       }
