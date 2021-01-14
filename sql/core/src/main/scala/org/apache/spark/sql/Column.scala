@@ -1186,7 +1186,9 @@ class Column(val expr: Expression) extends Logging {
    * @since 1.3.0
    */
   def cast(to: DataType): Column = withExpr {
-    Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
+    val cast = Cast(expr, CharVarcharUtils.replaceCharVarcharWithStringForCast(to))
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast
   }
 
   /**
