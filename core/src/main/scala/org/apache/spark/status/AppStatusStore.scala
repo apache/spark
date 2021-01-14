@@ -112,15 +112,15 @@ private[spark] class AppStatusStore(
       it.toSeq
     }
   }
-
+  
   def stageData(
-    stageId: Int,
-    details: Boolean = false,
-    taskStatus: JList[v1.TaskStatus] = List().asJava): Seq[v1.StageData] = {
+      stageId: Int,
+      details: Boolean = false,
+      taskStatus: JList[v1.TaskStatus] = List().asJava): Seq[v1.StageData] = {
     store.view(classOf[StageDataWrapper]).index("stageId").first(stageId).last(stageId)
-      .asScala.map { s =>
-        if (details) stageWithDetails(s.info, taskStatus) else s.info
-      }.toSeq
+        .asScala.map { s =>
+      if (details) stageWithDetails(s.info, taskStatus) else s.info
+    }.toSeq
   }
 
   def lastStageAttempt(stageId: Int): v1.StageData = {
@@ -140,12 +140,12 @@ private[spark] class AppStatusStore(
       it.close()
     }
   }
-
+  
   def stageAttempt(
-    stageId: Int,
-    stageAttemptId: Int,
-    details: Boolean = false,
-    taskStatus: JList[v1.TaskStatus] = List().asJava): (v1.StageData, Seq[Int]) = {
+      stageId: Int,
+      stageAttemptId: Int,
+      details: Boolean = false,
+      taskStatus: JList[v1.TaskStatus] = List().asJava): (v1.StageData, Seq[Int]) = {
     val stageKey = Array(stageId, stageAttemptId)
     val stageDataWrapper = store.read(classOf[StageDataWrapper], stageKey)
     val stage = if (details) {
@@ -438,11 +438,11 @@ private[spark] class AppStatusStore(
 
     constructTaskDataList(taskDataWrapperIter)
   }
-
+  
   def executorSummary(stageId: Int, attemptId: Int): Map[String, v1.ExecutorStageSummary] = {
     val stageKey = Array(stageId, attemptId)
     store.view(classOf[ExecutorStageSummaryWrapper]).index("stage").first(stageKey).last(stageKey)
-      .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
+        .asScala.map { exec => (exec.executorId -> exec.info) }.toMap
   }
 
   def rddList(cachedOnly: Boolean = true): Seq[v1.RDDStorageInfo] = {
@@ -462,13 +462,13 @@ private[spark] class AppStatusStore(
       case _: NoSuchElementException => None
     }
   }
-
+  
   private def stageWithDetails(
-    stage: v1.StageData,
-    taskStatus: JList[v1.TaskStatus]): v1.StageData = {
+      stage: v1.StageData,
+      taskStatus: JList[v1.TaskStatus]): v1.StageData = {
     val tasks = taskList(stage.stageId, stage.attemptId, 0, Int.MaxValue, None, false, taskStatus)
-      .map { t => (t.taskId, t) }
-      .toMap
+        .map { t => (t.taskId, t) }
+        .toMap
 
     new v1.StageData(
       status = stage.status,
