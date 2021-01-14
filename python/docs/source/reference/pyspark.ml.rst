@@ -272,10 +272,8 @@ Statistics
     :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVATest
     ChiSquareTest
     Correlation
-    FValueTest
     KolmogorovSmirnovTest
     MultivariateGaussian
     Summarizer
