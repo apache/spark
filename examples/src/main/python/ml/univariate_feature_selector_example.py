@@ -41,14 +41,15 @@ if __name__ == "__main__":
         (5, Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0,),
         (6, Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0,)], ["id", "features", "label"])
 
-    selector = UnivariateFeatureSelector(numTopFeatures=1, featuresCol="features",
-                                         outputCol="selectedFeatures", labelCol="label")
+    selector = UnivariateFeatureSelector(selectionThreshold=1, featuresCol="features",
+                                         outputCol="selectedFeatures", labelCol="label",
+                                         selectionMode="numTopFeatures")
     selector.setFeatureType("continuous").setLabelType("categorical")
 
     result = selector.fit(df).transform(df)
 
     print("UnivariateFeatureSelector output with top %d features selected using f_classif"
-          % selector.getNumTopFeatures())
+          % selector.getSelectionThreshold())
     result.show()
     # $example off$
 

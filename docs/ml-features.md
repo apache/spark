@@ -1807,14 +1807,14 @@ continuous  |categorical | f_classif
 continuous  |continuous  | f_regression
 ~~~
 
-It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
+It supports five selection modes: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
 * `numTopFeatures` chooses a fixed number of top features.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
 * `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
 * `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
 * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
-By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
-The user can choose a selection method using `setSelectorType`.
+
+By default, the selection mode is `numTopFeatures`, with the default selectionThreshold sets to 50.
 
 **Examples**
 

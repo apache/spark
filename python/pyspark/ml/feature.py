@@ -5768,90 +5768,46 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
                       "Supported options: categorical, continuous.",
                       typeConverter=TypeConverters.toString)
 
-    selectorType = Param(Params._dummy(), "selectorType",
-                         "The selector type. " +
+    selectionMode = Param(Params._dummy(), "selectionMode",
+                         "The selection mode. " +
                          "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
                          typeConverter=TypeConverters.toString)
 
-    numTopFeatures = \
-        Param(Params._dummy(), "numTopFeatures",
-              "Number of features that selector will select, ordered by ascending p-value. " +
-              "If the number of features is < numTopFeatures, then this will select " +
-              "all features.", typeConverter=TypeConverters.toInt)
-
-    percentile = Param(Params._dummy(), "percentile", "Percentile of features that selector " +
-                       "will select, ordered by ascending p-value.",
-                       typeConverter=TypeConverters.toFloat)
-
-    fpr = Param(Params._dummy(), "fpr", "The highest p-value for features to be kept.",
-                typeConverter=TypeConverters.toFloat)
-
-    fdr = Param(Params._dummy(), "fdr", "The upper bound of the expected false discovery rate.",
-                typeConverter=TypeConverters.toFloat)
-
-    fwe = Param(Params._dummy(), "fwe", "The upper bound of the expected family-wise error rate.",
-                typeConverter=TypeConverters.toFloat)
+    selectionThreshold = Param(Params._dummy(), "selectionThreshold", "The upper bound of the " +
+                               "features that selector will select.",
+                               typeConverter=TypeConverters.toFloat)
 
     def __init__(self, *args):
         super(_UnivariateFeatureSelectorParams, self).__init__(*args)
-        self._setDefault(numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1,
-                         fpr=0.05, fdr=0.05, fwe=0.05)
+        self._setDefault(selectionMode="numTopFeatures", selectionThreshold=50)
 
-    @since("3.1.0")
+    @since("3.1.1")
     def getFeatureType(self):
         """
         Gets the value of featureType or its default value.
         """
         return self.getOrDefault(self.featureType)
 
-    @since("3.1.0")
+    @since("3.1.1")
     def getLabelType(self):
         """
         Gets the value of labelType or its default value.
         """
         return self.getOrDefault(self.labelType)
 
-    @since("3.1.0")
-    def getSelectorType(self):
+    @since("3.1.1")
+    def getSelectionMode(self):
         """
-        Gets the value of selectorType or its default value.
+        Gets the value of selectionMode or its default value.
         """
-        return self.getOrDefault(self.selectorType)
+        return self.getOrDefault(self.selectionMode)
 
-    @since("3.1.0")
-    def getNumTopFeatures(self):
+    @since("3.1.1")
+    def getSelectionThreshold(self):
         """
-        Gets the value of numTopFeatures or its default value.
+        Gets the value of selectionThreshold or its default value.
         """
-        return self.getOrDefault(self.numTopFeatures)
-
-    @since("3.1.0")
-    def getPercentile(self):
-        """
-        Gets the value of percentile or its default value.
-        """
-        return self.getOrDefault(self.percentile)
-
-    @since("3.1.0")
-    def getFpr(self):
-        """
-        Gets the value of fpr or its default value.
-        """
-        return self.getOrDefault(self.fpr)
-
-    @since("3.1.0")
-    def getFdr(self):
-        """
-        Gets the value of fdr or its default value.
-        """
-        return self.getOrDefault(self.fdr)
-
-    @since("3.1.0")
-    def getFwe(self):
-        """
-        Gets the value of fwe or its default value.
-        """
-        return self.getOrDefault(self.fwe)
+        return self.getOrDefault(self.selectionThreshold)
 
 
 @inherit_doc
@@ -5868,7 +5824,7 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     - `featureType` `continuous` and `labelType` `categorical`, Spark uses f_classif.
     - `featureType` `continuous` and `labelType` `continuous`, Spark uses f_regression.
 
-    The `UnivariateFeatureSelector` supports different selection methods: `numTopFeatures`,
+    The `UnivariateFeatureSelector` supports different selection modes: `numTopFeatures`,
     `percentile`, `fpr`, `fdr`, `fwe`.
 
     - `numTopFeatures` chooses a fixed number of top features according to a according to a
@@ -5883,10 +5839,10 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
       1 / `numFeatures`, thus controlling the family-wise error rate of selection.
 
-    By default, the selection method is `numTopFeatures`, with the default number of top features
-    set to 50.
+    By default, the selection mode is `numTopFeatures`, with the default number of selectionThreshold
+    sets to 50.
 
-    .. versionadded:: 3.1.0
+    .. versionadded:: 3.1.1
 
     Examples
     --------
@@ -5899,7 +5855,7 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     ...     (Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0),
     ...     (Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0)],
     ...    ["features", "label"])
-    >>> selector = UnivariateFeatureSelector(numTopFeatures=1, outputCol="selectedFeatures")
+    >>> selector = UnivariateFeatureSelector(selectionThreshold=1, outputCol="selectedFeatures")
     >>> selector.setFeatureType("continuous").setLabelType("categorical")
     UnivariateFeatureSelector...
     >>> model = selector.fit(df)
@@ -5914,7 +5870,7 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     >>> selectorPath = temp_path + "/selector"
     >>> selector.save(selectorPath)
     >>> loadedSelector = UnivariateFeatureSelector.load(selectorPath)
-    >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
+    >>> loadedSelector.getSelectionThreshold() == selector.getSelectionThreshold()
     True
     >>> modelPath = temp_path + "/selector-model"
     >>> model.save(modelPath)
@@ -5926,13 +5882,11 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
     """
 
     @keyword_only
-    def __init__(self, *, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                 fdr=0.05, fwe=0.05):
+    def __init__(self, *, featuresCol="features", outputCol=None,
+                 labelCol="label", selectionMode="numTopFeatures", selectionThreshold=50):
         """
-        __init__(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
-                 fdr=0.05, fwe=0.05)
+        __init__(self, \\*, featuresCol="features", outputCol=None, \
+                 labelCol="label", selectionMode="numTopFeatures", selectionThreshold=50)
         """
         super(UnivariateFeatureSelector, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.UnivariateFeatureSelector",
@@ -5941,79 +5895,44 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
         self.setParams(**kwargs)
 
     @keyword_only
-    @since("3.1.0")
-    def setParams(self, *, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                  fdr=0.05, fwe=0.05):
+    @since("3.1.1")
+    def setParams(self, *, featuresCol="features", outputCol=None,
+                  labelCol="labels", selectionMode="numTopFeatures", selectionThreshold=50):
         """
-        setParams(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
-                  fdr=0.05, fwe=0.05)
+        setParams(self, \\*, featuresCol="features", outputCol=None, \
+                  labelCol="labels", selectionMode="numTopFeatures", selectionThreshold=50)
         Sets params for this UnivariateFeatureSelector.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
 
-    @since("3.1.0")
+    @since("3.1.1")
     def setFeatureType(self, value):
         """
         Sets the value of :py:attr:`featureType`.
         """
         return self._set(featureType=value)
 
-    @since("3.1.0")
+    @since("3.1.1")
     def setLabelType(self, value):
         """
         Sets the value of :py:attr:`labelType`.
         """
         return self._set(labelType=value)
 
-    @since("3.1.0")
-    def setSelectorType(self, value):
+    @since("3.1.1")
+    def setSelectionMode(self, value):
         """
-        Sets the value of :py:attr:`selectorType`.
+        Sets the value of :py:attr:`selectionMode`.
         """
-        return self._set(selectorType=value)
+        return self._set(selectionMode=value)
 
-    @since("3.1.0")
-    def setNumTopFeatures(self, value):
+    @since("3.1.1")
+    def setSelectionThreshold(self, value):
         """
-        Sets the value of :py:attr:`numTopFeatures`.
-        Only applicable when selectorType = "numTopFeatures".
+        Sets the value of :py:attr:`selectionThreshold`.
         """
-        return self._set(numTopFeatures=value)
-
-    @since("3.1.0")
-    def setPercentile(self, value):
-        """
-        Sets the value of :py:attr:`percentile`.
-        Only applicable when selectorType = "percentile".
-        """
-        return self._set(percentile=value)
-
-    @since("3.1.0")
-    def setFpr(self, value):
-        """
-        Sets the value of :py:attr:`fpr`.
-        Only applicable when selectorType = "fpr".
-        """
-        return self._set(fpr=value)
-
-    @since("3.1.0")
-    def setFdr(self, value):
-        """
-        Sets the value of :py:attr:`fdr`.
-        Only applicable when selectorType = "fdr".
-        """
-        return self._set(fdr=value)
-
-    @since("3.1.0")
-    def setFwe(self, value):
-        """
-        Sets the value of :py:attr:`fwe`.
-        Only applicable when selectorType = "fwe".
-        """
-        return self._set(fwe=value)
+        return self._set(selectionThreshold=value)
 
     def setFeaturesCol(self, value):
         """
@@ -6042,17 +5961,17 @@ class UnivariateFeatureSelectorModel(JavaModel, _UnivariateFeatureSelectorParams
     """
     Model fitted by :py:class:`UnivariateFeatureSelector`.
 
-    .. versionadded:: 3.1.0
+    .. versionadded:: 3.1.1
     """
 
-    @since("3.1.0")
+    @since("3.1.1")
     def setFeaturesCol(self, value):
         """
         Sets the value of :py:attr:`featuresCol`.
         """
         return self._set(featuresCol=value)
 
-    @since("3.1.0")
+    @since("3.1.1")
     def setOutputCol(self, value):
         """
         Sets the value of :py:attr:`outputCol`.
@@ -6060,7 +5979,7 @@ class UnivariateFeatureSelectorModel(JavaModel, _UnivariateFeatureSelectorParams
         return self._set(outputCol=value)
 
     @property
-    @since("3.1.0")
+    @since("3.1.1")
     def selectedFeatures(self):
         """
         List of indices to select (filter).

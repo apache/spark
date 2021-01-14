@@ -340,9 +340,9 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test numTopFeatures") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
-      (selector1.setNumTopFeatures(1), datasetAnova),
-      (selector2.setNumTopFeatures(1), datasetFRegression),
-      (selector3.setNumTopFeatures(1), datasetChi2)
+      (selector1.setSelectionMode("numTopFeatures").setSelectionThreshold(1), datasetAnova),
+      (selector2.setSelectionMode("numTopFeatures").setSelectionThreshold(1), datasetFRegression),
+      (selector3.setSelectionMode("numTopFeatures").setSelectionThreshold(1), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -352,9 +352,9 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test percentile") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
-      (selector1.setSelectorType("percentile").setPercentile(0.17), datasetAnova),
-      (selector2.setSelectorType("percentile").setPercentile(0.17), datasetFRegression),
-      (selector3.setSelectorType("percentile").setPercentile(0.17), datasetChi2)
+      (selector1.setSelectionMode("percentile").setSelectionThreshold(0.17), datasetAnova),
+      (selector2.setSelectionMode("percentile").setSelectionThreshold(0.17), datasetFRegression),
+      (selector3.setSelectionMode("percentile").setSelectionThreshold(0.17), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -364,9 +364,9 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test fpr") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
-      (selector1.setSelectorType("fpr").setFpr(1.0E-12), datasetAnova),
-      (selector2.setSelectorType("fpr").setFpr(0.01), datasetFRegression),
-      (selector3.setSelectorType("fpr").setFpr(0.02), datasetChi2)
+      (selector1.setSelectionMode("fpr").setSelectionThreshold(1.0E-12), datasetAnova),
+      (selector2.setSelectionMode("fpr").setSelectionThreshold(0.01), datasetFRegression),
+      (selector3.setSelectionMode("fpr").setSelectionThreshold(0.02), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -376,9 +376,9 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test fdr") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
-      (selector1.setSelectorType("fdr").setFdr(6.0E-12), datasetAnova),
-      (selector2.setSelectorType("fdr").setFdr(0.03), datasetFRegression),
-      (selector3.setSelectorType("fdr").setFdr(0.12), datasetChi2)
+      (selector1.setSelectionMode("fdr").setSelectionThreshold(6.0E-12), datasetAnova),
+      (selector2.setSelectionMode("fdr").setSelectionThreshold(0.03), datasetFRegression),
+      (selector3.setSelectionMode("fdr").setSelectionThreshold(0.12), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -388,9 +388,9 @@ class UnivariateFeatureSelectorSuite extends MLTest with DefaultReadWriteTest {
 
   test("Test fwe") {
     val testParams: Seq[(UnivariateFeatureSelector, Dataset[_])] = Seq(
-      (selector1.setSelectorType("fwe").setFwe(6.0E-12), datasetAnova),
-      (selector2.setSelectorType("fwe").setFwe(0.03), datasetFRegression),
-      (selector3.setSelectorType("fwe").setFwe(0.12), datasetChi2)
+      (selector1.setSelectionMode("fwe").setSelectionThreshold(6.0E-12), datasetAnova),
+      (selector2.setSelectionMode("fwe").setSelectionThreshold(0.03), datasetFRegression),
+      (selector3.setSelectionMode("fwe").setSelectionThreshold(0.12), datasetChi2)
     )
     for ((sel, dataset) <- testParams) {
       val model = testSelector(sel, dataset)
@@ -432,9 +432,8 @@ object UnivariateFeatureSelectorSuite {
    * This excludes input columns to simplify some tests.
    */
   val allParamSettings: Map[String, Any] = Map(
-    "selectorType" -> "percentile",
-    "numTopFeatures" -> 1,
-    "percentile" -> 0.12,
+    "selectionMode" -> "percentile",
+    "selectionThreshold" -> 0.12,
     "outputCol" -> "myOutput"
   )
 }

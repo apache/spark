@@ -66,15 +66,16 @@ public class JavaUnivariateFeatureSelectorExample {
     UnivariateFeatureSelector selector = new UnivariateFeatureSelector()
       .setFeatureType("continuous")
       .setLabelType("categorical")
-      .setNumTopFeatures(1)
+      .setSelectionMode("numTopFeatures")
+      .setSelectionThreshold(1)
       .setFeaturesCol("features")
       .setLabelCol("label")
       .setOutputCol("selectedFeatures");
 
     Dataset<Row> result = selector.fit(df).transform(df);
 
-    System.out.println("UnivariateFeatureSelector output with top " + selector.getNumTopFeatures()
-        + " features selected using f_classif");
+    System.out.println("UnivariateFeatureSelector output with top "
+        + selector.getSelectionThreshold() + " features selected using f_classif");
     result.show();
 
     // $example off$

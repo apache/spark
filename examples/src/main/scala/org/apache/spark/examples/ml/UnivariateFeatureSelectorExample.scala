@@ -54,14 +54,15 @@ object UnivariateFeatureSelectorExample {
     val selector = new UnivariateFeatureSelector()
       .setFeatureType("continuous")
       .setLabelType("categorical")
-      .setNumTopFeatures(1)
+      .setSelectionMode("numTopFeatures")
+      .setSelectionThreshold(1)
       .setFeaturesCol("features")
       .setLabelCol("label")
       .setOutputCol("selectedFeatures")
 
     val result = selector.fit(df).transform(df)
 
-    println(s"UnivariateFeatureSelector output with top ${selector.getNumTopFeatures}" +
+    println(s"UnivariateFeatureSelector output with top ${selector.getSelectionThreshold}" +
       s" features selected using f_classif")
     result.show()
     // $example off$
