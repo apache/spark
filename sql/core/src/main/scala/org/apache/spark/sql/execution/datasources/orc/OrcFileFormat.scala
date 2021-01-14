@@ -160,9 +160,6 @@ class OrcFileFormat
     val capacity = sqlConf.orcVectorizedReaderBatchSize
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
-    OrcConf.FORCE_POSITIONAL_EVOLUTION.setBoolean(hadoopConf,
-      hadoopConf.getBoolean("spark.hadoop." + OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute,
-        false))
 
     val broadcastedConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))

@@ -325,8 +325,7 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val deserializer = new OrcSerde
     val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
-    val forcePositionalEvolution =
-      conf.getBoolean("spark.hadoop." + OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute, false)
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {

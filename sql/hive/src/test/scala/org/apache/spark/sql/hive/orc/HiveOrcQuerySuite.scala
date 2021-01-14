@@ -319,8 +319,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     Seq("native", "hive").foreach { orcImpl =>
       Seq(true, false).foreach { forcePositionalEvolution =>
         withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
-          "spark.hadoop." + OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute ->
-            forcePositionalEvolution.toString) {
+          OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
             Seq((1, 2), (3, 4), (5, 6)).toDF("c1", "c2").write.orc(path)
@@ -350,8 +349,7 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     Seq("native", "hive").foreach { orcImpl =>
       Seq(true, false).foreach { forcePositionalEvolution =>
         withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
-          "spark.hadoop." + OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute ->
-            forcePositionalEvolution.toString) {
+          OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString) {
           withTempPath { f =>
             val path = f.getCanonicalPath
             Seq((1, 2, 1), (3, 4, 2), (5, 6, 3)).toDF("c1", "c2", "p")

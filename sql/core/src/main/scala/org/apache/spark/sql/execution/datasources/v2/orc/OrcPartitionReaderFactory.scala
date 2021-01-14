@@ -81,8 +81,6 @@ case class OrcPartitionReaderFactory(
     val conf = broadcastedConf.value.value
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
-    OrcConf.FORCE_POSITIONAL_EVOLUTION.setBoolean(conf,
-      conf.getBoolean("spark.hadoop." + OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute, false))
 
     val filePath = new Path(new URI(file.filePath))
 
@@ -131,8 +129,6 @@ case class OrcPartitionReaderFactory(
     val conf = broadcastedConf.value.value
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(conf, isCaseSensitive)
-    OrcConf.FORCE_POSITIONAL_EVOLUTION.setBoolean(conf,
-      conf.getBoolean("spark.hadoop." + OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute, false))
 
     val filePath = new Path(new URI(file.filePath))
 
