@@ -126,9 +126,10 @@ trait WindowExecBase extends UnaryExecNode {
     // Add a function and its function to the map for a given frame.
     def collect(tpe: String, fr: SpecifiedWindowFrame, e: Expression, fn: Expression): Unit = {
       val key = fn match {
-        // This branch is used for Lead/Lag to support ignoring null.
-        // All window frames move in rows. If there are multiple Leads or Lags acting on a row
-        // and operating on different input expressions, they should not be moved uniformly
+        // This branch is used for Lead/Lag to support ignoring null and optimize the performance
+        // for NthValue ignoring null.
+        // All window frames move in rows. If there are multiple Leads, Lags or NthValues acting on
+        // a row and operating on different input expressions, they should not be moved uniformly
         // by row. Therefore, we put these functions in different window frames.
         case f: OffsetWindowFunction if f.ignoreNulls =>
           (tpe, fr.frameType, fr.lower, fr.upper, f.children.map(_.canonicalized))
