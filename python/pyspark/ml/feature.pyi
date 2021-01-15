@@ -1579,29 +1579,29 @@ class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol
     def getFeatureType(self) -> str: ...
     def getLabelType(self) -> str: ...
     def getSelectionMode(self) -> str: ...
-    def getSelectionThreshold -> float: ...
+    def getSelectionThreshold(self) -> float: ...
 
 class UnivariateFeatureSelector(
     JavaEstimator[UnivariateFeatureSelectorModel],
     _UnivariateFeatureSelectorParams,
     JavaMLReadable[UnivariateFeatureSelector],
-    JavaMLWritable
+    JavaMLWritable,
 ):
     def __init__(
         self,
+        *,
         featuresCol: str = ...,
         outputCol: Optional[str] = ...,
         labelCol: str = ...,
         selectionMode: str = ...,
-        selectionThreshold: float = ...,
     ) -> None: ...
     def setParams(
         self,
+        *,
         featuresCol: str = ...,
         outputCol: Optional[str] = ...,
         labelCol: str = ...,
         selectionMode: str = ...,
-        selectionThreshold: float = ...,
     ) -> UnivariateFeatureSelector: ...
     def setFeatureType(self, value: str) -> UnivariateFeatureSelector: ...
     def setLabelType(self, value: str) -> UnivariateFeatureSelector: ...
@@ -1615,7 +1615,7 @@ class UnivariateFeatureSelectorModel(
     JavaModel,
     _UnivariateFeatureSelectorParams,
     JavaMLReadable[UnivariateFeatureSelectorModel],
-    JavaMLWritable
+    JavaMLWritable,
 ):
     def setFeaturesCol(self, value: str) -> UnivariateFeatureSelectorModel: ...
     def setOutputCol(self, value: str) -> UnivariateFeatureSelectorModel: ...
