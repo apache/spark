@@ -61,7 +61,7 @@ Condition : ((isnotnull(cs_ship_date_sk#1) AND isnotnull(cs_ship_addr_sk#2)) AND
 
 (4) Exchange
 Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
-Arguments: hashpartitioning(cs_order_number#5, 5), true, [id=#8]
+Arguments: hashpartitioning(cs_order_number#5, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (5) Sort [codegen id : 2]
 Input [7]: [cs_ship_date_sk#1, cs_ship_addr_sk#2, cs_call_center_sk#3, cs_warehouse_sk#4, cs_order_number#5, cs_ext_ship_cost#6, cs_net_profit#7]
@@ -82,7 +82,7 @@ Input [2]: [cs_warehouse_sk#4, cs_order_number#5]
 
 (9) Exchange
 Input [2]: [cs_warehouse_sk#4#9, cs_order_number#5#10]
-Arguments: hashpartitioning(cs_order_number#5#10, 5), true, [id=#11]
+Arguments: hashpartitioning(cs_order_number#5#10, 5), ENSURE_REQUIREMENTS, [id=#11]
 
 (10) Sort [codegen id : 4]
 Input [2]: [cs_warehouse_sk#4#9, cs_order_number#5#10]
@@ -108,7 +108,7 @@ Input [1]: [cr_order_number#12]
 
 (15) Exchange
 Input [1]: [cr_order_number#12]
-Arguments: hashpartitioning(cr_order_number#12, 5), true, [id=#13]
+Arguments: hashpartitioning(cr_order_number#12, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (16) Sort [codegen id : 7]
 Input [1]: [cr_order_number#12]
@@ -235,7 +235,7 @@ Results [3]: [sum#25, sum#26, count#28]
 
 (42) Exchange
 Input [3]: [sum#25, sum#26, count#28]
-Arguments: SinglePartition, true, [id=#29]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#29]
 
 (43) HashAggregate [codegen id : 12]
 Input [3]: [sum#25, sum#26, count#28]

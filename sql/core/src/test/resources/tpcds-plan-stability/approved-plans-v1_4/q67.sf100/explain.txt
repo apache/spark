@@ -109,7 +109,7 @@ Input [9]: [ss_item_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, d_year
 
 (17) Exchange
 Input [7]: [ss_item_sk#2, ss_quantity#4, ss_sales_price#5, d_year#8, d_moy#9, d_qoy#10, s_store_id#13]
-Arguments: hashpartitioning(ss_item_sk#2, 5), true, [id=#15]
+Arguments: hashpartitioning(ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (18) Sort [codegen id : 4]
 Input [7]: [ss_item_sk#2, ss_quantity#4, ss_sales_price#5, d_year#8, d_moy#9, d_qoy#10, s_store_id#13]
@@ -131,7 +131,7 @@ Condition : isnotnull(i_item_sk#16)
 
 (22) Exchange
 Input [5]: [i_item_sk#16, i_brand#17, i_class#18, i_category#19, i_product_name#20]
-Arguments: hashpartitioning(i_item_sk#16, 5), true, [id=#21]
+Arguments: hashpartitioning(i_item_sk#16, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (23) Sort [codegen id : 6]
 Input [5]: [i_item_sk#16, i_brand#17, i_class#18, i_category#19, i_product_name#20]
@@ -159,7 +159,7 @@ Results [11]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#
 
 (28) Exchange
 Input [11]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, spark_grouping_id#30, sum#33, isEmpty#34]
-Arguments: hashpartitioning(i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, spark_grouping_id#30, 5), true, [id=#35]
+Arguments: hashpartitioning(i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, spark_grouping_id#30, 5), ENSURE_REQUIREMENTS, [id=#35]
 
 (29) HashAggregate [codegen id : 8]
 Input [11]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, spark_grouping_id#30, sum#33, isEmpty#34]
@@ -170,7 +170,7 @@ Results [9]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#2
 
 (30) Exchange
 Input [9]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, sumsales#37]
-Arguments: hashpartitioning(i_category#22, 5), true, [id=#38]
+Arguments: hashpartitioning(i_category#22, 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (31) Sort [codegen id : 9]
 Input [9]: [i_category#22, i_class#23, i_brand#24, i_product_name#25, d_year#26, d_qoy#27, d_moy#28, s_store_id#29, sumsales#37]

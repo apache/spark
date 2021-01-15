@@ -149,7 +149,7 @@ Input [9]: [ss_item_sk#2, ss_store_sk#3, ss_quantity#4, ss_sales_price#5, d_year
 
 (17) Exchange
 Input [7]: [ss_item_sk#2, ss_quantity#4, ss_sales_price#5, d_year#8, d_moy#9, d_qoy#10, s_store_id#13]
-Arguments: hashpartitioning(ss_item_sk#2, 5), true, [id=#15]
+Arguments: hashpartitioning(ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (18) Sort [codegen id : 4]
 Input [7]: [ss_item_sk#2, ss_quantity#4, ss_sales_price#5, d_year#8, d_moy#9, d_qoy#10, s_store_id#13]
@@ -171,7 +171,7 @@ Condition : isnotnull(i_item_sk#16)
 
 (22) Exchange
 Input [5]: [i_item_sk#16, i_brand#17, i_class#18, i_category#19, i_product_name#20]
-Arguments: hashpartitioning(i_item_sk#16, 5), true, [id=#21]
+Arguments: hashpartitioning(i_item_sk#16, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (23) Sort [codegen id : 6]
 Input [5]: [i_item_sk#16, i_brand#17, i_class#18, i_category#19, i_product_name#20]
@@ -195,7 +195,7 @@ Results [10]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#
 
 (27) Exchange
 Input [10]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sum#24, isEmpty#25]
-Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, 5), true, [id=#26]
+Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (28) HashAggregate [codegen id : 8]
 Input [10]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sum#24, isEmpty#25]
@@ -223,7 +223,7 @@ Results [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8
 
 (32) Exchange
 Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, sum#35, isEmpty#36]
-Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, 5), true, [id=#37]
+Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, 5), ENSURE_REQUIREMENTS, [id=#37]
 
 (33) HashAggregate [codegen id : 17]
 Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, sum#35, isEmpty#36]
@@ -251,7 +251,7 @@ Results [8]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8
 
 (37) Exchange
 Input [8]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, sum#46, isEmpty#47]
-Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, 5), true, [id=#48]
+Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, 5), ENSURE_REQUIREMENTS, [id=#48]
 
 (38) HashAggregate [codegen id : 26]
 Input [8]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, sum#46, isEmpty#47]
@@ -279,7 +279,7 @@ Results [7]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8
 
 (42) Exchange
 Input [7]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, sum#58, isEmpty#59]
-Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, 5), true, [id=#60]
+Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, 5), ENSURE_REQUIREMENTS, [id=#60]
 
 (43) HashAggregate [codegen id : 35]
 Input [7]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, sum#58, isEmpty#59]
@@ -307,7 +307,7 @@ Results [6]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, sum#71, 
 
 (47) Exchange
 Input [6]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, sum#71, isEmpty#72]
-Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, 5), true, [id=#73]
+Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, i_product_name#20, 5), ENSURE_REQUIREMENTS, [id=#73]
 
 (48) HashAggregate [codegen id : 44]
 Input [6]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, sum#71, isEmpty#72]
@@ -335,7 +335,7 @@ Results [5]: [i_category#19, i_class#18, i_brand#17, sum#85, isEmpty#86]
 
 (52) Exchange
 Input [5]: [i_category#19, i_class#18, i_brand#17, sum#85, isEmpty#86]
-Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, 5), true, [id=#87]
+Arguments: hashpartitioning(i_category#19, i_class#18, i_brand#17, 5), ENSURE_REQUIREMENTS, [id=#87]
 
 (53) HashAggregate [codegen id : 53]
 Input [5]: [i_category#19, i_class#18, i_brand#17, sum#85, isEmpty#86]
@@ -363,7 +363,7 @@ Results [4]: [i_category#19, i_class#18, sum#100, isEmpty#101]
 
 (57) Exchange
 Input [4]: [i_category#19, i_class#18, sum#100, isEmpty#101]
-Arguments: hashpartitioning(i_category#19, i_class#18, 5), true, [id=#102]
+Arguments: hashpartitioning(i_category#19, i_class#18, 5), ENSURE_REQUIREMENTS, [id=#102]
 
 (58) HashAggregate [codegen id : 62]
 Input [4]: [i_category#19, i_class#18, sum#100, isEmpty#101]
@@ -391,7 +391,7 @@ Results [3]: [i_category#19, sum#116, isEmpty#117]
 
 (62) Exchange
 Input [3]: [i_category#19, sum#116, isEmpty#117]
-Arguments: hashpartitioning(i_category#19, 5), true, [id=#118]
+Arguments: hashpartitioning(i_category#19, 5), ENSURE_REQUIREMENTS, [id=#118]
 
 (63) HashAggregate [codegen id : 71]
 Input [3]: [i_category#19, sum#116, isEmpty#117]
@@ -419,7 +419,7 @@ Results [2]: [sum#133, isEmpty#134]
 
 (67) Exchange
 Input [2]: [sum#133, isEmpty#134]
-Arguments: SinglePartition, true, [id=#135]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#135]
 
 (68) HashAggregate [codegen id : 80]
 Input [2]: [sum#133, isEmpty#134]
@@ -432,7 +432,7 @@ Results [9]: [null AS i_category#137, null AS i_class#138, null AS i_brand#139, 
 
 (70) Exchange
 Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28]
-Arguments: hashpartitioning(i_category#19, 5), true, [id=#146]
+Arguments: hashpartitioning(i_category#19, 5), ENSURE_REQUIREMENTS, [id=#146]
 
 (71) Sort [codegen id : 81]
 Input [9]: [i_category#19, i_class#18, i_brand#17, i_product_name#20, d_year#8, d_qoy#10, d_moy#9, s_store_id#13, sumsales#28]

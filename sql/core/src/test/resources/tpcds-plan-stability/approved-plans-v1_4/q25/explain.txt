@@ -254,7 +254,7 @@ Results [7]: [i_item_id#32, i_item_desc#33, s_store_id#28, s_store_name#29, sum#
 
 (46) Exchange
 Input [7]: [i_item_id#32, i_item_desc#33, s_store_id#28, s_store_name#29, sum#38, sum#39, sum#40]
-Arguments: hashpartitioning(i_item_id#32, i_item_desc#33, s_store_id#28, s_store_name#29, 5), true, [id=#41]
+Arguments: hashpartitioning(i_item_id#32, i_item_desc#33, s_store_id#28, s_store_name#29, 5), ENSURE_REQUIREMENTS, [id=#41]
 
 (47) HashAggregate [codegen id : 9]
 Input [7]: [i_item_id#32, i_item_desc#33, s_store_id#28, s_store_name#29, sum#38, sum#39, sum#40]

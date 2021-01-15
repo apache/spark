@@ -249,7 +249,7 @@ Results [19]: [i_item_id#34, ca_country#35, ca_state#36, ca_county#37, spark_gro
 
 (45) Exchange
 Input [19]: [i_item_id#34, ca_country#35, ca_state#36, ca_county#37, spark_grouping_id#38, sum#53, count#54, sum#55, count#56, sum#57, count#58, sum#59, count#60, sum#61, count#62, sum#63, count#64, sum#65, count#66]
-Arguments: hashpartitioning(i_item_id#34, ca_country#35, ca_state#36, ca_county#37, spark_grouping_id#38, 5), true, [id=#67]
+Arguments: hashpartitioning(i_item_id#34, ca_country#35, ca_state#36, ca_county#37, spark_grouping_id#38, 5), ENSURE_REQUIREMENTS, [id=#67]
 
 (46) HashAggregate [codegen id : 8]
 Input [19]: [i_item_id#34, ca_country#35, ca_state#36, ca_county#37, spark_grouping_id#38, sum#53, count#54, sum#55, count#56, sum#57, count#58, sum#59, count#60, sum#61, count#62, sum#63, count#64, sum#65, count#66]

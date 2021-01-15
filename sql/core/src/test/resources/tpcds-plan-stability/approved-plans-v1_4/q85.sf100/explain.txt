@@ -296,7 +296,7 @@ Input [11]: [ws_quantity#5, ws_sales_price#6, wr_refunded_cdemo_sk#12, wr_return
 (54) HashAggregate [codegen id : 14]
 Input [4]: [ws_quantity#5, wr_fee#17, wr_refunded_cash#18, r_reason_desc#24]
 Keys [1]: [r_reason_desc#24]
-Functions [3]: [partial_avg(cast(ws_quantity#5 as bigint)), partial_avg(UnscaledValue(wr_refunded_cash#18)), partial_avg(UnscaledValue(wr_fee#17))]
+Functions [3]: [partial_avg(ws_quantity#5), partial_avg(UnscaledValue(wr_refunded_cash#18)), partial_avg(UnscaledValue(wr_fee#17))]
 Aggregate Attributes [6]: [sum#39, count#40, sum#41, count#42, sum#43, count#44]
 Results [7]: [r_reason_desc#24, sum#45, count#46, sum#47, count#48, sum#49, count#50]
 
@@ -307,9 +307,9 @@ Arguments: hashpartitioning(r_reason_desc#24, 5), ENSURE_REQUIREMENTS, [id=#51]
 (56) HashAggregate [codegen id : 15]
 Input [7]: [r_reason_desc#24, sum#45, count#46, sum#47, count#48, sum#49, count#50]
 Keys [1]: [r_reason_desc#24]
-Functions [3]: [avg(cast(ws_quantity#5 as bigint)), avg(UnscaledValue(wr_refunded_cash#18)), avg(UnscaledValue(wr_fee#17))]
-Aggregate Attributes [3]: [avg(cast(ws_quantity#5 as bigint))#52, avg(UnscaledValue(wr_refunded_cash#18))#53, avg(UnscaledValue(wr_fee#17))#54]
-Results [4]: [substr(r_reason_desc#24, 1, 20) AS substr(r_reason_desc, 1, 20)#55, avg(cast(ws_quantity#5 as bigint))#52 AS avg(ws_quantity)#56, cast((avg(UnscaledValue(wr_refunded_cash#18))#53 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#57, cast((avg(UnscaledValue(wr_fee#17))#54 / 100.0) as decimal(11,6)) AS avg(wr_fee)#58]
+Functions [3]: [avg(ws_quantity#5), avg(UnscaledValue(wr_refunded_cash#18)), avg(UnscaledValue(wr_fee#17))]
+Aggregate Attributes [3]: [avg(ws_quantity#5)#52, avg(UnscaledValue(wr_refunded_cash#18))#53, avg(UnscaledValue(wr_fee#17))#54]
+Results [4]: [substr(r_reason_desc#24, 1, 20) AS substr(r_reason_desc, 1, 20)#55, avg(ws_quantity#5)#52 AS avg(ws_quantity)#56, cast((avg(UnscaledValue(wr_refunded_cash#18))#53 / 100.0) as decimal(11,6)) AS avg(wr_refunded_cash)#57, cast((avg(UnscaledValue(wr_fee#17))#54 / 100.0) as decimal(11,6)) AS avg(wr_fee)#58]
 
 (57) TakeOrderedAndProject
 Input [4]: [substr(r_reason_desc, 1, 20)#55, avg(ws_quantity)#56, avg(wr_refunded_cash)#57, avg(wr_fee)#58]

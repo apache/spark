@@ -96,7 +96,7 @@ Results [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
 
 (17) Exchange
 Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]
-Arguments: hashpartitioning(ss_customer_sk#2, 5), true, [id=#19]
+Arguments: hashpartitioning(ss_customer_sk#2, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (18) HashAggregate [codegen id : 4]
 Input [3]: [ss_customer_sk#2, sum#17, isEmpty#18]

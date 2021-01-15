@@ -9,7 +9,7 @@ TakeOrderedAndProject [ss_sold_year,ss_item_sk,ss_customer_sk,ss_qty,ss_wc,ss_sp
                 InputAdapter
                   WholeStageCodegen (7)
                     Sort [ss_sold_year,ss_item_sk,ss_customer_sk]
-                      HashAggregate [d_year,ss_item_sk,ss_customer_sk,sum,sum,sum] [sum(cast(ss_quantity as bigint)),sum(UnscaledValue(ss_wholesale_cost)),sum(UnscaledValue(ss_sales_price)),ss_sold_year,ss_qty,ss_wc,ss_sp,sum,sum,sum]
+                      HashAggregate [d_year,ss_item_sk,ss_customer_sk,sum,sum,sum] [sum(ss_quantity),sum(UnscaledValue(ss_wholesale_cost)),sum(UnscaledValue(ss_sales_price)),ss_sold_year,ss_qty,ss_wc,ss_sp,sum,sum,sum]
                         InputAdapter
                           Exchange [d_year,ss_item_sk,ss_customer_sk] #1
                             WholeStageCodegen (6)
@@ -49,7 +49,7 @@ TakeOrderedAndProject [ss_sold_year,ss_item_sk,ss_customer_sk,ss_qty,ss_wc,ss_sp
                   WholeStageCodegen (14)
                     Sort [cs_sold_year,cs_item_sk,cs_customer_sk]
                       Filter [cs_qty]
-                        HashAggregate [d_year,cs_item_sk,cs_bill_customer_sk,sum,sum,sum] [sum(cast(cs_quantity as bigint)),sum(UnscaledValue(cs_wholesale_cost)),sum(UnscaledValue(cs_sales_price)),cs_sold_year,cs_customer_sk,cs_qty,cs_wc,cs_sp,sum,sum,sum]
+                        HashAggregate [d_year,cs_item_sk,cs_bill_customer_sk,sum,sum,sum] [sum(cs_quantity),sum(UnscaledValue(cs_wholesale_cost)),sum(UnscaledValue(cs_sales_price)),cs_sold_year,cs_customer_sk,cs_qty,cs_wc,cs_sp,sum,sum,sum]
                           InputAdapter
                             Exchange [d_year,cs_item_sk,cs_bill_customer_sk] #5
                               WholeStageCodegen (13)
@@ -84,7 +84,7 @@ TakeOrderedAndProject [ss_sold_year,ss_item_sk,ss_customer_sk,ss_qty,ss_wc,ss_sp
           WholeStageCodegen (22)
             Sort [ws_sold_year,ws_item_sk,ws_customer_sk]
               Filter [ws_qty]
-                HashAggregate [d_year,ws_item_sk,ws_bill_customer_sk,sum,sum,sum] [sum(cast(ws_quantity as bigint)),sum(UnscaledValue(ws_wholesale_cost)),sum(UnscaledValue(ws_sales_price)),ws_sold_year,ws_customer_sk,ws_qty,ws_wc,ws_sp,sum,sum,sum]
+                HashAggregate [d_year,ws_item_sk,ws_bill_customer_sk,sum,sum,sum] [sum(ws_quantity),sum(UnscaledValue(ws_wholesale_cost)),sum(UnscaledValue(ws_sales_price)),ws_sold_year,ws_customer_sk,ws_qty,ws_wc,ws_sp,sum,sum,sum]
                   InputAdapter
                     Exchange [d_year,ws_item_sk,ws_bill_customer_sk] #8
                       WholeStageCodegen (21)

@@ -6,7 +6,7 @@ WholeStageCodegen (11)
           BroadcastHashJoin [i_item_sk,w_warehouse_sk,i_item_sk,w_warehouse_sk]
             Project [w_warehouse_sk,i_item_sk,d_moy,mean,stdev]
               Filter [mean,stdev]
-                HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(cast(inv_quantity_on_hand as bigint)),stdev,mean,n,avg,m2,sum,count]
+                HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(inv_quantity_on_hand),stdev,mean,n,avg,m2,sum,count]
                   InputAdapter
                     Exchange [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy] #2
                       WholeStageCodegen (4)
@@ -48,7 +48,7 @@ WholeStageCodegen (11)
                 WholeStageCodegen (9)
                   Project [w_warehouse_sk,i_item_sk,d_moy,mean,stdev]
                     Filter [mean,stdev]
-                      HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(cast(inv_quantity_on_hand as bigint)),stdev,mean,n,avg,m2,sum,count]
+                      HashAggregate [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy,n,avg,m2,sum,count] [stddev_samp(cast(inv_quantity_on_hand as double)),avg(inv_quantity_on_hand),stdev,mean,n,avg,m2,sum,count]
                         InputAdapter
                           Exchange [w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy] #7
                             WholeStageCodegen (8)

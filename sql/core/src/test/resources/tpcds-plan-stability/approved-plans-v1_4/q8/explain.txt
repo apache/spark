@@ -187,7 +187,7 @@ Results [2]: [ca_zip#12, count#18]
 
 (31) Exchange
 Input [2]: [ca_zip#12, count#18]
-Arguments: hashpartitioning(ca_zip#12, 5), true, [id=#19]
+Arguments: hashpartitioning(ca_zip#12, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (32) HashAggregate [codegen id : 5]
 Input [2]: [ca_zip#12, count#18]
@@ -226,7 +226,7 @@ Results [1]: [ca_zip#24]
 
 (39) Exchange
 Input [1]: [ca_zip#24]
-Arguments: hashpartitioning(ca_zip#24, 5), true, [id=#25]
+Arguments: hashpartitioning(ca_zip#24, 5), ENSURE_REQUIREMENTS, [id=#25]
 
 (40) HashAggregate [codegen id : 7]
 Input [1]: [ca_zip#24]
@@ -257,7 +257,7 @@ Results [2]: [s_store_name#9, sum#28]
 
 (45) Exchange
 Input [2]: [s_store_name#9, sum#28]
-Arguments: hashpartitioning(s_store_name#9, 5), true, [id=#29]
+Arguments: hashpartitioning(s_store_name#9, 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (46) HashAggregate [codegen id : 9]
 Input [2]: [s_store_name#9, sum#28]

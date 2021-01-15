@@ -271,20 +271,20 @@ Input [9]: [ss_item_sk#2, ss_quantity#6, sr_return_quantity#11, cs_quantity#16, 
 (49) HashAggregate [codegen id : 8]
 Input [7]: [ss_quantity#6, sr_return_quantity#11, cs_quantity#16, s_store_id#30, s_store_name#31, i_item_id#34, i_item_desc#35]
 Keys [4]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31]
-Functions [3]: [partial_sum(cast(ss_quantity#6 as bigint)), partial_sum(cast(sr_return_quantity#11 as bigint)), partial_sum(cast(cs_quantity#16 as bigint))]
+Functions [3]: [partial_sum(ss_quantity#6), partial_sum(sr_return_quantity#11), partial_sum(cs_quantity#16)]
 Aggregate Attributes [3]: [sum#37, sum#38, sum#39]
 Results [7]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, sum#40, sum#41, sum#42]
 
 (50) Exchange
 Input [7]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, sum#40, sum#41, sum#42]
-Arguments: hashpartitioning(i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, 5), true, [id=#43]
+Arguments: hashpartitioning(i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, 5), ENSURE_REQUIREMENTS, [id=#43]
 
 (51) HashAggregate [codegen id : 9]
 Input [7]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, sum#40, sum#41, sum#42]
 Keys [4]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31]
-Functions [3]: [sum(cast(ss_quantity#6 as bigint)), sum(cast(sr_return_quantity#11 as bigint)), sum(cast(cs_quantity#16 as bigint))]
-Aggregate Attributes [3]: [sum(cast(ss_quantity#6 as bigint))#44, sum(cast(sr_return_quantity#11 as bigint))#45, sum(cast(cs_quantity#16 as bigint))#46]
-Results [7]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, sum(cast(ss_quantity#6 as bigint))#44 AS store_sales_quantity#47, sum(cast(sr_return_quantity#11 as bigint))#45 AS store_returns_quantity#48, sum(cast(cs_quantity#16 as bigint))#46 AS catalog_sales_quantity#49]
+Functions [3]: [sum(ss_quantity#6), sum(sr_return_quantity#11), sum(cs_quantity#16)]
+Aggregate Attributes [3]: [sum(ss_quantity#6)#44, sum(sr_return_quantity#11)#45, sum(cs_quantity#16)#46]
+Results [7]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, sum(ss_quantity#6)#44 AS store_sales_quantity#47, sum(sr_return_quantity#11)#45 AS store_returns_quantity#48, sum(cs_quantity#16)#46 AS catalog_sales_quantity#49]
 
 (52) TakeOrderedAndProject
 Input [7]: [i_item_id#34, i_item_desc#35, s_store_id#30, s_store_name#31, store_sales_quantity#47, store_returns_quantity#48, catalog_sales_quantity#49]

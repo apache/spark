@@ -163,7 +163,7 @@ Input [6]: [ss_sold_date_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, d_date_sk#4, 
 
 (10) Exchange
 Input [4]: [ss_addr_sk#2, ss_ext_sales_price#3, d_year#5, d_qoy#6]
-Arguments: hashpartitioning(ss_addr_sk#2, 5), true, [id=#8]
+Arguments: hashpartitioning(ss_addr_sk#2, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (11) Sort [codegen id : 3]
 Input [4]: [ss_addr_sk#2, ss_ext_sales_price#3, d_year#5, d_qoy#6]
@@ -185,7 +185,7 @@ Condition : (isnotnull(ca_address_sk#9) AND isnotnull(ca_county#10))
 
 (15) Exchange
 Input [2]: [ca_address_sk#9, ca_county#10]
-Arguments: hashpartitioning(ca_address_sk#9, 5), true, [id=#11]
+Arguments: hashpartitioning(ca_address_sk#9, 5), ENSURE_REQUIREMENTS, [id=#11]
 
 (16) Sort [codegen id : 5]
 Input [2]: [ca_address_sk#9, ca_county#10]
@@ -209,7 +209,7 @@ Results [4]: [ca_county#10, d_qoy#6, d_year#5, sum#13]
 
 (20) Exchange
 Input [4]: [ca_county#10, d_qoy#6, d_year#5, sum#13]
-Arguments: hashpartitioning(ca_county#10, d_qoy#6, d_year#5, 5), true, [id=#14]
+Arguments: hashpartitioning(ca_county#10, d_qoy#6, d_year#5, 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (21) HashAggregate [codegen id : 42]
 Input [4]: [ca_county#10, d_qoy#6, d_year#5, sum#13]
@@ -261,7 +261,7 @@ Input [6]: [ss_sold_date_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, d_date_sk#17,
 
 (31) Exchange
 Input [4]: [ss_addr_sk#2, ss_ext_sales_price#3, d_year#18, d_qoy#19]
-Arguments: hashpartitioning(ss_addr_sk#2, 5), true, [id=#21]
+Arguments: hashpartitioning(ss_addr_sk#2, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (32) Sort [codegen id : 9]
 Input [4]: [ss_addr_sk#2, ss_ext_sales_price#3, d_year#18, d_qoy#19]
@@ -292,7 +292,7 @@ Results [4]: [ca_county#23, d_qoy#19, d_year#18, sum#25]
 
 (38) Exchange
 Input [4]: [ca_county#23, d_qoy#19, d_year#18, sum#25]
-Arguments: hashpartitioning(ca_county#23, d_qoy#19, d_year#18, 5), true, [id=#26]
+Arguments: hashpartitioning(ca_county#23, d_qoy#19, d_year#18, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (39) HashAggregate [codegen id : 13]
 Input [4]: [ca_county#23, d_qoy#19, d_year#18, sum#25]
@@ -357,7 +357,7 @@ Input [6]: [ss_sold_date_sk#1, ss_addr_sk#2, ss_ext_sales_price#3, d_date_sk#30,
 
 (52) Exchange
 Input [4]: [ss_addr_sk#2, ss_ext_sales_price#3, d_year#31, d_qoy#32]
-Arguments: hashpartitioning(ss_addr_sk#2, 5), true, [id=#34]
+Arguments: hashpartitioning(ss_addr_sk#2, 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (53) Sort [codegen id : 16]
 Input [4]: [ss_addr_sk#2, ss_ext_sales_price#3, d_year#31, d_qoy#32]
@@ -388,7 +388,7 @@ Results [4]: [ca_county#36, d_qoy#32, d_year#31, sum#38]
 
 (59) Exchange
 Input [4]: [ca_county#36, d_qoy#32, d_year#31, sum#38]
-Arguments: hashpartitioning(ca_county#36, d_qoy#32, d_year#31, 5), true, [id=#39]
+Arguments: hashpartitioning(ca_county#36, d_qoy#32, d_year#31, 5), ENSURE_REQUIREMENTS, [id=#39]
 
 (60) HashAggregate [codegen id : 20]
 Input [4]: [ca_county#36, d_qoy#32, d_year#31, sum#38]
@@ -438,7 +438,7 @@ Input [6]: [ws_sold_date_sk#43, ws_bill_addr_sk#44, ws_ext_sales_price#45, d_dat
 
 (70) Exchange
 Input [4]: [ws_bill_addr_sk#44, ws_ext_sales_price#45, d_year#47, d_qoy#48]
-Arguments: hashpartitioning(ws_bill_addr_sk#44, 5), true, [id=#49]
+Arguments: hashpartitioning(ws_bill_addr_sk#44, 5), ENSURE_REQUIREMENTS, [id=#49]
 
 (71) Sort [codegen id : 23]
 Input [4]: [ws_bill_addr_sk#44, ws_ext_sales_price#45, d_year#47, d_qoy#48]
@@ -469,7 +469,7 @@ Results [4]: [ca_county#51, d_qoy#48, d_year#47, sum#53]
 
 (77) Exchange
 Input [4]: [ca_county#51, d_qoy#48, d_year#47, sum#53]
-Arguments: hashpartitioning(ca_county#51, d_qoy#48, d_year#47, 5), true, [id=#54]
+Arguments: hashpartitioning(ca_county#51, d_qoy#48, d_year#47, 5), ENSURE_REQUIREMENTS, [id=#54]
 
 (78) HashAggregate [codegen id : 41]
 Input [4]: [ca_county#51, d_qoy#48, d_year#47, sum#53]
@@ -506,7 +506,7 @@ Input [6]: [ws_sold_date_sk#43, ws_bill_addr_sk#44, ws_ext_sales_price#45, d_dat
 
 (85) Exchange
 Input [4]: [ws_bill_addr_sk#44, ws_ext_sales_price#45, d_year#58, d_qoy#59]
-Arguments: hashpartitioning(ws_bill_addr_sk#44, 5), true, [id=#60]
+Arguments: hashpartitioning(ws_bill_addr_sk#44, 5), ENSURE_REQUIREMENTS, [id=#60]
 
 (86) Sort [codegen id : 29]
 Input [4]: [ws_bill_addr_sk#44, ws_ext_sales_price#45, d_year#58, d_qoy#59]
@@ -537,7 +537,7 @@ Results [4]: [ca_county#62, d_qoy#59, d_year#58, sum#64]
 
 (92) Exchange
 Input [4]: [ca_county#62, d_qoy#59, d_year#58, sum#64]
-Arguments: hashpartitioning(ca_county#62, d_qoy#59, d_year#58, 5), true, [id=#65]
+Arguments: hashpartitioning(ca_county#62, d_qoy#59, d_year#58, 5), ENSURE_REQUIREMENTS, [id=#65]
 
 (93) HashAggregate [codegen id : 33]
 Input [4]: [ca_county#62, d_qoy#59, d_year#58, sum#64]
@@ -587,7 +587,7 @@ Input [6]: [ws_sold_date_sk#43, ws_bill_addr_sk#44, ws_ext_sales_price#45, d_dat
 
 (103) Exchange
 Input [4]: [ws_bill_addr_sk#44, ws_ext_sales_price#45, d_year#70, d_qoy#71]
-Arguments: hashpartitioning(ws_bill_addr_sk#44, 5), true, [id=#72]
+Arguments: hashpartitioning(ws_bill_addr_sk#44, 5), ENSURE_REQUIREMENTS, [id=#72]
 
 (104) Sort [codegen id : 36]
 Input [4]: [ws_bill_addr_sk#44, ws_ext_sales_price#45, d_year#70, d_qoy#71]
@@ -618,7 +618,7 @@ Results [4]: [ca_county#74, d_qoy#71, d_year#70, sum#76]
 
 (110) Exchange
 Input [4]: [ca_county#74, d_qoy#71, d_year#70, sum#76]
-Arguments: hashpartitioning(ca_county#74, d_qoy#71, d_year#70, 5), true, [id=#77]
+Arguments: hashpartitioning(ca_county#74, d_qoy#71, d_year#70, 5), ENSURE_REQUIREMENTS, [id=#77]
 
 (111) HashAggregate [codegen id : 40]
 Input [4]: [ca_county#74, d_qoy#71, d_year#70, sum#76]
@@ -655,7 +655,7 @@ Input [9]: [store_sales#16, store_sales#28, ca_county#36, d_year#31, store_sales
 
 (118) Exchange
 Input [6]: [ca_county#36, d_year#31, web_q1_q2_increase#82, store_q1_q2_increase#83, web_q2_q3_increase#84, store_q2_q3_increase#85]
-Arguments: rangepartitioning(ca_county#36 ASC NULLS FIRST, 5), true, [id=#86]
+Arguments: rangepartitioning(ca_county#36 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#86]
 
 (119) Sort [codegen id : 43]
 Input [6]: [ca_county#36, d_year#31, web_q1_q2_increase#82, store_q1_q2_increase#83, web_q2_q3_increase#84, store_q2_q3_increase#85]

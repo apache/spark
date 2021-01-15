@@ -419,7 +419,7 @@ Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact
 (66) HashAggregate [codegen id : 23]
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#22, sales_amt#23]
 Keys [5]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
-Functions [2]: [partial_sum(cast(sales_cnt#22 as bigint)), partial_sum(UnscaledValue(sales_amt#23))]
+Functions [2]: [partial_sum(sales_cnt#22), partial_sum(UnscaledValue(sales_amt#23))]
 Aggregate Attributes [2]: [sum#51, sum#52]
 Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum#53, sum#54]
 
@@ -430,9 +430,9 @@ Arguments: hashpartitioning(d_year#14, i_brand_id#7, i_class_id#8, i_category_id
 (68) HashAggregate [codegen id : 24]
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum#53, sum#54]
 Keys [5]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11]
-Functions [2]: [sum(cast(sales_cnt#22 as bigint)), sum(UnscaledValue(sales_amt#23))]
-Aggregate Attributes [2]: [sum(cast(sales_cnt#22 as bigint))#56, sum(UnscaledValue(sales_amt#23))#57]
-Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum(cast(sales_cnt#22 as bigint))#56 AS sales_cnt#58, MakeDecimal(sum(UnscaledValue(sales_amt#23))#57,18,2) AS sales_amt#59]
+Functions [2]: [sum(sales_cnt#22), sum(UnscaledValue(sales_amt#23))]
+Aggregate Attributes [2]: [sum(sales_cnt#22)#56, sum(UnscaledValue(sales_amt#23))#57]
+Results [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sum(sales_cnt#22)#56 AS sales_cnt#58, MakeDecimal(sum(UnscaledValue(sales_amt#23))#57,18,2) AS sales_amt#59]
 
 (69) Exchange
 Input [7]: [d_year#14, i_brand_id#7, i_class_id#8, i_category_id#9, i_manufact_id#11, sales_cnt#58, sales_amt#59]
@@ -666,7 +666,7 @@ Results [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manuf
 (123) HashAggregate [codegen id : 48]
 Input [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65, sales_cnt#22, sales_amt#23]
 Keys [5]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65]
-Functions [2]: [partial_sum(cast(sales_cnt#22 as bigint)), partial_sum(UnscaledValue(sales_amt#23))]
+Functions [2]: [partial_sum(sales_cnt#22), partial_sum(UnscaledValue(sales_amt#23))]
 Aggregate Attributes [2]: [sum#77, sum#78]
 Results [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65, sum#79, sum#80]
 
@@ -677,9 +677,9 @@ Arguments: hashpartitioning(d_year#67, i_brand_id#62, i_class_id#63, i_category_
 (125) HashAggregate [codegen id : 49]
 Input [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65, sum#79, sum#80]
 Keys [5]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65]
-Functions [2]: [sum(cast(sales_cnt#22 as bigint)), sum(UnscaledValue(sales_amt#23))]
-Aggregate Attributes [2]: [sum(cast(sales_cnt#22 as bigint))#82, sum(UnscaledValue(sales_amt#23))#83]
-Results [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65, sum(cast(sales_cnt#22 as bigint))#82 AS sales_cnt#84, MakeDecimal(sum(UnscaledValue(sales_amt#23))#83,18,2) AS sales_amt#85]
+Functions [2]: [sum(sales_cnt#22), sum(UnscaledValue(sales_amt#23))]
+Aggregate Attributes [2]: [sum(sales_cnt#22)#82, sum(UnscaledValue(sales_amt#23))#83]
+Results [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65, sum(sales_cnt#22)#82 AS sales_cnt#84, MakeDecimal(sum(UnscaledValue(sales_amt#23))#83,18,2) AS sales_amt#85]
 
 (126) Exchange
 Input [7]: [d_year#67, i_brand_id#62, i_class_id#63, i_category_id#64, i_manufact_id#65, sales_cnt#84, sales_amt#85]

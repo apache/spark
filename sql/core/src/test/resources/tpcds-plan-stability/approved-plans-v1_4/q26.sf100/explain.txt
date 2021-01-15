@@ -172,20 +172,20 @@ Input [7]: [cs_item_sk#3, cs_quantity#5, cs_list_price#6, cs_sales_price#7, cs_c
 (31) HashAggregate [codegen id : 5]
 Input [5]: [cs_quantity#5, cs_list_price#6, cs_sales_price#7, cs_coupon_amt#8, i_item_id#22]
 Keys [1]: [i_item_id#22]
-Functions [4]: [partial_avg(cast(cs_quantity#5 as bigint)), partial_avg(UnscaledValue(cs_list_price#6)), partial_avg(UnscaledValue(cs_coupon_amt#8)), partial_avg(UnscaledValue(cs_sales_price#7))]
+Functions [4]: [partial_avg(cs_quantity#5), partial_avg(UnscaledValue(cs_list_price#6)), partial_avg(UnscaledValue(cs_coupon_amt#8)), partial_avg(UnscaledValue(cs_sales_price#7))]
 Aggregate Attributes [8]: [sum#24, count#25, sum#26, count#27, sum#28, count#29, sum#30, count#31]
 Results [9]: [i_item_id#22, sum#32, count#33, sum#34, count#35, sum#36, count#37, sum#38, count#39]
 
 (32) Exchange
 Input [9]: [i_item_id#22, sum#32, count#33, sum#34, count#35, sum#36, count#37, sum#38, count#39]
-Arguments: hashpartitioning(i_item_id#22, 5), true, [id=#40]
+Arguments: hashpartitioning(i_item_id#22, 5), ENSURE_REQUIREMENTS, [id=#40]
 
 (33) HashAggregate [codegen id : 6]
 Input [9]: [i_item_id#22, sum#32, count#33, sum#34, count#35, sum#36, count#37, sum#38, count#39]
 Keys [1]: [i_item_id#22]
-Functions [4]: [avg(cast(cs_quantity#5 as bigint)), avg(UnscaledValue(cs_list_price#6)), avg(UnscaledValue(cs_coupon_amt#8)), avg(UnscaledValue(cs_sales_price#7))]
-Aggregate Attributes [4]: [avg(cast(cs_quantity#5 as bigint))#41, avg(UnscaledValue(cs_list_price#6))#42, avg(UnscaledValue(cs_coupon_amt#8))#43, avg(UnscaledValue(cs_sales_price#7))#44]
-Results [5]: [i_item_id#22, avg(cast(cs_quantity#5 as bigint))#41 AS agg1#45, cast((avg(UnscaledValue(cs_list_price#6))#42 / 100.0) as decimal(11,6)) AS agg2#46, cast((avg(UnscaledValue(cs_coupon_amt#8))#43 / 100.0) as decimal(11,6)) AS agg3#47, cast((avg(UnscaledValue(cs_sales_price#7))#44 / 100.0) as decimal(11,6)) AS agg4#48]
+Functions [4]: [avg(cs_quantity#5), avg(UnscaledValue(cs_list_price#6)), avg(UnscaledValue(cs_coupon_amt#8)), avg(UnscaledValue(cs_sales_price#7))]
+Aggregate Attributes [4]: [avg(cs_quantity#5)#41, avg(UnscaledValue(cs_list_price#6))#42, avg(UnscaledValue(cs_coupon_amt#8))#43, avg(UnscaledValue(cs_sales_price#7))#44]
+Results [5]: [i_item_id#22, avg(cs_quantity#5)#41 AS agg1#45, cast((avg(UnscaledValue(cs_list_price#6))#42 / 100.0) as decimal(11,6)) AS agg2#46, cast((avg(UnscaledValue(cs_coupon_amt#8))#43 / 100.0) as decimal(11,6)) AS agg3#47, cast((avg(UnscaledValue(cs_sales_price#7))#44 / 100.0) as decimal(11,6)) AS agg4#48]
 
 (34) TakeOrderedAndProject
 Input [5]: [i_item_id#22, agg1#45, agg2#46, agg3#47, agg4#48]

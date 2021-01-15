@@ -125,7 +125,7 @@ Condition : (((isnotnull(ss_sold_date_sk#1) AND isnotnull(ss_store_sk#3)) AND is
 
 (4) Exchange
 Input [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ticket_number#5, ss_ext_sales_price#6, ss_net_profit#7]
-Arguments: hashpartitioning(cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#5 as bigint), 5), true, [id=#8]
+Arguments: hashpartitioning(cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#5 as bigint), 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (5) Sort [codegen id : 2]
 Input [7]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ticket_number#5, ss_ext_sales_price#6, ss_net_profit#7]
@@ -147,7 +147,7 @@ Condition : (isnotnull(sr_item_sk#9) AND isnotnull(sr_ticket_number#10))
 
 (9) Exchange
 Input [4]: [sr_item_sk#9, sr_ticket_number#10, sr_return_amt#11, sr_net_loss#12]
-Arguments: hashpartitioning(sr_item_sk#9, sr_ticket_number#10, 5), true, [id=#13]
+Arguments: hashpartitioning(sr_item_sk#9, sr_ticket_number#10, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (10) Sort [codegen id : 4]
 Input [4]: [sr_item_sk#9, sr_ticket_number#10, sr_return_amt#11, sr_net_loss#12]
@@ -291,7 +291,7 @@ Results [6]: [s_store_id#24, sum#31, sum#32, isEmpty#33, sum#34, isEmpty#35]
 
 (41) Exchange
 Input [6]: [s_store_id#24, sum#31, sum#32, isEmpty#33, sum#34, isEmpty#35]
-Arguments: hashpartitioning(s_store_id#24, 5), true, [id=#36]
+Arguments: hashpartitioning(s_store_id#24, 5), ENSURE_REQUIREMENTS, [id=#36]
 
 (42) HashAggregate [codegen id : 10]
 Input [6]: [s_store_id#24, sum#31, sum#32, isEmpty#33, sum#34, isEmpty#35]
@@ -316,7 +316,7 @@ Condition : (((isnotnull(cs_sold_date_sk#45) AND isnotnull(cs_catalog_page_sk#46
 
 (46) Exchange
 Input [7]: [cs_sold_date_sk#45, cs_catalog_page_sk#46, cs_item_sk#47, cs_promo_sk#48, cs_order_number#49, cs_ext_sales_price#50, cs_net_profit#51]
-Arguments: hashpartitioning(cs_item_sk#47, cs_order_number#49, 5), true, [id=#52]
+Arguments: hashpartitioning(cs_item_sk#47, cs_order_number#49, 5), ENSURE_REQUIREMENTS, [id=#52]
 
 (47) Sort [codegen id : 12]
 Input [7]: [cs_sold_date_sk#45, cs_catalog_page_sk#46, cs_item_sk#47, cs_promo_sk#48, cs_order_number#49, cs_ext_sales_price#50, cs_net_profit#51]
@@ -338,7 +338,7 @@ Condition : (isnotnull(cr_item_sk#53) AND isnotnull(cr_order_number#54))
 
 (51) Exchange
 Input [4]: [cr_item_sk#53, cr_order_number#54, cr_return_amount#55, cr_net_loss#56]
-Arguments: hashpartitioning(cr_item_sk#53, cr_order_number#54, 5), true, [id=#57]
+Arguments: hashpartitioning(cr_item_sk#53, cr_order_number#54, 5), ENSURE_REQUIREMENTS, [id=#57]
 
 (52) Sort [codegen id : 14]
 Input [4]: [cr_item_sk#53, cr_order_number#54, cr_return_amount#55, cr_net_loss#56]
@@ -425,7 +425,7 @@ Results [6]: [cp_catalog_page_id#59, sum#66, sum#67, isEmpty#68, sum#69, isEmpty
 
 (71) Exchange
 Input [6]: [cp_catalog_page_id#59, sum#66, sum#67, isEmpty#68, sum#69, isEmpty#70]
-Arguments: hashpartitioning(cp_catalog_page_id#59, 5), true, [id=#71]
+Arguments: hashpartitioning(cp_catalog_page_id#59, 5), ENSURE_REQUIREMENTS, [id=#71]
 
 (72) HashAggregate [codegen id : 20]
 Input [6]: [cp_catalog_page_id#59, sum#66, sum#67, isEmpty#68, sum#69, isEmpty#70]
@@ -450,7 +450,7 @@ Condition : (((isnotnull(ws_sold_date_sk#80) AND isnotnull(ws_web_site_sk#82)) A
 
 (76) Exchange
 Input [7]: [ws_sold_date_sk#80, ws_item_sk#81, ws_web_site_sk#82, ws_promo_sk#83, ws_order_number#84, ws_ext_sales_price#85, ws_net_profit#86]
-Arguments: hashpartitioning(cast(ws_item_sk#81 as bigint), cast(ws_order_number#84 as bigint), 5), true, [id=#87]
+Arguments: hashpartitioning(cast(ws_item_sk#81 as bigint), cast(ws_order_number#84 as bigint), 5), ENSURE_REQUIREMENTS, [id=#87]
 
 (77) Sort [codegen id : 22]
 Input [7]: [ws_sold_date_sk#80, ws_item_sk#81, ws_web_site_sk#82, ws_promo_sk#83, ws_order_number#84, ws_ext_sales_price#85, ws_net_profit#86]
@@ -472,7 +472,7 @@ Condition : (isnotnull(wr_item_sk#88) AND isnotnull(wr_order_number#89))
 
 (81) Exchange
 Input [4]: [wr_item_sk#88, wr_order_number#89, wr_return_amt#90, wr_net_loss#91]
-Arguments: hashpartitioning(wr_item_sk#88, wr_order_number#89, 5), true, [id=#92]
+Arguments: hashpartitioning(wr_item_sk#88, wr_order_number#89, 5), ENSURE_REQUIREMENTS, [id=#92]
 
 (82) Sort [codegen id : 24]
 Input [4]: [wr_item_sk#88, wr_order_number#89, wr_return_amt#90, wr_net_loss#91]
@@ -559,7 +559,7 @@ Results [6]: [web_site_id#94, sum#101, sum#102, isEmpty#103, sum#104, isEmpty#10
 
 (101) Exchange
 Input [6]: [web_site_id#94, sum#101, sum#102, isEmpty#103, sum#104, isEmpty#105]
-Arguments: hashpartitioning(web_site_id#94, 5), true, [id=#106]
+Arguments: hashpartitioning(web_site_id#94, 5), ENSURE_REQUIREMENTS, [id=#106]
 
 (102) HashAggregate [codegen id : 30]
 Input [6]: [web_site_id#94, sum#101, sum#102, isEmpty#103, sum#104, isEmpty#105]
@@ -583,7 +583,7 @@ Results [9]: [channel#115, id#116, spark_grouping_id#117, sum#124, isEmpty#125, 
 
 (106) Exchange
 Input [9]: [channel#115, id#116, spark_grouping_id#117, sum#124, isEmpty#125, sum#126, isEmpty#127, sum#128, isEmpty#129]
-Arguments: hashpartitioning(channel#115, id#116, spark_grouping_id#117, 5), true, [id=#130]
+Arguments: hashpartitioning(channel#115, id#116, spark_grouping_id#117, 5), ENSURE_REQUIREMENTS, [id=#130]
 
 (107) HashAggregate [codegen id : 32]
 Input [9]: [channel#115, id#116, spark_grouping_id#117, sum#124, isEmpty#125, sum#126, isEmpty#127, sum#128, isEmpty#129]

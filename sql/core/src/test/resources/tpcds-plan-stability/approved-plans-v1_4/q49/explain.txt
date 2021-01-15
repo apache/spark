@@ -158,24 +158,24 @@ Input [7]: [ws_sold_date_sk#1, ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_re
 (18) HashAggregate [codegen id : 3]
 Input [5]: [ws_item_sk#2, ws_quantity#4, ws_net_paid#5, wr_return_quantity#9, wr_return_amt#10]
 Keys [1]: [ws_item_sk#2]
-Functions [4]: [partial_sum(cast(coalesce(wr_return_quantity#9, 0) as bigint)), partial_sum(cast(coalesce(ws_quantity#4, 0) as bigint)), partial_sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
+Functions [4]: [partial_sum(coalesce(wr_return_quantity#9, 0)), partial_sum(coalesce(ws_quantity#4, 0)), partial_sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#16, sum#17, sum#18, isEmpty#19, sum#20, isEmpty#21]
 Results [7]: [ws_item_sk#2, sum#22, sum#23, sum#24, isEmpty#25, sum#26, isEmpty#27]
 
 (19) Exchange
 Input [7]: [ws_item_sk#2, sum#22, sum#23, sum#24, isEmpty#25, sum#26, isEmpty#27]
-Arguments: hashpartitioning(ws_item_sk#2, 5), true, [id=#28]
+Arguments: hashpartitioning(ws_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (20) HashAggregate [codegen id : 4]
 Input [7]: [ws_item_sk#2, sum#22, sum#23, sum#24, isEmpty#25, sum#26, isEmpty#27]
 Keys [1]: [ws_item_sk#2]
-Functions [4]: [sum(cast(coalesce(wr_return_quantity#9, 0) as bigint)), sum(cast(coalesce(ws_quantity#4, 0) as bigint)), sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(cast(coalesce(wr_return_quantity#9, 0) as bigint))#29, sum(cast(coalesce(ws_quantity#4, 0) as bigint))#30, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#31, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#32]
-Results [3]: [ws_item_sk#2 AS item#33, CheckOverflow((promote_precision(cast(sum(cast(coalesce(wr_return_quantity#9, 0) as bigint))#29 as decimal(15,4))) / promote_precision(cast(sum(cast(coalesce(ws_quantity#4, 0) as bigint))#30 as decimal(15,4)))), DecimalType(35,20), true) AS return_ratio#34, CheckOverflow((promote_precision(cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#31 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#32 as decimal(15,4)))), DecimalType(35,20), true) AS currency_ratio#35]
+Functions [4]: [sum(coalesce(wr_return_quantity#9, 0)), sum(coalesce(ws_quantity#4, 0)), sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00)), sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(wr_return_quantity#9, 0))#29, sum(coalesce(ws_quantity#4, 0))#30, sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#31, sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#32]
+Results [3]: [ws_item_sk#2 AS item#33, CheckOverflow((promote_precision(cast(sum(coalesce(wr_return_quantity#9, 0))#29 as decimal(15,4))) / promote_precision(cast(sum(coalesce(ws_quantity#4, 0))#30 as decimal(15,4)))), DecimalType(35,20), true) AS return_ratio#34, CheckOverflow((promote_precision(cast(sum(coalesce(cast(wr_return_amt#10 as decimal(12,2)), 0.00))#31 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ws_net_paid#5 as decimal(12,2)), 0.00))#32 as decimal(15,4)))), DecimalType(35,20), true) AS currency_ratio#35]
 
 (21) Exchange
 Input [3]: [item#33, return_ratio#34, currency_ratio#35]
-Arguments: SinglePartition, true, [id=#36]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#36]
 
 (22) Sort [codegen id : 5]
 Input [3]: [item#33, return_ratio#34, currency_ratio#35]
@@ -261,24 +261,24 @@ Input [7]: [cs_sold_date_sk#40, cs_item_sk#41, cs_quantity#43, cs_net_paid#44, c
 (41) HashAggregate [codegen id : 10]
 Input [5]: [cs_item_sk#41, cs_quantity#43, cs_net_paid#44, cr_return_quantity#48, cr_return_amount#49]
 Keys [1]: [cs_item_sk#41]
-Functions [4]: [partial_sum(cast(coalesce(cr_return_quantity#48, 0) as bigint)), partial_sum(cast(coalesce(cs_quantity#43, 0) as bigint)), partial_sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))]
+Functions [4]: [partial_sum(coalesce(cr_return_quantity#48, 0)), partial_sum(coalesce(cs_quantity#43, 0)), partial_sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#51, sum#52, sum#53, isEmpty#54, sum#55, isEmpty#56]
 Results [7]: [cs_item_sk#41, sum#57, sum#58, sum#59, isEmpty#60, sum#61, isEmpty#62]
 
 (42) Exchange
 Input [7]: [cs_item_sk#41, sum#57, sum#58, sum#59, isEmpty#60, sum#61, isEmpty#62]
-Arguments: hashpartitioning(cs_item_sk#41, 5), true, [id=#63]
+Arguments: hashpartitioning(cs_item_sk#41, 5), ENSURE_REQUIREMENTS, [id=#63]
 
 (43) HashAggregate [codegen id : 11]
 Input [7]: [cs_item_sk#41, sum#57, sum#58, sum#59, isEmpty#60, sum#61, isEmpty#62]
 Keys [1]: [cs_item_sk#41]
-Functions [4]: [sum(cast(coalesce(cr_return_quantity#48, 0) as bigint)), sum(cast(coalesce(cs_quantity#43, 0) as bigint)), sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(cast(coalesce(cr_return_quantity#48, 0) as bigint))#64, sum(cast(coalesce(cs_quantity#43, 0) as bigint))#65, sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00))#66, sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))#67]
-Results [3]: [cs_item_sk#41 AS item#68, CheckOverflow((promote_precision(cast(sum(cast(coalesce(cr_return_quantity#48, 0) as bigint))#64 as decimal(15,4))) / promote_precision(cast(sum(cast(coalesce(cs_quantity#43, 0) as bigint))#65 as decimal(15,4)))), DecimalType(35,20), true) AS return_ratio#69, CheckOverflow((promote_precision(cast(sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00))#66 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))#67 as decimal(15,4)))), DecimalType(35,20), true) AS currency_ratio#70]
+Functions [4]: [sum(coalesce(cr_return_quantity#48, 0)), sum(coalesce(cs_quantity#43, 0)), sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00)), sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(cr_return_quantity#48, 0))#64, sum(coalesce(cs_quantity#43, 0))#65, sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00))#66, sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))#67]
+Results [3]: [cs_item_sk#41 AS item#68, CheckOverflow((promote_precision(cast(sum(coalesce(cr_return_quantity#48, 0))#64 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cs_quantity#43, 0))#65 as decimal(15,4)))), DecimalType(35,20), true) AS return_ratio#69, CheckOverflow((promote_precision(cast(sum(coalesce(cast(cr_return_amount#49 as decimal(12,2)), 0.00))#66 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(cs_net_paid#44 as decimal(12,2)), 0.00))#67 as decimal(15,4)))), DecimalType(35,20), true) AS currency_ratio#70]
 
 (44) Exchange
 Input [3]: [item#68, return_ratio#69, currency_ratio#70]
-Arguments: SinglePartition, true, [id=#71]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#71]
 
 (45) Sort [codegen id : 12]
 Input [3]: [item#68, return_ratio#69, currency_ratio#70]
@@ -364,24 +364,24 @@ Input [7]: [ss_sold_date_sk#75, ss_item_sk#76, ss_quantity#78, ss_net_paid#79, s
 (64) HashAggregate [codegen id : 17]
 Input [5]: [ss_item_sk#76, ss_quantity#78, ss_net_paid#79, sr_return_quantity#83, sr_return_amt#84]
 Keys [1]: [ss_item_sk#76]
-Functions [4]: [partial_sum(cast(coalesce(sr_return_quantity#83, 0) as bigint)), partial_sum(cast(coalesce(ss_quantity#78, 0) as bigint)), partial_sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))]
+Functions [4]: [partial_sum(coalesce(sr_return_quantity#83, 0)), partial_sum(coalesce(ss_quantity#78, 0)), partial_sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00)), partial_sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))]
 Aggregate Attributes [6]: [sum#86, sum#87, sum#88, isEmpty#89, sum#90, isEmpty#91]
 Results [7]: [ss_item_sk#76, sum#92, sum#93, sum#94, isEmpty#95, sum#96, isEmpty#97]
 
 (65) Exchange
 Input [7]: [ss_item_sk#76, sum#92, sum#93, sum#94, isEmpty#95, sum#96, isEmpty#97]
-Arguments: hashpartitioning(ss_item_sk#76, 5), true, [id=#98]
+Arguments: hashpartitioning(ss_item_sk#76, 5), ENSURE_REQUIREMENTS, [id=#98]
 
 (66) HashAggregate [codegen id : 18]
 Input [7]: [ss_item_sk#76, sum#92, sum#93, sum#94, isEmpty#95, sum#96, isEmpty#97]
 Keys [1]: [ss_item_sk#76]
-Functions [4]: [sum(cast(coalesce(sr_return_quantity#83, 0) as bigint)), sum(cast(coalesce(ss_quantity#78, 0) as bigint)), sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))]
-Aggregate Attributes [4]: [sum(cast(coalesce(sr_return_quantity#83, 0) as bigint))#99, sum(cast(coalesce(ss_quantity#78, 0) as bigint))#100, sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00))#101, sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))#102]
-Results [3]: [ss_item_sk#76 AS item#103, CheckOverflow((promote_precision(cast(sum(cast(coalesce(sr_return_quantity#83, 0) as bigint))#99 as decimal(15,4))) / promote_precision(cast(sum(cast(coalesce(ss_quantity#78, 0) as bigint))#100 as decimal(15,4)))), DecimalType(35,20), true) AS return_ratio#104, CheckOverflow((promote_precision(cast(sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00))#101 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))#102 as decimal(15,4)))), DecimalType(35,20), true) AS currency_ratio#105]
+Functions [4]: [sum(coalesce(sr_return_quantity#83, 0)), sum(coalesce(ss_quantity#78, 0)), sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00)), sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))]
+Aggregate Attributes [4]: [sum(coalesce(sr_return_quantity#83, 0))#99, sum(coalesce(ss_quantity#78, 0))#100, sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00))#101, sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))#102]
+Results [3]: [ss_item_sk#76 AS item#103, CheckOverflow((promote_precision(cast(sum(coalesce(sr_return_quantity#83, 0))#99 as decimal(15,4))) / promote_precision(cast(sum(coalesce(ss_quantity#78, 0))#100 as decimal(15,4)))), DecimalType(35,20), true) AS return_ratio#104, CheckOverflow((promote_precision(cast(sum(coalesce(cast(sr_return_amt#84 as decimal(12,2)), 0.00))#101 as decimal(15,4))) / promote_precision(cast(sum(coalesce(cast(ss_net_paid#79 as decimal(12,2)), 0.00))#102 as decimal(15,4)))), DecimalType(35,20), true) AS currency_ratio#105]
 
 (67) Exchange
 Input [3]: [item#103, return_ratio#104, currency_ratio#105]
-Arguments: SinglePartition, true, [id=#106]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#106]
 
 (68) Sort [codegen id : 19]
 Input [3]: [item#103, return_ratio#104, currency_ratio#105]
@@ -418,7 +418,7 @@ Results [5]: [channel#39, item#33, return_ratio#34, return_rank#37, currency_ran
 
 (76) Exchange
 Input [5]: [channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38]
-Arguments: hashpartitioning(channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38, 5), true, [id=#110]
+Arguments: hashpartitioning(channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38, 5), ENSURE_REQUIREMENTS, [id=#110]
 
 (77) HashAggregate [codegen id : 23]
 Input [5]: [channel#39, item#33, return_ratio#34, return_rank#37, currency_rank#38]
