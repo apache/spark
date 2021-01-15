@@ -165,26 +165,15 @@ class Column(val expr: Expression) extends Logging {
   /** Creates a column based on the given expression. */
   private def withExpr(newExpr: Expression): Column = new Column(newExpr)
 
-  private def existsUnresolvedExtractValue(expr: Expression): Boolean = {
-    expr.find {_.isInstanceOf[UnresolvedExtractValue]}.isDefined
-  }
-
   /**
    * Returns the expression for this column either with an existing or auto assigned name.
    */
   private[sql] def named: NamedExpression = expr match {
-    // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-    // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-    // make it a NamedExpression.
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
-
     case expr: NamedExpression => expr
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
     // the correct defaults after the nested expression's type has been resolved.
     case g: Generator => MultiAlias(g, Nil)
-
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
@@ -193,18 +182,10 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case _ if existsUnresolvedExtractValue(expr) => UnresolvedAlias(expr)
-        case _ => Alias(expr, toPrettySQL(expr))()
+        case _ => UnresolvedAlias(expr, Some(Column.generateAlias))
       }
 
-    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, Some(Column.generateAlias))
-
-    // Wait until the struct is resolved. This will generate a nicer looking alias.
-    case struct: CreateNamedStruct => UnresolvedAlias(struct)
-
-    case expr: Expression if existsUnresolvedExtractValue(expr) => UnresolvedAlias(expr)
-    case expr: Expression => Alias(expr, toPrettySQL(expr))()
+    case expr: Expression => UnresolvedAlias(expr, Some(Column.generateAlias))
   }
 
   /**
