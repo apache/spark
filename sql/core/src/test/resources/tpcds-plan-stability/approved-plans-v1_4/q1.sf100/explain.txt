@@ -102,7 +102,7 @@ Results [3]: [sr_customer_sk#2, sr_store_sk#3, sum#9]
 
 (12) Exchange
 Input [3]: [sr_customer_sk#2, sr_store_sk#3, sum#9]
-Arguments: hashpartitioning(sr_customer_sk#2, sr_store_sk#3, 5), true, [id=#10]
+Arguments: hashpartitioning(sr_customer_sk#2, sr_store_sk#3, 5), ENSURE_REQUIREMENTS, [id=#10]
 
 (13) HashAggregate [codegen id : 8]
 Input [3]: [sr_customer_sk#2, sr_store_sk#3, sum#9]
@@ -150,7 +150,7 @@ Results [3]: [sr_customer_sk#2, sr_store_sk#3, sum#16]
 
 (22) Exchange
 Input [3]: [sr_customer_sk#2, sr_store_sk#3, sum#16]
-Arguments: hashpartitioning(sr_customer_sk#2, sr_store_sk#3, 5), true, [id=#17]
+Arguments: hashpartitioning(sr_customer_sk#2, sr_store_sk#3, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (23) HashAggregate [codegen id : 5]
 Input [3]: [sr_customer_sk#2, sr_store_sk#3, sum#16]
@@ -168,31 +168,31 @@ Results [3]: [ctr_store_sk#13, sum#21, count#22]
 
 (25) Exchange
 Input [3]: [ctr_store_sk#13, sum#21, count#22]
-Arguments: hashpartitioning(ctr_store_sk#13, 5), true, [id=#23]
+Arguments: hashpartitioning(ctr_store_sk#13, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (26) HashAggregate [codegen id : 6]
 Input [3]: [ctr_store_sk#13, sum#21, count#22]
 Keys [1]: [ctr_store_sk#13]
 Functions [1]: [avg(ctr_total_return#14)]
 Aggregate Attributes [1]: [avg(ctr_total_return#14)#24]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#14)#24) * 1.200000), DecimalType(24,7), true) AS (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13 AS ctr_store_sk#13#26]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#14)#24) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13 AS ctr_store_sk#13#26]
 
 (27) Filter [codegen id : 6]
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13#26]
-Condition : isnotnull((CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25)
+Input [2]: [(avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13#26]
+Condition : isnotnull((avg(ctr_total_return) * 1.2)#25)
 
 (28) BroadcastExchange
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13#26]
+Input [2]: [(avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13#26]
 Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#27]
 
 (29) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ctr_store_sk#13]
 Right keys [1]: [ctr_store_sk#13#26]
-Join condition: (cast(ctr_total_return#14 as decimal(24,7)) > (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25)
+Join condition: (cast(ctr_total_return#14 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#25)
 
 (30) Project [codegen id : 8]
 Output [2]: [ctr_customer_sk#12, ctr_store_sk#13]
-Input [5]: [ctr_customer_sk#12, ctr_store_sk#13, ctr_total_return#14, (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13#26]
+Input [5]: [ctr_customer_sk#12, ctr_store_sk#13, ctr_total_return#14, (avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13#26]
 
 (31) Scan parquet default.store
 Output [2]: [s_store_sk#28, s_state#29]
@@ -227,7 +227,7 @@ Input [3]: [ctr_customer_sk#12, ctr_store_sk#13, s_store_sk#28]
 
 (38) Exchange
 Input [1]: [ctr_customer_sk#12]
-Arguments: hashpartitioning(ctr_customer_sk#12, 5), true, [id=#31]
+Arguments: hashpartitioning(ctr_customer_sk#12, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (39) Sort [codegen id : 9]
 Input [1]: [ctr_customer_sk#12]
@@ -249,7 +249,7 @@ Condition : isnotnull(c_customer_sk#32)
 
 (43) Exchange
 Input [2]: [c_customer_sk#32, c_customer_id#33]
-Arguments: hashpartitioning(cast(c_customer_sk#32 as bigint), 5), true, [id=#34]
+Arguments: hashpartitioning(cast(c_customer_sk#32 as bigint), 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (44) Sort [codegen id : 11]
 Input [2]: [c_customer_sk#32, c_customer_id#33]

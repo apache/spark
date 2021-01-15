@@ -191,25 +191,32 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
   }
 
-  test("All files from SPARK_CONF_DIR, except templates and spark config " +
+  test("All files from SPARK_CONF_DIR, " +
+    "except templates, spark config, binary files and are within size limit, " +
     "should be populated to pod's configMap.") {
     def testSetup: (SparkConf, Seq[String]) = {
       val tempDir = Utils.createTempDir()
-      val sparkConf = new SparkConf(loadDefaults = false).setSparkHome(tempDir.getAbsolutePath)
+      val sparkConf = new SparkConf(loadDefaults = false)
+        .setSparkHome(tempDir.getAbsolutePath)
 
       val tempConfDir = new File(s"${tempDir.getAbsolutePath}/conf")
       tempConfDir.mkdir()
       // File names - which should not get mounted on the resultant config map.
       val filteredConfFileNames =
-        Set("spark-env.sh.template", "spark.properties", "spark-defaults.conf")
-      val confFileNames = for (i <- 1 to 5) yield s"testConf.$i" ++
+        Set("spark-env.sh.template", "spark.properties", "spark-defaults.conf",
+          "test.gz", "test2.jar", "non_utf8.txt")
+      val confFileNames = (for (i <- 1 to 5) yield s"testConf.$i") ++
         List("spark-env.sh") ++ filteredConfFileNames
 
-      val testConfFiles = for (i <- confFileNames) yield {
+      val testConfFiles = (for (i <- confFileNames) yield {
         val file = new File(s"${tempConfDir.getAbsolutePath}/$i")
-        Files.write(file.toPath, "conf1key=conf1value".getBytes(StandardCharsets.UTF_8))
+        if (i.startsWith("non_utf8")) { // filling some non-utf-8 binary
+          Files.write(file.toPath, Array[Byte](0x00.toByte, 0xA1.toByte))
+        } else {
+          Files.write(file.toPath, "conf1key=conf1value".getBytes(StandardCharsets.UTF_8))
+        }
         file.getName
-      }
+      })
       assert(tempConfDir.listFiles().length == confFileNames.length)
       val expectedConfFiles: Seq[String] = testConfFiles.filterNot(filteredConfFileNames.contains)
       (sparkConf, expectedConfFiles)

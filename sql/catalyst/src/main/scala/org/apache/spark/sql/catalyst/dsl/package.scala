@@ -130,7 +130,9 @@ package object dsl {
       if (expr.resolved && expr.dataType.sameType(to)) {
         expr
       } else {
-        Cast(expr, to)
+        val cast = Cast(expr, to)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
       }
     }
 

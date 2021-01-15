@@ -294,12 +294,12 @@ class StarJoinCostBasedReorderSuite extends JoinReorderPlanTestBase with StatsEs
           (nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
 
     val expected =
-      f1.join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
-        .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk")))
-        .join(t3.join(t4, Inner, Some(nameToAttr("t3_c1") === nameToAttr("t4_c1"))), Inner,
-          Some(nameToAttr("t3_c1") === nameToAttr("t4_c1")))
+      t3.join(t4, Inner, Some(nameToAttr("t3_c1") === nameToAttr("t4_c1")))
         .join(t1.join(t2, Inner, Some(nameToAttr("t1_c1") === nameToAttr("t2_c1"))), Inner,
           Some(nameToAttr("t1_c2") === nameToAttr("t4_c2")))
+        .join(f1
+          .join(d2, Inner, Some(nameToAttr("f1_fk2") === nameToAttr("d2_pk")))
+          .join(d1, Inner, Some(nameToAttr("f1_fk1") === nameToAttr("d1_pk"))))
         .select(outputsOf(d1, t1, t2, t3, t4, f1, d2): _*)
 
     assertEqualJoinPlans(Optimize, query, expected)

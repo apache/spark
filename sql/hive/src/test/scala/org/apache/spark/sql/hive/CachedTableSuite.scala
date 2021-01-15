@@ -429,4 +429,51 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-33963: do not use table stats while looking in table cache") {
+    val t = "table_on_test"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col int)")
+      assert(!spark.catalog.isCached(t))
+      sql(s"CACHE TABLE $t")
+      assert(spark.catalog.isCached(t))
+    }
+  }
+
+  test("SPARK-33965: cache table in spark_catalog") {
+    withNamespace("spark_catalog.ns") {
+      sql("CREATE NAMESPACE spark_catalog.ns")
+      val t = "spark_catalog.ns.tbl"
+      withTable(t) {
+        sql(s"CREATE TABLE $t (col int)")
+        assert(!spark.catalog.isCached(t))
+        sql(s"CACHE TABLE $t")
+        assert(spark.catalog.isCached(t))
+      }
+    }
+  }
+
+  test("SPARK-34076: should be able to drop temp view with cached tables") {
+    val t = "cachedTable"
+    val v = "tempView"
+    withTable(t) {
+      withTempView(v) {
+        sql(s"CREATE TEMPORARY VIEW $v AS SELECT key FROM src LIMIT 10")
+        sql(s"CREATE TABLE $t AS SELECT * FROM src")
+        sql(s"CACHE TABLE $t")
+      }
+    }
+  }
+
+  test("SPARK-34076: should be able to drop global temp view with cached tables") {
+    val t = "cachedTable"
+    val v = "globalTempView"
+    withTable(t) {
+      withGlobalTempView(v) {
+        sql(s"CREATE GLOBAL TEMPORARY VIEW $v AS SELECT key FROM src LIMIT 10")
+        sql(s"CREATE TABLE $t AS SELECT * FROM src")
+        sql(s"CACHE TABLE $t")
+      }
+    }
+  }
 }

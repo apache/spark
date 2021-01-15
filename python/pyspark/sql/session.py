@@ -96,7 +96,7 @@ class SparkSession(SparkConversionMixin):
     >>> df.createOrReplaceTempView("allTypes")
     >>> spark.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
     ...            'from allTypes where b and i > 0').collect()
-    [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
+    [Row((i + 1)=2, (d + 1)=2.0, (NOT b)=False, list[1]=2, \
         dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
     >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
     [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
