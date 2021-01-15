@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 
@@ -203,4 +204,48 @@ case class BitwiseCount(child: Expression)
     case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
   }
+}
+
+object BitwiseGetUtil {
+  def calculate(target: Long, pos: Int): Long = {
+    if (pos < 0) {
+      throw new IllegalArgumentException(s"Invalid bit position: $pos less than zero")
+    } else if (java.lang.Long.SIZE <= pos) {
+      throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the " +
+        "bit length of the target long")
+    }
+    (target >> pos) & 1
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr, pos) - Returns the value of the bit (0 or 1) at the specified position.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(11, 0);
+       1
+      > SELECT _FUNC_(11, 2);
+       0
+  """,
+  since = "3.2.0",
+  group = "bitwise_funcs")
+case class BitwiseGet(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[IntegralType] = Seq(LongType, IntegerType)
+
+  override def dataType: DataType = LongType
+
+  override def nullSafeEval(target: Any, pos: Any): Any = {
+    BitwiseGetUtil.calculate(target.asInstanceOf[Long], pos.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (target, pos) =>
+      s"org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.calculate($target, $pos);"
+    )
+  }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bit_get")
 }

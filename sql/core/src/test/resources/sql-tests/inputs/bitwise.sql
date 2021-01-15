@@ -68,3 +68,10 @@ SELECT b1, bit_xor(b2) FROM bitwise_test GROUP BY b1 HAVING bit_and(b2) < 7;
 
 -- window
 SELECT b1, b2, bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2) FROM bitwise_test;
+
+-- getbit
+select getbit(11, 3), getbit(11, 2), getbit(11, 1), getbit(11, 0);
+select getbit(11, 2 + 1), getbit(11, 3 - 1), getbit(10 + 1, 1 * 1), getbit(11 / 1, 1 - 1);
+select getbit(11, 63);
+select getbit(11, -1);
+select getbit(11, 64);

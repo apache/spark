@@ -1414,6 +1414,14 @@ object functions {
   def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
 
   /**
+   * Get the value of the bit (0 or 1) at the specified position.
+   *
+   * @group bitwise_funcs
+   * @since 3.2.0
+   */
+  def bitwiseGet(e: Column, pos: Column): Column = withExpr { BitwiseGet(e.expr, pos.expr) }
+
+  /**
    * Parses the expression string into the column that it represents, similar to
    * [[Dataset#selectExpr]].
    * {{{
