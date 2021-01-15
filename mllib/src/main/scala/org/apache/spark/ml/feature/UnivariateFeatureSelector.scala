@@ -291,11 +291,6 @@ class UnivariateFeatureSelectorModel private[ml](
   extends Model[UnivariateFeatureSelectorModel] with UnivariateFeatureSelectorParams
     with MLWritable {
 
-  if (selectedFeatures.length >= 2) {
-    require(selectedFeatures.sliding(2).forall(l => l(0) < l(1)),
-      "Index should be strictly increasing.")
-  }
-
   /** @group setParam */
   @Since("3.1.1")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -311,7 +306,7 @@ class UnivariateFeatureSelectorModel private[ml](
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
     UnivariateFeatureSelectorModel
-      .transform(dataset, selectedFeatures, outputSchema, $(outputCol), $(featuresCol))
+      .transform(dataset, selectedFeatures.sorted, outputSchema, $(outputCol), $(featuresCol))
   }
 
   @Since("3.1.1")
