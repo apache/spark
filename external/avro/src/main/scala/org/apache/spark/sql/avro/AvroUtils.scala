@@ -213,13 +213,13 @@ private[sql] object AvroUtils extends Logging {
    * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
    */
   private[avro] def getAvroFieldForCatalystField(
-    avroFields: Seq[Schema.Field],
+    avroFields: TraversableOnce[Schema.Field],
     catalystField: StructField,
     avroPath: Seq[String],
     catalystPath: Seq[String]): Option[Schema.Field] = {
     val isEqual: (String, String) => Boolean =
       if (SQLConf.get.caseSensitiveAnalysis) { _.equals(_) } else { _.equalsIgnoreCase(_) }
-    avroFields.filter(f => isEqual(f.name(), catalystField.name)) match {
+    avroFields.filter(f => isEqual(f.name(), catalystField.name)).toSeq match {
       case Seq(avroField) => Some(avroField)
       case Seq() => None
       case s => throw new IncompatibleSchemaException(
