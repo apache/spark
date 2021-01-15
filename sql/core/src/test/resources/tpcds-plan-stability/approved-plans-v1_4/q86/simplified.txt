@@ -33,8 +33,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,total_sum,i_cl
                                     InputAdapter
                                       BroadcastExchange #4
                                         WholeStageCodegen (2)
-                                          Project [i_item_sk,i_class,i_category]
-                                            Filter [i_item_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.item [i_item_sk,i_class,i_category]
+                                          Filter [i_item_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.item [i_item_sk,i_class,i_category]

@@ -46,11 +46,10 @@ WholeStageCodegen (20)
                                                       InputAdapter
                                                         BroadcastExchange #5
                                                           WholeStageCodegen (2)
-                                                            Project [i_item_sk,i_item_desc]
-                                                              Filter [i_item_sk]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet default.item [i_item_sk,i_item_desc]
+                                                            Filter [i_item_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.item [i_item_sk,i_item_desc]
                           InputAdapter
                             BroadcastExchange #6
                               WholeStageCodegen (7)

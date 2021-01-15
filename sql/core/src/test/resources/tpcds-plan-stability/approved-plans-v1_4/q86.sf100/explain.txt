@@ -1,33 +1,29 @@
 == Physical Plan ==
-TakeOrderedAndProject (29)
-+- * Project (28)
-   +- Window (27)
-      +- * Sort (26)
-         +- Exchange (25)
-            +- * HashAggregate (24)
-               +- Exchange (23)
-                  +- * HashAggregate (22)
-                     +- * Expand (21)
-                        +- * Project (20)
-                           +- * SortMergeJoin Inner (19)
-                              :- * Sort (12)
-                              :  +- Exchange (11)
-                              :     +- * Project (10)
-                              :        +- * BroadcastHashJoin Inner BuildRight (9)
-                              :           :- * Filter (3)
-                              :           :  +- * ColumnarToRow (2)
-                              :           :     +- Scan parquet default.web_sales (1)
-                              :           +- BroadcastExchange (8)
-                              :              +- * Project (7)
-                              :                 +- * Filter (6)
-                              :                    +- * ColumnarToRow (5)
-                              :                       +- Scan parquet default.date_dim (4)
-                              +- * Sort (18)
-                                 +- Exchange (17)
-                                    +- * Project (16)
-                                       +- * Filter (15)
-                                          +- * ColumnarToRow (14)
-                                             +- Scan parquet default.item (13)
+TakeOrderedAndProject (25)
++- * Project (24)
+   +- Window (23)
+      +- * Sort (22)
+         +- Exchange (21)
+            +- * HashAggregate (20)
+               +- Exchange (19)
+                  +- * HashAggregate (18)
+                     +- * Expand (17)
+                        +- * Project (16)
+                           +- * BroadcastHashJoin Inner BuildRight (15)
+                              :- * Project (10)
+                              :  +- * BroadcastHashJoin Inner BuildRight (9)
+                              :     :- * Filter (3)
+                              :     :  +- * ColumnarToRow (2)
+                              :     :     +- Scan parquet default.web_sales (1)
+                              :     +- BroadcastExchange (8)
+                              :        +- * Project (7)
+                              :           +- * Filter (6)
+                              :              +- * ColumnarToRow (5)
+                              :                 +- Scan parquet default.date_dim (4)
+                              +- BroadcastExchange (14)
+                                 +- * Filter (13)
+                                    +- * ColumnarToRow (12)
+                                       +- Scan parquet default.item (11)
 
 
 (1) Scan parquet default.web_sales
@@ -37,10 +33,10 @@ Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_sold_date_sk), IsNotNull(ws_item_sk)]
 ReadSchema: struct<ws_sold_date_sk:int,ws_item_sk:int,ws_net_paid:decimal(7,2)>
 
-(2) ColumnarToRow [codegen id : 2]
+(2) ColumnarToRow [codegen id : 3]
 Input [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_net_paid#3]
 
-(3) Filter [codegen id : 2]
+(3) Filter [codegen id : 3]
 Input [3]: [ws_sold_date_sk#1, ws_item_sk#2, ws_net_paid#3]
 Condition : (isnotnull(ws_sold_date_sk#1) AND isnotnull(ws_item_sk#2))
 
@@ -66,97 +62,81 @@ Input [2]: [d_date_sk#4, d_month_seq#5]
 Input [1]: [d_date_sk#4]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#6]
 
-(9) BroadcastHashJoin [codegen id : 2]
+(9) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ws_sold_date_sk#1]
 Right keys [1]: [d_date_sk#4]
 Join condition: None
 
-(10) Project [codegen id : 2]
+(10) Project [codegen id : 3]
 Output [2]: [ws_item_sk#2, ws_net_paid#3]
 Input [4]: [ws_sold_date_sk#1, ws_item_sk#2, ws_net_paid#3, d_date_sk#4]
 
-(11) Exchange
-Input [2]: [ws_item_sk#2, ws_net_paid#3]
-Arguments: hashpartitioning(ws_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#7]
-
-(12) Sort [codegen id : 3]
-Input [2]: [ws_item_sk#2, ws_net_paid#3]
-Arguments: [ws_item_sk#2 ASC NULLS FIRST], false, 0
-
-(13) Scan parquet default.item
-Output [3]: [i_item_sk#8, i_class#9, i_category#10]
+(11) Scan parquet default.item
+Output [3]: [i_item_sk#7, i_class#8, i_category#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
 
-(14) ColumnarToRow [codegen id : 4]
-Input [3]: [i_item_sk#8, i_class#9, i_category#10]
+(12) ColumnarToRow [codegen id : 2]
+Input [3]: [i_item_sk#7, i_class#8, i_category#9]
 
-(15) Filter [codegen id : 4]
-Input [3]: [i_item_sk#8, i_class#9, i_category#10]
-Condition : isnotnull(i_item_sk#8)
+(13) Filter [codegen id : 2]
+Input [3]: [i_item_sk#7, i_class#8, i_category#9]
+Condition : isnotnull(i_item_sk#7)
 
-(16) Project [codegen id : 4]
-Output [3]: [i_item_sk#8, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, i_class#9, 50, false, true) AS i_class#11, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, i_category#10, 50, false, true) AS i_category#12]
-Input [3]: [i_item_sk#8, i_class#9, i_category#10]
+(14) BroadcastExchange
+Input [3]: [i_item_sk#7, i_class#8, i_category#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
 
-(17) Exchange
-Input [3]: [i_item_sk#8, i_class#11, i_category#12]
-Arguments: hashpartitioning(i_item_sk#8, 5), ENSURE_REQUIREMENTS, [id=#13]
-
-(18) Sort [codegen id : 5]
-Input [3]: [i_item_sk#8, i_class#11, i_category#12]
-Arguments: [i_item_sk#8 ASC NULLS FIRST], false, 0
-
-(19) SortMergeJoin [codegen id : 6]
+(15) BroadcastHashJoin [codegen id : 3]
 Left keys [1]: [ws_item_sk#2]
-Right keys [1]: [i_item_sk#8]
+Right keys [1]: [i_item_sk#7]
 Join condition: None
 
-(20) Project [codegen id : 6]
-Output [3]: [ws_net_paid#3, i_category#12 AS i_category#14, i_class#11 AS i_class#15]
-Input [5]: [ws_item_sk#2, ws_net_paid#3, i_item_sk#8, i_class#11, i_category#12]
+(16) Project [codegen id : 3]
+Output [3]: [ws_net_paid#3, i_category#9, i_class#8]
+Input [5]: [ws_item_sk#2, ws_net_paid#3, i_item_sk#7, i_class#8, i_category#9]
 
-(21) Expand [codegen id : 6]
-Input [3]: [ws_net_paid#3, i_category#14, i_class#15]
-Arguments: [List(ws_net_paid#3, i_category#14, i_class#15, 0), List(ws_net_paid#3, i_category#14, null, 1), List(ws_net_paid#3, null, null, 3)], [ws_net_paid#3, i_category#16, i_class#17, spark_grouping_id#18]
+(17) Expand [codegen id : 3]
+Input [3]: [ws_net_paid#3, i_category#9, i_class#8]
+Arguments: [List(ws_net_paid#3, i_category#9, i_class#8, 0), List(ws_net_paid#3, i_category#9, null, 1), List(ws_net_paid#3, null, null, 3)], [ws_net_paid#3, i_category#11, i_class#12, spark_grouping_id#13]
 
-(22) HashAggregate [codegen id : 6]
-Input [4]: [ws_net_paid#3, i_category#16, i_class#17, spark_grouping_id#18]
-Keys [3]: [i_category#16, i_class#17, spark_grouping_id#18]
+(18) HashAggregate [codegen id : 3]
+Input [4]: [ws_net_paid#3, i_category#11, i_class#12, spark_grouping_id#13]
+Keys [3]: [i_category#11, i_class#12, spark_grouping_id#13]
 Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#3))]
-Aggregate Attributes [1]: [sum#19]
-Results [4]: [i_category#16, i_class#17, spark_grouping_id#18, sum#20]
+Aggregate Attributes [1]: [sum#14]
+Results [4]: [i_category#11, i_class#12, spark_grouping_id#13, sum#15]
 
-(23) Exchange
-Input [4]: [i_category#16, i_class#17, spark_grouping_id#18, sum#20]
-Arguments: hashpartitioning(i_category#16, i_class#17, spark_grouping_id#18, 5), ENSURE_REQUIREMENTS, [id=#21]
+(19) Exchange
+Input [4]: [i_category#11, i_class#12, spark_grouping_id#13, sum#15]
+Arguments: hashpartitioning(i_category#11, i_class#12, spark_grouping_id#13, 5), ENSURE_REQUIREMENTS, [id=#16]
 
-(24) HashAggregate [codegen id : 7]
-Input [4]: [i_category#16, i_class#17, spark_grouping_id#18, sum#20]
-Keys [3]: [i_category#16, i_class#17, spark_grouping_id#18]
+(20) HashAggregate [codegen id : 4]
+Input [4]: [i_category#11, i_class#12, spark_grouping_id#13, sum#15]
+Keys [3]: [i_category#11, i_class#12, spark_grouping_id#13]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#3))#22]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#22,17,2) AS total_sum#23, i_category#16, i_class#17, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS lochierarchy#24, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS _w1#25, CASE WHEN (cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint) = 0) THEN i_category#16 END AS _w2#26, MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#22,17,2) AS _w3#27]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#3))#17]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#17,17,2) AS total_sum#18, i_category#11, i_class#12, (cast((shiftright(spark_grouping_id#13, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint)) AS lochierarchy#19, (cast((shiftright(spark_grouping_id#13, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint)) AS _w1#20, CASE WHEN (cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint) = 0) THEN i_category#11 END AS _w2#21, MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#17,17,2) AS _w3#22]
 
-(25) Exchange
-Input [7]: [total_sum#23, i_category#16, i_class#17, lochierarchy#24, _w1#25, _w2#26, _w3#27]
-Arguments: hashpartitioning(_w1#25, _w2#26, 5), ENSURE_REQUIREMENTS, [id=#28]
+(21) Exchange
+Input [7]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w2#21, _w3#22]
+Arguments: hashpartitioning(_w1#20, _w2#21, 5), ENSURE_REQUIREMENTS, [id=#23]
 
-(26) Sort [codegen id : 8]
-Input [7]: [total_sum#23, i_category#16, i_class#17, lochierarchy#24, _w1#25, _w2#26, _w3#27]
-Arguments: [_w1#25 ASC NULLS FIRST, _w2#26 ASC NULLS FIRST, _w3#27 DESC NULLS LAST], false, 0
+(22) Sort [codegen id : 5]
+Input [7]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w2#21, _w3#22]
+Arguments: [_w1#20 ASC NULLS FIRST, _w2#21 ASC NULLS FIRST, _w3#22 DESC NULLS LAST], false, 0
 
-(27) Window
-Input [7]: [total_sum#23, i_category#16, i_class#17, lochierarchy#24, _w1#25, _w2#26, _w3#27]
-Arguments: [rank(_w3#27) windowspecdefinition(_w1#25, _w2#26, _w3#27 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#29], [_w1#25, _w2#26], [_w3#27 DESC NULLS LAST]
+(23) Window
+Input [7]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w2#21, _w3#22]
+Arguments: [rank(_w3#22) windowspecdefinition(_w1#20, _w2#21, _w3#22 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#24], [_w1#20, _w2#21], [_w3#22 DESC NULLS LAST]
 
-(28) Project [codegen id : 9]
-Output [5]: [total_sum#23, i_category#16, i_class#17, lochierarchy#24, rank_within_parent#29]
-Input [8]: [total_sum#23, i_category#16, i_class#17, lochierarchy#24, _w1#25, _w2#26, _w3#27, rank_within_parent#29]
+(24) Project [codegen id : 6]
+Output [5]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, rank_within_parent#24]
+Input [8]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w2#21, _w3#22, rank_within_parent#24]
 
-(29) TakeOrderedAndProject
-Input [5]: [total_sum#23, i_category#16, i_class#17, lochierarchy#24, rank_within_parent#29]
-Arguments: 100, [lochierarchy#24 DESC NULLS LAST, CASE WHEN (lochierarchy#24 = 0) THEN i_category#16 END ASC NULLS FIRST, rank_within_parent#29 ASC NULLS FIRST], [total_sum#23, i_category#16, i_class#17, lochierarchy#24, rank_within_parent#29]
+(25) TakeOrderedAndProject
+Input [5]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, rank_within_parent#24]
+Arguments: 100, [lochierarchy#19 DESC NULLS LAST, CASE WHEN (lochierarchy#19 = 0) THEN i_category#11 END ASC NULLS FIRST, rank_within_parent#24 ASC NULLS FIRST], [total_sum#18, i_category#11, i_class#12, lochierarchy#19, rank_within_parent#24]
 

@@ -45,11 +45,10 @@ WholeStageCodegen (14)
                                           InputAdapter
                                             BroadcastExchange #6
                                               WholeStageCodegen (3)
-                                                Project [w_warehouse_sk,w_warehouse_name]
-                                                  Filter [w_warehouse_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
+                                                Filter [w_warehouse_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
             InputAdapter
               WholeStageCodegen (12)
                 Sort [i_item_sk,w_warehouse_sk]

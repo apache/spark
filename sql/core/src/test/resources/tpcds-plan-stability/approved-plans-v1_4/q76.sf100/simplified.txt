@@ -26,11 +26,10 @@ TakeOrderedAndProject [channel,col_name,d_year,d_qoy,i_category,sales_cnt,sales_
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)
-                              Project [i_item_sk,i_category]
-                                Filter [i_item_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.item [i_item_sk,i_category]
+                              Filter [i_item_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.item [i_item_sk,i_category]
                   WholeStageCodegen (6)
                     Project [ws_ship_customer_sk,d_year,d_qoy,i_category,ws_ext_sales_price]
                       BroadcastHashJoin [ws_item_sk,i_item_sk]
@@ -50,11 +49,10 @@ TakeOrderedAndProject [channel,col_name,d_year,d_qoy,i_category,sales_cnt,sales_
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
-                        Project [i_item_sk,i_category]
-                          Filter [i_item_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.item [i_item_sk,i_category]
+                        Filter [i_item_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.item [i_item_sk,i_category]
                   WholeStageCodegen (9)
                     Project [cs_ship_addr_sk,d_year,d_qoy,i_category,cs_ext_sales_price]
                       BroadcastHashJoin [cs_item_sk,i_item_sk]

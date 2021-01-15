@@ -20,11 +20,10 @@ WholeStageCodegen (9)
                                       BroadcastHashJoin [cr_returned_date_sk,d_date_sk]
                                         Project [cc_call_center_id,cc_name,cc_manager,cr_returned_date_sk,cr_returning_customer_sk,cr_net_loss]
                                           BroadcastHashJoin [cc_call_center_sk,cr_call_center_sk]
-                                            Project [cc_call_center_sk,cc_call_center_id,cc_name,cc_manager]
-                                              Filter [cc_call_center_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.call_center [cc_call_center_sk,cc_call_center_id,cc_name,cc_manager]
+                                            Filter [cc_call_center_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.call_center [cc_call_center_sk,cc_call_center_id,cc_name,cc_manager]
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
@@ -58,11 +57,10 @@ WholeStageCodegen (9)
                             InputAdapter
                               BroadcastExchange #7
                                 WholeStageCodegen (5)
-                                  Project [cd_demo_sk,cd_marital_status,cd_education_status]
-                                    Filter [cd_marital_status,cd_education_status,cd_demo_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                  Filter [cd_marital_status,cd_education_status,cd_demo_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                         InputAdapter
                           BroadcastExchange #8
                             WholeStageCodegen (6)

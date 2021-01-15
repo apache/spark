@@ -50,11 +50,10 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                   InputAdapter
                                                     BroadcastExchange #5
                                                       WholeStageCodegen (4)
-                                                        Project [s_store_sk,s_store_id]
-                                                          Filter [s_store_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.store [s_store_sk,s_store_id]
+                                                        Filter [s_store_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.store [s_store_sk,s_store_id]
                                   WholeStageCodegen (12)
                                     HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
                                       InputAdapter
@@ -84,11 +83,10 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                   InputAdapter
                                                     BroadcastExchange #7
                                                       WholeStageCodegen (10)
-                                                        Project [cp_catalog_page_sk,cp_catalog_page_id]
-                                                          Filter [cp_catalog_page_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
+                                                        Filter [cp_catalog_page_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
                                   WholeStageCodegen (19)
                                     HashAggregate [web_site_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),channel,id,sales,returns,profit,sum,sum,sum,sum]
                                       InputAdapter
@@ -126,11 +124,10 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                   InputAdapter
                                                     BroadcastExchange #10
                                                       WholeStageCodegen (17)
-                                                        Project [web_site_sk,web_site_id]
-                                                          Filter [web_site_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.web_site [web_site_sk,web_site_id]
+                                                        Filter [web_site_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.web_site [web_site_sk,web_site_id]
                   WholeStageCodegen (43)
                     HashAggregate [channel,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),id,sum(sales),sum(returns),sum(profit),sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter

@@ -19,11 +19,10 @@ TakeOrderedAndProject [w_warehouse_name,i_item_id,inv_before,inv_after]
                             InputAdapter
                               BroadcastExchange #2
                                 WholeStageCodegen (1)
-                                  Project [w_warehouse_sk,w_warehouse_name]
-                                    Filter [w_warehouse_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
+                                  Filter [w_warehouse_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)

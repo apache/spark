@@ -60,16 +60,14 @@ TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_
                       InputAdapter
                         BroadcastExchange #6
                           WholeStageCodegen (7)
-                            Project [ca_address_sk,ca_state]
-                              Filter [ca_address_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.customer_address [ca_address_sk,ca_state]
+                            Filter [ca_address_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.customer_address [ca_address_sk,ca_state]
                   InputAdapter
                     BroadcastExchange #7
                       WholeStageCodegen (8)
-                        Project [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
-                          Filter [cd_demo_sk]
-                            ColumnarToRow
-                              InputAdapter
-                                Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                        Filter [cd_demo_sk]
+                          ColumnarToRow
+                            InputAdapter
+                              Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]

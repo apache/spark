@@ -15,11 +15,10 @@ TakeOrderedAndProject [cnt,state]
                             BroadcastHashJoin [c_customer_sk,ss_customer_sk]
                               Project [ca_state,c_customer_sk]
                                 BroadcastHashJoin [ca_address_sk,c_current_addr_sk]
-                                  Project [ca_address_sk,ca_state]
-                                    Filter [ca_address_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                  Filter [ca_address_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.customer_address [ca_address_sk,ca_state]
                                   InputAdapter
                                     BroadcastExchange #2
                                       WholeStageCodegen (1)
@@ -67,13 +66,12 @@ TakeOrderedAndProject [cnt,state]
                                   InputAdapter
                                     BroadcastExchange #7
                                       WholeStageCodegen (5)
-                                        HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),sum,count]
+                                        HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),i_category,sum,count]
                                           InputAdapter
                                             Exchange [i_category] #8
                                               WholeStageCodegen (4)
                                                 HashAggregate [i_category,i_current_price] [sum,count,sum,count]
-                                                  Project [i_current_price,i_category]
-                                                    Filter [i_category]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.item [i_current_price,i_category]
+                                                  Filter [i_category]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.item [i_current_price,i_category]

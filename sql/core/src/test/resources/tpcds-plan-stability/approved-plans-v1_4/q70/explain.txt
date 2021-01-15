@@ -1,15 +1,15 @@
 == Physical Plan ==
-TakeOrderedAndProject (49)
-+- * Project (48)
-   +- Window (47)
-      +- * Sort (46)
-         +- Exchange (45)
-            +- * HashAggregate (44)
-               +- Exchange (43)
-                  +- * HashAggregate (42)
-                     +- * Expand (41)
-                        +- * Project (40)
-                           +- * BroadcastHashJoin Inner BuildRight (39)
+TakeOrderedAndProject (47)
++- * Project (46)
+   +- Window (45)
+      +- * Sort (44)
+         +- Exchange (43)
+            +- * HashAggregate (42)
+               +- Exchange (41)
+                  +- * HashAggregate (40)
+                     +- * Expand (39)
+                        +- * Project (38)
+                           +- * BroadcastHashJoin Inner BuildRight (37)
                               :- * Project (10)
                               :  +- * BroadcastHashJoin Inner BuildRight (9)
                               :     :- * Filter (3)
@@ -20,34 +20,32 @@ TakeOrderedAndProject (49)
                               :           +- * Filter (6)
                               :              +- * ColumnarToRow (5)
                               :                 +- Scan parquet default.date_dim (4)
-                              +- BroadcastExchange (38)
-                                 +- * Project (37)
-                                    +- * BroadcastHashJoin LeftSemi BuildRight (36)
-                                       :- * Filter (13)
-                                       :  +- * ColumnarToRow (12)
-                                       :     +- Scan parquet default.store (11)
-                                       +- BroadcastExchange (35)
-                                          +- * Project (34)
-                                             +- * Filter (33)
-                                                +- Window (32)
-                                                   +- * Sort (31)
-                                                      +- Exchange (30)
-                                                         +- * HashAggregate (29)
-                                                            +- Exchange (28)
-                                                               +- * HashAggregate (27)
-                                                                  +- * Project (26)
-                                                                     +- * BroadcastHashJoin Inner BuildRight (25)
-                                                                        :- * Project (23)
-                                                                        :  +- * BroadcastHashJoin Inner BuildRight (22)
-                                                                        :     :- * Filter (16)
-                                                                        :     :  +- * ColumnarToRow (15)
-                                                                        :     :     +- Scan parquet default.store_sales (14)
-                                                                        :     +- BroadcastExchange (21)
-                                                                        :        +- * Project (20)
-                                                                        :           +- * Filter (19)
-                                                                        :              +- * ColumnarToRow (18)
-                                                                        :                 +- Scan parquet default.store (17)
-                                                                        +- ReusedExchange (24)
+                              +- BroadcastExchange (36)
+                                 +- * BroadcastHashJoin LeftSemi BuildRight (35)
+                                    :- * Filter (13)
+                                    :  +- * ColumnarToRow (12)
+                                    :     +- Scan parquet default.store (11)
+                                    +- BroadcastExchange (34)
+                                       +- * Project (33)
+                                          +- * Filter (32)
+                                             +- Window (31)
+                                                +- * Sort (30)
+                                                   +- Exchange (29)
+                                                      +- * HashAggregate (28)
+                                                         +- Exchange (27)
+                                                            +- * HashAggregate (26)
+                                                               +- * Project (25)
+                                                                  +- * BroadcastHashJoin Inner BuildRight (24)
+                                                                     :- * Project (22)
+                                                                     :  +- * BroadcastHashJoin Inner BuildRight (21)
+                                                                     :     :- * Filter (16)
+                                                                     :     :  +- * ColumnarToRow (15)
+                                                                     :     :     +- Scan parquet default.store_sales (14)
+                                                                     :     +- BroadcastExchange (20)
+                                                                     :        +- * Filter (19)
+                                                                     :           +- * ColumnarToRow (18)
+                                                                     :              +- Scan parquet default.store (17)
+                                                                     +- ReusedExchange (23)
 
 
 (1) Scan parquet default.store_sales
@@ -137,138 +135,130 @@ Input [2]: [s_store_sk#7, s_state#9]
 Input [2]: [s_store_sk#7, s_state#9]
 Condition : isnotnull(s_store_sk#7)
 
-(20) Project [codegen id : 2]
-Output [2]: [s_store_sk#7, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, s_state#9, 2, false, true) AS s_state#10]
+(20) BroadcastExchange
 Input [2]: [s_store_sk#7, s_state#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
 
-(21) BroadcastExchange
-Input [2]: [s_store_sk#7, s_state#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
-
-(22) BroadcastHashJoin [codegen id : 4]
+(21) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#2]
 Right keys [1]: [s_store_sk#7]
 Join condition: None
 
-(23) Project [codegen id : 4]
-Output [3]: [ss_sold_date_sk#1, ss_net_profit#3, s_state#10]
-Input [5]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3, s_store_sk#7, s_state#10]
+(22) Project [codegen id : 4]
+Output [3]: [ss_sold_date_sk#1, ss_net_profit#3, s_state#9]
+Input [5]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3, s_store_sk#7, s_state#9]
 
-(24) ReusedExchange [Reuses operator id: 8]
+(23) ReusedExchange [Reuses operator id: 8]
 Output [1]: [d_date_sk#4]
 
-(25) BroadcastHashJoin [codegen id : 4]
+(24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#1]
 Right keys [1]: [d_date_sk#4]
 Join condition: None
 
-(26) Project [codegen id : 4]
-Output [2]: [ss_net_profit#3, s_state#10]
-Input [4]: [ss_sold_date_sk#1, ss_net_profit#3, s_state#10, d_date_sk#4]
+(25) Project [codegen id : 4]
+Output [2]: [ss_net_profit#3, s_state#9]
+Input [4]: [ss_sold_date_sk#1, ss_net_profit#3, s_state#9, d_date_sk#4]
 
-(27) HashAggregate [codegen id : 4]
-Input [2]: [ss_net_profit#3, s_state#10]
-Keys [1]: [s_state#10]
+(26) HashAggregate [codegen id : 4]
+Input [2]: [ss_net_profit#3, s_state#9]
+Keys [1]: [s_state#9]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [sum#12]
-Results [2]: [s_state#10, sum#13]
+Aggregate Attributes [1]: [sum#11]
+Results [2]: [s_state#9, sum#12]
 
-(28) Exchange
-Input [2]: [s_state#10, sum#13]
-Arguments: hashpartitioning(s_state#10, 5), ENSURE_REQUIREMENTS, [id=#14]
+(27) Exchange
+Input [2]: [s_state#9, sum#12]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#13]
 
-(29) HashAggregate [codegen id : 5]
-Input [2]: [s_state#10, sum#13]
-Keys [1]: [s_state#10]
+(28) HashAggregate [codegen id : 5]
+Input [2]: [s_state#9, sum#12]
+Keys [1]: [s_state#9]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#15]
-Results [3]: [s_state#10 AS s_state#16, s_state#10, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#15,17,2) AS _w2#17]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#14]
+Results [3]: [s_state#9 AS s_state#15, s_state#9, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#14,17,2) AS _w2#16]
 
-(30) Exchange
-Input [3]: [s_state#16, s_state#10, _w2#17]
-Arguments: hashpartitioning(s_state#10, 5), ENSURE_REQUIREMENTS, [id=#18]
+(29) Exchange
+Input [3]: [s_state#15, s_state#9, _w2#16]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#17]
 
-(31) Sort [codegen id : 6]
-Input [3]: [s_state#16, s_state#10, _w2#17]
-Arguments: [s_state#10 ASC NULLS FIRST, _w2#17 DESC NULLS LAST], false, 0
+(30) Sort [codegen id : 6]
+Input [3]: [s_state#15, s_state#9, _w2#16]
+Arguments: [s_state#9 ASC NULLS FIRST, _w2#16 DESC NULLS LAST], false, 0
 
-(32) Window
-Input [3]: [s_state#16, s_state#10, _w2#17]
-Arguments: [rank(_w2#17) windowspecdefinition(s_state#10, _w2#17 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#19], [s_state#10], [_w2#17 DESC NULLS LAST]
+(31) Window
+Input [3]: [s_state#15, s_state#9, _w2#16]
+Arguments: [rank(_w2#16) windowspecdefinition(s_state#9, _w2#16 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS ranking#18], [s_state#9], [_w2#16 DESC NULLS LAST]
 
-(33) Filter [codegen id : 7]
-Input [4]: [s_state#16, s_state#10, _w2#17, ranking#19]
-Condition : (isnotnull(ranking#19) AND (ranking#19 <= 5))
+(32) Filter [codegen id : 7]
+Input [4]: [s_state#15, s_state#9, _w2#16, ranking#18]
+Condition : (isnotnull(ranking#18) AND (ranking#18 <= 5))
 
-(34) Project [codegen id : 7]
-Output [1]: [s_state#16]
-Input [4]: [s_state#16, s_state#10, _w2#17, ranking#19]
+(33) Project [codegen id : 7]
+Output [1]: [s_state#15]
+Input [4]: [s_state#15, s_state#9, _w2#16, ranking#18]
 
-(35) BroadcastExchange
-Input [1]: [s_state#16]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#20]
+(34) BroadcastExchange
+Input [1]: [s_state#15]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#19]
 
-(36) BroadcastHashJoin [codegen id : 8]
-Left keys [1]: [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, s_state#9, 2, false, true)]
-Right keys [1]: [s_state#16]
+(35) BroadcastHashJoin [codegen id : 8]
+Left keys [1]: [s_state#9]
+Right keys [1]: [s_state#15]
 Join condition: None
 
-(37) Project [codegen id : 8]
-Output [3]: [s_store_sk#7, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, lengthCheck, s_county#8, 30, false, true) AS s_county#21, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, s_state#9, 2, false, true) AS s_state#22]
+(36) BroadcastExchange
 Input [3]: [s_store_sk#7, s_county#8, s_state#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#20]
 
-(38) BroadcastExchange
-Input [3]: [s_store_sk#7, s_county#21, s_state#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#23]
-
-(39) BroadcastHashJoin [codegen id : 9]
+(37) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ss_store_sk#2]
 Right keys [1]: [s_store_sk#7]
 Join condition: None
 
-(40) Project [codegen id : 9]
-Output [3]: [ss_net_profit#3, s_state#22 AS s_state#24, s_county#21 AS s_county#25]
-Input [5]: [ss_store_sk#2, ss_net_profit#3, s_store_sk#7, s_county#21, s_state#22]
+(38) Project [codegen id : 9]
+Output [3]: [ss_net_profit#3, s_state#9, s_county#8]
+Input [5]: [ss_store_sk#2, ss_net_profit#3, s_store_sk#7, s_county#8, s_state#9]
 
-(41) Expand [codegen id : 9]
-Input [3]: [ss_net_profit#3, s_state#24, s_county#25]
-Arguments: [List(ss_net_profit#3, s_state#24, s_county#25, 0), List(ss_net_profit#3, s_state#24, null, 1), List(ss_net_profit#3, null, null, 3)], [ss_net_profit#3, s_state#26, s_county#27, spark_grouping_id#28]
+(39) Expand [codegen id : 9]
+Input [3]: [ss_net_profit#3, s_state#9, s_county#8]
+Arguments: [List(ss_net_profit#3, s_state#9, s_county#8, 0), List(ss_net_profit#3, s_state#9, null, 1), List(ss_net_profit#3, null, null, 3)], [ss_net_profit#3, s_state#21, s_county#22, spark_grouping_id#23]
 
-(42) HashAggregate [codegen id : 9]
-Input [4]: [ss_net_profit#3, s_state#26, s_county#27, spark_grouping_id#28]
-Keys [3]: [s_state#26, s_county#27, spark_grouping_id#28]
+(40) HashAggregate [codegen id : 9]
+Input [4]: [ss_net_profit#3, s_state#21, s_county#22, spark_grouping_id#23]
+Keys [3]: [s_state#21, s_county#22, spark_grouping_id#23]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [sum#29]
-Results [4]: [s_state#26, s_county#27, spark_grouping_id#28, sum#30]
+Aggregate Attributes [1]: [sum#24]
+Results [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
+
+(41) Exchange
+Input [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
+Arguments: hashpartitioning(s_state#21, s_county#22, spark_grouping_id#23, 5), ENSURE_REQUIREMENTS, [id=#26]
+
+(42) HashAggregate [codegen id : 10]
+Input [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
+Keys [3]: [s_state#21, s_county#22, spark_grouping_id#23]
+Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#27]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#27,17,2) AS total_sum#28, s_state#21, s_county#22, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS lochierarchy#29, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS _w1#30, CASE WHEN (cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint) = 0) THEN s_state#21 END AS _w2#31, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#27,17,2) AS _w3#32]
 
 (43) Exchange
-Input [4]: [s_state#26, s_county#27, spark_grouping_id#28, sum#30]
-Arguments: hashpartitioning(s_state#26, s_county#27, spark_grouping_id#28, 5), ENSURE_REQUIREMENTS, [id=#31]
+Input [7]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#31, _w3#32]
+Arguments: hashpartitioning(_w1#30, _w2#31, 5), ENSURE_REQUIREMENTS, [id=#33]
 
-(44) HashAggregate [codegen id : 10]
-Input [4]: [s_state#26, s_county#27, spark_grouping_id#28, sum#30]
-Keys [3]: [s_state#26, s_county#27, spark_grouping_id#28]
-Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#32]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#32,17,2) AS total_sum#33, s_state#26, s_county#27, (cast((shiftright(spark_grouping_id#28, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#28, 0) & 1) as tinyint)) AS lochierarchy#34, (cast((shiftright(spark_grouping_id#28, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#28, 0) & 1) as tinyint)) AS _w1#35, CASE WHEN (cast((shiftright(spark_grouping_id#28, 0) & 1) as tinyint) = 0) THEN s_state#26 END AS _w2#36, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#32,17,2) AS _w3#37]
+(44) Sort [codegen id : 11]
+Input [7]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#31, _w3#32]
+Arguments: [_w1#30 ASC NULLS FIRST, _w2#31 ASC NULLS FIRST, _w3#32 DESC NULLS LAST], false, 0
 
-(45) Exchange
-Input [7]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37]
-Arguments: hashpartitioning(_w1#35, _w2#36, 5), ENSURE_REQUIREMENTS, [id=#38]
+(45) Window
+Input [7]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#31, _w3#32]
+Arguments: [rank(_w3#32) windowspecdefinition(_w1#30, _w2#31, _w3#32 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#34], [_w1#30, _w2#31], [_w3#32 DESC NULLS LAST]
 
-(46) Sort [codegen id : 11]
-Input [7]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37]
-Arguments: [_w1#35 ASC NULLS FIRST, _w2#36 ASC NULLS FIRST, _w3#37 DESC NULLS LAST], false, 0
+(46) Project [codegen id : 12]
+Output [5]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, rank_within_parent#34]
+Input [8]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#31, _w3#32, rank_within_parent#34]
 
-(47) Window
-Input [7]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37]
-Arguments: [rank(_w3#37) windowspecdefinition(_w1#35, _w2#36, _w3#37 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#39], [_w1#35, _w2#36], [_w3#37 DESC NULLS LAST]
-
-(48) Project [codegen id : 12]
-Output [5]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, rank_within_parent#39]
-Input [8]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, _w1#35, _w2#36, _w3#37, rank_within_parent#39]
-
-(49) TakeOrderedAndProject
-Input [5]: [total_sum#33, s_state#26, s_county#27, lochierarchy#34, rank_within_parent#39]
-Arguments: 100, [lochierarchy#34 DESC NULLS LAST, CASE WHEN (lochierarchy#34 = 0) THEN s_state#26 END ASC NULLS FIRST, rank_within_parent#39 ASC NULLS FIRST], [total_sum#33, s_state#26, s_county#27, lochierarchy#34, rank_within_parent#39]
+(47) TakeOrderedAndProject
+Input [5]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, rank_within_parent#34]
+Arguments: 100, [lochierarchy#29 DESC NULLS LAST, CASE WHEN (lochierarchy#29 = 0) THEN s_state#21 END ASC NULLS FIRST, rank_within_parent#34 ASC NULLS FIRST], [total_sum#28, s_state#21, s_county#22, lochierarchy#29, rank_within_parent#34]
 

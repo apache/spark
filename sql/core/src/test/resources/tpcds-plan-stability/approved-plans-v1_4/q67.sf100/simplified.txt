@@ -41,19 +41,17 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                                     InputAdapter
                                                       BroadcastExchange #5
                                                         WholeStageCodegen (2)
-                                                          Project [s_store_sk,s_store_id]
-                                                            Filter [s_store_sk]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.store [s_store_sk,s_store_id]
+                                                          Filter [s_store_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.store [s_store_sk,s_store_id]
                                     InputAdapter
                                       WholeStageCodegen (6)
                                         Sort [i_item_sk]
                                           InputAdapter
                                             Exchange [i_item_sk] #6
                                               WholeStageCodegen (5)
-                                                Project [i_item_sk,i_brand,i_class,i_category,i_product_name]
-                                                  Filter [i_item_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                                                Filter [i_item_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
