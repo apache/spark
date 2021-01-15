@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.distributions.{Distribution, Distributions
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NullOrdering, SortDirection, SortOrder}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions._
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.functions.lit
@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 
 class WriteDistributionAndOrderingSuite
-  extends QueryTest with SharedSparkSession with BeforeAndAfter {
+  extends QueryTest with SharedSparkSession with BeforeAndAfter with AdaptiveSparkPlanHelper {
 
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -545,9 +545,9 @@ class WriteDistributionAndOrderingSuite
       partitioning: physical.Partitioning,
       ordering: Seq[catalyst.expressions.SortOrder]): Unit = {
 
-    val sorts = plan.collect { case s: SortExec => s }
+    val sorts = collect(plan) { case s: SortExec => s }
     assert(sorts.size <= 1, "must be at most one sort")
-    val shuffles = plan.collect { case s: ShuffleExchangeLike => s }
+    val shuffles = collect(plan) { case s: ShuffleExchangeLike => s }
     assert(shuffles.size <= 1, "must be at most one shuffle")
 
     val actualPartitioning = plan.outputPartitioning
@@ -608,10 +608,7 @@ class WriteDistributionAndOrderingSuite
 
     executedPlan match {
       case w: V2TableWriteExec =>
-        w.query match {
-          case p: AdaptiveSparkPlanExec => p.inputPlan
-          case p => p
-        }
+        stripAQEPlan(w.query)
       case _ =>
         fail("expected V2TableWriteExec")
     }
