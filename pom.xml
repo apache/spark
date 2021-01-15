@@ -208,6 +208,8 @@
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
 
+    <javax.servlet-api.name>javax.servlet-api</javax.servlet-api.name>
+
     <test.java.home>${java.home}</test.java.home>
 
     <!-- Some UI tests require Chrome and Chrome driver installed so those tests are disabled by default. -->
@@ -1116,7 +1118,7 @@
           </exclusion>
           <exclusion>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>${javax.servlet-api.name}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>junit</groupId>
@@ -1254,7 +1256,7 @@
         <exclusions>
           <exclusion>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>${javax.servlet-api.name}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>asm</groupId>
@@ -1310,7 +1312,7 @@
           </exclusion>
           <exclusion>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>${javax.servlet-api.name}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1355,7 +1357,7 @@
           </exclusion>
           <exclusion>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>${javax.servlet-api.name}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1415,7 +1417,7 @@
           </exclusion>
           <exclusion>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>${javax.servlet-api.name}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1464,7 +1466,7 @@
           </exclusion>
           <exclusion>
             <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
+            <artifactId>${javax.servlet-api.name}</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -2061,12 +2063,6 @@
         <artifactId>jpam</artifactId>
         <scope>${hive.deps.scope}</scope>
         <version>${jpam.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>javax.servlet</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
 
       <!-- hive shims pulls in hive 0.23 and a transitive dependency of the Hadoop version
@@ -3162,6 +3158,7 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <javax.servlet-api.name>servlet-api</javax.servlet-api.name>
       </properties>
     </profile>
 
