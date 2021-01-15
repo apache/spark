@@ -43,9 +43,9 @@ private[spark] object RUtils {
    * Check if SparkR is installed before running tests that use SparkR.
    */
   def isSparkRInstalled: Boolean = {
-    localSparkRPackagePath.filter { pkgDir =>
+    localSparkRPackagePath.exists { pkgDir =>
       new File(Seq(pkgDir, "SparkR").mkString(File.separator)).exists
-    }.isDefined
+    }
   }
 
   /**
