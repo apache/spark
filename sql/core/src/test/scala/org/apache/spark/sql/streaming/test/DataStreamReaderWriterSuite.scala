@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
 
 object LastOptions {
 
-  var mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
+  val mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
   var mockStreamSinkProvider = mock(classOf[StreamSinkProvider])
   var parameters: Map[String, String] = null
   var sinkParameters: Map[String, String] = null
