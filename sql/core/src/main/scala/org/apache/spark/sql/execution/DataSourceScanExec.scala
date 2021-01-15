@@ -409,7 +409,7 @@ case class FileSourceScanExec(
   }
 
   /** SQL metrics generated only for scans using dynamic partition pruning. */
-  private lazy val staticMetrics = if (partitionFilters.filter(isDynamicPruningFilter).nonEmpty) {
+  private lazy val staticMetrics = if (partitionFilters.exists(isDynamicPruningFilter)) {
     Map("staticFilesNum" -> SQLMetrics.createMetric(sparkContext, "static number of files read"),
       "staticFilesSize" -> SQLMetrics.createSizeMetric(sparkContext, "static size of files read"))
   } else {
@@ -422,7 +422,7 @@ case class FileSourceScanExec(
       static: Boolean): Unit = {
     val filesNum = partitions.map(_.files.size.toLong).sum
     val filesSize = partitions.map(_.files.map(_.getLen).sum).sum
-    if (!static || partitionFilters.filter(isDynamicPruningFilter).isEmpty) {
+    if (!static || !partitionFilters.exists(isDynamicPruningFilter)) {
       driverMetrics("numFiles") = filesNum
       driverMetrics("filesSize") = filesSize
     } else {
