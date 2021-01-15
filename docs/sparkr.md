@@ -777,10 +777,10 @@ All the initializations and library loading your worker function manages
 is thrown away when the fork concludes. Every fork has to be
 initialized.
 
-The configuration [spark.r.daemonInit](configuration.md#daemonInit)
-provides a way to avoid reloading packages every time the daemon forks
-by having the daemon pre-load packages. You do this by providing R code
-to initialize the daemon for your application.
+The configuration spark.r.daemonInit provides a way to avoid reloading
+packages every time the daemon forks by having the daemon pre-load
+packages. You do this by providing R code to initialize the daemon for
+your application.
 
 ## Examples
 
@@ -809,5 +809,4 @@ library(wow) from the newly created wowTarget.
 
 
 Warning: if your initialization takes longer than 10 seconds, consider
-increasing the configuration
-[spark.r.daemonTimeout](configuration.md#daemonTimeout).
+increasing the configuration spark.r.daemonTimeout.
