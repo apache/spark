@@ -835,21 +835,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql("SELECT 1 FROM src").collect().toSeq)
   }
 
-  test("SPARK-34122: duplicate branches in case when") {
-    checkAnswer(
-      sql(
-        """
-          |SELECT
-          | case when 2=2 then 1
-          | when 1&1=1 then 1
-          | when 1|0=1 then 1
-          | when 1^0=1 then 1
-          | when ~1=-2 then 1
-          | when 1=2 then 2 else 0 end FROM src
-          |""".stripMargin),
-      sql("SELECT 1 FROM src").collect().toSeq)
-  }
-
   test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
     checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"),
       sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
