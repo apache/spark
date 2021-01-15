@@ -23,7 +23,11 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.Clock
+import org.apache.spark.util.SystemClock
+import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.Utils
 
 /**
  * Controls the propagation of the Spark application's executor pods state to subscribers that
@@ -47,8 +51,10 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * time-windowed chunks. Each subscriber can choose to receive their snapshot chunks at different
  * time intervals.
  */
-private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: ScheduledExecutorService)
-  extends ExecutorPodsSnapshotsStore {
+private[spark] class ExecutorPodsSnapshotsStoreImpl(
+    subscribersExecutor: ScheduledExecutorService,
+    clock: Clock = new SystemClock)
+  extends ExecutorPodsSnapshotsStore with Logging {
 
   private val SNAPSHOT_LOCK = new Object()
 
@@ -93,7 +99,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
   }
 
   override def replaceSnapshot(newSnapshot: Seq[Pod]): Unit = SNAPSHOT_LOCK.synchronized {
-    currentSnapshot = ExecutorPodsSnapshot(newSnapshot)
+    currentSnapshot = ExecutorPodsSnapshot(newSnapshot, clock.getTimeMillis())
     addCurrentSnapshotToSubscribers()
   }
 
