@@ -461,7 +461,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StreamingQueryListener#QueryStartedEvent.this"),
 
     // [SPARK-30667][CORE] Add allGather method to BarrierTaskContext
-    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.RequestToSync")
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.RequestToSync"),
+
+    // [SPARK-33790][CORE] Reduce the rpc call of getFileStatus in SingleFileEventLogFileReader
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.deploy.history.SingleFileEventLogFileReader.this")
   )
 
   // Exclude rules for 2.4.x
