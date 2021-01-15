@@ -40,17 +40,19 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (3)
-                                        Filter [cd_demo_sk,cd_marital_status,cd_education_status]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                        Project [cd_demo_sk,cd_marital_status,cd_education_status]
+                                          Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                               InputAdapter
                                 BroadcastExchange #5
                                   WholeStageCodegen (4)
-                                    Filter [cd_demo_sk,cd_marital_status,cd_education_status]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                    Project [cd_demo_sk,cd_marital_status,cd_education_status]
+                                      Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                           InputAdapter
                             BroadcastExchange #6
                               WholeStageCodegen (5)
@@ -70,7 +72,8 @@ TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refu
                   InputAdapter
                     BroadcastExchange #8
                       WholeStageCodegen (7)
-                        Filter [r_reason_sk]
-                          ColumnarToRow
-                            InputAdapter
-                              Scan parquet default.reason [r_reason_sk,r_reason_desc]
+                        Project [r_reason_sk,r_reason_desc]
+                          Filter [r_reason_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.reason [r_reason_sk,r_reason_desc]

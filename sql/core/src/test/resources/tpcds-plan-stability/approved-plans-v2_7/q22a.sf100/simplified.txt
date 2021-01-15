@@ -45,12 +45,13 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                               InputAdapter
                                 Exchange [i_item_sk] #5
                                   WholeStageCodegen (5)
-                                    Filter [i_item_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                                    Project [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                                      Filter [i_item_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
     WholeStageCodegen (17)
-      HashAggregate [i_product_name,i_brand,i_class,sum,count] [avg(qoh),i_category,qoh,sum,count]
+      HashAggregate [i_product_name,i_brand,i_class,sum,count] [avg(qoh),i_product_name,i_brand,i_class,i_category,qoh,sum,count]
         InputAdapter
           Exchange [i_product_name,i_brand,i_class] #6
             WholeStageCodegen (16)
@@ -59,7 +60,7 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                   InputAdapter
                     ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
     WholeStageCodegen (26)
-      HashAggregate [i_product_name,i_brand,sum,count] [avg(qoh),i_class,i_category,qoh,sum,count]
+      HashAggregate [i_product_name,i_brand,sum,count] [avg(qoh),i_product_name,i_brand,i_class,i_category,qoh,sum,count]
         InputAdapter
           Exchange [i_product_name,i_brand] #7
             WholeStageCodegen (25)
@@ -68,7 +69,7 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                   InputAdapter
                     ReusedExchange [i_product_name,i_brand,i_class,i_category,sum,count] #1
     WholeStageCodegen (35)
-      HashAggregate [i_product_name,sum,count] [avg(qoh),i_brand,i_class,i_category,qoh,sum,count]
+      HashAggregate [i_product_name,sum,count] [avg(qoh),i_product_name,i_brand,i_class,i_category,qoh,sum,count]
         InputAdapter
           Exchange [i_product_name] #8
             WholeStageCodegen (34)

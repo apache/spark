@@ -31,10 +31,11 @@ WholeStageCodegen (11)
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
-                                        Filter [w_warehouse_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
+                                        Project [w_warehouse_sk,w_warehouse_name]
+                                          Filter [w_warehouse_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
                               InputAdapter
                                 BroadcastExchange #5
                                   WholeStageCodegen (3)

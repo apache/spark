@@ -1,7 +1,7 @@
 == Physical Plan ==
-TakeOrderedAndProject (44)
-+- * Project (43)
-   +- * BroadcastHashJoin Inner BuildRight (42)
+TakeOrderedAndProject (45)
++- * Project (44)
+   +- * BroadcastHashJoin Inner BuildRight (43)
       :- * Project (37)
       :  +- * BroadcastHashJoin Inner BuildRight (36)
       :     :- * Project (30)
@@ -39,10 +39,11 @@ TakeOrderedAndProject (44)
       :           +- * Filter (33)
       :              +- * ColumnarToRow (32)
       :                 +- Scan parquet default.store (31)
-      +- BroadcastExchange (41)
-         +- * Filter (40)
-            +- * ColumnarToRow (39)
-               +- Scan parquet default.customer (38)
+      +- BroadcastExchange (42)
+         +- * Project (41)
+            +- * Filter (40)
+               +- * ColumnarToRow (39)
+                  +- Scan parquet default.customer (38)
 
 
 (1) Scan parquet default.store_returns
@@ -195,7 +196,7 @@ Input [5]: [ctr_customer_sk#12, ctr_store_sk#13, ctr_total_return#14, (avg(ctr_t
 Output [2]: [s_store_sk#28, s_state#29]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_state), EqualTo(s_state,TN), IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
 (32) ColumnarToRow [codegen id : 7]
@@ -203,7 +204,7 @@ Input [2]: [s_store_sk#28, s_state#29]
 
 (33) Filter [codegen id : 7]
 Input [2]: [s_store_sk#28, s_state#29]
-Condition : ((isnotnull(s_state#29) AND (s_state#29 = TN)) AND isnotnull(s_store_sk#28))
+Condition : ((staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, s_state#29, 2, false, true) = TN) AND isnotnull(s_store_sk#28))
 
 (34) Project [codegen id : 7]
 Output [1]: [s_store_sk#28]
@@ -236,20 +237,24 @@ Input [2]: [c_customer_sk#31, c_customer_id#32]
 Input [2]: [c_customer_sk#31, c_customer_id#32]
 Condition : isnotnull(c_customer_sk#31)
 
-(41) BroadcastExchange
+(41) Project [codegen id : 8]
+Output [2]: [c_customer_sk#31, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, c_customer_id#32, 16, false, true) AS c_customer_id#33]
 Input [2]: [c_customer_sk#31, c_customer_id#32]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#33]
 
-(42) BroadcastHashJoin [codegen id : 9]
+(42) BroadcastExchange
+Input [2]: [c_customer_sk#31, c_customer_id#33]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#34]
+
+(43) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ctr_customer_sk#12]
 Right keys [1]: [cast(c_customer_sk#31 as bigint)]
 Join condition: None
 
-(43) Project [codegen id : 9]
-Output [1]: [c_customer_id#32]
-Input [3]: [ctr_customer_sk#12, c_customer_sk#31, c_customer_id#32]
+(44) Project [codegen id : 9]
+Output [1]: [c_customer_id#33]
+Input [3]: [ctr_customer_sk#12, c_customer_sk#31, c_customer_id#33]
 
-(44) TakeOrderedAndProject
-Input [1]: [c_customer_id#32]
-Arguments: 100, [c_customer_id#32 ASC NULLS FIRST], [c_customer_id#32]
+(45) TakeOrderedAndProject
+Input [1]: [c_customer_id#33]
+Arguments: 100, [c_customer_id#33 ASC NULLS FIRST], [c_customer_id#33]
 

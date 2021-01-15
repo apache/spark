@@ -53,11 +53,13 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                                                 Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_sales_price]
                                                           InputAdapter
                                                             ReusedExchange [d_date_sk] #4
-                  Filter [s_store_sk]
-                    ColumnarToRow
-                      InputAdapter
-                        Scan parquet default.store [s_store_sk,s_store_name]
-        Filter [i_item_sk]
-          ColumnarToRow
-            InputAdapter
-              Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+                  Project [s_store_sk,s_store_name]
+                    Filter [s_store_sk]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet default.store [s_store_sk,s_store_name]
+        Project [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+          Filter [i_item_sk]
+            ColumnarToRow
+              InputAdapter
+                Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]

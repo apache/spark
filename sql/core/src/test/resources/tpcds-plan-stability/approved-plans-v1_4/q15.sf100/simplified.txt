@@ -51,7 +51,8 @@ TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
                                         InputAdapter
                                           Exchange [ca_address_sk] #6
                                             WholeStageCodegen (6)
-                                              Filter [ca_address_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.customer_address [ca_address_sk,ca_state,ca_zip]
+                                              Project [ca_address_sk,ca_state,ca_zip]
+                                                Filter [ca_address_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.customer_address [ca_address_sk,ca_state,ca_zip]

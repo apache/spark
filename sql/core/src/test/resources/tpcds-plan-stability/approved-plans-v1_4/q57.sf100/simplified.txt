@@ -59,20 +59,22 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                                                                           InputAdapter
                                                                                             BroadcastExchange #7
                                                                                               WholeStageCodegen (2)
-                                                                                                Filter [cc_call_center_sk,cc_name]
-                                                                                                  ColumnarToRow
-                                                                                                    InputAdapter
-                                                                                                      Scan parquet default.call_center [cc_call_center_sk,cc_name]
+                                                                                                Project [cc_call_center_sk,cc_name]
+                                                                                                  Filter [cc_call_center_sk,cc_name]
+                                                                                                    ColumnarToRow
+                                                                                                      InputAdapter
+                                                                                                        Scan parquet default.call_center [cc_call_center_sk,cc_name]
                                                                           InputAdapter
                                                                             WholeStageCodegen (6)
                                                                               Sort [i_item_sk]
                                                                                 InputAdapter
                                                                                   Exchange [i_item_sk] #8
                                                                                     WholeStageCodegen (5)
-                                                                                      Filter [i_item_sk,i_category,i_brand]
-                                                                                        ColumnarToRow
-                                                                                          InputAdapter
-                                                                                            Scan parquet default.item [i_item_sk,i_brand,i_category]
+                                                                                      Project [i_item_sk,i_brand,i_category]
+                                                                                        Filter [i_item_sk,i_category,i_brand]
+                                                                                          ColumnarToRow
+                                                                                            InputAdapter
+                                                                                              Scan parquet default.item [i_item_sk,i_brand,i_category]
                 InputAdapter
                   WholeStageCodegen (24)
                     Sort [i_category,i_brand,cc_name,rn]

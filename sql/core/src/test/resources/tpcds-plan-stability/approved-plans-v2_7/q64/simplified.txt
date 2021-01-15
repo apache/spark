@@ -88,10 +88,11 @@ WholeStageCodegen (43)
                                                                                 InputAdapter
                                                                                   BroadcastExchange #8
                                                                                     WholeStageCodegen (6)
-                                                                                      Filter [s_store_sk,s_store_name,s_zip]
-                                                                                        ColumnarToRow
-                                                                                          InputAdapter
-                                                                                            Scan parquet default.store [s_store_sk,s_store_name,s_zip]
+                                                                                      Project [s_store_sk,s_store_name,s_zip]
+                                                                                        Filter [s_store_sk,s_store_name,s_zip]
+                                                                                          ColumnarToRow
+                                                                                            InputAdapter
+                                                                                              Scan parquet default.store [s_store_sk,s_store_name,s_zip]
                                                                             InputAdapter
                                                                               BroadcastExchange #9
                                                                                 WholeStageCodegen (7)
@@ -111,10 +112,11 @@ WholeStageCodegen (43)
                                                                 InputAdapter
                                                                   BroadcastExchange #11
                                                                     WholeStageCodegen (10)
-                                                                      Filter [cd_demo_sk,cd_marital_status]
-                                                                        ColumnarToRow
-                                                                          InputAdapter
-                                                                            Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status]
+                                                                      Project [cd_demo_sk,cd_marital_status]
+                                                                        Filter [cd_demo_sk,cd_marital_status]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status]
                                                             InputAdapter
                                                               ReusedExchange [cd_demo_sk,cd_marital_status] #11
                                                         InputAdapter
@@ -136,10 +138,11 @@ WholeStageCodegen (43)
                                             InputAdapter
                                               BroadcastExchange #14
                                                 WholeStageCodegen (15)
-                                                  Filter [ca_address_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.customer_address [ca_address_sk,ca_street_number,ca_street_name,ca_city,ca_zip]
+                                                  Project [ca_address_sk,ca_street_number,ca_street_name,ca_city,ca_zip]
+                                                    Filter [ca_address_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.customer_address [ca_address_sk,ca_street_number,ca_street_name,ca_city,ca_zip]
                                         InputAdapter
                                           ReusedExchange [ca_address_sk,ca_street_number,ca_street_name,ca_city,ca_zip] #14
                                     InputAdapter

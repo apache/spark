@@ -6,10 +6,11 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
           BroadcastHashJoin [ss_item_sk,i_item_sk]
             Project [s_store_name,ss_store_sk,ss_item_sk,revenue]
               BroadcastHashJoin [s_store_sk,ss_store_sk]
-                Filter [s_store_sk]
-                  ColumnarToRow
-                    InputAdapter
-                      Scan parquet default.store [s_store_sk,s_store_name]
+                Project [s_store_sk,s_store_name]
+                  Filter [s_store_sk]
+                    ColumnarToRow
+                      InputAdapter
+                        Scan parquet default.store [s_store_sk,s_store_name]
                 InputAdapter
                   BroadcastExchange #1
                     WholeStageCodegen (3)
@@ -36,10 +37,11 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
             InputAdapter
               BroadcastExchange #4
                 WholeStageCodegen (4)
-                  Filter [i_item_sk]
-                    ColumnarToRow
-                      InputAdapter
-                        Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+                  Project [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+                    Filter [i_item_sk]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
         InputAdapter
           BroadcastExchange #5
             WholeStageCodegen (8)

@@ -10,10 +10,11 @@ TakeOrderedAndProject [c_customer_id,customer_id,customername]
                   BroadcastHashJoin [c_current_cdemo_sk,cd_demo_sk]
                     Project [c_customer_id,c_current_cdemo_sk,c_current_hdemo_sk,c_first_name,c_last_name]
                       BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
-                        Filter [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk]
-                          ColumnarToRow
-                            InputAdapter
-                              Scan parquet default.customer [c_customer_id,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk,c_first_name,c_last_name]
+                        Project [c_customer_id,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk,c_first_name,c_last_name]
+                          Filter [c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.customer [c_customer_id,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk,c_first_name,c_last_name]
                         InputAdapter
                           BroadcastExchange #1
                             WholeStageCodegen (1)

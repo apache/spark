@@ -64,14 +64,16 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                       InputAdapter
                         BroadcastExchange #7
                           WholeStageCodegen (6)
-                            Filter [s_store_sk]
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet default.store [s_store_sk,s_store_id,s_store_name]
+                            Project [s_store_sk,s_store_id,s_store_name]
+                              Filter [s_store_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store [s_store_sk,s_store_id,s_store_name]
                   InputAdapter
                     BroadcastExchange #8
                       WholeStageCodegen (7)
-                        Filter [i_item_sk]
-                          ColumnarToRow
-                            InputAdapter
-                              Scan parquet default.item [i_item_sk,i_item_id,i_item_desc]
+                        Project [i_item_sk,i_item_id,i_item_desc]
+                          Filter [i_item_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.item [i_item_sk,i_item_id,i_item_desc]

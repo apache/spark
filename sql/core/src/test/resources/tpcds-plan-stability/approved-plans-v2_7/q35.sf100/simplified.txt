@@ -87,17 +87,19 @@ TakeOrderedAndProject [ca_state,cd_gender,cd_marital_status,cd_dep_count,cd_dep_
                                         InputAdapter
                                           Exchange [ca_address_sk] #9
                                             WholeStageCodegen (14)
-                                              Filter [ca_address_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.customer_address [ca_address_sk,ca_state]
+                                              Project [ca_address_sk,ca_state]
+                                                Filter [ca_address_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.customer_address [ca_address_sk,ca_state]
                   InputAdapter
                     WholeStageCodegen (19)
                       Sort [cd_demo_sk]
                         InputAdapter
                           Exchange [cd_demo_sk] #10
                             WholeStageCodegen (18)
-                              Filter [cd_demo_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                              Project [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                                Filter [cd_demo_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
