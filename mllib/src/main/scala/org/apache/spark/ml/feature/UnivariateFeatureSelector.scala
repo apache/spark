@@ -29,7 +29,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol, HasOutputCol}
 import org.apache.spark.ml.stat.{ANOVATest, ChiSquareTest, FValueTest}
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -159,9 +159,6 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
   @Since("3.1.1")
   override def fit(dataset: Dataset[_]): UnivariateFeatureSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val spark = dataset.sparkSession
-    import spark.implicits._
-
     val numFeatures = MetadataUtils.getNumFeatures(dataset, $(featuresCol))
 
     $(selectionMode) match {
@@ -218,27 +215,43 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
           s" featureType=${$(featureType)}, labelType=${$(labelType)}")
     }
 
-    def getTopIndices(k: Int): Array[Int] = {
-      resultDF.sort("pValue", "featureIndex")
-        .select("featureIndex")
-        .limit(k)
-        .as[Int]
-        .collect()
-    }
+    val indices =
+      selectIndicesFromPValues(numFeatures, resultDF, $(selectionMode), $(selectionThreshold))
 
-    val indices = $(selectionMode) match {
+    copyValues(new UnivariateFeatureSelectorModel(uid, indices)
+      .setParent(this))
+  }
+
+  def getTopIndices(df: DataFrame, k: Int): Array[Int] = {
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.implicits._
+    df.sort("pValue", "featureIndex")
+      .select("featureIndex")
+      .limit(k)
+      .as[Int]
+      .collect()
+  }
+
+  def selectIndicesFromPValues(
+      numFeatures: Int,
+      resultDF: DataFrame,
+      selectionMode: String,
+      selectionThreshold: Double): Array[Int] = {
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.implicits._
+    val indices = selectionMode match {
       case "numTopFeatures" =>
-        getTopIndices($(selectionThreshold).toInt)
+        getTopIndices(resultDF, selectionThreshold.toInt)
       case "percentile" =>
-        getTopIndices((numFeatures * $(selectionThreshold)).toInt)
+        getTopIndices(resultDF, (numFeatures * selectionThreshold).toInt)
       case "fpr" =>
         resultDF.select("featureIndex")
-          .where(col("pValue") < $(selectionThreshold))
+          .where(col("pValue") < selectionThreshold)
           .as[Int].collect()
       case "fdr" =>
         // This uses the Benjamini-Hochberg procedure.
         // https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure
-        val f = $(selectionThreshold) / numFeatures
+        val f = selectionThreshold / numFeatures
         val maxIndex = resultDF.sort("pValue", "featureIndex")
           .select("pValue")
           .as[Double].rdd
@@ -249,18 +262,16 @@ final class UnivariateFeatureSelector @Since("3.1.1")(@Since("3.1.1") override v
             } else Iterator.empty
           }.fold(-1)(math.max)
         if (maxIndex >= 0) {
-          getTopIndices(maxIndex + 1)
+          getTopIndices(resultDF, maxIndex + 1)
         } else Array.emptyIntArray
       case "fwe" =>
         resultDF.select("featureIndex")
-          .where(col("pValue") < $(selectionThreshold) / numFeatures)
+          .where(col("pValue") < selectionThreshold / numFeatures)
           .as[Int].collect()
       case errorType =>
         throw new IllegalArgumentException(s"Unknown Selector Type: $errorType")
     }
-
-    copyValues(new UnivariateFeatureSelectorModel(uid, indices)
-      .setParent(this))
+    indices
   }
 
   @Since("3.1.1")
