@@ -472,6 +472,22 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         Row(1))
     }
   }
+
+  test("SPARK-34114: varchar type will strip tailing spaces to certain length at write time") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('c      ')")
+      checkAnswer(spark.table("t"), Row("c  "))
+    }
+  }
+
+  test("SPARK-34114: varchar type will remain the value length with spaces at read time") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('c ')")
+      checkAnswer(spark.table("t"), Row("c "))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
@@ -664,6 +680,19 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
       val rest = sql("SHOW CREATE TABLE t").head().getString(0)
       assert(rest.contains("VARCHAR(3)"))
       assert(rest.contains("CHAR(5)"))
+    }
+  }
+
+  test("SPARK-34114: should not trim right for read-side length check and char padding") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val e = intercept[SparkException] { sql("select * from t").collect() }
+          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
+        }
+      }
     }
   }
 }
