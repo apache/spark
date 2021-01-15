@@ -68,8 +68,6 @@ abstract class StringRegexExpression extends BinaryExpression
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
-
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
 // scalastyle:off line.contains.tab
@@ -118,7 +116,8 @@ abstract class StringRegexExpression extends BinaryExpression
   note = """
     Use RLIKE to match with standard regular expressions.
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 // scalastyle:on line.contains.tab
 case class Like(left: Expression, right: Expression, escapeChar: Char)
   extends StringRegexExpression {
@@ -133,6 +132,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
     case '\\' => s"$left LIKE $right"
     case c => s"$left LIKE $right ESCAPE '$c'"
   }
+
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
@@ -180,7 +181,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   }
 }
 
-abstract class MultiLikeBase
+sealed abstract class MultiLikeBase
   extends UnaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   protected def patterns: Seq[UTF8String]
@@ -219,7 +220,7 @@ abstract class MultiLikeBase
 /**
  * Optimized version of LIKE ALL, when all pattern values are literal.
  */
-abstract class LikeAllBase extends MultiLikeBase {
+sealed abstract class LikeAllBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.forall(matchFunc(_, exprValue))) {
@@ -275,7 +276,7 @@ case class NotLikeAll(child: Expression, patterns: Seq[UTF8String]) extends Like
 /**
  * Optimized version of LIKE ANY, when all pattern values are literal.
  */
-abstract class LikeAnyBase extends MultiLikeBase {
+sealed abstract class LikeAnyBase extends MultiLikeBase {
 
   override def matches(exprValue: String): Any = {
     if (cache.exists(matchFunc(_, exprValue))) {
@@ -330,7 +331,7 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
 
 // scalastyle:off line.contains.tab
 @ExpressionDescription(
-  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
+  usage = "_FUNC_(str, regexp) - Returns true if `str` matches `regexp`, or false otherwise.",
   arguments = """
     Arguments:
       * str - a string expression
@@ -348,23 +349,25 @@ case class NotLikeAny(child: Expression, patterns: Seq[UTF8String]) extends Like
     Examples:
       > SET spark.sql.parser.escapedStringLiterals=true;
       spark.sql.parser.escapedStringLiterals	true
-      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*';
+      > SELECT _FUNC_('%SystemDrive%\Users\John', '%SystemDrive%\\Users.*');
       true
       > SET spark.sql.parser.escapedStringLiterals=false;
       spark.sql.parser.escapedStringLiterals	false
-      > SELECT '%SystemDrive%\\Users\\John' _FUNC_ '%SystemDrive%\\\\Users.*';
+      > SELECT _FUNC_('%SystemDrive%\\Users\\John', '%SystemDrive%\\\\Users.*');
       true
   """,
   note = """
     Use LIKE to match with simple string pattern.
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 // scalastyle:on line.contains.tab
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
-  override def toString: String = s"$left RLIKE $right"
+  override def toString: String = s"RLIKE($left, $right)"
+  override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
@@ -435,7 +438,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]', 2);
        ["one","twoBthreeC"]
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class StringSplit(str: Expression, regex: Expression, limit: Expression)
   extends TernaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
@@ -493,7 +497,8 @@ case class StringSplit(str: Expression, regex: Expression, limit: Expression)
       > SELECT _FUNC_('100-200', '(\\d+)', 'num');
        num-num
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 // scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression, pos: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes with NullIntolerant {
@@ -686,7 +691,8 @@ abstract class RegExpExtractBase
       > SELECT _FUNC_('100-200', '(\\d+)-(\\d+)', 1);
        100
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "string_funcs")
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -786,7 +792,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
       > SELECT _FUNC_('100-200, 300-400', '(\\d+)-(\\d+)', 1);
        ["100","300"]
   """,
-  since = "3.1.0")
+  since = "3.1.0",
+  group = "string_funcs")
 case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expression)
   extends RegExpExtractBase {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))

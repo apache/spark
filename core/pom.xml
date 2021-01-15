@@ -66,7 +66,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-client</artifactId>
+      <artifactId>${hadoop-client-api.artifact}</artifactId>
+      <version>${hadoop.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <version>${hadoop.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -176,6 +182,14 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-text</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
@@ -414,7 +428,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.9</version>
+      <version>0.10.9.1</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>

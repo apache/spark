@@ -78,7 +78,7 @@ Condition : ((isnotnull(ws_ship_date_sk#1) AND isnotnull(ws_ship_addr_sk#2)) AND
 
 (4) Exchange
 Input [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
-Arguments: hashpartitioning(ws_order_number#4, 5), true, [id=#7]
+Arguments: hashpartitioning(ws_order_number#4, 5), ENSURE_REQUIREMENTS, [id=#7]
 
 (5) Sort [codegen id : 2]
 Input [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
@@ -100,7 +100,7 @@ Condition : (isnotnull(ws_order_number#4) AND isnotnull(ws_warehouse_sk#8))
 
 (9) Exchange
 Input [2]: [ws_warehouse_sk#8, ws_order_number#4]
-Arguments: hashpartitioning(ws_order_number#4, 5), true, [id=#9]
+Arguments: hashpartitioning(ws_order_number#4, 5), ENSURE_REQUIREMENTS, [id=#9]
 
 (10) Sort [codegen id : 4]
 Input [2]: [ws_warehouse_sk#8, ws_order_number#4]
@@ -129,7 +129,7 @@ Join condition: None
 
 (16) Exchange
 Input [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
-Arguments: hashpartitioning(cast(ws_order_number#4 as bigint), 5), true, [id=#13]
+Arguments: hashpartitioning(cast(ws_order_number#4 as bigint), 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (17) Sort [codegen id : 8]
 Input [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
@@ -160,7 +160,7 @@ Input [4]: [ws_warehouse_sk#8, ws_order_number#4, ws_warehouse_sk#14, ws_order_n
 
 (24) Exchange
 Input [1]: [ws_order_number#4]
-Arguments: hashpartitioning(cast(ws_order_number#4 as bigint), 5), true, [id=#16]
+Arguments: hashpartitioning(cast(ws_order_number#4 as bigint), 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (25) Sort [codegen id : 14]
 Input [1]: [ws_order_number#4]
@@ -182,7 +182,7 @@ Condition : isnotnull(wr_order_number#17)
 
 (29) Exchange
 Input [1]: [wr_order_number#17]
-Arguments: hashpartitioning(wr_order_number#17, 5), true, [id=#18]
+Arguments: hashpartitioning(wr_order_number#17, 5), ENSURE_REQUIREMENTS, [id=#18]
 
 (30) Sort [codegen id : 16]
 Input [1]: [wr_order_number#17]
@@ -304,7 +304,7 @@ Results [3]: [ws_order_number#4, sum#30, sum#31]
 
 (56) Exchange
 Input [3]: [ws_order_number#4, sum#30, sum#31]
-Arguments: hashpartitioning(ws_order_number#4, 5), true, [id=#32]
+Arguments: hashpartitioning(ws_order_number#4, 5), ENSURE_REQUIREMENTS, [id=#32]
 
 (57) HashAggregate [codegen id : 22]
 Input [3]: [ws_order_number#4, sum#30, sum#31]
@@ -322,7 +322,7 @@ Results [3]: [sum#30, sum#31, count#34]
 
 (59) Exchange
 Input [3]: [sum#30, sum#31, count#34]
-Arguments: SinglePartition, true, [id=#35]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#35]
 
 (60) HashAggregate [codegen id : 23]
 Input [3]: [sum#30, sum#31, count#34]

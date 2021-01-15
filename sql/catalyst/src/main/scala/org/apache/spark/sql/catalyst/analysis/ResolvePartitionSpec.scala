@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan, ShowPartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, AlterTableRenamePartition, LogicalPlan, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
@@ -34,7 +34,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case r @ AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs, _) =>
       val partitionSchema = table.partitionSchema()
       r.copy(parts = resolvePartitionSpecs(
         table.name,
@@ -43,7 +43,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
     case r @ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _) =>
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs, _, _) =>
       val partitionSchema = table.partitionSchema()
       r.copy(parts = resolvePartitionSpecs(
         table.name,
@@ -51,7 +51,18 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         partitionSchema,
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
-    case r @ ShowPartitions(ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs) =>
+    case r @ AlterTableRenamePartition(
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
+      val partitionSchema = table.partitionSchema()
+      val Seq(resolvedFrom, resolvedTo) = resolvePartitionSpecs(
+        table.name,
+        Seq(from, to),
+        partitionSchema,
+        requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames))
+      r.copy(from = resolvedFrom, to = resolvedTo)
+
+    case r @ ShowPartitions(
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs) =>
       r.copy(pattern = resolvePartitionSpecs(
         table.name,
         partSpecs.toSeq,

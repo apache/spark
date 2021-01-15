@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Unary
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -193,7 +193,7 @@ object UnresolvedAttribute {
    * Escape character is not supported now, so we can't use backtick inside name part.
    */
   def parseAttributeName(name: String): Seq[String] = {
-    def e = new AnalysisException(s"syntax error in attribute name: $name")
+    def e = QueryCompilationErrors.attributeNameSyntaxError(name)
     val nameParts = scala.collection.mutable.ArrayBuffer.empty[String]
     val tmp = scala.collection.mutable.ArrayBuffer.empty[Char]
     var inBacktick = false
@@ -245,20 +245,21 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateGeneratorError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForGeneratorError(this)
 
   override def terminate(): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot terminate expression: $this")
+    throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
 }
 
 case class UnresolvedFunction(
     name: FunctionIdentifier,
     arguments: Seq[Expression],
     isDistinct: Boolean,
-    filter: Option[Expression] = None)
+    filter: Option[Expression] = None,
+    ignoreNulls: Boolean = false)
   extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq
@@ -358,13 +359,13 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
         }
 
         case _ =>
-          throw new AnalysisException("Can only star expand struct data types. Attribute: `" +
-            target.get + "`")
+          throw QueryCompilationErrors.starExpandDataTypeNotSupportedError(target.get)
       }
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
       val targetString = target.get.mkString(".")
-      throw new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$from'")
+      throw QueryCompilationErrors.cannotResolveStarExpandGivenInputColumnsError(
+        targetString, from)
     }
   }
 
@@ -560,4 +561,13 @@ case class UnresolvedHaving(
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * A place holder expression used in random functions, will be replaced after analyze.
+ */
+case object UnresolvedSeed extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override lazy val resolved = false
 }

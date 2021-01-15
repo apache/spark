@@ -110,6 +110,20 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
     assert(!hasPartitions(partTable))
   }
 
+  test("purgePartitions") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryAtomicPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    val partIdents = Array(InternalRow.apply("3"), InternalRow.apply("4"))
+    partTable.createPartitions(
+      partIdents,
+      Array(new util.HashMap[String, String](), new util.HashMap[String, String]()))
+    val errMsg = intercept[UnsupportedOperationException] {
+      partTable.purgePartitions(partIdents)
+    }.getMessage
+    assert(errMsg.contains("purge is not supported"))
+  }
+
   test("dropPartitions failed if partition not exists") {
     val table = catalog.loadTable(ident)
     val partTable = new InMemoryAtomicPartitionTable(

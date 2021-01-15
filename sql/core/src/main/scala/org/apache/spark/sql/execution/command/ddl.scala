@@ -270,7 +270,7 @@ case class AlterTableSetPropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView)
     // This overrides old properties and update the comment parameter of CatalogTable
     // with the newly added/modified comment since CatalogTable also holds comment as its
@@ -302,7 +302,7 @@ case class AlterTableUnsetPropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
@@ -342,7 +342,7 @@ case class AlterTableChangeColumnCommand(
   // TODO: support change column name/dataType/metadata/position.
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
@@ -414,7 +414,7 @@ case class AlterTableSerDePropertiesCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
@@ -485,17 +485,18 @@ case class AlterTableAddPartitionCommand(
       catalog.createPartitions(table.identifier, batch, ignoreIfExists = ifNotExists)
     }
 
-    if (table.stats.nonEmpty) {
-      if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
-        val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
-          parts.map(_.storage.locationUri)).sum
-        if (addedSize > 0) {
-          val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
-          catalog.alterTableStats(table.identifier, Some(newStats))
-        }
-      } else {
-        catalog.alterTableStats(table.identifier, None)
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
+    if (table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+      // Updating table stats only if new partition is not empty
+      val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
+        parts.map(_.storage.locationUri)).sum
+      if (addedSize > 0) {
+        val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
+        catalog.alterTableStats(table.identifier, Some(newStats))
       }
+    } else {
+      // Re-calculating of table size including all partitions
+      CommandUtils.updateTableStats(sparkSession, table)
     }
     Seq.empty[Row]
   }
@@ -536,6 +537,7 @@ case class AlterTableRenamePartitionCommand(
 
     catalog.renamePartitions(
       tableName, Seq(normalizedOldPartition), Seq(normalizedNewPartition))
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     Seq.empty[Row]
   }
 
@@ -581,6 +583,7 @@ case class AlterTableDropPartitionCommand(
       table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
       retainData = retainData)
 
+    sparkSession.catalog.refreshTable(table.identifier.quotedString)
     CommandUtils.updateTableStats(sparkSession, table)
 
     Seq.empty[Row]
@@ -629,7 +632,7 @@ case class AlterTableRecoverPartitionsCommand(
 
   override def run(spark: SparkSession): Seq[Row] = {
     val catalog = spark.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (table.partitionColumnNames.isEmpty) {

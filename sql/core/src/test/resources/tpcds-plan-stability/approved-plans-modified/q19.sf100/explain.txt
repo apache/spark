@@ -206,7 +206,7 @@ Results [5]: [i_brand#21, i_brand_id#20, i_manufact_id#22, i_manufact#23, sum#27
 
 (37) Exchange
 Input [5]: [i_brand#21, i_brand_id#20, i_manufact_id#22, i_manufact#23, sum#27]
-Arguments: hashpartitioning(i_brand#21, i_brand_id#20, i_manufact_id#22, i_manufact#23, 5), true, [id=#28]
+Arguments: hashpartitioning(i_brand#21, i_brand_id#20, i_manufact_id#22, i_manufact#23, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (38) HashAggregate [codegen id : 7]
 Input [5]: [i_brand#21, i_brand_id#20, i_manufact_id#22, i_manufact#23, sum#27]

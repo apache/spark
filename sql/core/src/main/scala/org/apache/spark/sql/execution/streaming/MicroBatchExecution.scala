@@ -212,7 +212,10 @@ class MicroBatchExecution(
           }
 
           // Record the trigger offset range for progress reporting *before* processing the batch
-          recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+          recordTriggerOffsets(
+            from = committedOffsets,
+            to = availableOffsets,
+            latest = latestOffsets)
 
           // Remember whether the current batch has data or not. This will be required later
           // for bookkeeping after running the batch, when `isNewDataAvailable` will have changed
@@ -379,7 +382,7 @@ class MicroBatchExecution(
     if (isCurrentBatchConstructed) return true
 
     // Generate a map from each unique source to the next available offset.
-    val latestOffsets: Map[SparkDataStream, Option[OffsetV2]] = uniqueSources.map {
+    val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
       case (s: SupportsAdmissionControl, limit) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
@@ -391,23 +394,31 @@ class MicroBatchExecution(
               startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
                 .getOrElse(v2.initialOffset())
           }
-          (s, Option(s.latestOffset(startOffset, limit)))
+          val next = s.latestOffset(startOffset, limit)
+          val latest = s.reportLatestOffset()
+          ((s, Option(next)), (s, Option(latest)))
         }
       case (s: Source, _) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("getOffset") {
-          (s, s.getOffset)
+          val offset = s.getOffset
+          ((s, offset), (s, offset))
         }
       case (s: MicroBatchStream, _) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
-          (s, Option(s.latestOffset()))
+          val latest = s.latestOffset()
+          ((s, Option(latest)), (s, Option(latest)))
         }
       case (s, _) =>
         // for some reason, the compiler is unhappy and thinks the match is not exhaustive
         throw new IllegalStateException(s"Unexpected source: $s")
-    }
-    availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
+    }.unzip
+
+    availableOffsets ++= nextOffsets.filter { case (_, o) => o.nonEmpty }
+      .map(p => p._1 -> p._2.get).toMap
+    latestOffsets ++= recentOffsets.filter { case (_, o) => o.nonEmpty }
+      .map(p => p._1 -> p._2.get).toMap
 
     // Update the query metadata
     offsetSeqMetadata = offsetSeqMetadata.copy(

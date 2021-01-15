@@ -140,19 +140,22 @@ private[sql] trait LookupCatalog extends Logging {
    * For legacy support only. Please use [[CatalogAndIdentifier]] instead on DSv2 code paths.
    */
   object AsTableIdentifier {
-    def unapply(parts: Seq[String]): Option[TableIdentifier] = parts match {
-      case CatalogAndMultipartIdentifier(None, names)
+    def unapply(parts: Seq[String]): Option[TableIdentifier] = {
+      def namesToTableIdentifier(names: Seq[String]): Option[TableIdentifier] = names match {
+        case Seq(name) => Some(TableIdentifier(name))
+        case Seq(database, name) => Some(TableIdentifier(name, Some(database)))
+        case _ => None
+      }
+      parts match {
+        case CatalogAndMultipartIdentifier(None, names)
           if CatalogV2Util.isSessionCatalog(currentCatalog) =>
-        names match {
-          case Seq(name) =>
-            Some(TableIdentifier(name))
-          case Seq(database, name) =>
-            Some(TableIdentifier(name, Some(database)))
-          case _ =>
-            None
-        }
-      case _ =>
-        None
+          namesToTableIdentifier(names)
+        case CatalogAndMultipartIdentifier(Some(catalog), names)
+          if CatalogV2Util.isSessionCatalog(catalog) &&
+             CatalogV2Util.isSessionCatalog(currentCatalog) =>
+          namesToTableIdentifier(names)
+        case _ => None
+      }
     }
   }
 

@@ -17,47 +17,29 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.scalactic.source.Position
-import org.scalatest.Tag
-
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
-trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
-  protected def version: String
-  protected def catalog: String
-  protected def defaultUsing: String
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. DROP PARTITION` command that
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
+ * located in more specific test suites:
+ *
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableDropPartitionSuite`
+ *   - V1 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuiteBase`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableDropPartitionSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableDropPartitionSuite`
+ */
+trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "ALTER TABLE .. DROP PARTITION"
 
   protected def notFullPartitionSpecErr: String
-
-  override def test(testName: String, testTags: Tag*)(testFun: => Any)
-    (implicit pos: Position): Unit = {
-    super.test(s"ALTER TABLE .. DROP PARTITION $version: " + testName, testTags: _*)(testFun)
-  }
-
-  protected def withNsTable(ns: String, tableName: String, cat: String = catalog)
-    (f: String => Unit): Unit = {
-    val nsCat = s"$cat.$ns"
-    withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE $nsCat")
-      val t = s"$nsCat.$tableName"
-      withTable(t) {
-        f(t)
-      }
-    }
-  }
-
-  protected def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
-    val partitions = sql(s"SHOW PARTITIONS $t")
-      .collect()
-      .toSet
-      .map((row: Row) => row.getString(0))
-      .map(PartitioningUtils.parsePathFragment)
-    assert(partitions === expected.toSet)
-  }
+  protected def nullPartitionValue: String
 
   protected def checkDropPartition(
       t: String,
@@ -75,7 +57,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("single partition") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF EXISTS").foreach { ifExists =>
         sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
@@ -85,7 +67,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("multiple partitions") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       Seq("", "IF EXISTS").foreach { ifExists =>
         sql(s"""
@@ -98,7 +80,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("multi-part partition") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, a int, b string) $defaultUsing PARTITIONED BY (a, b)")
       Seq("", "IF EXISTS").foreach { ifExists =>
         sql(s"ALTER TABLE $t ADD PARTITION (a = 2, b = 'abc')")
@@ -108,7 +90,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("table to alter does not exist") {
-    withNsTable("ns", "does_not_exist") { t =>
+    withNamespaceAndTable("ns", "does_not_exist") { t =>
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (a='4', b='9')")
       }.getMessage
@@ -117,7 +99,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("case sensitivity in resolving partition specs") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
         val errMsg = intercept[AnalysisException] {
@@ -136,7 +118,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-33676: not fully specified partition spec") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"""
         |CREATE TABLE $t (id bigint, part0 int, part1 string)
         |$defaultUsing
@@ -149,7 +131,7 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
   }
 
   test("partition not exists") {
-    withNsTable("ns", "tbl") { t =>
+    withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
       sql(s"ALTER TABLE $t ADD PARTITION (id=1) LOCATION 'loc'")
 
@@ -160,6 +142,42 @@ trait AlterTableDropPartitionSuiteBase  extends QueryTest with SQLTestUtils {
 
       checkPartitions(t, Map("id" -> "1"))
       sql(s"ALTER TABLE $t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
+      checkPartitions(t)
+    }
+  }
+
+  test("SPARK-33990: don not return data from dropped partition") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
+      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
+    }
+  }
+
+  test("SPARK-33950, SPARK-33987: refresh cache after partition dropping") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      assert(!spark.catalog.isCached(t))
+      sql(s"CACHE TABLE $t")
+      assert(spark.catalog.isCached(t))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
+      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      assert(spark.catalog.isCached(t))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
+    }
+  }
+
+  test("SPARK-33591: null as a partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = null)")
+      checkPartitions(t, Map("p1" -> nullPartitionValue))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
       checkPartitions(t)
     }
   }

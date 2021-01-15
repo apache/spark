@@ -17,33 +17,50 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.SparkConf
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
+/**
+ * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command
+ * to check V2 table catalogs.
+ */
 class AlterTableDropPartitionSuite
   extends command.AlterTableDropPartitionSuiteBase
-  with SharedSparkSession {
-
-  override def version: String = "V2"
-  override def catalog: String = "test_catalog"
-  override def defaultUsing: String = "USING _"
-
+  with CommandSuiteBase {
   override protected val notFullPartitionSpecErr = "Partition spec is invalid"
-
-  override def sparkConf: SparkConf = super.sparkConf
-    .set(s"spark.sql.catalog.$catalog", classOf[InMemoryPartitionTableCatalog].getName)
-    .set(s"spark.sql.catalog.non_part_$catalog", classOf[InMemoryTableCatalog].getName)
+  override protected def nullPartitionValue: String = "null"
 
   test("SPARK-33650: drop partition into a table which doesn't support partition management") {
-    withNsTable("ns", "tbl", s"non_part_$catalog") { t =>
+    withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
       sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }.getMessage
       assert(errMsg.contains("can not alter partitions"))
+    }
+  }
+
+  test("purge partition data") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"ALTER TABLE $t ADD PARTITION (id=1)")
+      try {
+        val errMsg = intercept[UnsupportedOperationException] {
+          sql(s"ALTER TABLE $t DROP PARTITION (id=1) PURGE")
+        }.getMessage
+        assert(errMsg.contains("purge is not supported"))
+      } finally {
+        sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
+      }
+    }
+  }
+
+  test("empty string as partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = '')")
+      checkPartitions(t)
     }
   }
 }

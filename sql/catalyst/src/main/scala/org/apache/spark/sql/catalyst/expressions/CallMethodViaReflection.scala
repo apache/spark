@@ -52,7 +52,8 @@ import org.apache.spark.util.Utils
       > SELECT _FUNC_('java.util.UUID', 'fromString', 'a5cf6c42-0c85-418f-af6c-3e4e5b1328f2');
        a5cf6c42-0c85-418f-af6c-3e4e5b1328f2
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "misc_funcs")
 case class CallMethodViaReflection(children: Seq[Expression])
   extends Nondeterministic with CodegenFallback {
 

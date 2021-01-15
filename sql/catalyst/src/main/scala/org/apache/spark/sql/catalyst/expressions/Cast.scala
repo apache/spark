@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.Cast.{forceNullable, resolvableNullability}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -37,6 +38,11 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 
 object Cast {
+
+  /**
+   * A tag to decide if a CAST is specified by user.
+   */
+  val USER_SPECIFIED_CAST = new TreeNodeTag[Boolean]("user_specified_cast")
 
   /**
    * Returns true iff we can cast `from` type to `to` type.
@@ -1755,7 +1761,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       > SELECT _FUNC_('10' as int);
        10
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "conversion_funcs")
 case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
   extends CastBase {
 

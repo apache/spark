@@ -196,14 +196,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
     checkKeywordsExistsInExplain(sql("select 'a' || 1 + 2"),
-      "Project [null AS (CAST(concat(a, CAST(1 AS STRING)) AS DOUBLE) + CAST(2 AS DOUBLE))#x]")
+      "Project [null AS (concat(a, 1) + 2)#x]")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
-      "Project [-1b AS concat(CAST((1 - 2) AS STRING), b)#x]")
+      "Project [-1b AS concat((1 - 2), b)#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
-      "Project [11b AS concat(CAST(((2 * 4) + 3) AS STRING), b)#x]")
+      "Project [11b AS concat(((2 * 4) + 3), b)#x]")
     checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),
-      "Project [4a2.0 AS concat(concat(CAST((3 + 1) AS STRING), a), " +
-        "CAST((CAST(4 AS DOUBLE) / CAST(2 AS DOUBLE)) AS STRING))#x]")
+      "Project [4a2.0 AS concat(concat((3 + 1), a), (4 / 2))#x]")
     checkKeywordsExistsInExplain(sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
       "Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]")
     checkKeywordsExistsInExplain(sql("select 'a' || 'c' == 'ac' AND 2 == 3"),
@@ -228,12 +227,27 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     }
   }
 
+  test("SPARK-33853: explain codegen - check presence of subquery") {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df1 = spark.range(1, 100)
+        df1.createTempView("df")
+
+        val sqlText = "EXPLAIN CODEGEN SELECT (SELECT min(id) FROM df)"
+        val expectedText = "Found 3 WholeStageCodegen subtrees."
+
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(normalizedOutput.contains(expectedText))
+        }
+      }
+    }
+  }
+
   test("explain formatted - check presence of subquery in case of DPP") {
     withTable("df1", "df2") {
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-        withTable("df1", "df2") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
             .partitionBy("k")
@@ -272,6 +286,22 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
             assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
+        }
+    }
+  }
+
+  test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df = spark.range(1, 100)
+        df.createTempView("df")
+
+        val sqlText = "EXPLAIN FORMATTED SELECT (SELECT min(id) FROM df) as v"
+        val expected_pattern =
+          "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x"
+
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(expected_pattern.r.findAllMatchIn(normalizedOutput).length == 1)
         }
       }
     }

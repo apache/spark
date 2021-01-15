@@ -128,7 +128,7 @@ Input [5]: [ss_store_sk#2, ss_net_profit#3, s_store_sk#8, s_store_name#9, s_zip#
 
 (17) Exchange
 Input [3]: [ss_net_profit#3, s_store_name#9, s_zip#10]
-Arguments: hashpartitioning(substr(s_zip#10, 1, 2), 5), true, [id=#12]
+Arguments: hashpartitioning(substr(s_zip#10, 1, 2), 5), ENSURE_REQUIREMENTS, [id=#12]
 
 (18) Sort [codegen id : 4]
 Input [3]: [ss_net_profit#3, s_store_name#9, s_zip#10]
@@ -163,7 +163,7 @@ Condition : isnotnull(ca_address_sk#14)
 
 (25) Exchange
 Input [2]: [ca_address_sk#14, ca_zip#13]
-Arguments: hashpartitioning(ca_address_sk#14, 5), true, [id=#15]
+Arguments: hashpartitioning(ca_address_sk#14, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (26) Sort [codegen id : 6]
 Input [2]: [ca_address_sk#14, ca_zip#13]
@@ -189,7 +189,7 @@ Input [2]: [c_current_addr_sk#16, c_preferred_cust_flag#17]
 
 (31) Exchange
 Input [1]: [c_current_addr_sk#16]
-Arguments: hashpartitioning(c_current_addr_sk#16, 5), true, [id=#18]
+Arguments: hashpartitioning(c_current_addr_sk#16, 5), ENSURE_REQUIREMENTS, [id=#18]
 
 (32) Sort [codegen id : 8]
 Input [1]: [c_current_addr_sk#16]
@@ -213,7 +213,7 @@ Results [2]: [ca_zip#13, count#20]
 
 (36) Exchange
 Input [2]: [ca_zip#13, count#20]
-Arguments: hashpartitioning(ca_zip#13, 5), true, [id=#21]
+Arguments: hashpartitioning(ca_zip#13, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (37) HashAggregate [codegen id : 10]
 Input [2]: [ca_zip#13, count#20]
@@ -252,7 +252,7 @@ Results [1]: [ca_zip#26]
 
 (44) Exchange
 Input [1]: [ca_zip#26]
-Arguments: hashpartitioning(ca_zip#26, 5), true, [id=#27]
+Arguments: hashpartitioning(ca_zip#26, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (45) HashAggregate [codegen id : 12]
 Input [1]: [ca_zip#26]
@@ -263,7 +263,7 @@ Results [1]: [ca_zip#26]
 
 (46) Exchange
 Input [1]: [ca_zip#26]
-Arguments: hashpartitioning(substr(ca_zip#26, 1, 2), 5), true, [id=#28]
+Arguments: hashpartitioning(substr(ca_zip#26, 1, 2), 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (47) Sort [codegen id : 13]
 Input [1]: [ca_zip#26]
@@ -287,7 +287,7 @@ Results [2]: [s_store_name#9, sum#30]
 
 (51) Exchange
 Input [2]: [s_store_name#9, sum#30]
-Arguments: hashpartitioning(s_store_name#9, 5), true, [id=#31]
+Arguments: hashpartitioning(s_store_name#9, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (52) HashAggregate [codegen id : 15]
 Input [2]: [s_store_name#9, sum#30]

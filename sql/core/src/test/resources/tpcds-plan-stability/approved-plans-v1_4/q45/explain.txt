@@ -211,7 +211,7 @@ Results [3]: [ca_zip#11, ca_city#10, sum#23]
 
 (38) Exchange
 Input [3]: [ca_zip#11, ca_city#10, sum#23]
-Arguments: hashpartitioning(ca_zip#11, ca_city#10, 5), true, [id=#24]
+Arguments: hashpartitioning(ca_zip#11, ca_city#10, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (39) HashAggregate [codegen id : 7]
 Input [3]: [ca_zip#11, ca_city#10, sum#23]

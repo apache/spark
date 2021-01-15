@@ -187,7 +187,7 @@ Results [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#22, su
 
 (32) Exchange
 Input [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#22, sum#27, sum#28, sum#29]
-Arguments: hashpartitioning(ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#22, 5), true, [id=#30]
+Arguments: hashpartitioning(ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#22, 5), ENSURE_REQUIREMENTS, [id=#30]
 
 (33) HashAggregate [codegen id : 8]
 Input [7]: [ss_ticket_number#6, ss_customer_sk#2, ss_addr_sk#4, ca_city#22, sum#27, sum#28, sum#29]

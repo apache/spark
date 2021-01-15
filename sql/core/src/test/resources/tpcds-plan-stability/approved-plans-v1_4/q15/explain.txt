@@ -135,7 +135,7 @@ Results [2]: [ca_zip#9, sum#16]
 
 (24) Exchange
 Input [2]: [ca_zip#9, sum#16]
-Arguments: hashpartitioning(ca_zip#9, 5), true, [id=#17]
+Arguments: hashpartitioning(ca_zip#9, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (25) HashAggregate [codegen id : 5]
 Input [2]: [ca_zip#9, sum#16]

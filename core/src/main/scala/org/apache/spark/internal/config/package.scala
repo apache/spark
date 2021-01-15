@@ -384,7 +384,7 @@ package object config {
         "get the replication level of the block to the initial number")
       .version("2.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val STORAGE_MEMORY_MAP_THRESHOLD =
     ConfigBuilder("spark.storage.memoryMapThreshold")
@@ -1889,6 +1889,14 @@ package object config {
       .doubleConf
       .createWithDefault(0.75)
 
+  private[spark] val SPECULATION_MIN_THRESHOLD =
+    ConfigBuilder("spark.speculation.min.threshold")
+      .doc("Minimum amount of time a task runs before being considered for speculation. " +
+        "This can be used to avoid launching speculative copies of tasks that are very short.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
   private[spark] val SPECULATION_TASK_DURATION_THRESHOLD =
     ConfigBuilder("spark.speculation.task.duration.threshold")
       .doc("Task duration after which scheduler would try to speculative run the task. If " +
@@ -1926,6 +1934,13 @@ package object config {
       .version("3.1.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
+
+  private[spark] val EXECUTOR_DECOMMISSION_SIGNAL =
+    ConfigBuilder("spark.executor.decommission.signal")
+      .doc("The signal that used to trigger the executor to start decommission.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefaultString("PWR")
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
@@ -2023,4 +2038,33 @@ package object config {
       .version("3.1.0")
       .doubleConf
       .createWithDefault(5)
+
+  private[spark] val SHUFFLE_NUM_PUSH_THREADS =
+    ConfigBuilder("spark.shuffle.push.numPushThreads")
+      .doc("Specify the number of threads in the block pusher pool. These threads assist " +
+        "in creating connections and pushing blocks to remote shuffle services. By default, the " +
+        "threadpool size is equal to the number of spark executor cores.")
+      .version("3.2.0")
+      .intConf
+      .createOptional
+
+  private[spark] val SHUFFLE_MAX_BLOCK_SIZE_TO_PUSH =
+    ConfigBuilder("spark.shuffle.push.maxBlockSizeToPush")
+      .doc("The max size of an individual block to push to the remote shuffle services. Blocks " +
+       "larger than this threshold are not pushed to be merged remotely. These shuffle blocks " +
+       "will be fetched by the executors in the original manner.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1m")
+
+  private[spark] val SHUFFLE_MAX_BLOCK_BATCH_SIZE_FOR_PUSH =
+    ConfigBuilder("spark.shuffle.push.maxBlockBatchSize")
+      .doc("The max size of a batch of shuffle blocks to be grouped into a single push request.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      // Default is 3m because it is greater than 2m which is the default value for
+      // TransportConf#memoryMapBytes. If this defaults to 2m as well it is very likely that each
+      // batch of block will be loaded in memory with memory mapping, which has higher overhead
+      // with small MB sized chunk of data.
+      .createWithDefaultString("3m")
 }

@@ -47,7 +47,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.{CommandLineUtils, ResetSystemProperties, Utils}
+import org.apache.spark.util.{CommandLineUtils, DependencyUtils, ResetSystemProperties, Utils}
 
 trait TestPrematureExit {
   suite: SparkFunSuite =>
@@ -1121,8 +1121,7 @@ class SparkSubmitSuite
     val sparkConf = new SparkConf(false)
     intercept[IOException] {
       DependencyUtils.downloadFile(
-        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration(),
-        new SecurityManager(sparkConf))
+        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration())
     }
   }
 
@@ -1132,19 +1131,17 @@ class SparkSubmitSuite
     val tmpDir = Utils.createTempDir()
     updateConfWithFakeS3Fs(hadoopConf)
     intercept[FileNotFoundException] {
-      DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf,
-        new SecurityManager(sparkConf))
+      DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf)
     }
   }
 
   test("downloadFile does not download local file") {
     val sparkConf = new SparkConf(false)
-    val secMgr = new SecurityManager(sparkConf)
     // empty path is considered as local file.
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    assert(DependencyUtils.downloadFile("", tmpDir, sparkConf, new Configuration(), secMgr) === "")
-    assert(DependencyUtils.downloadFile("/local/file", tmpDir, sparkConf, new Configuration(),
-      secMgr) === "/local/file")
+    assert(DependencyUtils.downloadFile("", tmpDir, sparkConf, new Configuration()) === "")
+    assert(DependencyUtils.downloadFile(
+      "/local/file", tmpDir, sparkConf, new Configuration()) === "/local/file")
   }
 
   test("download one file to local") {
@@ -1157,8 +1154,7 @@ class SparkSubmitSuite
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
     val sourcePath = s"s3a://${jarFile.toURI.getPath}"
-    val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf,
-      new SecurityManager(sparkConf))
+    val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf)
     checkDownloadedFile(sourcePath, outputPath)
     deleteTempOutputFile(outputPath)
   }
@@ -1174,8 +1170,7 @@ class SparkSubmitSuite
     updateConfWithFakeS3Fs(hadoopConf)
     val sourcePaths = Seq("/local/file", s"s3a://${jarFile.toURI.getPath}")
     val outputPaths = DependencyUtils
-      .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf,
-        new SecurityManager(sparkConf))
+      .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf)
       .split(",")
 
     assert(outputPaths.length === sourcePaths.length)
@@ -1189,7 +1184,6 @@ class SparkSubmitSuite
     val fs = File.separator
     val sparkConf = new SparkConf(false)
     val hadoopConf = new Configuration()
-    val secMgr = new SecurityManager(sparkConf)
 
     val appJarName = "myApp.jar"
     val jar1Name = "myJar1.jar"
@@ -1197,8 +1191,7 @@ class SparkSubmitSuite
     val userJar = s"file:/path${fs}to${fs}app${fs}jar$fs$appJarName"
     val jars = s"file:/$jar1Name,file:/$appJarName,file:/$jar2Name"
 
-    val resolvedJars = DependencyUtils
-      .resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf, secMgr)
+    val resolvedJars = DependencyUtils.resolveAndDownloadJars(jars, userJar, sparkConf, hadoopConf)
 
     assert(!resolvedJars.contains(appJarName))
     assert(resolvedJars.contains(jar1Name) && resolvedJars.contains(jar2Name))

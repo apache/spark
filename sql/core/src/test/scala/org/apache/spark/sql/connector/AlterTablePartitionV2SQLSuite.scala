@@ -31,15 +31,4 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
         "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables."))
     }
   }
-
-  test("ALTER TABLE RENAME PARTITION") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t PARTITION (id=1) RENAME TO PARTITION (id=2)")
-      }
-      assert(e.message.contains("ALTER TABLE RENAME PARTITION is only supported with v1 tables"))
-    }
-  }
 }

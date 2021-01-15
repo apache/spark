@@ -460,7 +460,7 @@ private[spark] object HiveUtils extends Logging {
         version = metaVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        execJars = jars.toSeq,
+        execJars = jars,
         config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,

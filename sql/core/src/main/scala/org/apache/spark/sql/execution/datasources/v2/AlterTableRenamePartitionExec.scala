@@ -15,23 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 
-/** Query execution that skips re-analysis and optimize. */
-class AlreadyOptimizedExecution(
-    session: SparkSession,
-    plan: LogicalPlan) extends QueryExecution(session, plan) {
-  override lazy val analyzed: LogicalPlan = plan
-  override lazy val optimizedPlan: LogicalPlan = plan
-}
+/**
+ * Physical plan node for renaming a table partition.
+ */
+case class AlterTableRenamePartitionExec(
+    table: SupportsPartitionManagement,
+    from: ResolvedPartitionSpec,
+    to: ResolvedPartitionSpec,
+    refreshCache: () => Unit) extends V2CommandExec {
 
-object AlreadyOptimized {
-  def dataFrame(sparkSession: SparkSession, optimized: LogicalPlan): DataFrame = {
-    val qe = new AlreadyOptimizedExecution(sparkSession, optimized)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    if (table.renamePartition(from.ident, to.ident)) {
+      refreshCache()
+    }
+    Seq.empty
   }
 }

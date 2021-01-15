@@ -22,13 +22,16 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
@@ -3719,6 +3722,25 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-33084: Add jar support Ivy URI in SQL") {
+    val sc = spark.sparkContext
+    // default transitive=false, only download specified jar
+    sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    assert(sc.listJars()
+      .exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+
+    // test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
+
+    sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7" +
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
+  }
+
   test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
     withTempView("df") {
       Seq("m@ca").toDF("s").createOrReplaceTempView("df")
@@ -3730,6 +3752,128 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         "the escape character is not allowed to precede '@'"))
 
       checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
+    }
+  }
+
+  test("limit partition num to 1 when distributing by foldable expressions") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.optimizedPlan
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 1 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("Fold RepartitionExpression num partition should check if partition expression is empty") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      val df = spark.range(1).hint("REPARTITION_BY_RANGE")
+      val plan = df.queryExecution.optimizedPlan
+      val res = plan.collect {
+        case r: RepartitionByExpression if r.numPartitions == 5 => true
+      }
+      assert(res.nonEmpty)
+    }
+  }
+
+  test("SPARK-34030: Fold RepartitionExpression num partition should at Optimizer") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.analyzed
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 2 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("SPARK-33593: Vector reader got incorrect data with binary partition value") {
+    Seq("false", "true").foreach(value => {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t1") {
+          sql(
+            """CREATE TABLE t1(name STRING, id BINARY, part BINARY)
+              |USING PARQUET PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t1 PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t1"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t2") {
+          sql(
+            """CREATE TABLE t2(name STRING, id BINARY, part BINARY)
+              |USING ORC PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t2 PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t2"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+    })
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val functionName = "test_udf"
+    withTempDir { dir =>
+      System.setProperty("ivy.home", dir.getAbsolutePath)
+      val sourceJar = new File(Thread.currentThread().getContextClassLoader
+        .getResource("SPARK-33084.jar").getFile)
+      val targetCacheJarDir = new File(dir.getAbsolutePath +
+        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
+      targetCacheJarDir.mkdir()
+      // copy jar to local cache
+      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      withTempView("v1") {
+        withUserDefinedFunction(
+          s"default.$functionName" -> false,
+          functionName -> true) {
+          // create temporary function without class
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          }.getMessage
+          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
+          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          // create a view using a function in 'default' database
+          sql(s"CREATE TEMPORARY VIEW v1 AS SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+          // view v1 should still using function defined in `default` database
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
+        }
+      }
+      System.clearProperty("ivy.home")
+    }
+  }
+
+  test("SPARK-33964: Combine distinct unions that have noop project between them") {
+    val df = sql("""
+      |SELECT a, b FROM (
+      |  SELECT a, b FROM testData2
+      |  UNION
+      |  SELECT a, sum(b) FROM testData2 GROUP BY a
+      |  UNION
+      |  SELECT null AS a, sum(b) FROM testData2
+      |)""".stripMargin)
+
+    val unions = df.queryExecution.sparkPlan.collect {
+      case u: UnionExec => u
+    }
+
+    assert(unions.size == 1)
+  }
+
+  test("SPARK-33591: null as a partition value") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, null))
     }
   }
 }
