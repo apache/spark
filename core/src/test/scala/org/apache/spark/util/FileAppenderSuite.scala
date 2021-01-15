@@ -338,7 +338,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     assert(generatedFiles.size > 1)
     if (isCompressed) {
       assert(
-        generatedFiles.filter(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)).size > 0)
+        generatedFiles.exists(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)))
     }
     val allText = generatedFiles.map { file =>
       if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
