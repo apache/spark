@@ -237,8 +237,9 @@ case class DropTableCommand(
 
     if (isTempView || catalog.tableExists(tableName)) {
       try {
+        val viewText = catalog.getTempViewOrPermanentTableMetadata(tableName).viewText
         sparkSession.sharedState.cacheManager.uncacheQuery(
-          sparkSession.table(tableName), cascade = !(isTempView && conf.storeAnalyzedPlanForView))
+          sparkSession.table(tableName), cascade = !(isTempView && viewText.isEmpty))
       } catch {
         case NonFatal(e) => log.warn(e.toString, e)
       }

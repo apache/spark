@@ -1966,7 +1966,7 @@ class DDLParserSuite extends AnalysisTest {
       CacheTableAsSelect(
         "t",
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
-        Some("SELECT * FROM testData"),
+        "SELECT * FROM testData",
         false,
         Map.empty))
 

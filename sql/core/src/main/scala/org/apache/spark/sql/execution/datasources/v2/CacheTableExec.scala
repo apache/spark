@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.Locale
 
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.LocalTempView
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -88,20 +88,19 @@ case class CacheTableExec(
 case class CacheTableAsSelectExec(
     tempViewName: String,
     query: LogicalPlan,
-    originalText: Option[String],
+    originalText: String,
     override val isLazy: Boolean,
     override val options: Map[String, String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
-    val viewIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tempViewName)
     Dataset.ofRows(sparkSession,
       CreateViewCommand(
-        name = viewIdent,
+        name = TableIdentifier(tempViewName),
         userSpecifiedColumns = Nil,
         comment = None,
         properties = Map.empty,
-        originalText = originalText,
+        originalText = Some(originalText),
         child = query,
         allowExisting = false,
         replace = false,
