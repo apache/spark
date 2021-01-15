@@ -28,12 +28,9 @@ import org.apache.spark.sql.catalyst.rules.Rule
  *  1) Project
  *  2) Window
  *  3) Union
- *  4) Aggregate
- *  5) Other permissible unary operators. please see [[PushPredicateThroughNonJoin.canPushThrough]].
+ *  4) Other permissible unary operators. please see [[PushPredicateThroughNonJoin.canPushThrough]].
  */
-object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
-  with PredicateHelper
-  with JoinSelectionHelper {
+object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // LeftSemi/LeftAnti over Project
     case Join(p @ Project(pList, gChild), rightOp, LeftSemiOrAnti(joinType), joinCond, hint)
@@ -52,22 +49,6 @@ object PushDownLeftSemiAntiJoin extends Rule[LogicalPlan]
         }
         p.copy(child = Join(gChild, rightOp, joinType, newJoinCond, hint))
       }
-
-    // LeftSemi/LeftAnti over Aggregate, only push down if join can be planned as broadcast join.
-    case join @ Join(agg: Aggregate, rightOp, LeftSemiOrAnti(_), _, _)
-        if agg.aggregateExpressions.forall(_.deterministic) && agg.groupingExpressions.nonEmpty &&
-          !agg.aggregateExpressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) &&
-          canPlanAsBroadcastHashJoin(join, conf) =>
-      val aliasMap = getAliasMap(agg)
-      val canPushDownPredicate = (predicate: Expression) => {
-        val replaced = replaceAlias(predicate, aliasMap)
-        predicate.references.nonEmpty &&
-          replaced.references.subsetOf(agg.child.outputSet ++ rightOp.outputSet)
-      }
-      val makeJoinCondition = (predicates: Seq[Expression]) => {
-        replaceAlias(predicates.reduce(And), aliasMap)
-      }
-      pushDownJoin(join, canPushDownPredicate, makeJoinCondition)
 
     // LeftSemi/LeftAnti over Window
     case join @ Join(w: Window, rightOp, LeftSemiOrAnti(_), _, _)

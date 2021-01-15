@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class LeftSemiPushdownSuite extends PlanTest {
@@ -95,20 +94,6 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Aggregate: LeftSemiAnti join pushdown") {
-    val originalQuery = testRelation
-      .groupBy('b)('b, sum('c))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
-      .groupBy('b)('b, sum('c))
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
   test("Aggregate: LeftSemiAnti join no pushdown due to non-deterministic aggr expressions") {
     val originalQuery = testRelation
       .groupBy('b)('b, Rand(10).as('c))
@@ -116,21 +101,6 @@ class LeftSemiPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
-  }
-
-  test("Aggregate: LeftSemi join partial pushdown") {
-    val originalQuery = testRelation
-      .groupBy('b)('b, sum('c).as('sum))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 10))
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
-      .groupBy('b)('b, sum('c).as('sum))
-      .where('sum === 10)
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
   }
 
   test("Aggregate: LeftAnti join no pushdown") {
@@ -149,21 +119,6 @@ class LeftSemiPushdownSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
-  }
-
-  test("Aggregate: LeftSemiAnti join non-correlated scalar subq aggr exprs") {
-    val subq = ScalarSubquery(testRelation.groupBy('b)(sum('c).as("sum")).analyze)
-    val originalQuery = testRelation
-      .groupBy('a) ('a, subq.as("sum"))
-      .join(testRelation1, joinType = LeftSemi, condition = Some('sum === 'd && 'a === 'd))
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelation
-      .join(testRelation1, joinType = LeftSemi, condition = Some(subq === 'd && 'a === 'd))
-      .groupBy('a) ('a, subq.as("sum"))
-      .analyze
-
-    comparePlans(optimized, correctAnswer)
   }
 
   test("LeftSemiAnti join over Window") {
@@ -444,28 +399,11 @@ class LeftSemiPushdownSuite extends PlanTest {
     }
   }
 
-  Seq(LeftSemi, LeftAnti).foreach { jt =>
-    test(s"SPARK-34081: $jt only push down if join can be planned as broadcast join") {
-      Seq(-1, 100000).foreach { threshold =>
-        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
-          val originalQuery = testRelation
-            .groupBy('b)('b)
-            .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
-
-          val optimized = Optimize.execute(originalQuery.analyze)
-          val correctAnswer = if (threshold > 0) {
-            testRelation
-              .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
-              .groupBy('b)('b)
-              .analyze
-          } else {
-            originalQuery.analyze
-          }
-
-          comparePlans(optimized, correctAnswer)
-        }
-      }
-    }
+  test("SPARK-34117: Disable LeftSemi/LeftAnti push down over Aggregate") {
+    val originalQuery = testRelation
+      .groupBy('b)('b, sum('c))
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
   }
-
 }

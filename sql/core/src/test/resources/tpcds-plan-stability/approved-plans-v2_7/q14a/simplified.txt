@@ -94,12 +94,12 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                           WholeStageCodegen (10)
                                                                             HashAggregate [brand_id,class_id,category_id]
                                                                               HashAggregate [brand_id,class_id,category_id]
-                                                                                HashAggregate [brand_id,class_id,category_id]
-                                                                                  InputAdapter
-                                                                                    Exchange [brand_id,class_id,category_id] #6
-                                                                                      WholeStageCodegen (9)
-                                                                                        HashAggregate [brand_id,class_id,category_id]
-                                                                                          BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
+                                                                                BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
+                                                                                  HashAggregate [brand_id,class_id,category_id]
+                                                                                    InputAdapter
+                                                                                      Exchange [brand_id,class_id,category_id] #6
+                                                                                        WholeStageCodegen (6)
+                                                                                          HashAggregate [brand_id,class_id,category_id]
                                                                                             BroadcastHashJoin [brand_id,class_id,category_id,i_brand_id,i_class_id,i_category_id]
                                                                                               Project [i_brand_id,i_class_id,i_category_id]
                                                                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
@@ -144,21 +144,21 @@ TakeOrderedAndProject [channel,i_brand_id,i_class_id,i_category_id,sum_sales,num
                                                                                                                         Scan parquet default.item [i_item_sk,i_brand_id,i_class_id,i_category_id]
                                                                                                         InputAdapter
                                                                                                           ReusedExchange [d_date_sk] #8
+                                                                                  InputAdapter
+                                                                                    BroadcastExchange #11
+                                                                                      WholeStageCodegen (9)
+                                                                                        Project [i_brand_id,i_class_id,i_category_id]
+                                                                                          BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                                                            Project [ws_sold_date_sk,i_brand_id,i_class_id,i_category_id]
+                                                                                              BroadcastHashJoin [ws_item_sk,i_item_sk]
+                                                                                                Filter [ws_item_sk,ws_sold_date_sk]
+                                                                                                  ColumnarToRow
+                                                                                                    InputAdapter
+                                                                                                      Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk]
+                                                                                                InputAdapter
+                                                                                                  ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #10
                                                                                             InputAdapter
-                                                                                              BroadcastExchange #11
-                                                                                                WholeStageCodegen (8)
-                                                                                                  Project [i_brand_id,i_class_id,i_category_id]
-                                                                                                    BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                                                                      Project [ws_sold_date_sk,i_brand_id,i_class_id,i_category_id]
-                                                                                                        BroadcastHashJoin [ws_item_sk,i_item_sk]
-                                                                                                          Filter [ws_item_sk,ws_sold_date_sk]
-                                                                                                            ColumnarToRow
-                                                                                                              InputAdapter
-                                                                                                                Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk]
-                                                                                                          InputAdapter
-                                                                                                            ReusedExchange [i_item_sk,i_brand_id,i_class_id,i_category_id] #10
-                                                                                                      InputAdapter
-                                                                                                        ReusedExchange [d_date_sk] #8
+                                                                                              ReusedExchange [d_date_sk] #8
                                                           InputAdapter
                                                             BroadcastExchange #12
                                                               WholeStageCodegen (23)
