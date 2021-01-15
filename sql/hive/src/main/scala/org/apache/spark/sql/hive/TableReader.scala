@@ -240,8 +240,8 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
-      val avroTablePropertyKeys = HadoopTableReader.avroTableProperties
-      val avroSchemaEvolutionEnabled = conf.avroSchemaEvolutionEnabled
+      val avroPropertyKeys = HadoopTableReader.avroTableProperties
+      val schemaEvolutionEnabled = conf.avroSchemaEvolutionEnabled
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
       createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
@@ -256,11 +256,10 @@ class HadoopTableReader(
         // For example, a partition may have a different SerDe as the one defined in table
         // properties.
         val props = new Properties(tableProperties)
-        partProps.asScala.foreach { case (key, value) =>
-          if (!avroSchemaEvolutionEnabled ||
-            !avroTablePropertyKeys.contains(key) || !tableProperties.containsKey(key)) {
-            props.setProperty(key, value)
-          }
+        partProps.asScala.filterNot { case (k, _) =>
+          schemaEvolutionEnabled && avroPropertyKeys.contains(k) && tableProperties.containsKey(k)
+        }.foreach { case (key, value) =>
+          props.setProperty(key, value)
         }
         DeserializerLock.synchronized {
           deserializer.initialize(hconf, props)
