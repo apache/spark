@@ -1,10 +1,10 @@
 == Physical Plan ==
-TakeOrderedAndProject (49)
-+- * HashAggregate (48)
-   +- Exchange (47)
-      +- * HashAggregate (46)
-         +- * Project (45)
-            +- * BroadcastHashJoin Inner BuildRight (44)
+TakeOrderedAndProject (48)
++- * HashAggregate (47)
+   +- Exchange (46)
+      +- * HashAggregate (45)
+         +- * Project (44)
+            +- * BroadcastHashJoin Inner BuildRight (43)
                :- * Project (38)
                :  +- * BroadcastHashJoin Inner BuildRight (37)
                :     :- * Project (31)
@@ -43,11 +43,10 @@ TakeOrderedAndProject (49)
                :           +- * Filter (34)
                :              +- * ColumnarToRow (33)
                :                 +- Scan parquet default.customer_address (32)
-               +- BroadcastExchange (43)
-                  +- * Project (42)
-                     +- * Filter (41)
-                        +- * ColumnarToRow (40)
-                           +- Scan parquet default.customer_demographics (39)
+               +- BroadcastExchange (42)
+                  +- * Filter (41)
+                     +- * ColumnarToRow (40)
+                        +- Scan parquet default.customer_demographics (39)
 
 
 (1) Scan parquet default.customer
@@ -189,7 +188,7 @@ Input [3]: [c_customer_sk#1, c_current_cdemo_sk#2, c_current_addr_sk#3]
 Output [2]: [ca_address_sk#19, ca_county#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_address_sk)]
+PushedFilters: [In(ca_county, [Walker County,Richland County,Gaines County,Douglas County,Dona Ana County]), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_county:string>
 
 (33) ColumnarToRow [codegen id : 7]
@@ -197,7 +196,7 @@ Input [2]: [ca_address_sk#19, ca_county#20]
 
 (34) Filter [codegen id : 7]
 Input [2]: [ca_address_sk#19, ca_county#20]
-Condition : (staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, lengthCheck, ca_county#20, 30, false, true) IN (Walker County,Richland County,Gaines County,Douglas County,Dona Ana County) AND isnotnull(ca_address_sk#19))
+Condition : (ca_county#20 IN (Walker County,Richland County,Gaines County,Douglas County,Dona Ana County) AND isnotnull(ca_address_sk#19))
 
 (35) Project [codegen id : 7]
 Output [1]: [ca_address_sk#19]
@@ -230,42 +229,38 @@ Input [9]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_education_stat
 Input [9]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 Condition : isnotnull(cd_demo_sk#22)
 
-(42) Project [codegen id : 8]
-Output [9]: [cd_demo_sk#22, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, cd_gender#23, 1, false, true) AS cd_gender#31, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, cd_marital_status#24, 1, false, true) AS cd_marital_status#32, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, cd_education_status#25, 20, false, true) AS cd_education_status#33, cd_purchase_estimate#26, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, cd_credit_rating#27, 10, false, true) AS cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+(42) BroadcastExchange
 Input [9]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#31]
 
-(43) BroadcastExchange
-Input [9]: [cd_demo_sk#22, cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#35]
-
-(44) BroadcastHashJoin [codegen id : 9]
+(43) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [c_current_cdemo_sk#2]
 Right keys [1]: [cd_demo_sk#22]
 Join condition: None
 
-(45) Project [codegen id : 9]
-Output [8]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
-Input [10]: [c_current_cdemo_sk#2, cd_demo_sk#22, cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+(44) Project [codegen id : 9]
+Output [8]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Input [10]: [c_current_cdemo_sk#2, cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 
-(46) HashAggregate [codegen id : 9]
-Input [8]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
-Keys [8]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+(45) HashAggregate [codegen id : 9]
+Input [8]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+Keys [8]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#36]
-Results [9]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#37]
+Aggregate Attributes [1]: [count#32]
+Results [9]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#33]
 
-(47) Exchange
-Input [9]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#37]
-Arguments: hashpartitioning(cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, 5), ENSURE_REQUIREMENTS, [id=#38]
+(46) Exchange
+Input [9]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#33]
+Arguments: hashpartitioning(cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, 5), true, [id=#34]
 
-(48) HashAggregate [codegen id : 10]
-Input [9]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#37]
-Keys [8]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cd_purchase_estimate#26, cd_credit_rating#34, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
+(47) HashAggregate [codegen id : 10]
+Input [9]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30, count#33]
+Keys [8]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cd_purchase_estimate#26, cd_credit_rating#27, cd_dep_count#28, cd_dep_employed_count#29, cd_dep_college_count#30]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#39]
-Results [14]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, count(1)#39 AS cnt1#40, cd_purchase_estimate#26, count(1)#39 AS cnt2#41, cd_credit_rating#34, count(1)#39 AS cnt3#42, cd_dep_count#28, count(1)#39 AS cnt4#43, cd_dep_employed_count#29, count(1)#39 AS cnt5#44, cd_dep_college_count#30, count(1)#39 AS cnt6#45]
+Aggregate Attributes [1]: [count(1)#35]
+Results [14]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, count(1)#35 AS cnt1#36, cd_purchase_estimate#26, count(1)#35 AS cnt2#37, cd_credit_rating#27, count(1)#35 AS cnt3#38, cd_dep_count#28, count(1)#35 AS cnt4#39, cd_dep_employed_count#29, count(1)#35 AS cnt5#40, cd_dep_college_count#30, count(1)#35 AS cnt6#41]
 
-(49) TakeOrderedAndProject
-Input [14]: [cd_gender#31, cd_marital_status#32, cd_education_status#33, cnt1#40, cd_purchase_estimate#26, cnt2#41, cd_credit_rating#34, cnt3#42, cd_dep_count#28, cnt4#43, cd_dep_employed_count#29, cnt5#44, cd_dep_college_count#30, cnt6#45]
-Arguments: 100, [cd_gender#31 ASC NULLS FIRST, cd_marital_status#32 ASC NULLS FIRST, cd_education_status#33 ASC NULLS FIRST, cd_purchase_estimate#26 ASC NULLS FIRST, cd_credit_rating#34 ASC NULLS FIRST, cd_dep_count#28 ASC NULLS FIRST, cd_dep_employed_count#29 ASC NULLS FIRST, cd_dep_college_count#30 ASC NULLS FIRST], [cd_gender#31, cd_marital_status#32, cd_education_status#33, cnt1#40, cd_purchase_estimate#26, cnt2#41, cd_credit_rating#34, cnt3#42, cd_dep_count#28, cnt4#43, cd_dep_employed_count#29, cnt5#44, cd_dep_college_count#30, cnt6#45]
+(48) TakeOrderedAndProject
+Input [14]: [cd_gender#23, cd_marital_status#24, cd_education_status#25, cnt1#36, cd_purchase_estimate#26, cnt2#37, cd_credit_rating#27, cnt3#38, cd_dep_count#28, cnt4#39, cd_dep_employed_count#29, cnt5#40, cd_dep_college_count#30, cnt6#41]
+Arguments: 100, [cd_gender#23 ASC NULLS FIRST, cd_marital_status#24 ASC NULLS FIRST, cd_education_status#25 ASC NULLS FIRST, cd_purchase_estimate#26 ASC NULLS FIRST, cd_credit_rating#27 ASC NULLS FIRST, cd_dep_count#28 ASC NULLS FIRST, cd_dep_employed_count#29 ASC NULLS FIRST, cd_dep_college_count#30 ASC NULLS FIRST], [cd_gender#23, cd_marital_status#24, cd_education_status#25, cnt1#36, cd_purchase_estimate#26, cnt2#37, cd_credit_rating#27, cnt3#38, cd_dep_count#28, cnt4#39, cd_dep_employed_count#29, cnt5#40, cd_dep_college_count#30, cnt6#41]
 

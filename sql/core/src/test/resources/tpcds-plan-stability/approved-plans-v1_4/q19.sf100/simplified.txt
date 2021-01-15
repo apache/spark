@@ -34,11 +34,10 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
-                                            Project [s_store_sk,s_zip]
-                                              Filter [s_zip,s_store_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.store [s_store_sk,s_zip]
+                                            Filter [s_zip,s_store_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store [s_store_sk,s_zip]
                       InputAdapter
                         WholeStageCodegen (10)
                           Sort [c_customer_sk]
@@ -63,11 +62,10 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                                             InputAdapter
                                               Exchange [ca_address_sk] #7
                                                 WholeStageCodegen (7)
-                                                  Project [ca_address_sk,ca_zip]
-                                                    Filter [ca_address_sk,ca_zip]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.customer_address [ca_address_sk,ca_zip]
+                                                  Filter [ca_address_sk,ca_zip]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.customer_address [ca_address_sk,ca_zip]
                   InputAdapter
                     BroadcastExchange #8
                       WholeStageCodegen (11)

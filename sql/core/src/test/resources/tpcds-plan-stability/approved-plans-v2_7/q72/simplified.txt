@@ -39,19 +39,17 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                                   InputAdapter
                                                     BroadcastExchange #3
                                                       WholeStageCodegen (2)
-                                                        Project [w_warehouse_sk,w_warehouse_name]
-                                                          Filter [w_warehouse_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
+                                                        Filter [w_warehouse_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name]
                                               InputAdapter
                                                 BroadcastExchange #4
                                                   WholeStageCodegen (3)
-                                                    Project [i_item_sk,i_item_desc]
-                                                      Filter [i_item_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.item [i_item_sk,i_item_desc]
+                                                    Filter [i_item_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.item [i_item_sk,i_item_desc]
                                           InputAdapter
                                             BroadcastExchange #5
                                               WholeStageCodegen (4)

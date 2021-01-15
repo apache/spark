@@ -19,11 +19,10 @@ TakeOrderedAndProject [channel,col_name,d_year,d_qoy,i_category,sales_cnt,sales_
                             InputAdapter
                               BroadcastExchange #2
                                 WholeStageCodegen (1)
-                                  Project [i_item_sk,i_category]
-                                    Filter [i_item_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.item [i_item_sk,i_category]
+                                  Filter [i_item_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.item [i_item_sk,i_category]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)

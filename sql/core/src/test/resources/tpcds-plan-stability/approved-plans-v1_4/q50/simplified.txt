@@ -27,11 +27,10 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                           InputAdapter
                             BroadcastExchange #3
                               WholeStageCodegen (2)
-                                Project [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
-                                  Filter [s_store_sk]
-                                    ColumnarToRow
-                                      InputAdapter
-                                        Scan parquet default.store [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
+                                Filter [s_store_sk]
+                                  ColumnarToRow
+                                    InputAdapter
+                                      Scan parquet default.store [s_store_sk,s_store_name,s_company_id,s_street_number,s_street_name,s_street_type,s_suite_number,s_city,s_county,s_state,s_zip]
                       InputAdapter
                         BroadcastExchange #4
                           WholeStageCodegen (3)

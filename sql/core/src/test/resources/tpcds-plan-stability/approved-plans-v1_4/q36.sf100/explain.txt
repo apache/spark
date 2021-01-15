@@ -1,40 +1,36 @@
 == Physical Plan ==
-TakeOrderedAndProject (36)
-+- * Project (35)
-   +- Window (34)
-      +- * Sort (33)
-         +- Exchange (32)
-            +- * HashAggregate (31)
-               +- Exchange (30)
-                  +- * HashAggregate (29)
-                     +- * Expand (28)
-                        +- * Project (27)
-                           +- * SortMergeJoin Inner (26)
-                              :- * Sort (19)
-                              :  +- Exchange (18)
-                              :     +- * Project (17)
-                              :        +- * BroadcastHashJoin Inner BuildRight (16)
-                              :           :- * Project (10)
-                              :           :  +- * BroadcastHashJoin Inner BuildRight (9)
-                              :           :     :- * Filter (3)
-                              :           :     :  +- * ColumnarToRow (2)
-                              :           :     :     +- Scan parquet default.store_sales (1)
-                              :           :     +- BroadcastExchange (8)
-                              :           :        +- * Project (7)
-                              :           :           +- * Filter (6)
-                              :           :              +- * ColumnarToRow (5)
-                              :           :                 +- Scan parquet default.date_dim (4)
-                              :           +- BroadcastExchange (15)
-                              :              +- * Project (14)
-                              :                 +- * Filter (13)
-                              :                    +- * ColumnarToRow (12)
-                              :                       +- Scan parquet default.store (11)
-                              +- * Sort (25)
-                                 +- Exchange (24)
-                                    +- * Project (23)
-                                       +- * Filter (22)
-                                          +- * ColumnarToRow (21)
-                                             +- Scan parquet default.item (20)
+TakeOrderedAndProject (32)
++- * Project (31)
+   +- Window (30)
+      +- * Sort (29)
+         +- Exchange (28)
+            +- * HashAggregate (27)
+               +- Exchange (26)
+                  +- * HashAggregate (25)
+                     +- * Expand (24)
+                        +- * Project (23)
+                           +- * BroadcastHashJoin Inner BuildRight (22)
+                              :- * Project (17)
+                              :  +- * BroadcastHashJoin Inner BuildRight (16)
+                              :     :- * Project (10)
+                              :     :  +- * BroadcastHashJoin Inner BuildRight (9)
+                              :     :     :- * Filter (3)
+                              :     :     :  +- * ColumnarToRow (2)
+                              :     :     :     +- Scan parquet default.store_sales (1)
+                              :     :     +- BroadcastExchange (8)
+                              :     :        +- * Project (7)
+                              :     :           +- * Filter (6)
+                              :     :              +- * ColumnarToRow (5)
+                              :     :                 +- Scan parquet default.date_dim (4)
+                              :     +- BroadcastExchange (15)
+                              :        +- * Project (14)
+                              :           +- * Filter (13)
+                              :              +- * ColumnarToRow (12)
+                              :                 +- Scan parquet default.store (11)
+                              +- BroadcastExchange (21)
+                                 +- * Filter (20)
+                                    +- * ColumnarToRow (19)
+                                       +- Scan parquet default.item (18)
 
 
 (1) Scan parquet default.store_sales
@@ -44,10 +40,10 @@ Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_store_sk:int,ss_ext_sales_price:decimal(7,2),ss_net_profit:decimal(7,2)>
 
-(2) ColumnarToRow [codegen id : 3]
+(2) ColumnarToRow [codegen id : 4]
 Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4, ss_net_profit#5]
 
-(3) Filter [codegen id : 3]
+(3) Filter [codegen id : 4]
 Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4, ss_net_profit#5]
 Condition : ((isnotnull(ss_sold_date_sk#1) AND isnotnull(ss_item_sk#2)) AND isnotnull(ss_store_sk#3))
 
@@ -73,12 +69,12 @@ Input [2]: [d_date_sk#6, d_year#7]
 Input [1]: [d_date_sk#6]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
 
-(9) BroadcastHashJoin [codegen id : 3]
+(9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#1]
 Right keys [1]: [d_date_sk#6]
 Join condition: None
 
-(10) Project [codegen id : 3]
+(10) Project [codegen id : 4]
 Output [4]: [ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4, ss_net_profit#5]
 Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4, ss_net_profit#5, d_date_sk#6]
 
@@ -86,7 +82,7 @@ Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4
 Output [2]: [s_store_sk#9, s_state#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_state), EqualTo(s_state,TN), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_state:string>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -94,7 +90,7 @@ Input [2]: [s_store_sk#9, s_state#10]
 
 (13) Filter [codegen id : 2]
 Input [2]: [s_store_sk#9, s_state#10]
-Condition : ((staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, s_state#10, 2, false, true) = TN) AND isnotnull(s_store_sk#9))
+Condition : ((isnotnull(s_state#10) AND (s_state#10 = TN)) AND isnotnull(s_store_sk#9))
 
 (14) Project [codegen id : 2]
 Output [1]: [s_store_sk#9]
@@ -104,97 +100,81 @@ Input [2]: [s_store_sk#9, s_state#10]
 Input [1]: [s_store_sk#9]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
 
-(16) BroadcastHashJoin [codegen id : 3]
+(16) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
 Right keys [1]: [s_store_sk#9]
 Join condition: None
 
-(17) Project [codegen id : 3]
+(17) Project [codegen id : 4]
 Output [3]: [ss_item_sk#2, ss_ext_sales_price#4, ss_net_profit#5]
 Input [5]: [ss_item_sk#2, ss_store_sk#3, ss_ext_sales_price#4, ss_net_profit#5, s_store_sk#9]
 
-(18) Exchange
-Input [3]: [ss_item_sk#2, ss_ext_sales_price#4, ss_net_profit#5]
-Arguments: hashpartitioning(ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#12]
-
-(19) Sort [codegen id : 4]
-Input [3]: [ss_item_sk#2, ss_ext_sales_price#4, ss_net_profit#5]
-Arguments: [ss_item_sk#2 ASC NULLS FIRST], false, 0
-
-(20) Scan parquet default.item
-Output [3]: [i_item_sk#13, i_class#14, i_category#15]
+(18) Scan parquet default.item
+Output [3]: [i_item_sk#12, i_class#13, i_category#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_class:string,i_category:string>
 
-(21) ColumnarToRow [codegen id : 5]
-Input [3]: [i_item_sk#13, i_class#14, i_category#15]
+(19) ColumnarToRow [codegen id : 3]
+Input [3]: [i_item_sk#12, i_class#13, i_category#14]
 
-(22) Filter [codegen id : 5]
-Input [3]: [i_item_sk#13, i_class#14, i_category#15]
-Condition : isnotnull(i_item_sk#13)
+(20) Filter [codegen id : 3]
+Input [3]: [i_item_sk#12, i_class#13, i_category#14]
+Condition : isnotnull(i_item_sk#12)
 
-(23) Project [codegen id : 5]
-Output [3]: [i_item_sk#13, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, i_class#14, 50, false, true) AS i_class#16, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, i_category#15, 50, false, true) AS i_category#17]
-Input [3]: [i_item_sk#13, i_class#14, i_category#15]
+(21) BroadcastExchange
+Input [3]: [i_item_sk#12, i_class#13, i_category#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#15]
 
-(24) Exchange
-Input [3]: [i_item_sk#13, i_class#16, i_category#17]
-Arguments: hashpartitioning(i_item_sk#13, 5), ENSURE_REQUIREMENTS, [id=#18]
-
-(25) Sort [codegen id : 6]
-Input [3]: [i_item_sk#13, i_class#16, i_category#17]
-Arguments: [i_item_sk#13 ASC NULLS FIRST], false, 0
-
-(26) SortMergeJoin [codegen id : 7]
+(22) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_item_sk#2]
-Right keys [1]: [i_item_sk#13]
+Right keys [1]: [i_item_sk#12]
 Join condition: None
 
-(27) Project [codegen id : 7]
-Output [4]: [ss_ext_sales_price#4, ss_net_profit#5, i_category#17 AS i_category#19, i_class#16 AS i_class#20]
-Input [6]: [ss_item_sk#2, ss_ext_sales_price#4, ss_net_profit#5, i_item_sk#13, i_class#16, i_category#17]
+(23) Project [codegen id : 4]
+Output [4]: [ss_ext_sales_price#4, ss_net_profit#5, i_category#14, i_class#13]
+Input [6]: [ss_item_sk#2, ss_ext_sales_price#4, ss_net_profit#5, i_item_sk#12, i_class#13, i_category#14]
 
-(28) Expand [codegen id : 7]
-Input [4]: [ss_ext_sales_price#4, ss_net_profit#5, i_category#19, i_class#20]
-Arguments: [List(ss_ext_sales_price#4, ss_net_profit#5, i_category#19, i_class#20, 0), List(ss_ext_sales_price#4, ss_net_profit#5, i_category#19, null, 1), List(ss_ext_sales_price#4, ss_net_profit#5, null, null, 3)], [ss_ext_sales_price#4, ss_net_profit#5, i_category#21, i_class#22, spark_grouping_id#23]
+(24) Expand [codegen id : 4]
+Input [4]: [ss_ext_sales_price#4, ss_net_profit#5, i_category#14, i_class#13]
+Arguments: [List(ss_ext_sales_price#4, ss_net_profit#5, i_category#14, i_class#13, 0), List(ss_ext_sales_price#4, ss_net_profit#5, i_category#14, null, 1), List(ss_ext_sales_price#4, ss_net_profit#5, null, null, 3)], [ss_ext_sales_price#4, ss_net_profit#5, i_category#16, i_class#17, spark_grouping_id#18]
 
-(29) HashAggregate [codegen id : 7]
-Input [5]: [ss_ext_sales_price#4, ss_net_profit#5, i_category#21, i_class#22, spark_grouping_id#23]
-Keys [3]: [i_category#21, i_class#22, spark_grouping_id#23]
+(25) HashAggregate [codegen id : 4]
+Input [5]: [ss_ext_sales_price#4, ss_net_profit#5, i_category#16, i_class#17, spark_grouping_id#18]
+Keys [3]: [i_category#16, i_class#17, spark_grouping_id#18]
 Functions [2]: [partial_sum(UnscaledValue(ss_net_profit#5)), partial_sum(UnscaledValue(ss_ext_sales_price#4))]
-Aggregate Attributes [2]: [sum#24, sum#25]
-Results [5]: [i_category#21, i_class#22, spark_grouping_id#23, sum#26, sum#27]
+Aggregate Attributes [2]: [sum#19, sum#20]
+Results [5]: [i_category#16, i_class#17, spark_grouping_id#18, sum#21, sum#22]
 
-(30) Exchange
-Input [5]: [i_category#21, i_class#22, spark_grouping_id#23, sum#26, sum#27]
-Arguments: hashpartitioning(i_category#21, i_class#22, spark_grouping_id#23, 5), ENSURE_REQUIREMENTS, [id=#28]
+(26) Exchange
+Input [5]: [i_category#16, i_class#17, spark_grouping_id#18, sum#21, sum#22]
+Arguments: hashpartitioning(i_category#16, i_class#17, spark_grouping_id#18, 5), true, [id=#23]
 
-(31) HashAggregate [codegen id : 8]
-Input [5]: [i_category#21, i_class#22, spark_grouping_id#23, sum#26, sum#27]
-Keys [3]: [i_category#21, i_class#22, spark_grouping_id#23]
+(27) HashAggregate [codegen id : 5]
+Input [5]: [i_category#16, i_class#17, spark_grouping_id#18, sum#21, sum#22]
+Keys [3]: [i_category#16, i_class#17, spark_grouping_id#18]
 Functions [2]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(ss_ext_sales_price#4))]
-Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#5))#29, sum(UnscaledValue(ss_ext_sales_price#4))#30]
-Results [7]: [CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#29,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#30,17,2))), DecimalType(37,20), true) AS gross_margin#31, i_category#21, i_class#22, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS lochierarchy#32, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS _w1#33, CASE WHEN (cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint) = 0) THEN i_category#21 END AS _w2#34, CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#29,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#30,17,2))), DecimalType(37,20), true) AS _w3#35]
+Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#5))#24, sum(UnscaledValue(ss_ext_sales_price#4))#25]
+Results [7]: [CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#24,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#25,17,2))), DecimalType(37,20), true) AS gross_margin#26, i_category#16, i_class#17, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS lochierarchy#27, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS _w1#28, CASE WHEN (cast(cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint) as int) = 0) THEN i_category#16 END AS _w2#29, CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#24,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#25,17,2))), DecimalType(37,20), true) AS _w3#30]
 
-(32) Exchange
-Input [7]: [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, _w1#33, _w2#34, _w3#35]
-Arguments: hashpartitioning(_w1#33, _w2#34, 5), ENSURE_REQUIREMENTS, [id=#36]
+(28) Exchange
+Input [7]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28, _w2#29, _w3#30]
+Arguments: hashpartitioning(_w1#28, _w2#29, 5), true, [id=#31]
 
-(33) Sort [codegen id : 9]
-Input [7]: [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, _w1#33, _w2#34, _w3#35]
-Arguments: [_w1#33 ASC NULLS FIRST, _w2#34 ASC NULLS FIRST, _w3#35 ASC NULLS FIRST], false, 0
+(29) Sort [codegen id : 6]
+Input [7]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28, _w2#29, _w3#30]
+Arguments: [_w1#28 ASC NULLS FIRST, _w2#29 ASC NULLS FIRST, _w3#30 ASC NULLS FIRST], false, 0
 
-(34) Window
-Input [7]: [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, _w1#33, _w2#34, _w3#35]
-Arguments: [rank(_w3#35) windowspecdefinition(_w1#33, _w2#34, _w3#35 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#37], [_w1#33, _w2#34], [_w3#35 ASC NULLS FIRST]
+(30) Window
+Input [7]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28, _w2#29, _w3#30]
+Arguments: [rank(_w3#30) windowspecdefinition(_w1#28, _w2#29, _w3#30 ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#32], [_w1#28, _w2#29], [_w3#30 ASC NULLS FIRST]
 
-(35) Project [codegen id : 10]
-Output [5]: [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, rank_within_parent#37]
-Input [8]: [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, _w1#33, _w2#34, _w3#35, rank_within_parent#37]
+(31) Project [codegen id : 7]
+Output [5]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, rank_within_parent#32]
+Input [8]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28, _w2#29, _w3#30, rank_within_parent#32]
 
-(36) TakeOrderedAndProject
-Input [5]: [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, rank_within_parent#37]
-Arguments: 100, [lochierarchy#32 DESC NULLS LAST, CASE WHEN (lochierarchy#32 = 0) THEN i_category#21 END ASC NULLS FIRST, rank_within_parent#37 ASC NULLS FIRST], [gross_margin#31, i_category#21, i_class#22, lochierarchy#32, rank_within_parent#37]
+(32) TakeOrderedAndProject
+Input [5]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, rank_within_parent#32]
+Arguments: 100, [lochierarchy#27 DESC NULLS LAST, CASE WHEN (cast(lochierarchy#27 as int) = 0) THEN i_category#16 END ASC NULLS FIRST, rank_within_parent#32 ASC NULLS FIRST], [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, rank_within_parent#32]
 

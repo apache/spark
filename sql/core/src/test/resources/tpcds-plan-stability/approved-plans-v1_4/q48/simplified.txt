@@ -26,11 +26,10 @@ WholeStageCodegen (6)
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)
-                              Project [cd_demo_sk,cd_marital_status,cd_education_status]
-                                Filter [cd_demo_sk,cd_marital_status,cd_education_status]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                              Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (3)

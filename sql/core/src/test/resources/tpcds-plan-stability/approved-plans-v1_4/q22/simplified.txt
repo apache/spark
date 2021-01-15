@@ -27,11 +27,10 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                         InputAdapter
                           BroadcastExchange #3
                             WholeStageCodegen (2)
-                              Project [i_item_sk,i_brand,i_class,i_category,i_product_name]
-                                Filter [i_item_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
+                              Filter [i_item_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
                     InputAdapter
                       BroadcastExchange #4
                         WholeStageCodegen (3)

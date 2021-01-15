@@ -21,11 +21,10 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                 InputAdapter
                                   BroadcastExchange #2
                                     WholeStageCodegen (1)
-                                      Project [i_item_sk,i_item_id]
-                                        Filter [i_item_sk,i_item_id]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.item [i_item_sk,i_item_id]
+                                      Filter [i_item_sk,i_item_id]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.item [i_item_sk,i_item_id]
                             InputAdapter
                               BroadcastExchange #3
                                 WholeStageCodegen (3)

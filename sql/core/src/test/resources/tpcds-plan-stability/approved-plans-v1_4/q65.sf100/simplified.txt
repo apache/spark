@@ -56,19 +56,17 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                         InputAdapter
                           BroadcastExchange #7
                             WholeStageCodegen (7)
-                              Project [s_store_sk,s_store_name]
-                                Filter [s_store_sk]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.store [s_store_sk,s_store_name]
+                              Filter [s_store_sk]
+                                ColumnarToRow
+                                  InputAdapter
+                                    Scan parquet default.store [s_store_sk,s_store_name]
         InputAdapter
           WholeStageCodegen (11)
             Sort [i_item_sk]
               InputAdapter
                 Exchange [i_item_sk] #8
                   WholeStageCodegen (10)
-                    Project [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
-                      Filter [i_item_sk]
-                        ColumnarToRow
-                          InputAdapter
-                            Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+                    Filter [i_item_sk]
+                      ColumnarToRow
+                        InputAdapter
+                          Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]

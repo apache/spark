@@ -1,250 +1,200 @@
 == Physical Plan ==
-TakeOrderedAndProject (46)
-+- * Project (45)
-   +- * SortMergeJoin Inner (44)
-      :- * Sort (38)
-      :  +- Exchange (37)
-      :     +- * Project (36)
-      :        +- * SortMergeJoin Inner (35)
-      :           :- * Sort (29)
-      :           :  +- Exchange (28)
-      :           :     +- * Project (27)
-      :           :        +- * SortMergeJoin Inner (26)
-      :           :           :- * Sort (19)
-      :           :           :  +- Exchange (18)
-      :           :           :     +- * Project (17)
-      :           :           :        +- * BroadcastHashJoin Inner BuildLeft (16)
-      :           :           :           :- BroadcastExchange (11)
-      :           :           :           :  +- * Project (10)
-      :           :           :           :     +- * BroadcastHashJoin Inner BuildRight (9)
-      :           :           :           :        :- * Filter (3)
-      :           :           :           :        :  +- * ColumnarToRow (2)
-      :           :           :           :        :     +- Scan parquet default.household_demographics (1)
-      :           :           :           :        +- BroadcastExchange (8)
-      :           :           :           :           +- * Project (7)
-      :           :           :           :              +- * Filter (6)
-      :           :           :           :                 +- * ColumnarToRow (5)
-      :           :           :           :                    +- Scan parquet default.income_band (4)
-      :           :           :           +- * Project (15)
-      :           :           :              +- * Filter (14)
-      :           :           :                 +- * ColumnarToRow (13)
-      :           :           :                    +- Scan parquet default.customer (12)
-      :           :           +- * Sort (25)
-      :           :              +- Exchange (24)
-      :           :                 +- * Project (23)
-      :           :                    +- * Filter (22)
-      :           :                       +- * ColumnarToRow (21)
-      :           :                          +- Scan parquet default.customer_address (20)
-      :           +- * Sort (34)
-      :              +- Exchange (33)
-      :                 +- * Filter (32)
-      :                    +- * ColumnarToRow (31)
-      :                       +- Scan parquet default.customer_demographics (30)
-      +- * Sort (43)
-         +- Exchange (42)
-            +- * Filter (41)
-               +- * ColumnarToRow (40)
-                  +- Scan parquet default.store_returns (39)
+TakeOrderedAndProject (36)
++- * Project (35)
+   +- * BroadcastHashJoin Inner BuildLeft (34)
+      :- BroadcastExchange (30)
+      :  +- * Project (29)
+      :     +- * BroadcastHashJoin Inner BuildLeft (28)
+      :        :- BroadcastExchange (24)
+      :        :  +- * Project (23)
+      :        :     +- * BroadcastHashJoin Inner BuildRight (22)
+      :        :        :- * Project (10)
+      :        :        :  +- * BroadcastHashJoin Inner BuildRight (9)
+      :        :        :     :- * Filter (3)
+      :        :        :     :  +- * ColumnarToRow (2)
+      :        :        :     :     +- Scan parquet default.customer (1)
+      :        :        :     +- BroadcastExchange (8)
+      :        :        :        +- * Project (7)
+      :        :        :           +- * Filter (6)
+      :        :        :              +- * ColumnarToRow (5)
+      :        :        :                 +- Scan parquet default.customer_address (4)
+      :        :        +- BroadcastExchange (21)
+      :        :           +- * Project (20)
+      :        :              +- * BroadcastHashJoin Inner BuildRight (19)
+      :        :                 :- * Filter (13)
+      :        :                 :  +- * ColumnarToRow (12)
+      :        :                 :     +- Scan parquet default.household_demographics (11)
+      :        :                 +- BroadcastExchange (18)
+      :        :                    +- * Project (17)
+      :        :                       +- * Filter (16)
+      :        :                          +- * ColumnarToRow (15)
+      :        :                             +- Scan parquet default.income_band (14)
+      :        +- * Filter (27)
+      :           +- * ColumnarToRow (26)
+      :              +- Scan parquet default.customer_demographics (25)
+      +- * Filter (33)
+         +- * ColumnarToRow (32)
+            +- Scan parquet default.store_returns (31)
 
 
-(1) Scan parquet default.household_demographics
-Output [2]: [hd_demo_sk#1, hd_income_band_sk#2]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)]
-ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
-
-(2) ColumnarToRow [codegen id : 2]
-Input [2]: [hd_demo_sk#1, hd_income_band_sk#2]
-
-(3) Filter [codegen id : 2]
-Input [2]: [hd_demo_sk#1, hd_income_band_sk#2]
-Condition : (isnotnull(hd_demo_sk#1) AND isnotnull(hd_income_band_sk#2))
-
-(4) Scan parquet default.income_band
-Output [3]: [ib_income_band_sk#3, ib_lower_bound#4, ib_upper_bound#5]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/income_band]
-PushedFilters: [IsNotNull(ib_lower_bound), IsNotNull(ib_upper_bound), GreaterThanOrEqual(ib_lower_bound,38128), LessThanOrEqual(ib_upper_bound,88128), IsNotNull(ib_income_band_sk)]
-ReadSchema: struct<ib_income_band_sk:int,ib_lower_bound:int,ib_upper_bound:int>
-
-(5) ColumnarToRow [codegen id : 1]
-Input [3]: [ib_income_band_sk#3, ib_lower_bound#4, ib_upper_bound#5]
-
-(6) Filter [codegen id : 1]
-Input [3]: [ib_income_band_sk#3, ib_lower_bound#4, ib_upper_bound#5]
-Condition : ((((isnotnull(ib_lower_bound#4) AND isnotnull(ib_upper_bound#5)) AND (ib_lower_bound#4 >= 38128)) AND (ib_upper_bound#5 <= 88128)) AND isnotnull(ib_income_band_sk#3))
-
-(7) Project [codegen id : 1]
-Output [1]: [ib_income_band_sk#3]
-Input [3]: [ib_income_band_sk#3, ib_lower_bound#4, ib_upper_bound#5]
-
-(8) BroadcastExchange
-Input [1]: [ib_income_band_sk#3]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#6]
-
-(9) BroadcastHashJoin [codegen id : 2]
-Left keys [1]: [hd_income_band_sk#2]
-Right keys [1]: [ib_income_band_sk#3]
-Join condition: None
-
-(10) Project [codegen id : 2]
-Output [1]: [hd_demo_sk#1]
-Input [3]: [hd_demo_sk#1, hd_income_band_sk#2, ib_income_band_sk#3]
-
-(11) BroadcastExchange
-Input [1]: [hd_demo_sk#1]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
-
-(12) Scan parquet default.customer
-Output [6]: [c_customer_id#8, c_current_cdemo_sk#9, c_current_hdemo_sk#10, c_current_addr_sk#11, c_first_name#12, c_last_name#13]
+(1) Scan parquet default.customer
+Output [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
 PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk), IsNotNull(c_current_hdemo_sk)]
 ReadSchema: struct<c_customer_id:string,c_current_cdemo_sk:int,c_current_hdemo_sk:int,c_current_addr_sk:int,c_first_name:string,c_last_name:string>
 
-(13) ColumnarToRow
-Input [6]: [c_customer_id#8, c_current_cdemo_sk#9, c_current_hdemo_sk#10, c_current_addr_sk#11, c_first_name#12, c_last_name#13]
+(2) ColumnarToRow [codegen id : 4]
+Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6]
 
-(14) Filter
-Input [6]: [c_customer_id#8, c_current_cdemo_sk#9, c_current_hdemo_sk#10, c_current_addr_sk#11, c_first_name#12, c_last_name#13]
-Condition : ((isnotnull(c_current_addr_sk#11) AND isnotnull(c_current_cdemo_sk#9)) AND isnotnull(c_current_hdemo_sk#10))
+(3) Filter [codegen id : 4]
+Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6]
+Condition : ((isnotnull(c_current_addr_sk#4) AND isnotnull(c_current_cdemo_sk#2)) AND isnotnull(c_current_hdemo_sk#3))
 
-(15) Project
-Output [6]: [staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, c_customer_id#8, 16, false, true) AS c_customer_id#14, c_current_cdemo_sk#9, c_current_hdemo_sk#10, c_current_addr_sk#11, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, c_first_name#12, 20, false, true) AS c_first_name#15, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, c_last_name#13, 30, false, true) AS c_last_name#16]
-Input [6]: [c_customer_id#8, c_current_cdemo_sk#9, c_current_hdemo_sk#10, c_current_addr_sk#11, c_first_name#12, c_last_name#13]
-
-(16) BroadcastHashJoin [codegen id : 3]
-Left keys [1]: [hd_demo_sk#1]
-Right keys [1]: [c_current_hdemo_sk#10]
-Join condition: None
-
-(17) Project [codegen id : 3]
-Output [5]: [c_customer_id#14, c_current_cdemo_sk#9, c_current_addr_sk#11, c_first_name#15, c_last_name#16]
-Input [7]: [hd_demo_sk#1, c_customer_id#14, c_current_cdemo_sk#9, c_current_hdemo_sk#10, c_current_addr_sk#11, c_first_name#15, c_last_name#16]
-
-(18) Exchange
-Input [5]: [c_customer_id#14, c_current_cdemo_sk#9, c_current_addr_sk#11, c_first_name#15, c_last_name#16]
-Arguments: hashpartitioning(c_current_addr_sk#11, 5), ENSURE_REQUIREMENTS, [id=#17]
-
-(19) Sort [codegen id : 4]
-Input [5]: [c_customer_id#14, c_current_cdemo_sk#9, c_current_addr_sk#11, c_first_name#15, c_last_name#16]
-Arguments: [c_current_addr_sk#11 ASC NULLS FIRST], false, 0
-
-(20) Scan parquet default.customer_address
-Output [2]: [ca_address_sk#18, ca_city#19]
+(4) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#7, ca_city#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_address_sk)]
+PushedFilters: [IsNotNull(ca_city), EqualTo(ca_city,Edgewood), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_city:string>
 
-(21) ColumnarToRow [codegen id : 5]
-Input [2]: [ca_address_sk#18, ca_city#19]
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [ca_address_sk#7, ca_city#8]
 
-(22) Filter [codegen id : 5]
-Input [2]: [ca_address_sk#18, ca_city#19]
-Condition : ((staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, lengthCheck, ca_city#19, 60, false, true) = Edgewood) AND isnotnull(ca_address_sk#18))
+(6) Filter [codegen id : 1]
+Input [2]: [ca_address_sk#7, ca_city#8]
+Condition : ((isnotnull(ca_city#8) AND (ca_city#8 = Edgewood)) AND isnotnull(ca_address_sk#7))
 
-(23) Project [codegen id : 5]
-Output [1]: [ca_address_sk#18]
-Input [2]: [ca_address_sk#18, ca_city#19]
+(7) Project [codegen id : 1]
+Output [1]: [ca_address_sk#7]
+Input [2]: [ca_address_sk#7, ca_city#8]
 
-(24) Exchange
-Input [1]: [ca_address_sk#18]
-Arguments: hashpartitioning(ca_address_sk#18, 5), ENSURE_REQUIREMENTS, [id=#20]
+(8) BroadcastExchange
+Input [1]: [ca_address_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
 
-(25) Sort [codegen id : 6]
-Input [1]: [ca_address_sk#18]
-Arguments: [ca_address_sk#18 ASC NULLS FIRST], false, 0
-
-(26) SortMergeJoin [codegen id : 7]
-Left keys [1]: [c_current_addr_sk#11]
-Right keys [1]: [ca_address_sk#18]
+(9) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [c_current_addr_sk#4]
+Right keys [1]: [ca_address_sk#7]
 Join condition: None
 
-(27) Project [codegen id : 7]
-Output [4]: [c_customer_id#14, c_current_cdemo_sk#9, c_first_name#15, c_last_name#16]
-Input [6]: [c_customer_id#14, c_current_cdemo_sk#9, c_current_addr_sk#11, c_first_name#15, c_last_name#16, ca_address_sk#18]
+(10) Project [codegen id : 4]
+Output [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6]
+Input [7]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_current_addr_sk#4, c_first_name#5, c_last_name#6, ca_address_sk#7]
 
-(28) Exchange
-Input [4]: [c_customer_id#14, c_current_cdemo_sk#9, c_first_name#15, c_last_name#16]
-Arguments: hashpartitioning(c_current_cdemo_sk#9, 5), ENSURE_REQUIREMENTS, [id=#21]
+(11) Scan parquet default.household_demographics
+Output [2]: [hd_demo_sk#10, hd_income_band_sk#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/household_demographics]
+PushedFilters: [IsNotNull(hd_demo_sk), IsNotNull(hd_income_band_sk)]
+ReadSchema: struct<hd_demo_sk:int,hd_income_band_sk:int>
 
-(29) Sort [codegen id : 8]
-Input [4]: [c_customer_id#14, c_current_cdemo_sk#9, c_first_name#15, c_last_name#16]
-Arguments: [c_current_cdemo_sk#9 ASC NULLS FIRST], false, 0
+(12) ColumnarToRow [codegen id : 3]
+Input [2]: [hd_demo_sk#10, hd_income_band_sk#11]
 
-(30) Scan parquet default.customer_demographics
-Output [1]: [cd_demo_sk#22]
+(13) Filter [codegen id : 3]
+Input [2]: [hd_demo_sk#10, hd_income_band_sk#11]
+Condition : (isnotnull(hd_demo_sk#10) AND isnotnull(hd_income_band_sk#11))
+
+(14) Scan parquet default.income_band
+Output [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/income_band]
+PushedFilters: [IsNotNull(ib_lower_bound), IsNotNull(ib_upper_bound), GreaterThanOrEqual(ib_lower_bound,38128), LessThanOrEqual(ib_upper_bound,88128), IsNotNull(ib_income_band_sk)]
+ReadSchema: struct<ib_income_band_sk:int,ib_lower_bound:int,ib_upper_bound:int>
+
+(15) ColumnarToRow [codegen id : 2]
+Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+
+(16) Filter [codegen id : 2]
+Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+Condition : ((((isnotnull(ib_lower_bound#13) AND isnotnull(ib_upper_bound#14)) AND (ib_lower_bound#13 >= 38128)) AND (ib_upper_bound#14 <= 88128)) AND isnotnull(ib_income_band_sk#12))
+
+(17) Project [codegen id : 2]
+Output [1]: [ib_income_band_sk#12]
+Input [3]: [ib_income_band_sk#12, ib_lower_bound#13, ib_upper_bound#14]
+
+(18) BroadcastExchange
+Input [1]: [ib_income_band_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+
+(19) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [hd_income_band_sk#11]
+Right keys [1]: [ib_income_band_sk#12]
+Join condition: None
+
+(20) Project [codegen id : 3]
+Output [1]: [hd_demo_sk#10]
+Input [3]: [hd_demo_sk#10, hd_income_band_sk#11, ib_income_band_sk#12]
+
+(21) BroadcastExchange
+Input [1]: [hd_demo_sk#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#16]
+
+(22) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [c_current_hdemo_sk#3]
+Right keys [1]: [hd_demo_sk#10]
+Join condition: None
+
+(23) Project [codegen id : 4]
+Output [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
+Input [6]: [c_customer_id#1, c_current_cdemo_sk#2, c_current_hdemo_sk#3, c_first_name#5, c_last_name#6, hd_demo_sk#10]
+
+(24) BroadcastExchange
+Input [4]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#17]
+
+(25) Scan parquet default.customer_demographics
+Output [1]: [cd_demo_sk#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
 PushedFilters: [IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int>
 
-(31) ColumnarToRow [codegen id : 9]
-Input [1]: [cd_demo_sk#22]
+(26) ColumnarToRow
+Input [1]: [cd_demo_sk#18]
 
-(32) Filter [codegen id : 9]
-Input [1]: [cd_demo_sk#22]
-Condition : isnotnull(cd_demo_sk#22)
+(27) Filter
+Input [1]: [cd_demo_sk#18]
+Condition : isnotnull(cd_demo_sk#18)
 
-(33) Exchange
-Input [1]: [cd_demo_sk#22]
-Arguments: hashpartitioning(cd_demo_sk#22, 5), ENSURE_REQUIREMENTS, [id=#23]
-
-(34) Sort [codegen id : 10]
-Input [1]: [cd_demo_sk#22]
-Arguments: [cd_demo_sk#22 ASC NULLS FIRST], false, 0
-
-(35) SortMergeJoin [codegen id : 11]
-Left keys [1]: [c_current_cdemo_sk#9]
-Right keys [1]: [cd_demo_sk#22]
+(28) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [c_current_cdemo_sk#2]
+Right keys [1]: [cd_demo_sk#18]
 Join condition: None
 
-(36) Project [codegen id : 11]
-Output [4]: [c_customer_id#14, c_first_name#15, c_last_name#16, cd_demo_sk#22]
-Input [5]: [c_customer_id#14, c_current_cdemo_sk#9, c_first_name#15, c_last_name#16, cd_demo_sk#22]
+(29) Project [codegen id : 5]
+Output [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18]
+Input [5]: [c_customer_id#1, c_current_cdemo_sk#2, c_first_name#5, c_last_name#6, cd_demo_sk#18]
 
-(37) Exchange
-Input [4]: [c_customer_id#14, c_first_name#15, c_last_name#16, cd_demo_sk#22]
-Arguments: hashpartitioning(cast(cd_demo_sk#22 as bigint), 5), ENSURE_REQUIREMENTS, [id=#24]
+(30) BroadcastExchange
+Input [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [id=#19]
 
-(38) Sort [codegen id : 12]
-Input [4]: [c_customer_id#14, c_first_name#15, c_last_name#16, cd_demo_sk#22]
-Arguments: [cast(cd_demo_sk#22 as bigint) ASC NULLS FIRST], false, 0
-
-(39) Scan parquet default.store_returns
-Output [1]: [sr_cdemo_sk#25]
+(31) Scan parquet default.store_returns
+Output [1]: [sr_cdemo_sk#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_cdemo_sk)]
 ReadSchema: struct<sr_cdemo_sk:bigint>
 
-(40) ColumnarToRow [codegen id : 13]
-Input [1]: [sr_cdemo_sk#25]
+(32) ColumnarToRow
+Input [1]: [sr_cdemo_sk#20]
 
-(41) Filter [codegen id : 13]
-Input [1]: [sr_cdemo_sk#25]
-Condition : isnotnull(sr_cdemo_sk#25)
+(33) Filter
+Input [1]: [sr_cdemo_sk#20]
+Condition : isnotnull(sr_cdemo_sk#20)
 
-(42) Exchange
-Input [1]: [sr_cdemo_sk#25]
-Arguments: hashpartitioning(sr_cdemo_sk#25, 5), ENSURE_REQUIREMENTS, [id=#26]
-
-(43) Sort [codegen id : 14]
-Input [1]: [sr_cdemo_sk#25]
-Arguments: [sr_cdemo_sk#25 ASC NULLS FIRST], false, 0
-
-(44) SortMergeJoin [codegen id : 15]
-Left keys [1]: [cast(cd_demo_sk#22 as bigint)]
-Right keys [1]: [sr_cdemo_sk#25]
+(34) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cast(cd_demo_sk#18 as bigint)]
+Right keys [1]: [sr_cdemo_sk#20]
 Join condition: None
 
-(45) Project [codegen id : 15]
-Output [3]: [c_customer_id#14 AS customer_id#27, concat(c_last_name#16, , , c_first_name#15) AS customername#28, c_customer_id#14]
-Input [5]: [c_customer_id#14, c_first_name#15, c_last_name#16, cd_demo_sk#22, sr_cdemo_sk#25]
+(35) Project [codegen id : 6]
+Output [3]: [c_customer_id#1 AS customer_id#21, concat(c_last_name#6, , , c_first_name#5) AS customername#22, c_customer_id#1]
+Input [5]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18, sr_cdemo_sk#20]
 
-(46) TakeOrderedAndProject
-Input [3]: [customer_id#27, customername#28, c_customer_id#14]
-Arguments: 100, [c_customer_id#14 ASC NULLS FIRST], [customer_id#27, customername#28]
+(36) TakeOrderedAndProject
+Input [3]: [customer_id#21, customername#22, c_customer_id#1]
+Arguments: 100, [c_customer_id#1 ASC NULLS FIRST], [customer_id#21, customername#22]
 

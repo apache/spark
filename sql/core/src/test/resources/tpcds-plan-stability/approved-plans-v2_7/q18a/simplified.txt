@@ -48,11 +48,10 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                             InputAdapter
                               BroadcastExchange #5
                                 WholeStageCodegen (4)
-                                  Project [ca_address_sk,ca_county,ca_state,ca_country]
-                                    Filter [ca_state,ca_address_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.customer_address [ca_address_sk,ca_county,ca_state,ca_country]
+                                  Filter [ca_state,ca_address_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.customer_address [ca_address_sk,ca_county,ca_state,ca_country]
                         InputAdapter
                           BroadcastExchange #6
                             WholeStageCodegen (5)
@@ -64,13 +63,12 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                     InputAdapter
                       BroadcastExchange #7
                         WholeStageCodegen (6)
-                          Project [i_item_sk,i_item_id]
-                            Filter [i_item_sk]
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet default.item [i_item_sk,i_item_id]
+                          Filter [i_item_sk]
+                            ColumnarToRow
+                              InputAdapter
+                                Scan parquet default.item [i_item_sk,i_item_id]
     WholeStageCodegen (16)
-      HashAggregate [i_item_id,ca_country,ca_state,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),i_item_id,ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+      HashAggregate [i_item_id,ca_country,ca_state,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id,ca_country,ca_state] #8
             WholeStageCodegen (15)
@@ -100,17 +98,16 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                             InputAdapter
                               BroadcastExchange #9
                                 WholeStageCodegen (12)
-                                  Project [ca_address_sk,ca_state,ca_country]
-                                    Filter [ca_state,ca_address_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
+                                  Filter [ca_state,ca_address_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
                         InputAdapter
                           ReusedExchange [d_date_sk] #6
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #7
     WholeStageCodegen (24)
-      HashAggregate [i_item_id,ca_country,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),i_item_id,ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+      HashAggregate [i_item_id,ca_country,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id,ca_country] #10
             WholeStageCodegen (23)
@@ -150,7 +147,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #7
     WholeStageCodegen (32)
-      HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),i_item_id,ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+      HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(agg2),avg(agg3),avg(agg4),avg(agg5),avg(agg6),avg(agg7),ca_country,ca_state,county,agg1,agg2,agg3,agg4,agg5,agg6,agg7,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id] #12
             WholeStageCodegen (31)
