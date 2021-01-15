@@ -22,6 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -161,9 +162,20 @@ object CharVarcharUtils extends Logging {
 
   private def paddingWithLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
     case CharType(length) =>
-      StringRPad(stringLengthCheck(expr, dt, needTrim = false), Literal(length))
+      StaticInvoke(
+        classOf[CharVarcharCodegenUtils],
+        StringType,
+        "paddingWithLengthCheck",
+        expr :: Literal(length) :: Nil,
+        propagateNull = false)
 
-    case VarcharType(_) => stringLengthCheck(expr, dt, needTrim = false)
+    case VarcharType(length) =>
+      StaticInvoke(
+        classOf[CharVarcharCodegenUtils],
+        StringType,
+        "lengthCheck",
+        expr :: Literal(length) :: Nil,
+        propagateNull = false)
 
     case StructType(fields) =>
       val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
@@ -200,47 +212,38 @@ object CharVarcharUtils extends Logging {
    */
   def stringLengthCheck(expr: Expression, targetAttr: Attribute): Expression = {
     getRawType(targetAttr.metadata).map { rawType =>
-      stringLengthCheck(expr, rawType, needTrim = true)
+      stringLengthCheck(expr, rawType)
     }.getOrElse(expr)
   }
 
   private def raiseError(typeName: String, length: Int): Expression = {
     val errMsg = UTF8String.fromString(s"Exceeds $typeName type length limitation: $length")
-    RaiseError(Literal(errMsg, StringType), StringType)
+      RaiseError(Literal(errMsg, StringType), StringType)
   }
 
-  private def stringLengthCheck(expr: Expression, dt: DataType, needTrim: Boolean): Expression = {
+  private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     dt match {
       case CharType(length) =>
-        val trimmed = if (needTrim) StringTrimRight(expr) else expr
+        val trimmed = StringTrimRight(expr)
         // Trailing spaces do not count in the length check. We don't need to retain the trailing
         // spaces, as we will pad char type columns/fields at read time.
-        If(
-          GreaterThan(Length(trimmed), Literal(length)),
-          raiseError("char", length),
-          trimmed)
+        If(GreaterThan(Length(trimmed), Literal(length)), raiseError("char", length), trimmed)
 
       case VarcharType(length) =>
-        if (needTrim) {
-          val trimmed = StringTrimRight(expr)
-          // Trailing spaces do not count in the length check. We need to retain the trailing spaces
-          // (truncate to length N), as there is no read-time padding for varchar type.
-          // TODO: create a special TrimRight function that can trim to a certain length.
-          If(
-            LessThanOrEqual(Length(expr), Literal(length)),
-            expr,
-            If(
-              GreaterThan(Length(trimmed), Literal(length)),
-              raiseError("varchar", length),
-              StringRPad(trimmed, Literal(length))))
-        } else {
-          If(GreaterThan(Length(expr), Literal(length)), raiseError("varchar", length), expr)
-        }
+        val trimmed = StringTrimRight(expr)
+        // Trailing spaces do not count in the length check. We need to retain the trailing spaces
+        // (truncate to length N), as there is no read-time padding for varchar type.
+        // TODO: create a special TrimRight function that can trim to a certain length.
+        If(LessThanOrEqual(Length(expr), Literal(length)),
+          expr,
+          If(GreaterThan(Length(trimmed), Literal(length)),
+            raiseError("varchar", length),
+            StringRPad(trimmed, Literal(length))))
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
           Seq(Literal(f.name),
-            stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType, needTrim))
+            stringLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
         })
         if (expr.nullable) {
           If(IsNull(expr), Literal(null, struct.dataType), struct)
@@ -248,11 +251,11 @@ object CharVarcharUtils extends Logging {
           struct
         }
 
-      case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull, needTrim)
+      case ArrayType(et, containsNull) => stringLengthCheckInArray(expr, et, containsNull)
 
       case MapType(kt, vt, valueContainsNull) =>
-        val newKeys = stringLengthCheckInArray(MapKeys(expr), kt, containsNull = false, needTrim)
-        val newValues = stringLengthCheckInArray(MapValues(expr), vt, valueContainsNull, needTrim)
+        val newKeys = stringLengthCheckInArray(MapKeys(expr), kt, containsNull = false)
+        val newValues = stringLengthCheckInArray(MapValues(expr), vt, valueContainsNull)
         MapFromArrays(newKeys, newValues)
 
       case _ => expr
@@ -260,9 +263,9 @@ object CharVarcharUtils extends Logging {
   }
 
   private def stringLengthCheckInArray(
-      arr: Expression, et: DataType, containsNull: Boolean, needTrim: Boolean): Expression = {
+      arr: Expression, et: DataType, containsNull: Boolean): Expression = {
     val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(stringLengthCheck(param, et, needTrim), Seq(param))
+    val func = LambdaFunction(stringLengthCheck(param, et), Seq(param))
     ArrayTransform(arr, func)
   }
 
