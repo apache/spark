@@ -37,7 +37,7 @@ class FlatmapIteratorSuite extends SparkFunSuite with LocalSparkContext {
     val expand_size = 100
     val data = sc.parallelize((1 to 5).toSeq).
       flatMap( x => Stream.range(0, expand_size))
-    var persisted = data.persist(StorageLevel.DISK_ONLY)
+    val persisted = data.persist(StorageLevel.DISK_ONLY)
     assert(persisted.count()===500)
     assert(persisted.filter(_==1).count()===5)
   }
@@ -48,7 +48,7 @@ class FlatmapIteratorSuite extends SparkFunSuite with LocalSparkContext {
     val expand_size = 100
     val data = sc.parallelize((1 to 5).toSeq).
       flatMap(x => Stream.range(0, expand_size))
-    var persisted = data.persist(StorageLevel.MEMORY_ONLY)
+    val persisted = data.persist(StorageLevel.MEMORY_ONLY)
     assert(persisted.count()===500)
     assert(persisted.filter(_==1).count()===5)
   }
