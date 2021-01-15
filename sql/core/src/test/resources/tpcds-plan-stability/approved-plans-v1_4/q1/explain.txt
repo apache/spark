@@ -172,24 +172,24 @@ Input [3]: [ctr_store_sk#13, sum#21, count#22]
 Keys [1]: [ctr_store_sk#13]
 Functions [1]: [avg(ctr_total_return#14)]
 Aggregate Attributes [1]: [avg(ctr_total_return#14)#24]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#14)#24) * 1.200000), DecimalType(24,7), true) AS (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13 AS ctr_store_sk#13#26]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#14)#24) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13 AS ctr_store_sk#13#26]
 
 (27) Filter [codegen id : 6]
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13#26]
-Condition : isnotnull((CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25)
+Input [2]: [(avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13#26]
+Condition : isnotnull((avg(ctr_total_return) * 1.2)#25)
 
 (28) BroadcastExchange
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13#26]
+Input [2]: [(avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13#26]
 Arguments: HashedRelationBroadcastMode(List(input[1, bigint, true]),false), [id=#27]
 
 (29) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ctr_store_sk#13]
 Right keys [1]: [ctr_store_sk#13#26]
-Join condition: (cast(ctr_total_return#14 as decimal(24,7)) > (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25)
+Join condition: (cast(ctr_total_return#14 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#25)
 
 (30) Project [codegen id : 9]
 Output [2]: [ctr_customer_sk#12, ctr_store_sk#13]
-Input [5]: [ctr_customer_sk#12, ctr_store_sk#13, ctr_total_return#14, (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#25, ctr_store_sk#13#26]
+Input [5]: [ctr_customer_sk#12, ctr_store_sk#13, ctr_total_return#14, (avg(ctr_total_return) * 1.2)#25, ctr_store_sk#13#26]
 
 (31) Scan parquet default.store
 Output [2]: [s_store_sk#28, s_state#29]

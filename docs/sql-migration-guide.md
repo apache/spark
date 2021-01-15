@@ -26,11 +26,20 @@ license: |
 
   - In Spark 3.2, `spark.sql.adaptive.enabled` is enabled by default. To restore the behavior before Spark 3.2, you can set `spark.sql.adaptive.enabled` to `false`.
 
-  - In Spark 3.2, the meta-characters `\n` and `\t` are escaped in the `show()` action. In Spark 3.1 or earlier, the two metacharacters are output as it is.
+  - In Spark 3.2, the following meta-characters are escaped in the `show()` action. In Spark 3.1 or earlier, the following metacharacters are output as it is.
+    * `\n` (new line)
+    * `\r` (carrige ret)
+    * `\t` (horizontal tab)
+    * `\f` (form feed)
+    * `\b` (backspace)
+    * `\u000B` (vertical tab)
+    * `\u0007` (bell)
 
   - In Spark 3.2, `ALTER TABLE .. RENAME TO PARTITION` throws `PartitionAlreadyExistsException` instead of `AnalysisException` for tables from Hive external when the target partition already exists.
 
   - In Spark 3.2, script transform default FIELD DELIMIT is `\u0001` for no serde mode, serde property `field.delim` is `\t` for Hive serde mode when user specifies serde. In Spark 3.1 or earlier, the default FIELD DELIMIT is `\t`, serde property `field.delim` is `\u0001` for Hive serde mode when user specifies serde.
+
+  - In Spark 3.2, the auto-generated `Cast` (such as those added by type coercion rules) will be stripped when generating column alias names. E.g., `sql("SELECT floor(1)").columns` will be `FLOOR(1)` instead of `FLOOR(CAST(1 AS DOUBLE))`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 

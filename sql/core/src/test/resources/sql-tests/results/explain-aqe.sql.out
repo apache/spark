@@ -503,6 +503,7 @@ Results [1]: [max(key#x)#x AS max(key)#x]
 Output [1]: [max(key)#x]
 Arguments: isFinalPlan=false
 
+
 -- !query
 EXPLAIN FORMATTED
   SELECT * 
@@ -633,6 +634,7 @@ Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
 Output [1]: [avg(key)#x]
 Arguments: isFinalPlan=false
 
+
 -- !query
 EXPLAIN FORMATTED
   SELECT (SELECT Avg(key) FROM explain_temp1) + (SELECT Avg(key) FROM explain_temp1)
@@ -733,6 +735,7 @@ Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
 (13) AdaptiveSparkPlan
 Output [1]: [avg(key)#x]
 Arguments: isFinalPlan=false
+
 
 -- !query
 EXPLAIN FORMATTED

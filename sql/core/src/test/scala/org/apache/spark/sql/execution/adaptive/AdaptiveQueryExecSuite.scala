@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1428,6 +1429,34 @@ class AdaptiveQueryExecSuite
         assert(smjWithNum2.length == 1)
         // Skew join can apply as the repartition is not optimized out.
         assert(smjWithNum2.head.isSkewJoin)
+      }
+    }
+  }
+
+  test("SPARK-34091: Batch shuffle fetch in AQE partition coalescing") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10000",
+      SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "true") {
+      withTable("t1") {
+        spark.range(100).selectExpr("id + 1 as a").write.format("parquet").saveAsTable("t1")
+        val query = "SELECT SUM(a) FROM t1 GROUP BY a"
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val metricName = SQLShuffleReadMetricsReporter.LOCAL_BLOCKS_FETCHED
+        val blocksFetchedMetric = collectFirst(adaptivePlan) {
+          case p if p.metrics.contains(metricName) => p.metrics(metricName)
+        }
+        assert(blocksFetchedMetric.isDefined)
+        val blocksFetched = blocksFetchedMetric.get.value
+        withSQLConf(SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "false") {
+          val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(query)
+          val blocksFetchedMetric2 = collectFirst(adaptivePlan2) {
+            case p if p.metrics.contains(metricName) => p.metrics(metricName)
+          }
+          assert(blocksFetchedMetric2.isDefined)
+          val blocksFetched2 = blocksFetchedMetric2.get.value
+          assert(blocksFetched < blocksFetched2)
+        }
       }
     }
   }
