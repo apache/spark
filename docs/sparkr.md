@@ -764,9 +764,10 @@ of compute time repeatedly doing something that should have taken a few
 seconds during daemon initialization.
 
 Every Spark executor spawns a process running an R daemon. The daemon
-"forks a copy" of itself whenever Spark finds work for it to do. It may
-be applying a predefined method such as "max", or it may be applying
-your worker function. SparkR::gapply arranges things so that your worker
+["forks a copy"](https://stat.ethz.ch/R-manual/R-devel/library/parallel/html/mcfork.html)
+of itself whenever Spark finds work for it to do. It may be applying a
+predefined method such as "max", or it may be applying your worker
+function. [SparkR::gapply](#gapply) arranges things so that your worker
 function will be called with each group. A group is the pair
 Key-Seq[Row]. In the absence of partitioning, the daemon will fork for
 every group found. With partitioning, the daemon will fork for every
@@ -776,10 +777,10 @@ All the initializations and library loading your worker function manages
 is thrown away when the fork concludes. Every fork has to be
 initialized.
 
-The configuration spark.r.daemonInit provides a way to avoid reloading
-packages every time the daemon forks by having the daemon pre-load
-packages. You do this by providing R code to initialize the daemon for
-your application.
+The configuration [spark.r.daemonInit](configuration.md#daemonInit)
+provides a way to avoid reloading packages every time the daemon forks
+by having the daemon pre-load packages. You do this by providing R code
+to initialize the daemon for your application.
 
 ## Examples
 
@@ -808,4 +809,5 @@ library(wow) from the newly created wowTarget.
 
 
 Warning: if your initialization takes longer than 10 seconds, consider
-increasing the configuration [spark.r.daemonTimeout](configuration.md#sparkr).
+increasing the configuration
+[spark.r.daemonTimeout](configuration.md#daemonTimeout).

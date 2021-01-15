@@ -2825,6 +2825,7 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>1.5.3</td>
 </tr>
 <tr>
+  <a name="daemonInit">
   <td><code>spark.r.daemonInit</code></td>
   <td>NULL</td>
   <td>
@@ -2837,6 +2838,7 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>3.2.0</td>
 </tr>
 <tr>
+  <a name="daemonTimeout">
   <td><code>spark.r.daemonTimeout</code></td>
   <td>10000</td>
   <td>
