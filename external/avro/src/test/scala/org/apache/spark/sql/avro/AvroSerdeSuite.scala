@@ -43,24 +43,24 @@ class AvroSerdeSuite extends SparkFunSuite {
     val avro = createAvroSchemaWithTopLevelFields(_.requiredInt("foo"))
 
     assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot convert Avro to Catalyst because schema of field 'foo' is not compatible " +
+      "Cannot convert Avro field 'foo' to Catalyst field 'foo' because schema is incompatible " +
           s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType})""")
 
     assertFailedConversionMessage(avro, deserialize = false,
-      s"While attempting to convert Catalyst field 'foo' to Avro field 'foo': " +
-          s"""Cannot convert Catalyst type ${CATALYST_STRUCT.head.dataType} to Avro type "int"""")
+      s"Cannot convert Catalyst field 'foo' to Avro field 'foo' because schema is incompatible " +
+          s"""(sqlType = ${CATALYST_STRUCT.head.dataType}, avroType = "int")""")
   }
 
   test("Fail to convert with nested field type mismatch") {
     val avro = createNestedAvroSchemaWithFields("foo", _.optionalFloat("bar"))
 
     assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot convert Avro to Catalyst because schema of field 'foo.bar' is not compatible " +
-          """(avroType = "float", sqlType = IntegerType)""")
+      "Cannot convert Avro field 'foo.bar' to Catalyst field 'foo.bar' because schema is " +
+          """incompatible (avroType = "float", sqlType = IntegerType)""")
 
     assertFailedConversionMessage(avro, deserialize = false,
-      "While attempting to convert Catalyst field 'foo.bar' to " +
-        "Avro field 'foo.bar': Cannot convert Catalyst type IntegerType to Avro type \"float\"")
+      "Cannot convert Catalyst field 'foo.bar' to Avro field 'foo.bar' because " +
+        """schema is incompatible (sqlType = IntegerType, avroType = "float")""")
   }
 
   test("Fail to convert with nested field name mismatch") {
@@ -68,7 +68,7 @@ class AvroSerdeSuite extends SparkFunSuite {
     val nonnullCatalyst = new StructType()
         .add("foo", new StructType().add("bar", IntegerType, nullable = false))
 
-    // deserialize should have no issues when 'bar' is nullable
+    // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
     new AvroDeserializer(avro, CATALYST_STRUCT)
     assertFailedConversionMessage(avro, deserialize = true,
       "Cannot find non-nullable field 'foo.bar' in Avro schema.",
@@ -87,17 +87,17 @@ class AvroSerdeSuite extends SparkFunSuite {
     val catalyst = new StructType().add("top", CATALYST_STRUCT)
 
     assertFailedConversionMessage(avro, deserialize = true,
-      "Cannot convert Avro to Catalyst because schema of field " +
-        """'top.foo.bar' is not compatible (avroType = "float", sqlType = IntegerType)""",
+      "Cannot convert Avro field 'top.foo.bar' to Catalyst field 'top.foo.bar' because schema " +
+        """is incompatible (avroType = "float", sqlType = IntegerType)""",
       catalyst)
 
     assertFailedConversionMessage(avro, deserialize = false,
-      "While attempting to convert Catalyst field 'top.foo.bar'" +
-          " to Avro field 'top.foo.bar': Cannot convert Catalyst type IntegerType to Avro type",
+      "Cannot convert Catalyst field 'top.foo.bar' to Avro field 'top.foo.bar' because schema is " +
+          """incompatible (sqlType = IntegerType, avroType = "float")""",
       catalyst)
   }
 
-  test("Fail to convert with field count mismatch") {
+  test("Fail to convert for serialization with field count mismatch") {
     val tooManyFields = createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
     assertFailedConversionMessage(tooManyFields, deserialize = false,
       "Avro top-level record schema length (2) " +
@@ -131,7 +131,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       s"Cannot convert Catalyst type $catalystSchema to Avro type $avroSchema."
     }
     assert(e.getMessage === expectMsg)
-    assert(e.getCause.getMessage.contains(expectedCauseMessage))
+    assert(e.getCause.getMessage === expectedCauseMessage)
   }
 }
 

@@ -101,8 +101,8 @@ private[sql] class AvroSerializer(
 
   private def newConverter(catalystType: DataType, avroType: Schema,
     catalystPath: Seq[String], avroPath: Seq[String]): Converter = {
-    val errorPrefix = s"While attempting to convert Catalyst ${toFieldStr(catalystPath)} " +
-      s"to Avro ${toFieldStr(avroPath)}: "
+    val errorPrefix = s"Cannot convert Catalyst ${toFieldStr(catalystPath)} " +
+      s"to Avro ${toFieldStr(avroPath)} because "
     (catalystType, avroType.getType) match {
       case (NullType, NULL) =>
         (getter, ordinal) => null
@@ -140,8 +140,8 @@ private[sql] class AvroSerializer(
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
             throw new IncompatibleSchemaException(errorPrefix +
-              "Cannot write \"" + data + "\" since it's not defined in enum \"" +
-                enumSymbols.mkString("\", \"") + "\"")
+              s""""$data" cannot be written since it's not defined in enum """ +
+                enumSymbols.mkString("\"", "\", \"", "\""))
           }
           new EnumSymbol(avroType, data)
 
@@ -149,14 +149,13 @@ private[sql] class AvroSerializer(
         (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
 
       case (BinaryType, FIXED) =>
-        val size = avroType.getFixedSize()
+        val size = avroType.getFixedSize
         (getter, ordinal) =>
           val data: Array[Byte] = getter.getBinary(ordinal)
           if (data.length != size) {
-            throw new IncompatibleSchemaException(errorPrefix +
-              s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
-                "binary data into FIXED Type with size of " +
-                s"$size ${if (size > 1) "bytes" else "byte"}")
+            def len2str(len: Int): String = s"$len ${if (len > 1) "bytes" else "byte"}"
+            throw new IncompatibleSchemaException(errorPrefix + len2str(data.length) +
+                " of binary data cannot be written into FIXED type with size of " + len2str(size))
           }
           new Fixed(avroType, data)
 
@@ -174,7 +173,7 @@ private[sql] class AvroSerializer(
           case _: TimestampMicros => (getter, ordinal) =>
             timestampRebaseFunc(getter.getLong(ordinal))
           case other => throw new IncompatibleSchemaException(errorPrefix +
-            s"Cannot convert Catalyst Timestamp type to Avro logical type $other")
+            s"Catalyst Timestamp type cannot be converted to Avro logical type $other")
         }
 
       case (ArrayType(et, containsNull), ARRAY) =>
@@ -228,7 +227,7 @@ private[sql] class AvroSerializer(
 
       case _ =>
         throw new IncompatibleSchemaException(errorPrefix +
-          s"Cannot convert Catalyst type $catalystType to Avro type $avroType.")
+          s"schema is incompatible (sqlType = $catalystType, avroType = $avroType)")
     }
   }
 
