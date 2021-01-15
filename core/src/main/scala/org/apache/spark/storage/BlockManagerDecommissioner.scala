@@ -68,7 +68,7 @@ private[storage] class BlockManagerDecommissioner(
   private class ShuffleMigrationRunnable(peer: BlockManagerId) extends Runnable {
     @volatile var keepRunning = true
 
-    def allowRetry(shuffleBlock: ShuffleBlockInfo, failureNum: Int): Boolean = {
+    private def allowRetry(shuffleBlock: ShuffleBlockInfo, failureNum: Int): Boolean = {
       if (failureNum < maxReplicationFailuresForDecommission) {
         logInfo(s"Add $shuffleBlock back to migration queue for " +
           s"retry ($failureNum / $maxReplicationFailuresForDecommission)")
@@ -81,12 +81,24 @@ private[storage] class BlockManagerDecommissioner(
       }
     }
 
+    private def fetchNextShuffleBlock(): (ShuffleBlockInfo, Int) = {
+      while (!Thread.currentThread().isInterrupted) {
+        Option(shufflesToMigrate.poll()) match {
+          case Some(head) => return head
+          // Nothing to do right now, but maybe a transfer will fail or a new block
+          // will finish being committed.
+          case None => Thread.sleep(1000)
+        }
+      }
+      throw new InterruptedException()
+    }
+
     override def run(): Unit = {
       logInfo(s"Starting shuffle block migration thread for $peer")
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       while (keepRunning) {
         try {
-          val (shuffleBlockInfo, retryCount) = shufflesToMigrate.take()
+          val (shuffleBlockInfo, retryCount) = fetchNextShuffleBlock()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
           if (blocks.isEmpty) {
             logInfo(s"Ignore empty shuffle block $shuffleBlockInfo")
@@ -158,7 +170,7 @@ private[storage] class BlockManagerDecommissioner(
   // Shuffles which are queued for migration & number of retries so far.
   // Visible in storage for testing.
   private[storage] val shufflesToMigrate =
-    new java.util.concurrent.LinkedBlockingQueue[(ShuffleBlockInfo, Int)]()
+    new java.util.concurrent.ConcurrentLinkedQueue[(ShuffleBlockInfo, Int)]()
 
   // Set if we encounter an error attempting to migrate and stop.
   @volatile private var stopped = false
