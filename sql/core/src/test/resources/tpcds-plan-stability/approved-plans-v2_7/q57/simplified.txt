@@ -31,10 +31,11 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                                                             BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                                               Project [i_brand,i_category,cs_sold_date_sk,cs_call_center_sk,cs_sales_price]
                                                                 BroadcastHashJoin [i_item_sk,cs_item_sk]
-                                                                  Filter [i_item_sk,i_category,i_brand]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.item [i_item_sk,i_brand,i_category]
+                                                                  Project [i_item_sk,i_brand,i_category]
+                                                                    Filter [i_item_sk,i_category,i_brand]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet default.item [i_item_sk,i_brand,i_category]
                                                                   InputAdapter
                                                                     BroadcastExchange #4
                                                                       WholeStageCodegen (1)
@@ -52,10 +53,11 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,d_year,i_category,i_brand,d_m
                                                           InputAdapter
                                                             BroadcastExchange #6
                                                               WholeStageCodegen (3)
-                                                                Filter [cc_call_center_sk,cc_name]
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.call_center [cc_call_center_sk,cc_name]
+                                                                Project [cc_call_center_sk,cc_name]
+                                                                  Filter [cc_call_center_sk,cc_name]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.call_center [cc_call_center_sk,cc_name]
             InputAdapter
               BroadcastExchange #7
                 WholeStageCodegen (15)

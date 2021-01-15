@@ -40,47 +40,49 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                   InputAdapter
                                                     BroadcastExchange #5
                                                       WholeStageCodegen (8)
-                                                        BroadcastHashJoin [s_state,s_state]
-                                                          Filter [s_store_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.store [s_store_sk,s_county,s_state]
-                                                          InputAdapter
-                                                            BroadcastExchange #6
-                                                              WholeStageCodegen (7)
-                                                                Project [s_state]
-                                                                  Filter [ranking]
-                                                                    InputAdapter
-                                                                      Window [_w2,s_state]
-                                                                        WholeStageCodegen (6)
-                                                                          Sort [s_state,_w2]
-                                                                            InputAdapter
-                                                                              Exchange [s_state] #7
-                                                                                WholeStageCodegen (5)
-                                                                                  HashAggregate [s_state,sum] [sum(UnscaledValue(ss_net_profit)),s_state,_w2,sum]
-                                                                                    InputAdapter
-                                                                                      Exchange [s_state] #8
-                                                                                        WholeStageCodegen (4)
-                                                                                          HashAggregate [s_state,ss_net_profit] [sum,sum]
-                                                                                            Project [ss_net_profit,s_state]
-                                                                                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                                                Project [ss_sold_date_sk,ss_net_profit,s_state]
-                                                                                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                                                                                    Filter [ss_store_sk,ss_sold_date_sk]
-                                                                                                      ColumnarToRow
-                                                                                                        InputAdapter
-                                                                                                          Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
-                                                                                                    InputAdapter
-                                                                                                      BroadcastExchange #9
-                                                                                                        WholeStageCodegen (2)
-                                                                                                          Filter [s_store_sk]
-                                                                                                            ColumnarToRow
-                                                                                                              InputAdapter
-                                                                                                                Scan parquet default.store [s_store_sk,s_state]
-                                                                                                InputAdapter
-                                                                                                  ReusedExchange [d_date_sk] #4
+                                                        Project [s_store_sk,s_county,s_state]
+                                                          BroadcastHashJoin [s_state,s_state]
+                                                            Filter [s_store_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.store [s_store_sk,s_county,s_state]
+                                                            InputAdapter
+                                                              BroadcastExchange #6
+                                                                WholeStageCodegen (7)
+                                                                  Project [s_state]
+                                                                    Filter [ranking]
+                                                                      InputAdapter
+                                                                        Window [_w2,s_state]
+                                                                          WholeStageCodegen (6)
+                                                                            Sort [s_state,_w2]
+                                                                              InputAdapter
+                                                                                Exchange [s_state] #7
+                                                                                  WholeStageCodegen (5)
+                                                                                    HashAggregate [s_state,sum] [sum(UnscaledValue(ss_net_profit)),s_state,_w2,sum]
+                                                                                      InputAdapter
+                                                                                        Exchange [s_state] #8
+                                                                                          WholeStageCodegen (4)
+                                                                                            HashAggregate [s_state,ss_net_profit] [sum,sum]
+                                                                                              Project [ss_net_profit,s_state]
+                                                                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                                                  Project [ss_sold_date_sk,ss_net_profit,s_state]
+                                                                                                    BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                                                      Filter [ss_store_sk,ss_sold_date_sk]
+                                                                                                        ColumnarToRow
+                                                                                                          InputAdapter
+                                                                                                            Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_net_profit]
+                                                                                                      InputAdapter
+                                                                                                        BroadcastExchange #9
+                                                                                                          WholeStageCodegen (2)
+                                                                                                            Project [s_store_sk,s_state]
+                                                                                                              Filter [s_store_sk]
+                                                                                                                ColumnarToRow
+                                                                                                                  InputAdapter
+                                                                                                                    Scan parquet default.store [s_store_sk,s_state]
+                                                                                                  InputAdapter
+                                                                                                    ReusedExchange [d_date_sk] #4
                                   WholeStageCodegen (21)
-                                    HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
+                                    HashAggregate [s_state,sum,isEmpty] [sum(total_sum),total_sum,s_state,s_county,g_state,g_county,lochierarchy,sum,isEmpty]
                                       InputAdapter
                                         Exchange [s_state] #10
                                           WholeStageCodegen (20)

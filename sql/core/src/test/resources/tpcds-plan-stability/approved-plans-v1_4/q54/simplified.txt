@@ -76,17 +76,19 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                     InputAdapter
                                       BroadcastExchange #8
                                         WholeStageCodegen (8)
-                                          Filter [ca_address_sk,ca_county,ca_state]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.customer_address [ca_address_sk,ca_county,ca_state]
+                                          Project [ca_address_sk,ca_county,ca_state]
+                                            Filter [ca_address_sk,ca_county,ca_state]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.customer_address [ca_address_sk,ca_county,ca_state]
                                 InputAdapter
                                   BroadcastExchange #9
                                     WholeStageCodegen (9)
-                                      Filter [s_county,s_state]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.store [s_county,s_state]
+                                      Project [s_county,s_state]
+                                        Filter [s_county,s_state]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.store [s_county,s_state]
                             InputAdapter
                               BroadcastExchange #10
                                 WholeStageCodegen (10)

@@ -1,9 +1,9 @@
 == Physical Plan ==
-TakeOrderedAndProject (36)
-+- * Project (35)
-   +- * BroadcastHashJoin Inner BuildRight (34)
-      :- * Project (32)
-      :  +- * BroadcastHashJoin Inner BuildRight (31)
+TakeOrderedAndProject (37)
++- * Project (36)
+   +- * BroadcastHashJoin Inner BuildRight (35)
+      :- * Project (33)
+      :  +- * BroadcastHashJoin Inner BuildRight (32)
       :     :- * Project (26)
       :     :  +- * BroadcastHashJoin Inner BuildRight (25)
       :     :     :- * Project (14)
@@ -30,11 +30,12 @@ TakeOrderedAndProject (36)
       :     :                          +- * Filter (17)
       :     :                             +- * HashAggregate (16)
       :     :                                +- ReusedExchange (15)
-      :     +- BroadcastExchange (30)
-      :        +- * Filter (29)
-      :           +- * ColumnarToRow (28)
-      :              +- Scan parquet default.item (27)
-      +- ReusedExchange (33)
+      :     +- BroadcastExchange (31)
+      :        +- * Project (30)
+      :           +- * Filter (29)
+      :              +- * ColumnarToRow (28)
+      :                 +- Scan parquet default.item (27)
+      +- ReusedExchange (34)
 
 
 (1) Scan parquet default.store_sales
@@ -64,7 +65,7 @@ Results [3]: [ss_item_sk#1, sum#6, count#7]
 
 (6) Exchange
 Input [3]: [ss_item_sk#1, sum#6, count#7]
-Arguments: hashpartitioning(ss_item_sk#1, 5), true, [id=#8]
+Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (7) HashAggregate [codegen id : 2]
 Input [3]: [ss_item_sk#1, sum#6, count#7]
@@ -83,7 +84,7 @@ Input [3]: [item_sk#10, rank_col#11, avg(ss_net_profit#3)#12]
 
 (10) Exchange
 Input [2]: [item_sk#10, rank_col#11]
-Arguments: SinglePartition, true, [id=#15]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#15]
 
 (11) Sort [codegen id : 3]
 Input [2]: [item_sk#10, rank_col#11]
@@ -121,7 +122,7 @@ Input [3]: [item_sk#20, rank_col#21, avg(ss_net_profit#3)#22]
 
 (19) Exchange
 Input [2]: [item_sk#20, rank_col#21]
-Arguments: SinglePartition, true, [id=#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
 
 (20) Sort [codegen id : 6]
 Input [2]: [item_sk#20, rank_col#21]
@@ -166,82 +167,86 @@ Input [2]: [i_item_sk#26, i_product_name#27]
 Input [2]: [i_item_sk#26, i_product_name#27]
 Condition : isnotnull(i_item_sk#26)
 
-(30) BroadcastExchange
+(30) Project [codegen id : 8]
+Output [2]: [i_item_sk#26, staticinvoke(class org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils, StringType, paddingWithLengthCheck, i_product_name#27, 50, false, true) AS i_product_name#28]
 Input [2]: [i_item_sk#26, i_product_name#27]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#28]
 
-(31) BroadcastHashJoin [codegen id : 10]
+(31) BroadcastExchange
+Input [2]: [i_item_sk#26, i_product_name#28]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#29]
+
+(32) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [item_sk#10]
 Right keys [1]: [i_item_sk#26]
 Join condition: None
 
-(32) Project [codegen id : 10]
-Output [3]: [rnk#16, item_sk#20, i_product_name#27]
-Input [5]: [item_sk#10, rnk#16, item_sk#20, i_item_sk#26, i_product_name#27]
+(33) Project [codegen id : 10]
+Output [3]: [rnk#16, item_sk#20, i_product_name#28]
+Input [5]: [item_sk#10, rnk#16, item_sk#20, i_item_sk#26, i_product_name#28]
 
-(33) ReusedExchange [Reuses operator id: 30]
-Output [2]: [i_item_sk#29, i_product_name#30]
+(34) ReusedExchange [Reuses operator id: 31]
+Output [2]: [i_item_sk#30, i_product_name#31]
 
-(34) BroadcastHashJoin [codegen id : 10]
+(35) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [item_sk#20]
-Right keys [1]: [i_item_sk#29]
+Right keys [1]: [i_item_sk#30]
 Join condition: None
 
-(35) Project [codegen id : 10]
-Output [3]: [rnk#16, i_product_name#27 AS best_performing#31, i_product_name#30 AS worst_performing#32]
-Input [5]: [rnk#16, item_sk#20, i_product_name#27, i_item_sk#29, i_product_name#30]
+(36) Project [codegen id : 10]
+Output [3]: [rnk#16, i_product_name#28 AS best_performing#32, i_product_name#31 AS worst_performing#33]
+Input [5]: [rnk#16, item_sk#20, i_product_name#28, i_item_sk#30, i_product_name#31]
 
-(36) TakeOrderedAndProject
-Input [3]: [rnk#16, best_performing#31, worst_performing#32]
-Arguments: 100, [rnk#16 ASC NULLS FIRST], [rnk#16, best_performing#31, worst_performing#32]
+(37) TakeOrderedAndProject
+Input [3]: [rnk#16, best_performing#32, worst_performing#33]
+Arguments: 100, [rnk#16 ASC NULLS FIRST], [rnk#16, best_performing#32, worst_performing#33]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 8 Hosting Expression = Subquery scalar-subquery#13, [id=#14]
-* HashAggregate (43)
-+- Exchange (42)
-   +- * HashAggregate (41)
-      +- * Project (40)
-         +- * Filter (39)
-            +- * ColumnarToRow (38)
-               +- Scan parquet default.store_sales (37)
+* HashAggregate (44)
++- Exchange (43)
+   +- * HashAggregate (42)
+      +- * Project (41)
+         +- * Filter (40)
+            +- * ColumnarToRow (39)
+               +- Scan parquet default.store_sales (38)
 
 
-(37) Scan parquet default.store_sales
-Output [3]: [ss_addr_sk#33, ss_store_sk#2, ss_net_profit#3]
+(38) Scan parquet default.store_sales
+Output [3]: [ss_addr_sk#34, ss_store_sk#2, ss_net_profit#3]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_sales]
 PushedFilters: [IsNotNull(ss_store_sk), EqualTo(ss_store_sk,4), IsNull(ss_addr_sk)]
 ReadSchema: struct<ss_addr_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
 
-(38) ColumnarToRow [codegen id : 1]
-Input [3]: [ss_addr_sk#33, ss_store_sk#2, ss_net_profit#3]
+(39) ColumnarToRow [codegen id : 1]
+Input [3]: [ss_addr_sk#34, ss_store_sk#2, ss_net_profit#3]
 
-(39) Filter [codegen id : 1]
-Input [3]: [ss_addr_sk#33, ss_store_sk#2, ss_net_profit#3]
-Condition : ((isnotnull(ss_store_sk#2) AND (ss_store_sk#2 = 4)) AND isnull(ss_addr_sk#33))
+(40) Filter [codegen id : 1]
+Input [3]: [ss_addr_sk#34, ss_store_sk#2, ss_net_profit#3]
+Condition : ((isnotnull(ss_store_sk#2) AND (ss_store_sk#2 = 4)) AND isnull(ss_addr_sk#34))
 
-(40) Project [codegen id : 1]
+(41) Project [codegen id : 1]
 Output [2]: [ss_store_sk#2, ss_net_profit#3]
-Input [3]: [ss_addr_sk#33, ss_store_sk#2, ss_net_profit#3]
+Input [3]: [ss_addr_sk#34, ss_store_sk#2, ss_net_profit#3]
 
-(41) HashAggregate [codegen id : 1]
+(42) HashAggregate [codegen id : 1]
 Input [2]: [ss_store_sk#2, ss_net_profit#3]
 Keys [1]: [ss_store_sk#2]
 Functions [1]: [partial_avg(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [2]: [sum#34, count#35]
-Results [3]: [ss_store_sk#2, sum#36, count#37]
+Aggregate Attributes [2]: [sum#35, count#36]
+Results [3]: [ss_store_sk#2, sum#37, count#38]
 
-(42) Exchange
-Input [3]: [ss_store_sk#2, sum#36, count#37]
-Arguments: hashpartitioning(ss_store_sk#2, 5), true, [id=#38]
+(43) Exchange
+Input [3]: [ss_store_sk#2, sum#37, count#38]
+Arguments: hashpartitioning(ss_store_sk#2, 5), ENSURE_REQUIREMENTS, [id=#39]
 
-(43) HashAggregate [codegen id : 2]
-Input [3]: [ss_store_sk#2, sum#36, count#37]
+(44) HashAggregate [codegen id : 2]
+Input [3]: [ss_store_sk#2, sum#37, count#38]
 Keys [1]: [ss_store_sk#2]
 Functions [1]: [avg(UnscaledValue(ss_net_profit#3))]
-Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#3))#39]
-Results [1]: [cast((avg(UnscaledValue(ss_net_profit#3))#39 / 100.0) as decimal(11,6)) AS rank_col#40]
+Aggregate Attributes [1]: [avg(UnscaledValue(ss_net_profit#3))#40]
+Results [1]: [cast((avg(UnscaledValue(ss_net_profit#3))#40 / 100.0) as decimal(11,6)) AS rank_col#41]
 
 Subquery:2 Hosting operator id = 17 Hosting Expression = ReusedSubquery Subquery scalar-subquery#13, [id=#14]
 
