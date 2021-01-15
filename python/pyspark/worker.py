@@ -21,7 +21,7 @@ Worker that receives input from Piped RDD.
 import os
 import sys
 import time
-from inspect import getfullargspec
+from inspect import currentframe, getframeinfo, getfullargspec
 import importlib
 # 'resource' is a Unix specific module.
 has_resource_module = True
@@ -501,10 +501,12 @@ def main(infile, outfile):
 
             except (resource.error, OSError, ValueError) as e:
                 # not all systems support resource limits, so warn instead of failing
-                warnings.warn(
+                print(warnings.formatwarning(
                     "Failed to set memory limit: {0}\n".format(e),
-                    ResourceWarning
-                )
+                    ResourceWarning,
+                    __file__,
+                    getframeinfo(currentframe()).lineno
+                ))
 
         # initialize global state
         taskContext = None
