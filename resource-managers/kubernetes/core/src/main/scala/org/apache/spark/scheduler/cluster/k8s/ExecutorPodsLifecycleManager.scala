@@ -45,7 +45,7 @@ private[spark] class ExecutorPodsLifecycleManager(
 
   private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
   private lazy val missingPodDetectDelta = conf.get(KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA)
-  
+
   private var lastFullSnapshotTs: Long = 0
 
   def start(schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
