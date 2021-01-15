@@ -235,9 +235,13 @@ private[storage] class BlockManagerDecommissioner(
     }
   }
 
-  lazy val shuffleMigrationPool = ThreadUtils.newDaemonCachedThreadPool(
-    "migrate-shuffles",
-    conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS))
+  private val shuffleMigrationPool =
+    if (conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED)) {
+      Some(ThreadUtils.newDaemonCachedThreadPool("migrate-shuffles",
+        conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS)))
+    } else None
+
+
 
   /**
    * Tries to migrate all shuffle blocks that are registered with the shuffle service locally.
@@ -266,7 +270,7 @@ private[storage] class BlockManagerDecommissioner(
     migrationPeers ++= newPeers.map { peer =>
       logDebug(s"Starting thread to migrate shuffle blocks to ${peer}")
       val runnable = new ShuffleMigrationRunnable(peer)
-      shuffleMigrationPool.submit(runnable)
+      shuffleMigrationPool.foreach(_.submit(runnable))
       (peer, runnable)
     }
     // A peer may have entered a decommissioning state, don't transfer any new blocks
@@ -284,10 +288,12 @@ private[storage] class BlockManagerDecommissioner(
    * Stop migrating shuffle blocks.
    */
   private[storage] def stopMigratingShuffleBlocks(): Unit = {
-    logInfo("Stopping migrating shuffle blocks.")
-    // Stop as gracefully as possible.
-    migrationPeers.values.foreach(_.keepRunning = false)
-    shuffleMigrationPool.shutdownNow()
+    shuffleMigrationPool.foreach { threadPool =>
+      logInfo("Stopping migrating shuffle blocks.")
+      // Stop as gracefully as possible.
+      migrationPeers.values.foreach(_.keepRunning = false)
+      threadPool.shutdownNow()
+    }
   }
 
   /**
@@ -355,21 +361,17 @@ private[storage] class BlockManagerDecommissioner(
       case NonFatal(e) =>
         logError(s"Error during shutdown RDD block migration thread", e)
     }
-    shuffleBlockMigrationRefreshExecutor.foreach { executor =>
-      try {
-        executor.shutdownNow()
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Error during shutdown shuffle block refreshing thread", e)
-      }
-      try {
-        // invoke inside `foreach` so we can avoid initiating
-        // `shuffleMigrationPool` when it's unnecessary
-        stopMigratingShuffleBlocks()
-      } catch {
-        case NonFatal(e) =>
-          logError(s"Error during shutdown shuffle block migration thread", e)
-      }
+    try {
+      shuffleBlockMigrationRefreshExecutor.foreach(_.shutdownNow())
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Error during shutdown shuffle block refreshing thread", e)
+    }
+    try {
+      stopMigratingShuffleBlocks()
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Error during shutdown shuffle block migration thread", e)
     }
     logInfo("Stopped block migration")
   }
