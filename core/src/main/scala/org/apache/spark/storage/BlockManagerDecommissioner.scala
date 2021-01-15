@@ -241,8 +241,6 @@ private[storage] class BlockManagerDecommissioner(
         conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_THREADS)))
     } else None
 
-
-
   /**
    * Tries to migrate all shuffle blocks that are registered with the shuffle service locally.
    * Note: this does not delete the shuffle files in-case there is an in-progress fetch
