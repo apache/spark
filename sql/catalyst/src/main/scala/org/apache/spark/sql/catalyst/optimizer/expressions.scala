@@ -620,6 +620,30 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
   }
 }
 
+/**
+ * Remove duplicated case when branches.
+ */
+object RemoveDuplicatedBranches extends Rule[LogicalPlan] with PredicateHelper {
+
+  private def contains(branches: Seq[(Expression, Expression)], elem: (Expression, Expression)) = {
+    branches.exists { case (condExpr, valueExpr) =>
+      condExpr.semanticEquals(elem._1) && valueExpr.semanticEquals(elem._2)
+    }
+  }
+
+  private def deduplicate[T](branches: Seq[(Expression, Expression)]) = {
+    branches.foldLeft(Seq.empty[(Expression, Expression)]) { (seq, elem) =>
+      if (contains(seq, elem)) seq else seq :+ elem
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case c @ CaseWhen(branches, _) if branches.length > 1 =>
+        c.copy(branches = deduplicate(branches))
+    }
+  }
+}
 
 /**
  * Simplifies LIKE expressions that do not need full regular expressions to evaluate the condition.

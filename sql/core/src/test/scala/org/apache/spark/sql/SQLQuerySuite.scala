@@ -3876,6 +3876,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(sql(s"SELECT * FROM $t"), Row(0, null))
     }
   }
+
+  test("SPARK-34122: duplicate branches in case when") {
+    checkAnswer(
+      sql(
+        """SELECT CASE key WHEN 1 THEN 1 WHEN 1 THEN 1 WHEN 1 THEN 1
+          |ELSE 0 END FROM testData WHERE key = 1 group by key
+          |""".stripMargin),
+      Row(1))
+    checkAnswer(
+      sql(
+        """
+          |SELECT CASE WHEN key = 1 THEN 1 WHEN key = 1 THEN 1 WHEN key = 1 THEN 1
+          |ELSE 2 END FROM testData WHERE key = 1 group by key
+          |""".stripMargin),
+      Row(1))
+  }
 }
 
 case class Foo(bar: Option[String])
