@@ -43,7 +43,7 @@ class AlterTableDropPartitionSuite
             sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
           }
           sql(s"CACHE TABLE $t")
-          checkHiveClientCalls(expected = if (statsOn) 35 else 22) {
+          checkHiveClientCalls(expected = if (statsOn) 32 else 19) {
             sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
           }
         }

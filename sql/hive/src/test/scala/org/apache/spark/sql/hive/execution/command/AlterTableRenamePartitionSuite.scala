@@ -36,7 +36,7 @@ class AlterTableRenamePartitionSuite
         sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=1)")
       }
       sql(s"CACHE TABLE $t")
-      checkHiveClientCalls(expected = 24) {
+      checkHiveClientCalls(expected = 21) {
         sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=2)")
       }
     }

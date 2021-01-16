@@ -40,7 +40,7 @@ class AlterTableAddPartitionSuite
             sql(s"ALTER TABLE $t ADD PARTITION (part=1)")
           }
           sql(s"CACHE TABLE $t")
-          checkHiveClientCalls(expected = 23) {
+          checkHiveClientCalls(expected = 20) {
             sql(s"ALTER TABLE $t ADD PARTITION (part=2)")
           }
         }
