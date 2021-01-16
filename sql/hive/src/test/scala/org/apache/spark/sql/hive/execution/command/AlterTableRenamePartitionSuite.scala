@@ -32,11 +32,11 @@ class AlterTableRenamePartitionSuite
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
 
-      checkHiveClientCalls(expected = 21) {
+      checkHiveClientCalls(expected = 18) {
         sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=1)")
       }
       sql(s"CACHE TABLE $t")
-      checkHiveClientCalls(expected = 21) {
+      checkHiveClientCalls(expected = 18) {
         sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=2)")
       }
     }
