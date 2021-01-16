@@ -111,18 +111,18 @@ Results [4]: [i_category#11, i_class#12, spark_grouping_id#13, sum#15]
 
 (19) Exchange
 Input [4]: [i_category#11, i_class#12, spark_grouping_id#13, sum#15]
-Arguments: hashpartitioning(i_category#11, i_class#12, spark_grouping_id#13, 5), true, [id=#16]
+Arguments: hashpartitioning(i_category#11, i_class#12, spark_grouping_id#13, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (20) HashAggregate [codegen id : 4]
 Input [4]: [i_category#11, i_class#12, spark_grouping_id#13, sum#15]
 Keys [3]: [i_category#11, i_class#12, spark_grouping_id#13]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#3))#17]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#17,17,2) AS total_sum#18, i_category#11, i_class#12, (cast((shiftright(spark_grouping_id#13, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint)) AS lochierarchy#19, (cast((shiftright(spark_grouping_id#13, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint)) AS _w1#20, CASE WHEN (cast(cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint) as int) = 0) THEN i_category#11 END AS _w2#21, MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#17,17,2) AS _w3#22]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#17,17,2) AS total_sum#18, i_category#11, i_class#12, (cast((shiftright(spark_grouping_id#13, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint)) AS lochierarchy#19, (cast((shiftright(spark_grouping_id#13, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint)) AS _w1#20, CASE WHEN (cast((shiftright(spark_grouping_id#13, 0) & 1) as tinyint) = 0) THEN i_category#11 END AS _w2#21, MakeDecimal(sum(UnscaledValue(ws_net_paid#3))#17,17,2) AS _w3#22]
 
 (21) Exchange
 Input [7]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w2#21, _w3#22]
-Arguments: hashpartitioning(_w1#20, _w2#21, 5), true, [id=#23]
+Arguments: hashpartitioning(_w1#20, _w2#21, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (22) Sort [codegen id : 5]
 Input [7]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w2#21, _w3#22]
@@ -138,5 +138,5 @@ Input [8]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, _w1#20, _w
 
 (25) TakeOrderedAndProject
 Input [5]: [total_sum#18, i_category#11, i_class#12, lochierarchy#19, rank_within_parent#24]
-Arguments: 100, [lochierarchy#19 DESC NULLS LAST, CASE WHEN (cast(lochierarchy#19 as int) = 0) THEN i_category#11 END ASC NULLS FIRST, rank_within_parent#24 ASC NULLS FIRST], [total_sum#18, i_category#11, i_class#12, lochierarchy#19, rank_within_parent#24]
+Arguments: 100, [lochierarchy#19 DESC NULLS LAST, CASE WHEN (lochierarchy#19 = 0) THEN i_category#11 END ASC NULLS FIRST, rank_within_parent#24 ASC NULLS FIRST], [total_sum#18, i_category#11, i_class#12, lochierarchy#19, rank_within_parent#24]
 

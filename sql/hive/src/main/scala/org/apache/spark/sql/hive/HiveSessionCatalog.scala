@@ -86,14 +86,7 @@ private[sql] class HiveSessionCatalog(
       }
     } catch {
       case NonFatal(e) =>
-        val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
-        val errorMsg =
-          if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-            s"$noHandlerMsg\nPlease make sure your function overrides " +
-              "`public StructObjectInspector initialize(ObjectInspector[] args)`."
-          } else {
-            noHandlerMsg
-          }
+        val errorMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
         val analysisException = new AnalysisException(errorMsg)
         analysisException.setStackTrace(e.getStackTrace)
         throw analysisException

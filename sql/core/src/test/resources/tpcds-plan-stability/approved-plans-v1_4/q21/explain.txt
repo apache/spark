@@ -130,7 +130,7 @@ Input [6]: [inv_date_sk#1, inv_quantity_on_hand#4, w_warehouse_name#6, i_item_id
 (23) HashAggregate [codegen id : 4]
 Input [4]: [inv_quantity_on_hand#4, w_warehouse_name#6, i_item_id#9, d_date#13]
 Keys [2]: [w_warehouse_name#6, i_item_id#9]
-Functions [2]: [partial_sum(CASE WHEN (d_date#13 < 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END), partial_sum(CASE WHEN (d_date#13 >= 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END)]
+Functions [2]: [partial_sum(CASE WHEN (d_date#13 < 11027) THEN inv_quantity_on_hand#4 ELSE 0 END), partial_sum(CASE WHEN (d_date#13 >= 11027) THEN inv_quantity_on_hand#4 ELSE 0 END)]
 Aggregate Attributes [2]: [sum#15, sum#16]
 Results [4]: [w_warehouse_name#6, i_item_id#9, sum#17, sum#18]
 
@@ -141,13 +141,13 @@ Arguments: hashpartitioning(w_warehouse_name#6, i_item_id#9, 5), ENSURE_REQUIREM
 (25) HashAggregate [codegen id : 5]
 Input [4]: [w_warehouse_name#6, i_item_id#9, sum#17, sum#18]
 Keys [2]: [w_warehouse_name#6, i_item_id#9]
-Functions [2]: [sum(CASE WHEN (d_date#13 < 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END), sum(CASE WHEN (d_date#13 >= 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END)]
-Aggregate Attributes [2]: [sum(CASE WHEN (d_date#13 < 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END)#20, sum(CASE WHEN (d_date#13 >= 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END)#21]
-Results [4]: [w_warehouse_name#6, i_item_id#9, sum(CASE WHEN (d_date#13 < 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END)#20 AS inv_before#22, sum(CASE WHEN (d_date#13 >= 11027) THEN cast(inv_quantity_on_hand#4 as bigint) ELSE 0 END)#21 AS inv_after#23]
+Functions [2]: [sum(CASE WHEN (d_date#13 < 11027) THEN inv_quantity_on_hand#4 ELSE 0 END), sum(CASE WHEN (d_date#13 >= 11027) THEN inv_quantity_on_hand#4 ELSE 0 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#13 < 11027) THEN inv_quantity_on_hand#4 ELSE 0 END)#20, sum(CASE WHEN (d_date#13 >= 11027) THEN inv_quantity_on_hand#4 ELSE 0 END)#21]
+Results [4]: [w_warehouse_name#6, i_item_id#9, sum(CASE WHEN (d_date#13 < 11027) THEN inv_quantity_on_hand#4 ELSE 0 END)#20 AS inv_before#22, sum(CASE WHEN (d_date#13 >= 11027) THEN inv_quantity_on_hand#4 ELSE 0 END)#21 AS inv_after#23]
 
 (26) Filter [codegen id : 5]
 Input [4]: [w_warehouse_name#6, i_item_id#9, inv_before#22, inv_after#23]
-Condition : (CASE WHEN (inv_before#22 > 0) THEN ((cast(inv_after#23 as double) / cast(inv_before#22 as double)) >= 0.666667) ELSE false END AND CASE WHEN (inv_before#22 > 0) THEN ((cast(inv_after#23 as double) / cast(inv_before#22 as double)) <= 1.5) ELSE false END)
+Condition : (((((isnotnull(inv_before#22) AND isnotnull(inv_after#23)) AND (inv_before#22 > 0)) AND ((cast(inv_after#23 as double) / cast(inv_before#22 as double)) >= 0.666667)) AND (inv_before#22 > 0)) AND ((cast(inv_after#23 as double) / cast(inv_before#22 as double)) <= 1.5))
 
 (27) TakeOrderedAndProject
 Input [4]: [w_warehouse_name#6, i_item_id#9, inv_before#22, inv_after#23]

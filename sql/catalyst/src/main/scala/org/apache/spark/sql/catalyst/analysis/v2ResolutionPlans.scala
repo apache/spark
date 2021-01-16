@@ -67,7 +67,7 @@ case class UnresolvedView(
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTempView: Boolean = true) extends LeafNode {
+    allowTempView: Boolean) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }

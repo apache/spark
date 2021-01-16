@@ -27,8 +27,8 @@ import org.apache.spark.sql.execution.command
 class AlterTableDropPartitionSuite
   extends command.AlterTableDropPartitionSuiteBase
   with CommandSuiteBase {
-
   override protected val notFullPartitionSpecErr = "Partition spec is invalid"
+  override protected def nullPartitionValue: String = "null"
 
   test("SPARK-33650: drop partition into a table which doesn't support partition management") {
     withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>

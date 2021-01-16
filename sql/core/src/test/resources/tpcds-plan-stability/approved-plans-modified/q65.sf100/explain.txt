@@ -97,7 +97,7 @@ Results [3]: [ss_store_sk#3, ss_item_sk#2, sum#9]
 
 (12) Exchange
 Input [3]: [ss_store_sk#3, ss_item_sk#2, sum#9]
-Arguments: hashpartitioning(ss_store_sk#3, ss_item_sk#2, 5), true, [id=#10]
+Arguments: hashpartitioning(ss_store_sk#3, ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#10]
 
 (13) HashAggregate [codegen id : 7]
 Input [3]: [ss_store_sk#3, ss_item_sk#2, sum#9]
@@ -145,7 +145,7 @@ Results [3]: [ss_store_sk#15, ss_item_sk#14, sum#18]
 
 (22) Exchange
 Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#18]
-Arguments: hashpartitioning(ss_store_sk#15, ss_item_sk#14, 5), true, [id=#19]
+Arguments: hashpartitioning(ss_store_sk#15, ss_item_sk#14, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (23) HashAggregate [codegen id : 5]
 Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#18]
@@ -163,7 +163,7 @@ Results [3]: [ss_store_sk#15, sum#24, count#25]
 
 (25) Exchange
 Input [3]: [ss_store_sk#15, sum#24, count#25]
-Arguments: hashpartitioning(ss_store_sk#15, 5), true, [id=#26]
+Arguments: hashpartitioning(ss_store_sk#15, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (26) HashAggregate [codegen id : 6]
 Input [3]: [ss_store_sk#15, sum#24, count#25]

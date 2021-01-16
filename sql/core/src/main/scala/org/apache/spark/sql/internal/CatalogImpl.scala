@@ -396,8 +396,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false)
+      try {
+        val plan = sparkSession.sessionState.executePlan(viewDef)
+        sparkSession.sharedState.cacheManager.uncacheQuery(
+          sparkSession, plan.analyzed, cascade = false)
+      } catch {
+        case NonFatal(_) => // ignore
+      }
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -412,8 +417,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false)
+      try {
+        val plan = sparkSession.sessionState.executePlan(viewDef)
+        sparkSession.sharedState.cacheManager.uncacheQuery(
+          sparkSession, plan.analyzed, cascade = false)
+      } catch {
+        case NonFatal(_) => // ignore
+      }
       sessionCatalog.dropGlobalTempView(viewName)
     }
   }

@@ -355,7 +355,7 @@ Results [18]: [i_item_id#32, ca_country#26, ca_state#25, ca_county#24, sum#55, c
 
 (44) Exchange
 Input [18]: [i_item_id#32, ca_country#26, ca_state#25, ca_county#24, sum#55, count#56, sum#57, count#58, sum#59, count#60, sum#61, count#62, sum#63, count#64, sum#65, count#66, sum#67, count#68]
-Arguments: hashpartitioning(i_item_id#32, ca_country#26, ca_state#25, ca_county#24, 5), true, [id=#69]
+Arguments: hashpartitioning(i_item_id#32, ca_country#26, ca_state#25, ca_county#24, 5), ENSURE_REQUIREMENTS, [id=#69]
 
 (45) HashAggregate [codegen id : 8]
 Input [18]: [i_item_id#32, ca_country#26, ca_state#25, ca_county#24, sum#55, count#56, sum#57, count#58, sum#59, count#60, sum#61, count#62, sum#63, count#64, sum#65, count#66, sum#67, count#68]
@@ -474,7 +474,7 @@ Results [17]: [i_item_id#32, ca_country#26, ca_state#25, sum#100, count#101, sum
 
 (71) Exchange
 Input [17]: [i_item_id#32, ca_country#26, ca_state#25, sum#100, count#101, sum#102, count#103, sum#104, count#105, sum#106, count#107, sum#108, count#109, sum#110, count#111, sum#112, count#113]
-Arguments: hashpartitioning(i_item_id#32, ca_country#26, ca_state#25, 5), true, [id=#114]
+Arguments: hashpartitioning(i_item_id#32, ca_country#26, ca_state#25, 5), ENSURE_REQUIREMENTS, [id=#114]
 
 (72) HashAggregate [codegen id : 16]
 Input [17]: [i_item_id#32, ca_country#26, ca_state#25, sum#100, count#101, sum#102, count#103, sum#104, count#105, sum#106, count#107, sum#108, count#109, sum#110, count#111, sum#112, count#113]
@@ -597,7 +597,7 @@ Results [16]: [i_item_id#32, ca_country#26, sum#146, count#147, sum#148, count#1
 
 (99) Exchange
 Input [16]: [i_item_id#32, ca_country#26, sum#146, count#147, sum#148, count#149, sum#150, count#151, sum#152, count#153, sum#154, count#155, sum#156, count#157, sum#158, count#159]
-Arguments: hashpartitioning(i_item_id#32, ca_country#26, 5), true, [id=#160]
+Arguments: hashpartitioning(i_item_id#32, ca_country#26, 5), ENSURE_REQUIREMENTS, [id=#160]
 
 (100) HashAggregate [codegen id : 24]
 Input [16]: [i_item_id#32, ca_country#26, sum#146, count#147, sum#148, count#149, sum#150, count#151, sum#152, count#153, sum#154, count#155, sum#156, count#157, sum#158, count#159]
@@ -720,7 +720,7 @@ Results [15]: [i_item_id#32, sum#193, count#194, sum#195, count#196, sum#197, co
 
 (127) Exchange
 Input [15]: [i_item_id#32, sum#193, count#194, sum#195, count#196, sum#197, count#198, sum#199, count#200, sum#201, count#202, sum#203, count#204, sum#205, count#206]
-Arguments: hashpartitioning(i_item_id#32, 5), true, [id=#207]
+Arguments: hashpartitioning(i_item_id#32, 5), ENSURE_REQUIREMENTS, [id=#207]
 
 (128) HashAggregate [codegen id : 32]
 Input [15]: [i_item_id#32, sum#193, count#194, sum#195, count#196, sum#197, count#198, sum#199, count#200, sum#201, count#202, sum#203, count#204, sum#205, count#206]
@@ -839,7 +839,7 @@ Results [14]: [sum#241, count#242, sum#243, count#244, sum#245, count#246, sum#2
 
 (154) Exchange
 Input [14]: [sum#241, count#242, sum#243, count#244, sum#245, count#246, sum#247, count#248, sum#249, count#250, sum#251, count#252, sum#253, count#254]
-Arguments: SinglePartition, true, [id=#255]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#255]
 
 (155) HashAggregate [codegen id : 40]
 Input [14]: [sum#241, count#242, sum#243, count#244, sum#245, count#246, sum#247, count#248, sum#249, count#250, sum#251, count#252, sum#253, count#254]

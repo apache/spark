@@ -196,14 +196,13 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     // OR                                                disjunction
     // ---------------------------------------------------------------------------------------
     checkKeywordsExistsInExplain(sql("select 'a' || 1 + 2"),
-      "Project [null AS (CAST(concat(a, CAST(1 AS STRING)) AS DOUBLE) + CAST(2 AS DOUBLE))#x]")
+      "Project [null AS (concat(a, 1) + 2)#x]")
     checkKeywordsExistsInExplain(sql("select 1 - 2 || 'b'"),
-      "Project [-1b AS concat(CAST((1 - 2) AS STRING), b)#x]")
+      "Project [-1b AS concat((1 - 2), b)#x]")
     checkKeywordsExistsInExplain(sql("select 2 * 4  + 3 || 'b'"),
-      "Project [11b AS concat(CAST(((2 * 4) + 3) AS STRING), b)#x]")
+      "Project [11b AS concat(((2 * 4) + 3), b)#x]")
     checkKeywordsExistsInExplain(sql("select 3 + 1 || 'a' || 4 / 2"),
-      "Project [4a2.0 AS concat(concat(CAST((3 + 1) AS STRING), a), " +
-        "CAST((CAST(4 AS DOUBLE) / CAST(2 AS DOUBLE)) AS STRING))#x]")
+      "Project [4a2.0 AS concat(concat((3 + 1), a), (4 / 2))#x]")
     checkKeywordsExistsInExplain(sql("select 1 == 1 OR 'a' || 'b' ==  'ab'"),
       "Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]")
     checkKeywordsExistsInExplain(sql("select 'a' || 'c' == 'ac' AND 2 == 3"),

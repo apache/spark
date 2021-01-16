@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -51,8 +52,10 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
   override def dataType: DataType = LongType
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least one argument.")
+    if (children.isEmpty && !SQLConf.get.getConf(SQLConf.ALLOW_PARAMETERLESS_COUNT)) {
+      TypeCheckResult.TypeCheckFailure(s"$prettyName requires at least one argument. " +
+        s"If you have to call the function $prettyName without arguments, set the legacy " +
+        s"configuration `${SQLConf.ALLOW_PARAMETERLESS_COUNT.key}` as true")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

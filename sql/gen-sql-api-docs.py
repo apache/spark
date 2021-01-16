@@ -195,6 +195,7 @@ def generate_sql_api_markdown(jvm, path):
     """
 
     with open(path, 'w') as mdfile:
+        mdfile.write("# Built-in Functions\n\n")
         for info in _list_function_infos(jvm):
             name = info.name
             usage = _make_pretty_usage(info.usage)

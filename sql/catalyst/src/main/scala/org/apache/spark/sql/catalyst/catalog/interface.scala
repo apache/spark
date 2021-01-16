@@ -29,7 +29,6 @@ import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
@@ -37,6 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -145,7 +145,7 @@ case class CatalogTablePartition(
   /** Return the partition location, assuming it is specified. */
   def location: URI = storage.locationUri.getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
-    throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
+    throw QueryCompilationErrors.partitionNotSpecifyLocationUriError(specString)
   }
 
   /**
@@ -182,9 +182,8 @@ case class BucketSpec(
     sortColumnNames: Seq[String]) extends SQLConfHelper {
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
-    throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than or equal to " +
-        s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
+    throw QueryCompilationErrors.invalidBucketNumberError(
+      conf.bucketingMaxBuckets, numBuckets)
   }
 
   override def toString: String = {
@@ -274,12 +273,12 @@ case class CatalogTable(
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
-    throw new AnalysisException(s"table $identifier did not specify database")
+    throw QueryCompilationErrors.tableNotSpecifyDatabaseError(identifier)
   }
 
   /** Return the table location, assuming it is specified. */
   def location: URI = storage.locationUri.getOrElse {
-    throw new AnalysisException(s"table $identifier did not specify locationUri")
+    throw QueryCompilationErrors.tableNotSpecifyLocationUriError(identifier)
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
@@ -295,8 +294,7 @@ case class CatalogTable(
       (0 until numParts).map { index =>
         properties.getOrElse(
           s"$VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX$index",
-          throw new AnalysisException("Corrupted table name context in catalog: " +
-            s"$numParts parts expected, but part $index is missing.")
+          throw QueryCompilationErrors.corruptedTableNameContextInCatalogError(numParts, index)
         )
       }
     } else if (properties.contains(VIEW_DEFAULT_DATABASE)) {
@@ -318,8 +316,7 @@ case class CatalogTable(
         yield (key.substring(CatalogTable.VIEW_SQL_CONFIG_PREFIX.length), value)
     } catch {
       case e: Exception =>
-        throw new AnalysisException(
-          "Corrupted view SQL configs in catalog", cause = Some(e))
+        throw QueryCompilationErrors.corruptedViewSQLConfigsInCatalogError(e)
     }
   }
 
@@ -334,8 +331,7 @@ case class CatalogTable(
       index <- 0 until numCols.toInt
     } yield properties.getOrElse(
       s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index",
-      throw new AnalysisException("Corrupted view query output column names in catalog: " +
-        s"$numCols parts expected, but part $index is missing.")
+      throw QueryCompilationErrors.corruptedViewQueryOutputColumnsInCatalogError(numCols, index)
     )
   }
 
@@ -352,8 +348,7 @@ case class CatalogTable(
       }.getOrElse(Seq.empty)
     } catch {
       case e: Exception =>
-        throw new AnalysisException(
-          "corrupted view referred temp view names in catalog", cause = Some(e))
+        throw QueryCompilationErrors.corruptedViewReferredTempViewInCatalogError(e)
     }
   }
 
@@ -368,8 +363,7 @@ case class CatalogTable(
       }.getOrElse(Seq.empty)
     } catch {
       case e: Exception =>
-        throw new AnalysisException(
-          "corrupted view referred temp functions names in catalog", cause = Some(e))
+        throw QueryCompilationErrors.corruptedViewReferredTempFunctionsInCatalogError(e)
     }
   }
 
@@ -497,14 +491,13 @@ object CatalogTable {
         None
       } else {
         val numParts = props.get(s"$key.numParts")
-        val errorMessage = s"Cannot read table property '$key' as it's corrupted."
         if (numParts.isEmpty) {
-          throw new AnalysisException(errorMessage)
+          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
         } else {
           val parts = (0 until numParts.get.toInt).map { index =>
             props.getOrElse(s"$key.part.$index", {
-              throw new AnalysisException(
-                s"$errorMessage Missing part $index, ${numParts.get} parts are expected.")
+              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
+                key, s"Missing part $index, $numParts parts are expected.")
             })
           }
           Some(parts.mkString)
@@ -516,6 +509,33 @@ object CatalogTable {
   def isLargeTableProp(originalKey: String, propKey: String): Boolean = {
     propKey == originalKey || propKey == s"$originalKey.numParts" ||
       propKey.startsWith(s"$originalKey.part.")
+  }
+
+  def normalize(table: CatalogTable): CatalogTable = {
+    val nondeterministicProps = Set(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      // The following are hive specific schema parameters which we do not need to match exactly.
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize"
+    )
+
+    table.copy(
+      createTime = 0L,
+      lastAccessTime = 0L,
+      properties = table.properties
+        .filterKeys(!nondeterministicProps.contains(_))
+        .map(identity)
+        .toMap,
+      stats = None,
+      ignoredProperties = Map.empty
+    )
   }
 }
 
@@ -657,8 +677,8 @@ object CatalogColumnStat extends Logging {
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case BinaryType | StringType => null
       case _ =>
-        throw new AnalysisException("Column statistics deserialization is not supported for " +
-          s"column $name of data type: $dataType.")
+        throw QueryCompilationErrors.columnStatisticsDeserializationNotSupportedError(
+          name, dataType)
     }
   }
 
@@ -674,8 +694,8 @@ object CatalogColumnStat extends Logging {
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case _ =>
-        throw new AnalysisException("Column statistics serialization is not supported for " +
-          s"column $colName of data type: $dataType.")
+        throw QueryCompilationErrors.columnStatisticsSerializationNotSupportedError(
+          colName, dataType)
     }
     externalValue.toString
   }
@@ -788,10 +808,7 @@ case class HiveTableRelation(
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
   override def doCanonicalize(): HiveTableRelation = copy(
-    tableMeta = tableMeta.copy(
-      storage = CatalogStorageFormat.empty,
-      createTime = -1
-    ),
+    tableMeta = CatalogTable.normalize(tableMeta),
     dataCols = dataCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index))
     },
@@ -805,7 +822,7 @@ case class HiveTableRelation(
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw new IllegalStateException("table stats must be specified.")
+      throw QueryExecutionErrors.tableStatsNotSpecifiedError
     }
   }
 

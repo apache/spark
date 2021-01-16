@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `ALTER TABLE .. DROP PARTITION` command to check
@@ -25,4 +26,28 @@ import org.apache.spark.sql.execution.command.v1
  */
 class AlterTableDropPartitionSuite
   extends v1.AlterTableDropPartitionSuiteBase
-  with CommandSuiteBase
+  with CommandSuiteBase {
+
+  test("hive client calls") {
+    Seq(false, true).foreach { statsOn =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> statsOn.toString) {
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+          sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+          sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+          sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
+          checkHiveClientCalls(expected = if (statsOn) 27 else 19) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
+          }
+          checkHiveClientCalls(expected = if (statsOn) 32 else 19) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+          }
+          sql(s"CACHE TABLE $t")
+          checkHiveClientCalls(expected = if (statsOn) 35 else 22) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+          }
+        }
+      }
+    }
+  }
+}

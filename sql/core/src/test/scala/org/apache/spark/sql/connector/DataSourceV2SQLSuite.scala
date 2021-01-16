@@ -752,6 +752,23 @@ class DataSourceV2SQLSuite
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
 
+  test("SPARK-34039: ReplaceTable (atomic or non-atomic) should invalidate cache") {
+    Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
+      val view = "view"
+      withTable(t) {
+        withTempView(view) {
+          sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+          sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+          checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+          checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+          sql(s"REPLACE TABLE $t (a bigint) USING foo")
+          assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        }
+      }
+    }
+  }
+
   test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
     Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
       val view = "view"
@@ -1285,95 +1302,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowNamespaces: show root namespaces with default v2 catalog") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq())
-
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
-    testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
-  }
-
-  test("ShowNamespaces: show namespaces with v2 catalog") {
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
-
-    // Look up only with catalog name, which should list root namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
-
-    // Look up sub-namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
-
-    // Try to look up namespaces that do not exist.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
-  }
-
-  test("ShowNamespaces: default v2 catalog is not set") {
-    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
-
-    // The current catalog is resolved to a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-  }
-
-  test("ShowNamespaces: default v2 catalog doesn't support namespace") {
-    spark.conf.set(
-      "spark.sql.catalog.testcat_no_namespace",
-      classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namespace")
-
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES")
-    }
-
-    assert(exception.getMessage.contains("does not support namespaces"))
-  }
-
-  test("ShowNamespaces: v2 catalog doesn't support namespace") {
-    spark.conf.set(
-      "spark.sql.catalog.testcat_no_namespace",
-      classOf[BasicInMemoryTableCatalog].getName)
-
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namespace")
-    }
-
-    assert(exception.getMessage.contains("does not support namespaces"))
-  }
-
-  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in dummy")
-    }
-
-    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
-  }
-
-  test("ShowNamespaces: change catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-
-    // Initially, the current catalog is a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-
-    // Update the current catalog to 'testcat'.
-    sql("USE testcat")
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
-
-    // Update the current namespace to 'ns1'.
-    sql("USE ns1")
-    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
-  }
-
   private def testShowNamespaces(
       sqlText: String,
       expected: Seq[String]): Unit = {
@@ -1701,16 +1629,23 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33435: REFRESH TABLE should invalidate all caches referencing the table") {
+  test("SPARK-33435, SPARK-34099: REFRESH TABLE should refresh all caches referencing the table") {
     val tblName = "testcat.ns.t"
     withTable(tblName) {
       withTempView("t") {
         sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+        sql(s"INSERT INTO $tblName SELECT 0")
         sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
+        checkAnswer(spark.table(tblName), Row(0))
+        checkAnswer(spark.table("t"), Row(0))
+
+        sql(s"INSERT INTO $tblName SELECT 1")
 
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
         sql(s"REFRESH TABLE $tblName")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        checkAnswer(spark.table(tblName), Seq(Row(0), Row(1)))
+        checkAnswer(spark.table("t"), Seq(Row(0), Row(1)))
       }
     }
   }

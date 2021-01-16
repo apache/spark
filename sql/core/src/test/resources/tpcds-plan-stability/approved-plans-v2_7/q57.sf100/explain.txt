@@ -129,7 +129,7 @@ Input [7]: [cs_call_center_sk#2, cs_item_sk#3, cs_sales_price#4, d_year#6, d_moy
 
 (16) Exchange
 Input [5]: [cs_item_sk#3, cs_sales_price#4, d_year#6, d_moy#7, cc_name#10]
-Arguments: hashpartitioning(cs_item_sk#3, 5), true, [id=#12]
+Arguments: hashpartitioning(cs_item_sk#3, 5), ENSURE_REQUIREMENTS, [id=#12]
 
 (17) Sort [codegen id : 4]
 Input [5]: [cs_item_sk#3, cs_sales_price#4, d_year#6, d_moy#7, cc_name#10]
@@ -151,7 +151,7 @@ Condition : ((isnotnull(i_item_sk#13) AND isnotnull(i_category#15)) AND isnotnul
 
 (21) Exchange
 Input [3]: [i_item_sk#13, i_brand#14, i_category#15]
-Arguments: hashpartitioning(i_item_sk#13, 5), true, [id=#16]
+Arguments: hashpartitioning(i_item_sk#13, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (22) Sort [codegen id : 6]
 Input [3]: [i_item_sk#13, i_brand#14, i_category#15]
@@ -175,7 +175,7 @@ Results [6]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum#18]
 
 (26) Exchange
 Input [6]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum#18]
-Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, 5), true, [id=#19]
+Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (27) HashAggregate [codegen id : 8]
 Input [6]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum#18]
@@ -186,7 +186,7 @@ Results [7]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, MakeDeci
 
 (28) Exchange
 Input [7]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, _w0#22]
-Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, d_year#6, 5), true, [id=#23]
+Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, d_year#6, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (29) Sort [codegen id : 9]
 Input [7]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, _w0#22]
@@ -202,7 +202,7 @@ Input [8]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#
 
 (32) Exchange
 Input [7]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24]
-Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, 5), true, [id=#25]
+Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, 5), ENSURE_REQUIREMENTS, [id=#25]
 
 (33) Sort [codegen id : 11]
 Input [7]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24]
@@ -214,11 +214,11 @@ Arguments: [rank(d_year#6, d_moy#7) windowspecdefinition(i_category#15, i_brand#
 
 (35) Filter [codegen id : 12]
 Input [8]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24, rn#26]
-Condition : (((((isnotnull(d_year#6) AND isnotnull(avg_monthly_sales#24)) AND (d_year#6 = 1999)) AND (avg_monthly_sales#24 > 0.000000)) AND (CASE WHEN (avg_monthly_sales#24 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)) AND isnotnull(rn#26))
+Condition : ((((((isnotnull(d_year#6) AND isnotnull(avg_monthly_sales#24)) AND (d_year#6 = 1999)) AND (avg_monthly_sales#24 > 0.000000)) AND (avg_monthly_sales#24 > 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#21 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#24 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000)) AND isnotnull(rn#26))
 
 (36) Exchange
 Input [8]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24, rn#26]
-Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, rn#26, 5), true, [id=#27]
+Arguments: hashpartitioning(i_category#15, i_brand#14, cc_name#10, rn#26, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (37) Sort [codegen id : 13]
 Input [8]: [i_category#15, i_brand#14, cc_name#10, d_year#6, d_moy#7, sum_sales#21, avg_monthly_sales#24, rn#26]
@@ -236,7 +236,7 @@ Results [6]: [i_category#28, i_brand#29, cc_name#30, d_year#31, d_moy#32, MakeDe
 
 (40) Exchange
 Input [6]: [i_category#28, i_brand#29, cc_name#30, d_year#31, d_moy#32, sum_sales#35]
-Arguments: hashpartitioning(i_category#28, i_brand#29, cc_name#30, 5), true, [id=#36]
+Arguments: hashpartitioning(i_category#28, i_brand#29, cc_name#30, 5), ENSURE_REQUIREMENTS, [id=#36]
 
 (41) Sort [codegen id : 22]
 Input [6]: [i_category#28, i_brand#29, cc_name#30, d_year#31, d_moy#32, sum_sales#35]
@@ -256,7 +256,7 @@ Input [7]: [i_category#28, i_brand#29, cc_name#30, d_year#31, d_moy#32, sum_sale
 
 (45) Exchange
 Input [5]: [i_category#28, i_brand#29, cc_name#30, sum_sales#35, rn#37]
-Arguments: hashpartitioning(i_category#28, i_brand#29, cc_name#30, (rn#37 + 1), 5), true, [id=#38]
+Arguments: hashpartitioning(i_category#28, i_brand#29, cc_name#30, (rn#37 + 1), 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (46) Sort [codegen id : 24]
 Input [5]: [i_category#28, i_brand#29, cc_name#30, sum_sales#35, rn#37]
@@ -292,7 +292,7 @@ Input [7]: [i_category#39, i_brand#40, cc_name#41, d_year#42, d_moy#43, sum_sale
 
 (54) Exchange
 Input [5]: [i_category#39, i_brand#40, cc_name#41, sum_sales#44, rn#45]
-Arguments: hashpartitioning(i_category#39, i_brand#40, cc_name#41, (rn#45 - 1), 5), true, [id=#46]
+Arguments: hashpartitioning(i_category#39, i_brand#40, cc_name#41, (rn#45 - 1), 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (55) Sort [codegen id : 36]
 Input [5]: [i_category#39, i_brand#40, cc_name#41, sum_sales#44, rn#45]

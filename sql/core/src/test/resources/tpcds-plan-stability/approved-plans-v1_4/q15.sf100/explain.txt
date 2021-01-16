@@ -80,7 +80,7 @@ Input [4]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_sales_price#3, d_date_s
 
 (11) Exchange
 Input [2]: [cs_bill_customer_sk#2, cs_sales_price#3]
-Arguments: hashpartitioning(cs_bill_customer_sk#2, 5), true, [id=#8]
+Arguments: hashpartitioning(cs_bill_customer_sk#2, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (12) Sort [codegen id : 3]
 Input [2]: [cs_bill_customer_sk#2, cs_sales_price#3]
@@ -102,7 +102,7 @@ Condition : (isnotnull(c_customer_sk#9) AND isnotnull(c_current_addr_sk#10))
 
 (16) Exchange
 Input [2]: [c_customer_sk#9, c_current_addr_sk#10]
-Arguments: hashpartitioning(c_current_addr_sk#10, 5), true, [id=#11]
+Arguments: hashpartitioning(c_current_addr_sk#10, 5), ENSURE_REQUIREMENTS, [id=#11]
 
 (17) Sort [codegen id : 5]
 Input [2]: [c_customer_sk#9, c_current_addr_sk#10]
@@ -124,7 +124,7 @@ Condition : isnotnull(ca_address_sk#12)
 
 (21) Exchange
 Input [3]: [ca_address_sk#12, ca_state#13, ca_zip#14]
-Arguments: hashpartitioning(ca_address_sk#12, 5), true, [id=#15]
+Arguments: hashpartitioning(ca_address_sk#12, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (22) Sort [codegen id : 7]
 Input [3]: [ca_address_sk#12, ca_state#13, ca_zip#14]
@@ -141,7 +141,7 @@ Input [5]: [c_customer_sk#9, c_current_addr_sk#10, ca_address_sk#12, ca_state#13
 
 (25) Exchange
 Input [3]: [c_customer_sk#9, ca_state#13, ca_zip#14]
-Arguments: hashpartitioning(c_customer_sk#9, 5), true, [id=#16]
+Arguments: hashpartitioning(c_customer_sk#9, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (26) Sort [codegen id : 9]
 Input [3]: [c_customer_sk#9, ca_state#13, ca_zip#14]
@@ -165,7 +165,7 @@ Results [2]: [ca_zip#14, sum#18]
 
 (30) Exchange
 Input [2]: [ca_zip#14, sum#18]
-Arguments: hashpartitioning(ca_zip#14, 5), true, [id=#19]
+Arguments: hashpartitioning(ca_zip#14, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (31) HashAggregate [codegen id : 11]
 Input [2]: [ca_zip#14, sum#18]

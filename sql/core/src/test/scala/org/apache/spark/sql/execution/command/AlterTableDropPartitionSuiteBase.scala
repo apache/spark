@@ -39,6 +39,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   override val command = "ALTER TABLE .. DROP PARTITION"
 
   protected def notFullPartitionSpecErr: String
+  protected def nullPartitionValue: String
 
   protected def checkDropPartition(
       t: String,
@@ -168,6 +169,16 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
       assert(spark.catalog.isCached(t))
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
+    }
+  }
+
+  test("SPARK-33591: null as a partition value") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p1 = null)")
+      checkPartitions(t, Map("p1" -> nullPartitionValue))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
     }
   }
 }

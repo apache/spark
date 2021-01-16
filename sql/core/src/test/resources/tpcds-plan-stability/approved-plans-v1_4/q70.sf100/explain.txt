@@ -169,7 +169,7 @@ Results [2]: [s_state#9, sum#12]
 
 (27) Exchange
 Input [2]: [s_state#9, sum#12]
-Arguments: hashpartitioning(s_state#9, 5), true, [id=#13]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (28) HashAggregate [codegen id : 5]
 Input [2]: [s_state#9, sum#12]
@@ -180,7 +180,7 @@ Results [3]: [s_state#9 AS s_state#15, s_state#9, MakeDecimal(sum(UnscaledValue(
 
 (29) Exchange
 Input [3]: [s_state#15, s_state#9, _w2#16]
-Arguments: hashpartitioning(s_state#9, 5), true, [id=#17]
+Arguments: hashpartitioning(s_state#9, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (30) Sort [codegen id : 6]
 Input [3]: [s_state#15, s_state#9, _w2#16]
@@ -233,18 +233,18 @@ Results [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
 
 (41) Exchange
 Input [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
-Arguments: hashpartitioning(s_state#21, s_county#22, spark_grouping_id#23, 5), true, [id=#26]
+Arguments: hashpartitioning(s_state#21, s_county#22, spark_grouping_id#23, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (42) HashAggregate [codegen id : 10]
 Input [4]: [s_state#21, s_county#22, spark_grouping_id#23, sum#25]
 Keys [3]: [s_state#21, s_county#22, spark_grouping_id#23]
 Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#27]
-Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#27,17,2) AS total_sum#28, s_state#21, s_county#22, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS lochierarchy#29, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS _w1#30, CASE WHEN (cast(cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint) as int) = 0) THEN s_state#21 END AS _w2#31, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#27,17,2) AS _w3#32]
+Results [7]: [MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#27,17,2) AS total_sum#28, s_state#21, s_county#22, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS lochierarchy#29, (cast((shiftright(spark_grouping_id#23, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint)) AS _w1#30, CASE WHEN (cast((shiftright(spark_grouping_id#23, 0) & 1) as tinyint) = 0) THEN s_state#21 END AS _w2#31, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#27,17,2) AS _w3#32]
 
 (43) Exchange
 Input [7]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#31, _w3#32]
-Arguments: hashpartitioning(_w1#30, _w2#31, 5), true, [id=#33]
+Arguments: hashpartitioning(_w1#30, _w2#31, 5), ENSURE_REQUIREMENTS, [id=#33]
 
 (44) Sort [codegen id : 11]
 Input [7]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#31, _w3#32]
@@ -260,5 +260,5 @@ Input [8]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, _w1#30, _w2#
 
 (47) TakeOrderedAndProject
 Input [5]: [total_sum#28, s_state#21, s_county#22, lochierarchy#29, rank_within_parent#34]
-Arguments: 100, [lochierarchy#29 DESC NULLS LAST, CASE WHEN (cast(lochierarchy#29 as int) = 0) THEN s_state#21 END ASC NULLS FIRST, rank_within_parent#34 ASC NULLS FIRST], [total_sum#28, s_state#21, s_county#22, lochierarchy#29, rank_within_parent#34]
+Arguments: 100, [lochierarchy#29 DESC NULLS LAST, CASE WHEN (lochierarchy#29 = 0) THEN s_state#21 END ASC NULLS FIRST, rank_within_parent#34 ASC NULLS FIRST], [total_sum#28, s_state#21, s_county#22, lochierarchy#29, rank_within_parent#34]
 

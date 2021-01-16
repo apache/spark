@@ -227,7 +227,7 @@ private[spark] class ExecutorMonitor(
     }
 
     if (updateExecutors) {
-      val activeShuffleIds = shuffleStages.map(_._2).toSeq
+      val activeShuffleIds = shuffleStages.map(_._2)
       var needTimeoutUpdate = false
       val activatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
@@ -251,7 +251,7 @@ private[spark] class ExecutorMonitor(
     }
 
     stageToShuffleID ++= shuffleStages
-    jobToStageIDs(event.jobId) = shuffleStages.map(_._1).toSeq
+    jobToStageIDs(event.jobId) = shuffleStages.map(_._1)
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {

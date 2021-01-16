@@ -722,7 +722,7 @@ class JDBCSuite extends QueryTest
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
-    assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
+    assert(!df.schema.exists(_.dataType != org.apache.spark.sql.types.StringType))
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])

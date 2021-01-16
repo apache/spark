@@ -54,7 +54,7 @@ struct<two:string,f1:string>
 -- !query
 select length(42)
 -- !query schema
-struct<length(CAST(42 AS STRING)):int>
+struct<length(42):int>
 -- !query output
 2
 
@@ -80,7 +80,7 @@ invalid input syntax for type numeric: four: 2
 -- !query
 select 3 || 4.0
 -- !query schema
-struct<concat(CAST(3 AS STRING), CAST(4.0 AS STRING)):string>
+struct<concat(3, 4.0):string>
 -- !query output
 34.0
 
@@ -99,7 +99,7 @@ one
 -- !query
 select concat(1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<concat(CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date(20100309, yyyyMMdd) AS STRING)):string>
+struct<concat(1, 2, 3, hello, true, false, to_date(20100309, yyyyMMdd)):string>
 -- !query output
 123hellotruefalse2010-03-09
 
@@ -115,7 +115,7 @@ one
 -- !query
 select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','yyyyMMdd'))
 -- !query schema
-struct<concat_ws(#, CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hello, CAST(true AS STRING), CAST(false AS STRING), CAST(to_date(20100309, yyyyMMdd) AS STRING)):string>
+struct<concat_ws(#, 1, 2, 3, hello, true, false, to_date(20100309, yyyyMMdd)):string>
 -- !query output
 1#x#x#hello#true#false#x-03-09
 
@@ -123,7 +123,7 @@ struct<concat_ws(#, CAST(1 AS STRING), CAST(2 AS STRING), CAST(3 AS STRING), hel
 -- !query
 select concat_ws(',',10,20,null,30)
 -- !query schema
-struct<concat_ws(,, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)):string>
+struct<concat_ws(,, 10, 20, NULL, 30):string>
 -- !query output
 10,20,30
 
@@ -131,7 +131,7 @@ struct<concat_ws(,, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STR
 -- !query
 select concat_ws('',10,20,null,30)
 -- !query schema
-struct<concat_ws(, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)):string>
+struct<concat_ws(, 10, 20, NULL, 30):string>
 -- !query output
 102030
 
@@ -139,7 +139,7 @@ struct<concat_ws(, CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRI
 -- !query
 select concat_ws(NULL,10,20,null,30) is null
 -- !query schema
-struct<(concat_ws(CAST(NULL AS STRING), CAST(10 AS STRING), CAST(20 AS STRING), NULL, CAST(30 AS STRING)) IS NULL):boolean>
+struct<(concat_ws(NULL, 10, 20, NULL, 30) IS NULL):boolean>
 -- !query output
 true
 
@@ -176,7 +176,7 @@ struct<i:bigint,left(ahoj, i):string,right(ahoj, i):string>
  */
 select format_string(NULL)
 -- !query schema
-struct<format_string(CAST(NULL AS STRING)):string>
+struct<format_string(NULL):string>
 -- !query output
 NULL
 
