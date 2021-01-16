@@ -524,37 +524,23 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val tableMetadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
-    val table = sparkSession.table(tableIdent)
+    val relation = sparkSession.table(tableIdent).queryExecution.analyzed
 
     if (tableMetadata.tableType == CatalogTableType.VIEW) {
       // Temp or persistent views: refresh (or invalidate) any metadata/data cached
       // in the plan recursively.
-      table.queryExecution.analyzed.refresh()
+      relation.refresh()
     } else {
       // Non-temp tables: refresh the metadata cache.
       sessionCatalog.refreshTable(tableIdent)
     }
 
-    // If this table is cached as an InMemoryRelation, drop the original
-    // cached version and make the new version cached lazily.
-    val cache = sparkSession.sharedState.cacheManager.lookupCachedData(table)
-
-    // uncache the logical plan.
-    // note this is a no-op for the table itself if it's not cached, but will invalidate all
-    // caches referencing this table.
-    sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
-
-    if (cache.nonEmpty) {
-      // save the cache name and cache level for recreation
-      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
-      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-
-      // creates a new logical plan since the old table refers to old relation which
-      // should be refreshed
-      val newTable = sparkSession.table(tableIdent)
-
-      // recache with the same name and cache level.
-      sparkSession.sharedState.cacheManager.cacheQuery(newTable, cacheName, cacheLevel)
+    // Re-caches the logical plan of the relation.
+    // Note this is a no-op for the relation itself if it's not cached, but will clear all
+    // caches referencing this relation. If this relation is cached as an InMemoryRelation,
+    // this will clear the relation cache and caches of all its dependants.
+    relation.children.foreach { child =>
+      sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, child)
     }
   }
 
