@@ -68,6 +68,47 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
       }
     }
   }
+
+  test("SPARK-XXXXX: keep dependents cashed after table altering") {
+    def cacheRelation(name: String): Unit = {
+      assert(!spark.catalog.isCached(name))
+      sql(s"CACHE TABLE $name")
+      assert(spark.catalog.isCached(name))
+    }
+    def checkRelation(name: String, expected: Seq[Row]): Unit = {
+      assert(spark.catalog.isCached(name))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
+    }
+
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      cacheRelation(t)
+
+      withView("v0") {
+        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        cacheRelation("v0")
+        sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=2)")
+        checkRelation("v0", Seq(Row(0, 2), Row(1, 1)))
+      }
+
+      withTempView("v1") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        cacheRelation("v1")
+        sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=3)")
+        checkRelation("v1", Seq(Row(0, 2), Row(1, 3)))
+      }
+
+      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      withGlobalTempView(v2) {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        cacheRelation(v2)
+        sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
+        checkRelation(v2, Seq(Row(0, 4), Row(1, 3)))
+      }
+    }
+  }
 }
 
 /**
