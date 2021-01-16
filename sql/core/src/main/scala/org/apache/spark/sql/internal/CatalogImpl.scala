@@ -512,10 +512,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * For Hive metastore table, the metadata is refreshed. For data source tables, the schema will
    * not be inferred and refreshed.
    *
-   * If this table is cached as an InMemoryRelation, drop the original cached version and make the
-   * new version cached lazily.
+   * If this table is cached as an InMemoryRelation, re-cache the table and its dependents lazily.
    *
-   * In addition, refreshing a table also invalidate all caches that have reference to the table
+   * In addition, refreshing a table also clear all caches that have reference to the table
    * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
    *
    * @group cachemgmt
