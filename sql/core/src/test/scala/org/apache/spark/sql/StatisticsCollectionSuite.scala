@@ -680,4 +680,22 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
   }
+
+  test("SPARK-34119: Keep necessary stats after partition pruning") {
+    val table = "SPARK_34119"
+    withTable(table) {
+      sql(s"CREATE TABLE $table using parquet PARTITIONED BY (p) AS " +
+        "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        checkColStats(
+          sql(s"SELECT * FROM $table WHERE p = '2'"),
+          mutable.LinkedHashMap(
+            "id" -> CatalogColumnStat(Some(2), Some("2"), Some("7"), Some(0),
+              Some(LongType.defaultSize), Some(LongType.defaultSize)),
+            "p" -> CatalogColumnStat(Some(1), None, None, Some(0),
+              Some(1), Some(1))))
+      }
+    }
+  }
 }
