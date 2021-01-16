@@ -115,7 +115,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     assert(spark.catalog.isCached(name))
   }
 
-  def checkRelation(name: String, expected: Seq[Row]): Unit = {
+  def checkCachedRelation(name: String, expected: Seq[Row]): Unit = {
     assert(spark.catalog.isCached(name))
     QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
   }

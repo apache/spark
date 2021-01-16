@@ -185,19 +185,20 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
       sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
       cacheRelation(t)
+      checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1)))
 
       withView("v0") {
         sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=2)")
-        checkRelation("v0", Seq(Row(0, 2), Row(1, 1)))
+        checkCachedRelation("v0", Seq(Row(0, 2), Row(1, 1)))
       }
 
       withTempView("v1") {
         sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t PARTITION (part=1) RENAME TO PARTITION (part=3)")
-        checkRelation("v1", Seq(Row(0, 2), Row(1, 3)))
+        checkCachedRelation("v1", Seq(Row(0, 2), Row(1, 3)))
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
@@ -205,7 +206,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
-        checkRelation(v2, Seq(Row(0, 4), Row(1, 3)))
+        checkCachedRelation(v2, Seq(Row(0, 4), Row(1, 3)))
       }
     }
   }

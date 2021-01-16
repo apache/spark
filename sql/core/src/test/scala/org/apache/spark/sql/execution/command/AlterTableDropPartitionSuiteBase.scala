@@ -190,19 +190,20 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       sql(s"INSERT INTO $t PARTITION (part=2) SELECT 2")
       sql(s"INSERT INTO $t PARTITION (part=3) SELECT 3")
       cacheRelation(t)
+      checkCachedRelation(t, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3)))
 
       withView("v0") {
         sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
         cacheRelation("v0")
         sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
-        checkRelation("v0", Seq(Row(0, 0), Row(2, 2), Row(3, 3)))
+        checkCachedRelation("v0", Seq(Row(0, 0), Row(2, 2), Row(3, 3)))
       }
 
       withTempView("v1") {
         sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
         cacheRelation("v1")
         sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
-        checkRelation("v1", Seq(Row(0, 0), Row(3, 3)))
+        checkCachedRelation("v1", Seq(Row(0, 0), Row(3, 3)))
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
@@ -210,7 +211,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t DROP PARTITION (part=3)")
-        checkRelation(v2, Seq(Row(0, 0)))
+        checkCachedRelation(v2, Seq(Row(0, 0)))
       }
     }
   }
