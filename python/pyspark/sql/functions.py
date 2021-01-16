@@ -122,8 +122,8 @@ def lit(col):
         )
 
         return struct(*[
-            lit(x).alias(v)
-            for x, v in zip(col, fields)
+            lit(x).alias(a)
+            for x, a in zip(col, fields)
         ])
 
     elif isinstance(col, dict):
