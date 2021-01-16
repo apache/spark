@@ -108,4 +108,10 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     }
     size
   }
+
+  def cacheRelation(name: String): Unit = {
+    assert(!spark.catalog.isCached(name))
+    sql(s"CACHE TABLE $name")
+    assert(spark.catalog.isCached(name))
+  }
 }

@@ -183,11 +183,6 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
   }
 
   test("SPARK-XXXXX: keep dependents cashed after table altering") {
-    def cacheRelation(name: String): Unit = {
-      assert(!spark.catalog.isCached(name))
-      sql(s"CACHE TABLE $name")
-      assert(spark.catalog.isCached(name))
-    }
     def checkRelation(name: String, expected: Seq[Row]): Unit = {
       assert(spark.catalog.isCached(name))
       QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
