@@ -1901,12 +1901,12 @@ class HiveDDLSuite
         """.stripMargin
       sql(
         s"""
-           |CREATE TABLE t PARTITIONED BY (ds string)
-           |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-           |WITH SERDEPROPERTIES ('avro.schema.literal'='$originalSchema')
-           |STORED AS
-           |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
-           |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+          |CREATE TABLE t PARTITIONED BY (ds string)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |WITH SERDEPROPERTIES ('avro.schema.literal'='$originalSchema')
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
         """.stripMargin)
       sql("INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
       val evolvedSchema =
@@ -1928,7 +1928,7 @@ class HiveDDLSuite
           |  ]
           |}
         """.stripMargin
-      sql(s"""ALTER TABLE t SET SERDEPROPERTIES ('avro.schema.literal'='$evolvedSchema')""")
+      sql(s"ALTER TABLE t SET SERDEPROPERTIES ('avro.schema.literal'='$evolvedSchema')")
       sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
       checkAnswer(spark.table("t"), Row("col1_default", "col2_value", "1981-01-07")
         :: Row("col1_value", "col2_value", "1983-04-27") :: Nil)
