@@ -195,6 +195,16 @@ $(document).ready(function() {
               render: (log, type, row) => `<a href="${log}" class="btn btn-info btn-mini">Download</a>` 
             },
           ],
+          "aoColumnDefs": [
+            {
+              aTargets: [0, 1, 2],
+              fnCreatedCell: (nTd, sData, oData, iRow, iCol) => {
+                if (hasMultipleAttempts) { 
+                  $(nTd).css('background-color', '#fff');
+                } 
+              }
+            },
+          ],
           "autoWidth": false,
           "deferRender": true
         };
