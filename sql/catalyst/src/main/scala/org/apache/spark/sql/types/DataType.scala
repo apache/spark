@@ -190,7 +190,7 @@ object DataType {
 
   private object JSortedObject {
     def unapplySeq(value: JValue): Option[List[(String, JValue)]] = value match {
-      case JObject(seq) => Some(seq.toList.sortBy(_._1))
+      case JObject(seq) => Some(seq.sortBy(_._1))
       case _ => None
     }
   }

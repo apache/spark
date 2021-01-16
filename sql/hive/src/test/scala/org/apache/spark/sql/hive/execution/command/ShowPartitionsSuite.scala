@@ -38,4 +38,13 @@ class ShowPartitionsSuite extends v1.ShowPartitionsSuiteBase with CommandSuiteBa
       }
     }
   }
+
+  test("hive client calls") {
+    withNamespaceAndTable("ns", "dateTable") { t =>
+      createDateTable(t)
+      checkHiveClientCalls(expected = 10) {
+        sql(s"SHOW PARTITIONS $t")
+      }
+    }
+  }
 }

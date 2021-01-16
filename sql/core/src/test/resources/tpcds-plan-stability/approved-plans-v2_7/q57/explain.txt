@@ -156,18 +156,18 @@ Results [6]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum#17]
 
 (23) Exchange
 Input [6]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum#17]
-Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, 5), true, [id=#18]
+Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, 5), ENSURE_REQUIREMENTS, [id=#18]
 
 (24) HashAggregate [codegen id : 5]
 Input [6]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum#17]
 Keys [5]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11]
 Functions [1]: [sum(UnscaledValue(cs_sales_price#7))]
 Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#7))#19]
-Results [7]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, MakeDecimal(sum(UnscaledValue(cs_sales_price#7))#19,17,2) AS sum_sales#20, MakeDecimal(sum(UnscaledValue(cs_sales_price#7))#19,17,2) AS _w0#21]
+Results [7]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, MakeDecimal(sum(UnscaledValue(cs_sales_price#7))#19,17,2) AS sum_sales#20, cast(MakeDecimal(sum(UnscaledValue(cs_sales_price#7))#19,17,2) as bigint) AS _w0#21]
 
 (25) Exchange
 Input [7]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales#20, _w0#21]
-Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#14, d_year#10, 5), true, [id=#22]
+Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#14, d_year#10, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (26) Sort [codegen id : 6]
 Input [7]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales#20, _w0#21]
@@ -183,7 +183,7 @@ Input [8]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales#
 
 (29) Exchange
 Input [7]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales#20, avg_monthly_sales#23]
-Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#14, 5), true, [id=#24]
+Arguments: hashpartitioning(i_category#3, i_brand#2, cc_name#14, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (30) Sort [codegen id : 8]
 Input [7]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales#20, avg_monthly_sales#23]
@@ -195,7 +195,7 @@ Arguments: [rank(d_year#10, d_moy#11) windowspecdefinition(i_category#3, i_brand
 
 (32) Filter [codegen id : 23]
 Input [8]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales#20, avg_monthly_sales#23, rn#25]
-Condition : (((((isnotnull(d_year#10) AND isnotnull(avg_monthly_sales#23)) AND (d_year#10 = 1999)) AND (avg_monthly_sales#23 > 0.000000)) AND (CASE WHEN (avg_monthly_sales#23 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#20 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#23 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#23 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)) AND isnotnull(rn#25))
+Condition : (((((((isnotnull(d_year#10) AND isnotnull(avg_monthly_sales#23)) AND isnotnull(sum_sales#20)) AND (d_year#10 = 1999)) AND (avg_monthly_sales#23 > 0.0)) AND (avg_monthly_sales#23 > 0.0)) AND ((abs((cast(sum_sales#20 as double) - avg_monthly_sales#23)) / avg_monthly_sales#23) > 0.1)) AND isnotnull(rn#25))
 
 (33) ReusedExchange [Reuses operator id: 23]
 Output [6]: [i_category#26, i_brand#27, cc_name#28, d_year#29, d_moy#30, sum#31]
@@ -209,7 +209,7 @@ Results [6]: [i_category#26, i_brand#27, cc_name#28, d_year#29, d_moy#30, MakeDe
 
 (35) Exchange
 Input [6]: [i_category#26, i_brand#27, cc_name#28, d_year#29, d_moy#30, sum_sales#33]
-Arguments: hashpartitioning(i_category#26, i_brand#27, cc_name#28, 5), true, [id=#34]
+Arguments: hashpartitioning(i_category#26, i_brand#27, cc_name#28, 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (36) Sort [codegen id : 14]
 Input [6]: [i_category#26, i_brand#27, cc_name#28, d_year#29, d_moy#30, sum_sales#33]
@@ -274,5 +274,5 @@ Input [14]: [i_category#3, i_brand#2, cc_name#14, d_year#10, d_moy#11, sum_sales
 
 (51) TakeOrderedAndProject
 Input [8]: [i_category#3, i_brand#2, d_year#10, d_moy#11, avg_monthly_sales#23, sum_sales#20, psum#45, nsum#46]
-Arguments: 100, [CheckOverflow((promote_precision(cast(sum_sales#20 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#23 as decimal(22,6)))), DecimalType(22,6), true) ASC NULLS FIRST, d_year#10 ASC NULLS FIRST], [i_category#3, i_brand#2, d_year#10, d_moy#11, avg_monthly_sales#23, sum_sales#20, psum#45, nsum#46]
+Arguments: 100, [(cast(sum_sales#20 as double) - avg_monthly_sales#23) ASC NULLS FIRST, d_year#10 ASC NULLS FIRST], [i_category#3, i_brand#2, d_year#10, d_moy#11, avg_monthly_sales#23, sum_sales#20, psum#45, nsum#46]
 

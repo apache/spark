@@ -194,7 +194,7 @@ Results [7]: [channel#12, col_name#13, d_year#9, d_qoy#10, i_category#6, count#3
 
 (36) Exchange
 Input [7]: [channel#12, col_name#13, d_year#9, d_qoy#10, i_category#6, count#31, sum#32]
-Arguments: hashpartitioning(channel#12, col_name#13, d_year#9, d_qoy#10, i_category#6, 5), true, [id=#33]
+Arguments: hashpartitioning(channel#12, col_name#13, d_year#9, d_qoy#10, i_category#6, 5), ENSURE_REQUIREMENTS, [id=#33]
 
 (37) HashAggregate [codegen id : 11]
 Input [7]: [channel#12, col_name#13, d_year#9, d_qoy#10, i_category#6, count#31, sum#32]

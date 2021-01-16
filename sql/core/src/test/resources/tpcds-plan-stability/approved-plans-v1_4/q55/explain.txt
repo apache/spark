@@ -107,7 +107,7 @@ Results [3]: [i_brand#10, i_brand_id#9, sum#14]
 
 (19) Exchange
 Input [3]: [i_brand#10, i_brand_id#9, sum#14]
-Arguments: hashpartitioning(i_brand#10, i_brand_id#9, 5), true, [id=#15]
+Arguments: hashpartitioning(i_brand#10, i_brand_id#9, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (20) HashAggregate [codegen id : 4]
 Input [3]: [i_brand#10, i_brand_id#9, sum#14]

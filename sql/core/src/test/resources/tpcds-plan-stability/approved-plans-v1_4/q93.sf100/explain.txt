@@ -70,7 +70,7 @@ Input [5]: [sr_item_sk#1, sr_reason_sk#2, sr_ticket_number#3, sr_return_quantity
 
 (11) Exchange
 Input [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
-Arguments: hashpartitioning(sr_item_sk#1, sr_ticket_number#3, 5), true, [id=#8]
+Arguments: hashpartitioning(sr_item_sk#1, sr_ticket_number#3, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (12) Sort [codegen id : 3]
 Input [3]: [sr_item_sk#1, sr_ticket_number#3, sr_return_quantity#4]
@@ -87,7 +87,7 @@ Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12
 
 (15) Exchange
 Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
-Arguments: hashpartitioning(cast(ss_item_sk#9 as bigint), cast(ss_ticket_number#11 as bigint), 5), true, [id=#14]
+Arguments: hashpartitioning(cast(ss_item_sk#9 as bigint), cast(ss_ticket_number#11 as bigint), 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (16) Sort [codegen id : 5]
 Input [5]: [ss_item_sk#9, ss_customer_sk#10, ss_ticket_number#11, ss_quantity#12, ss_sales_price#13]
@@ -111,7 +111,7 @@ Results [3]: [ss_customer_sk#10, sum#18, isEmpty#19]
 
 (20) Exchange
 Input [3]: [ss_customer_sk#10, sum#18, isEmpty#19]
-Arguments: hashpartitioning(ss_customer_sk#10, 5), true, [id=#20]
+Arguments: hashpartitioning(ss_customer_sk#10, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (21) HashAggregate [codegen id : 7]
 Input [3]: [ss_customer_sk#10, sum#18, isEmpty#19]

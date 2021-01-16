@@ -144,7 +144,7 @@ Results [11]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#
 
 (25) Exchange
 Input [11]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, spark_grouping_id#29, sum#32, isEmpty#33]
-Arguments: hashpartitioning(i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, spark_grouping_id#29, 5), true, [id=#34]
+Arguments: hashpartitioning(i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, spark_grouping_id#29, 5), ENSURE_REQUIREMENTS, [id=#34]
 
 (26) HashAggregate [codegen id : 5]
 Input [11]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, spark_grouping_id#29, sum#32, isEmpty#33]
@@ -155,7 +155,7 @@ Results [9]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#2
 
 (27) Exchange
 Input [9]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, sumsales#36]
-Arguments: hashpartitioning(i_category#21, 5), true, [id=#37]
+Arguments: hashpartitioning(i_category#21, 5), ENSURE_REQUIREMENTS, [id=#37]
 
 (28) Sort [codegen id : 6]
 Input [9]: [i_category#21, i_class#22, i_brand#23, i_product_name#24, d_year#25, d_qoy#26, d_moy#27, s_store_id#28, sumsales#36]

@@ -83,9 +83,45 @@ Condition : ((isnotnull(d_month_seq#5) AND (d_month_seq#5 = Subquery scalar-subq
 Output [1]: [d_date_sk#4]
 Input [2]: [d_date_sk#4, d_month_seq#5]
 
+<<<<<<< HEAD
 (8) BroadcastExchange
 Input [1]: [d_date_sk#4]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#8]
+=======
+(8) ColumnarToRow [codegen id : 1]
+Input [2]: [i_current_price#5, i_category#6]
+
+(9) Filter [codegen id : 1]
+Input [2]: [i_current_price#5, i_category#6]
+Condition : isnotnull(i_category#6)
+
+(10) HashAggregate [codegen id : 1]
+Input [2]: [i_current_price#5, i_category#6]
+Keys [1]: [i_category#6]
+Functions [1]: [partial_avg(UnscaledValue(i_current_price#5))]
+Aggregate Attributes [2]: [sum#7, count#8]
+Results [3]: [i_category#6, sum#9, count#10]
+
+(11) Exchange
+Input [3]: [i_category#6, sum#9, count#10]
+Arguments: hashpartitioning(i_category#6, 5), ENSURE_REQUIREMENTS, [id=#11]
+
+(12) HashAggregate [codegen id : 2]
+Input [3]: [i_category#6, sum#9, count#10]
+Keys [1]: [i_category#6]
+Functions [1]: [avg(UnscaledValue(i_current_price#5))]
+Aggregate Attributes [1]: [avg(UnscaledValue(i_current_price#5))#12]
+Results [2]: [cast((avg(UnscaledValue(i_current_price#5))#12 / 100.0) as decimal(11,6)) AS avg(i_current_price)#13, i_category#6 AS i_category#6#14]
+
+(13) BroadcastExchange
+Input [2]: [avg(i_current_price)#13, i_category#6#14]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#15]
+
+(14) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [i_category#6]
+Right keys [1]: [i_category#6#14]
+Join condition: None
+>>>>>>> master
 
 (9) BroadcastHashJoin [codegen id : 5]
 Left keys [1]: [ss_sold_date_sk#1]
@@ -318,8 +354,13 @@ Aggregate Attributes: []
 Results [1]: [d_month_seq#5]
 
 (56) Exchange
+<<<<<<< HEAD
 Input [1]: [d_month_seq#5]
 Arguments: hashpartitioning(d_month_seq#5, 5), ENSURE_REQUIREMENTS, [id=#39]
+=======
+Input [1]: [d_month_seq#18]
+Arguments: hashpartitioning(d_month_seq#18, 5), ENSURE_REQUIREMENTS, [id=#39]
+>>>>>>> master
 
 (57) HashAggregate [codegen id : 2]
 Input [1]: [d_month_seq#5]

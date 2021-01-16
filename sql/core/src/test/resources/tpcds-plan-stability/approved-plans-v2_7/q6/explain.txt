@@ -181,7 +181,7 @@ Results [3]: [i_category#17, sum#20, count#21]
 
 (30) Exchange
 Input [3]: [i_category#17, sum#20, count#21]
-Arguments: hashpartitioning(i_category#17, 5), true, [id=#22]
+Arguments: hashpartitioning(i_category#17, 5), ENSURE_REQUIREMENTS, [id=#22]
 
 (31) HashAggregate [codegen id : 5]
 Input [3]: [i_category#17, sum#20, count#21]
@@ -229,7 +229,7 @@ Results [2]: [ca_state#2, count#29]
 
 (40) Exchange
 Input [2]: [ca_state#2, count#29]
-Arguments: hashpartitioning(ca_state#2, 5), true, [id=#30]
+Arguments: hashpartitioning(ca_state#2, 5), ENSURE_REQUIREMENTS, [id=#30]
 
 (41) HashAggregate [codegen id : 8]
 Input [2]: [ca_state#2, count#29]
@@ -289,7 +289,7 @@ Results [1]: [d_month_seq#11]
 
 (50) Exchange
 Input [1]: [d_month_seq#11]
-Arguments: hashpartitioning(d_month_seq#11, 5), true, [id=#37]
+Arguments: hashpartitioning(d_month_seq#11, 5), ENSURE_REQUIREMENTS, [id=#37]
 
 (51) HashAggregate [codegen id : 2]
 Input [1]: [d_month_seq#11]

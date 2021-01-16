@@ -49,7 +49,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
         .set(config.DECOMMISSION_ENABLED, true)
         .set(config.STORAGE_DECOMMISSION_ENABLED, isEnabled)
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 6000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
       val executors = sc.getExecutorIds().toArray
       val decommissionListener = new SparkListener {
         override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -281,7 +281,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           (update.blockUpdatedInfo.blockId.name,
             update.blockUpdatedInfo.blockManagerId)}
         val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.size)
-        assert(!blocksToManagers.filter(_._2 > 1).isEmpty,
+        assert(blocksToManagers.exists(_._2 > 1),
           s"We should have a block that has been on multiple BMs in rdds:\n ${rddUpdates} from:\n" +
           s"${blocksUpdated}\n but instead we got:\n ${blocksToManagers}")
       }

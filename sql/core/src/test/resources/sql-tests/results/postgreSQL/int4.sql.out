@@ -433,7 +433,7 @@ struct<two:double>
 -- !query
 SELECT string(shiftleft(int(-1), 31))
 -- !query schema
-struct<CAST(shiftleft(CAST(-1 AS INT), 31) AS STRING):string>
+struct<shiftleft(-1, 31):string>
 -- !query output
 -2147483648
 
@@ -441,7 +441,7 @@ struct<CAST(shiftleft(CAST(-1 AS INT), 31) AS STRING):string>
 -- !query
 SELECT string(int(shiftleft(int(-1), 31))+1)
 -- !query schema
-struct<CAST((CAST(shiftleft(CAST(-1 AS INT), 31) AS INT) + 1) AS STRING):string>
+struct<(shiftleft(-1, 31) + 1):string>
 -- !query output
 -2147483647
 
@@ -449,7 +449,7 @@ struct<CAST((CAST(shiftleft(CAST(-1 AS INT), 31) AS INT) + 1) AS STRING):string>
 -- !query
 SELECT int(-2147483648) % int(-1)
 -- !query schema
-struct<(CAST(-2147483648 AS INT) % CAST(-1 AS INT)):int>
+struct<(-2147483648 % -1):int>
 -- !query output
 0
 
@@ -457,7 +457,7 @@ struct<(CAST(-2147483648 AS INT) % CAST(-1 AS INT)):int>
 -- !query
 SELECT int(-2147483648) % smallint(-1)
 -- !query schema
-struct<(CAST(-2147483648 AS INT) % CAST(CAST(-1 AS SMALLINT) AS INT)):int>
+struct<(-2147483648 % -1):int>
 -- !query output
 0
 

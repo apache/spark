@@ -1,6 +1,6 @@
 TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
   WholeStageCodegen (6)
-    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cast(cs_quantity as bigint)),avg(UnscaledValue(cs_list_price)),avg(UnscaledValue(cs_coupon_amt)),avg(UnscaledValue(cs_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cs_quantity),avg(UnscaledValue(cs_list_price)),avg(UnscaledValue(cs_coupon_amt)),avg(UnscaledValue(cs_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [i_item_id] #1
           WholeStageCodegen (5)

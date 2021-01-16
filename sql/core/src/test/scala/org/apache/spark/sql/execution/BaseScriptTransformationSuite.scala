@@ -521,7 +521,10 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             'd.cast("string"),
             'e.cast("string")).collect())
       }.getMessage
-      assert(e1.contains("Permission denied"))
+      // Check with status exit code since in GA test, it may lose detail failed root cause.
+      // Different root cause's exitcode is not same.
+      // In this test, root cause is `Permission denied`
+      assert(e1.contains("Subprocess exited with status 126"))
 
       // test `/path/to/script.py' with script executable
       scriptFilePath.setExecutable(true)

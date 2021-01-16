@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.UUID
+import java.util.{Locale, UUID}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.runtime.universe.TypeTag
@@ -1236,40 +1236,42 @@ class DataFrameSuite extends QueryTest
   }
 
   test("SPARK-33690: showString: escape meta-characters") {
-    val df1 = Seq("aaa\nbbb\tccc").toDF("value")
+    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
     assert(df1.showString(1, truncate = 0) ===
-      """+-------------+
-        ||value        |
-        |+-------------+
-        ||aaa\nbbb\tccc|
-        |+-------------+
+      """+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
+        ||aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh|
+        |+--------------------------------------+
         |""".stripMargin)
 
-    val df2 = Seq(Seq("aaa\nbbb\tccc")).toDF("value")
+    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
     assert(df2.showString(1, truncate = 0) ===
-      """+---------------+
-        ||value          |
-        |+---------------+
-        ||[aaa\nbbb\tccc]|
-        |+---------------+
+      """+---------------------------------------------+
+        ||array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+---------------------------------------------+
+        ||[aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh]     |
+        |+---------------------------------------------+
         |""".stripMargin)
 
-    val df3 = Seq(Map("aaa\nbbb\tccc" -> "aaa\nbbb\tccc")).toDF("value")
+    val df3 =
+      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
     assert(df3.showString(1, truncate = 0) ===
-      """+--------------------------------+
-        ||value                           |
-        |+--------------------------------+
-        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc}|
-        |+--------------------------------+
+      """+----------------------------------------------------------+
+        ||map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+----------------------------------------------------------+
+        ||{aaa\nbbb\tccc -> aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh} |
+        |+----------------------------------------------------------+
         |""".stripMargin)
 
-    val df4 = Seq("aaa\nbbb\tccc").toDF("value").selectExpr("named_struct('v', value)")
+    val df4 =
+      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
     assert(df4.showString(1, truncate = 0) ===
-      """+----------------------+
-        ||named_struct(v, value)|
-        |+----------------------+
-        ||{aaa\nbbb\tccc}       |
-        |+----------------------+
+      """+-------------------------------------------------------+
+        ||named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh)|
+        |+-------------------------------------------------------+
+        ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
+        |+-------------------------------------------------------+
         |""".stripMargin)
   }
 
@@ -2612,6 +2614,21 @@ class DataFrameSuite extends QueryTest
     val l = c.select("col2")
     val df = l.join(r, $"col2" === $"col4", "LeftOuter")
     checkAnswer(df, Row("2", "2"))
+  }
+
+  test("SPARK-33989: Strip auto-generated cast when using Cast.sql") {
+    Seq("SELECT id == null FROM VALUES(1) AS t(id)",
+      "SELECT floor(1)",
+      "SELECT split(struct(c1, c2).c1, ',') FROM VALUES(1, 2) AS t(c1, c2)").foreach { sqlStr =>
+      assert(!sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
+    }
+
+    Seq("SELECT id == CAST(null AS int) FROM VALUES(1) AS t(id)",
+      "SELECT floor(CAST(1 AS double))",
+      "SELECT split(CAST(struct(c1, c2).c1 AS string), ',') FROM VALUES(1, 2) AS t(c1, c2)"
+    ).foreach { sqlStr =>
+      assert(sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
+    }
   }
 }
 

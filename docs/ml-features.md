@@ -1793,19 +1793,28 @@ for more details on the API.
 </div>
 </div>
 
-## ANOVASelector
+## UnivariateFeatureSelector
 
-`ANOVASelector` operates on categorical labels with continuous features. It uses the
-[one-way ANOVA F-test](https://en.wikipedia.org/wiki/F-test#Multiple-comparison_ANOVA_problems) to decide which
-features to choose.
-It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
-* `numTopFeatures` chooses a fixed number of top features according to ANOVA F-test.
+`UnivariateFeatureSelector` operates on categorical/continuous labels with categorical/continuous features. 
+User can set `featureType` and `labelType`, and Spark will pick the score function to use based on the specified 
+`featureType` and `labelType`. 
+
+~~~
+featureType |  labelType |score function
+------------|------------|--------------
+categorical |categorical | chi2
+continuous  |categorical | f_classif
+continuous  |continuous  | f_regression
+~~~
+
+It supports five selection modes: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
+* `numTopFeatures` chooses a fixed number of top features.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
 * `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
 * `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
 * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
-By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
-The user can choose a selection method using `setSelectorType`.
+
+By default, the selection mode is `numTopFeatures`, with the default selectionThreshold sets to 50.
 
 **Examples**
 
@@ -1823,7 +1832,7 @@ id | features                       | label
  6 | [7.9, 8.5, 9.2, 4.0, 9.4, 2.1] | 4.0
 ~~~
 
-If we use `ANOVASelector` with `numTopFeatures = 1`, the
+If we set `featureType` to `continuous` and `labelType` to `categorical` with `numTopFeatures = 1`, the
 last column in our `features` is chosen as the most useful feature:
 
 ~~~
@@ -1840,96 +1849,26 @@ id | features                       | label   | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [ANOVASelector Scala docs](api/scala/org/apache/spark/ml/feature/ANOVASelector.html)
+Refer to the [UnivariateFeatureSelector Scala docs](api/scala/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/ANOVASelectorExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/UnivariateFeatureSelectorExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [ANOVASelector Java docs](api/java/org/apache/spark/ml/feature/ANOVASelector.html)
+Refer to the [UnivariateFeatureSelector Java docs](api/java/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaANOVASelectorExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaUnivariateFeatureSelectorExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-Refer to the [ANOVASelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ANOVASelector)
+Refer to the [UnivariateFeatureSelector Python docs](api/python/reference/api/pyspark.ml.feature.UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example python/ml/anova_selector_example.py %}
-</div>
-</div>
-
-## FValueSelector
-
-`FValueSelector` operates on categorical labels with continuous features. It uses the
-[F-test for regression](https://en.wikipedia.org/wiki/F-test#Regression_problems) to decide which
-features to choose.
-It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
-* `numTopFeatures` chooses a fixed number of top features according to a F-test for regression.
-* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
-* `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
-* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
-* `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
-By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
-The user can choose a selection method using `setSelectorType`.
-
-**Examples**
-
-Assume that we have a DataFrame with the columns `id`, `features`, and `label`, which is used as
-our target to be predicted:
-
-~~~
-id | features                       | label
----|--------------------------------|---------
- 1 | [6.0, 7.0, 0.0, 7.0, 6.0, 0.0] | 4.6
- 2 | [0.0, 9.0, 6.0, 0.0, 5.0, 9.0] | 6.6
- 3 | [0.0, 9.0, 3.0, 0.0, 5.0, 5.0] | 5.1
- 4 | [0.0, 9.0, 8.0, 5.0, 6.0, 4.0] | 7.6
- 5 | [8.0, 9.0, 6.0, 5.0, 4.0, 4.0] | 9.0
- 6 | [8.0, 9.0, 6.0, 4.0, 0.0, 0.0] | 9.0
-~~~
-
-If we use `FValueSelector` with `numTopFeatures = 1`, the
-3rd column in our `features` is chosen as the most useful feature:
-
-~~~
-id | features                       | label   | selectedFeatures
----|--------------------------------|---------|------------------
- 1 | [6.0, 7.0, 0.0, 7.0, 6.0, 0.0] | 4.6     | [0.0]
- 2 | [0.0, 9.0, 6.0, 0.0, 5.0, 9.0] | 6.6     | [6.0]
- 3 | [0.0, 9.0, 3.0, 0.0, 5.0, 5.0] | 5.1     | [3.0]
- 4 | [0.0, 9.0, 8.0, 5.0, 6.0, 4.0] | 7.6     | [8.0]
- 5 | [8.0, 9.0, 6.0, 5.0, 4.0, 4.0] | 9.0     | [6.0]
- 6 | [8.0, 9.0, 6.0, 4.0, 0.0, 0.0] | 9.0     | [6.0]
-~~~
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [FValueSelector Scala docs](api/scala/org/apache/spark/ml/feature/FValueSelector.html)
-for more details on the API.
-
-{% include_example scala/org/apache/spark/examples/ml/FValueSelectorExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [FValueSelector Java docs](api/java/org/apache/spark/ml/feature/FValueSelector.html)
-for more details on the API.
-
-{% include_example java/org/apache/spark/examples/ml/JavaFValueSelectorExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [FValueSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.FValueSelector)
-for more details on the API.
-
-{% include_example python/ml/anova_selector_example.py %}
+{% include_example python/ml/univariate_feature_selector_example.py %}
 </div>
 </div>
 
@@ -1974,7 +1913,7 @@ id | features                       | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector))
+Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.VarianceThresholdSelector))
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VarianceThresholdSelectorExample.scala %}

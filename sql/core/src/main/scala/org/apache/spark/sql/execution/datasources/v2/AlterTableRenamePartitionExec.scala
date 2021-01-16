@@ -28,12 +28,15 @@ import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 case class AlterTableRenamePartitionExec(
     table: SupportsPartitionManagement,
     from: ResolvedPartitionSpec,
-    to: ResolvedPartitionSpec) extends V2CommandExec {
+    to: ResolvedPartitionSpec,
+    refreshCache: () => Unit) extends V2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    table.renamePartition(from.ident, to.ident)
+    if (table.renamePartition(from.ident, to.ident)) {
+      refreshCache()
+    }
     Seq.empty
   }
 }

@@ -120,7 +120,7 @@ case class ScalaUDF(
    */
   private def catalystConverter: Any => Any = outputEncoder.map { enc =>
     val toRow = enc.createSerializer().asInstanceOf[Any => Any]
-    if (enc.isSerializedAsStruct) {
+    if (enc.isSerializedAsStructForTopLevel) {
       value: Any =>
         if (value == null) null else toRow(value).asInstanceOf[InternalRow]
     } else {

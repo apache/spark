@@ -4,7 +4,7 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
       BroadcastHashJoin [item_id,item_id]
         Project [item_id,sr_item_qty,cr_item_qty]
           BroadcastHashJoin [item_id,item_id]
-            HashAggregate [i_item_id,sum] [sum(cast(sr_return_quantity as bigint)),item_id,sr_item_qty,sum]
+            HashAggregate [i_item_id,sum] [sum(sr_return_quantity),item_id,sr_item_qty,sum]
               InputAdapter
                 Exchange [i_item_id] #1
                   WholeStageCodegen (5)
@@ -52,7 +52,7 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
             InputAdapter
               BroadcastExchange #6
                 WholeStageCodegen (11)
-                  HashAggregate [i_item_id,sum] [sum(cast(cr_return_quantity as bigint)),item_id,cr_item_qty,sum]
+                  HashAggregate [i_item_id,sum] [sum(cr_return_quantity),item_id,cr_item_qty,sum]
                     InputAdapter
                       Exchange [i_item_id] #7
                         WholeStageCodegen (10)
@@ -72,7 +72,7 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
         InputAdapter
           BroadcastExchange #8
             WholeStageCodegen (17)
-              HashAggregate [i_item_id,sum] [sum(cast(wr_return_quantity as bigint)),item_id,wr_item_qty,sum]
+              HashAggregate [i_item_id,sum] [sum(wr_return_quantity),item_id,wr_item_qty,sum]
                 InputAdapter
                   Exchange [i_item_id] #9
                     WholeStageCodegen (16)

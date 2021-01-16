@@ -316,7 +316,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     override def update(time: Time): Unit = {
       batchForTime.clear()
       generatedRDDs.foreach { kv =>
-        val a = kv._2.asInstanceOf[KafkaRDD[K, V]].offsetRanges.map(_.toTuple).toArray
+        val a = kv._2.asInstanceOf[KafkaRDD[K, V]].offsetRanges.map(_.toTuple)
         batchForTime += kv._1 -> a
       }
     }

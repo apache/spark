@@ -76,7 +76,7 @@ Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#3, d_date_sk#4]
 
 (11) Exchange
 Input [2]: [inv_item_sk#2, inv_quantity_on_hand#3]
-Arguments: hashpartitioning(inv_item_sk#2, 5), true, [id=#7]
+Arguments: hashpartitioning(inv_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#7]
 
 (12) Sort [codegen id : 3]
 Input [2]: [inv_item_sk#2, inv_quantity_on_hand#3]
@@ -98,7 +98,7 @@ Condition : isnotnull(i_item_sk#8)
 
 (16) Exchange
 Input [5]: [i_item_sk#8, i_brand#9, i_class#10, i_category#11, i_product_name#12]
-Arguments: hashpartitioning(i_item_sk#8, 5), true, [id=#13]
+Arguments: hashpartitioning(i_item_sk#8, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (17) Sort [codegen id : 5]
 Input [5]: [i_item_sk#8, i_brand#9, i_class#10, i_category#11, i_product_name#12]
@@ -136,20 +136,20 @@ Arguments: [List(inv_quantity_on_hand#3, i_product_name#12, i_brand#9, i_class#1
 (25) HashAggregate [codegen id : 8]
 Input [6]: [inv_quantity_on_hand#3, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
 Keys [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
-Functions [1]: [partial_avg(cast(inv_quantity_on_hand#3 as bigint))]
+Functions [1]: [partial_avg(inv_quantity_on_hand#3)]
 Aggregate Attributes [2]: [sum#20, count#21]
 Results [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
 
 (26) Exchange
 Input [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
-Arguments: hashpartitioning(i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, 5), true, [id=#24]
+Arguments: hashpartitioning(i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (27) HashAggregate [codegen id : 9]
 Input [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
 Keys [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
-Functions [1]: [avg(cast(inv_quantity_on_hand#3 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#3 as bigint))#25]
-Results [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, avg(cast(inv_quantity_on_hand#3 as bigint))#25 AS qoh#26]
+Functions [1]: [avg(inv_quantity_on_hand#3)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#3)#25]
+Results [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, avg(inv_quantity_on_hand#3)#25 AS qoh#26]
 
 (28) TakeOrderedAndProject
 Input [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, qoh#26]

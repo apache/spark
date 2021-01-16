@@ -5,7 +5,7 @@ TakeOrderedAndProject [c_customer_id]
         Project [ctr_customer_sk]
           BroadcastHashJoin [ctr_store_sk,s_store_sk]
             Project [ctr_customer_sk,ctr_store_sk]
-              BroadcastHashJoin [ctr_store_sk,ctr_store_skL,ctr_total_return,(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))]
+              BroadcastHashJoin [ctr_store_sk,ctr_store_skL,ctr_total_return,(avg(ctr_total_return) * 1.2)]
                 Filter [ctr_total_return]
                   HashAggregate [sr_customer_sk,sr_store_sk,sum] [sum(UnscaledValue(sr_return_amt)),ctr_customer_sk,ctr_store_sk,ctr_total_return,sum]
                     InputAdapter
@@ -29,8 +29,8 @@ TakeOrderedAndProject [c_customer_id]
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (6)
-                      Filter [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))]
-                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6))),ctr_store_skL,sum,count]
+                      Filter [(avg(ctr_total_return) * 1.2)]
+                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),ctr_store_skL,sum,count]
                           InputAdapter
                             Exchange [ctr_store_sk] #4
                               WholeStageCodegen (5)

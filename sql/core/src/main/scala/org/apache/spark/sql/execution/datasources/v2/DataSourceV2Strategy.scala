@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, Na
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -60,25 +60,28 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
+  private def recacheTable(r: ResolvedTable)(): Unit = {
+    val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
+    session.sharedState.cacheManager.recacheByPlan(session, v2Relation)
+  }
+
   // Invalidates the cache associated with the given table. If the invalidated cache matches the
   // given table, the cache's storage level is returned.
-  private def invalidateCache(
-      r: ResolvedTable,
-      recacheTable: Boolean = false)(): Option[StorageLevel] = {
+  private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-      if (recacheTable) {
-        val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
-        // recache with the same name and cache level.
-        session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
-      }
       Some(cacheLevel)
     } else {
       None
     }
+  }
+
+  private def invalidateCache(catalog: TableCatalog, table: Table, ident: Identifier): Unit = {
+    val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -157,17 +160,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(r: ResolvedTable) =>
-      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r, recacheTable = true)) :: Nil
+      RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(
-            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
+            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate,
+            invalidateCache) :: Nil
         case _ =>
           ReplaceTableExec(
-            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
+            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate,
+            invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
@@ -176,7 +181,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
-            session,
             staging,
             ident,
             parts,
@@ -184,10 +188,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             planLater(query),
             propsWithOwner,
             writeOptions,
-            orCreate = orCreate) :: Nil
+            orCreate = orCreate,
+            invalidateCache) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
-            session,
             catalog,
             ident,
             parts,
@@ -195,7 +199,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             planLater(query),
             propsWithOwner,
             writeOptions,
-            orCreate = orCreate) :: Nil
+            orCreate = orCreate,
+            invalidateCache) :: Nil
       }
 
     case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), query, writeOptions,
@@ -284,7 +289,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil
+      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateTableCache(r)) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
@@ -301,7 +306,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         catalog,
         oldIdent,
         newIdent.asIdentifier,
-        invalidateCache(r),
+        invalidateTableCache(r),
         session.sharedState.cacheManager.cacheQuery) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
@@ -365,14 +370,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         parts.asResolvedPartitionSpecs,
         ignoreIfNotExists,
         purge,
-        invalidateCache(r, recacheTable = true)) :: Nil
+        recacheTable(r)) :: Nil
 
     case AlterTableRenamePartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
       AlterTableRenamePartitionExec(
         table,
         Seq(from).asResolvedPartitionSpecs.head,
-        Seq(to).asResolvedPartitionSpecs.head) :: Nil
+        Seq(to).asResolvedPartitionSpecs.head,
+        recacheTable(r)) :: Nil
 
     case AlterTableRecoverPartitions(_: ResolvedTable) =>
       throw new AnalysisException(

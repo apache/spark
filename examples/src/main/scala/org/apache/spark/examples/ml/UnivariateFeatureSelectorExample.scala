@@ -19,23 +19,23 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.feature.ANOVASelector
+import org.apache.spark.ml.feature.UnivariateFeatureSelector
 import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example for ANOVASelector.
+ * An example for UnivariateFeatureSelector.
  * Run with
  * {{{
- * bin/run-example ml.ANOVASelectorExample
+ * bin/run-example ml.UnivariateFeatureSelectorExample
  * }}}
  */
-object ANOVASelectorExample {
+object UnivariateFeatureSelectorExample {
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
-      .appName("ANOVASelectorExample")
+      .appName("UnivariateFeatureSelectorExample")
       .getOrCreate()
     import spark.implicits._
 
@@ -51,15 +51,19 @@ object ANOVASelectorExample {
 
     val df = spark.createDataset(data).toDF("id", "features", "label")
 
-    val selector = new ANOVASelector()
-      .setNumTopFeatures(1)
+    val selector = new UnivariateFeatureSelector()
+      .setFeatureType("continuous")
+      .setLabelType("categorical")
+      .setSelectionMode("numTopFeatures")
+      .setSelectionThreshold(1)
       .setFeaturesCol("features")
       .setLabelCol("label")
       .setOutputCol("selectedFeatures")
 
     val result = selector.fit(df).transform(df)
 
-    println(s"ANOVASelector output with top ${selector.getNumTopFeatures} features selected")
+    println(s"UnivariateFeatureSelector output with top ${selector.getSelectionThreshold}" +
+      s" features selected using f_classif")
     result.show()
     // $example off$
 

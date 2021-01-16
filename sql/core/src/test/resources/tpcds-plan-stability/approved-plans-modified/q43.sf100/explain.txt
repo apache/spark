@@ -107,7 +107,7 @@ Results [9]: [s_store_name#10, s_store_id#9, sum#20, sum#21, sum#22, sum#23, sum
 
 (19) Exchange
 Input [9]: [s_store_name#10, s_store_id#9, sum#20, sum#21, sum#22, sum#23, sum#24, sum#25, sum#26]
-Arguments: hashpartitioning(s_store_name#10, s_store_id#9, 5), true, [id=#27]
+Arguments: hashpartitioning(s_store_name#10, s_store_id#9, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (20) HashAggregate [codegen id : 4]
 Input [9]: [s_store_name#10, s_store_id#9, sum#20, sum#21, sum#22, sum#23, sum#24, sum#25, sum#26]
