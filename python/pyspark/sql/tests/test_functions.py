@@ -640,6 +640,48 @@ class FunctionsTests(ReusedSQLTestCase):
             str(cm.exception)
         )
 
+    def test_literals(self):
+        from collections import namedtuple
+
+        Person = namedtuple("Person", ["name", "age", "height"])
+
+        a_dict = {"a": 1, "b": 2}
+        a_list = [1.0, 2.0, 3.0]
+        a_tuple = ("foo", 3, True)
+        a_named_tuple = Person("Jane", 29, 171.5)
+        a_row = Row(x=1.0, y=2.0, valid=True)
+
+        df = self.spark.range(1).select(
+            lit(1).alias("one"),
+            lit("foo").alias("foo"),
+            lit(a_dict).alias("map"),
+            lit(a_list).alias("array"),
+            lit(a_tuple).alias("struct"),
+            lit(a_named_tuple).alias("named_struct"),
+            lit(a_row).alias("another_named_struct")
+        )
+        result = df.first()
+
+        self.assertEqual(
+            result,
+            (1, 'foo', a_dict, a_list, a_tuple, a_named_tuple, a_row)
+        )
+
+        self.assertEqual(
+            result["struct"].__fields__,
+            ["_1", "_2", "_3"]
+        )
+
+        self.assertEqual(
+            result["named_struct"].__fields__,
+            ["name", "age", "height"]
+        )
+
+        self.assertEqual(
+            result["another_named_struct"].__fields__,
+            ["x", "y", "valid"]
+        )
+
 
 if __name__ == "__main__":
     import unittest

@@ -21,6 +21,7 @@ A collections of builtin functions
 import sys
 import functools
 import warnings
+from itertools import chain
 
 from pyspark import since, SparkContext
 from pyspark.rdd import PythonEvalType
@@ -91,13 +92,48 @@ def lit(col):
     Creates a :class:`Column` of literal value.
 
     .. versionadded:: 1.3.0
+    .. versionchanged:: 3.2.0
+        Added support for complex type literals.
 
     Examples
     --------
     >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
     [Row(height=5, spark_user=True)]
+    >>> df.select(
+    ...     lit({"height": 5}).alias("data"),
+    ...     lit(["python", "scala"]).alias("languages")
+    ... ).take(1)
+    [Row(data={'height': 5}, languages=['python', 'scala'])]
     """
-    return col if isinstance(col, Column) else _invoke_function("lit", col)
+    if isinstance(col, Column):
+        return col
+
+    elif isinstance(col, list):
+        return array(*[lit(x) for x in col])
+
+    elif isinstance(col, tuple):
+        fields = (
+            # Named tuple
+            col._fields if hasattr(col, "_fields")
+            # PySpark Row
+            else col.__fields__ if hasattr(col, "__fields__")
+            # Other
+            else [f"_{i + 1}" for i in range(len(col))]
+        )
+
+        return struct(*[
+            lit(x).alias(v)
+            for x, v in zip(col, fields)
+        ])
+
+    elif isinstance(col, dict):
+        return create_map(*chain.from_iterable(
+            (lit(k), lit(v))
+            for k, v in col.items()
+        ))
+
+    else:
+        return _invoke_function("lit", col)
 
 
 @since(1.3)
