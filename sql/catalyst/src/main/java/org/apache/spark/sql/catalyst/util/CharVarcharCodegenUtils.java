@@ -23,8 +23,7 @@ public class CharVarcharCodegenUtils {
   private static final UTF8String SPACE = UTF8String.fromString(" ");
 
   public static UTF8String lengthCheck(UTF8String inputStr, int limit) {
-    if (inputStr == null) return null;
-    if (inputStr.numChars() > limit) {
+    if (inputStr != null && inputStr.numChars() > limit) {
       throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
     }
     return inputStr;
