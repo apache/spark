@@ -57,7 +57,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("ALTER VIEW unknown RENAME TO v", "unknown")
   }
 
-  test("SPARK-34139") {
+  test("SPARK-34139: UnresolvedRelation should retain sql text position") {
     verifyTableOrViewPosition("CACHE TABLE unknown", "unknown")
     verifyTableOrViewPosition("UNCACHE TABLE unknown", "unknown")
     verifyTableOrViewPosition("DELETE FROM unknown", "unknown")
