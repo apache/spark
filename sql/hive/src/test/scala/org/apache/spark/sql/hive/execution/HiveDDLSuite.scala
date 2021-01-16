@@ -1930,10 +1930,8 @@ class HiveDDLSuite
         """.stripMargin
       sql(s"""ALTER TABLE t SET SERDEPROPERTIES ('avro.schema.literal'='$evolvedSchema')""")
       sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
-      withSQLConf(SQLConf.HIVE_AVRO_SCHEMA_EVOLUTION_ENABLED.key -> "true") {
-        checkAnswer(spark.table("t"), Row("col1_default", "col2_value", "1981-01-07")
-          :: Row("col1_value", "col2_value", "1983-04-27") :: Nil)
-      }
+      checkAnswer(spark.table("t"), Row("col1_default", "col2_value", "1981-01-07")
+        :: Row("col1_value", "col2_value", "1983-04-27") :: Nil)
     }
   }
 

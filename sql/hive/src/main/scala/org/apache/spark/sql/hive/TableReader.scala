@@ -241,7 +241,6 @@ class HadoopTableReader(
 
       val tableProperties = tableDesc.getProperties
       val avroPropertyKeys = HadoopTableReader.avroTableProperties
-      val schemaEvolutionEnabled = conf.avroSchemaEvolutionEnabled
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
       createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
@@ -250,14 +249,14 @@ class HadoopTableReader(
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
         // information) may be defined in table properties. Here we should merge table properties
         // and partition properties before initializing the deserializer. Note that partition
-        // properties take a higher priority here except for the Avro table properties when
-        // "spark.sql.hive.avroSchemaEvolution.enabled" is set because in that case the properties
-        // given at table level will be used (for details please check SPARK-26836).
+        // properties take a higher priority here except for the Avro table properties
+        // to support schema evolution: in that case the properties given at table level will
+        // be used (for details please check SPARK-26836).
         // For example, a partition may have a different SerDe as the one defined in table
         // properties.
         val props = new Properties(tableProperties)
         partProps.asScala.filterNot { case (k, _) =>
-          schemaEvolutionEnabled && avroPropertyKeys.contains(k) && tableProperties.containsKey(k)
+          avroPropertyKeys.contains(k) && tableProperties.containsKey(k)
         }.foreach { case (key, value) =>
           props.setProperty(key, value)
         }
