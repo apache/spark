@@ -1018,4 +1018,17 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       )
     }
   }
+
+  test("SPARK-34141: ExtractGenerator with lazy project list") {
+    val b = AttributeReference("b", ArrayType(StringType))()
+
+    val columns = AttributeReference("a", StringType)() :: b :: Nil
+    val explode = Alias(Explode(b), "c")()
+
+    // view is a lazy seq
+    val rel = LocalRelation(columns.view)
+    val plan = Project(rel.output ++ (explode :: Nil), rel)
+
+    assertAnalysisSuccess(plan)
+  }
 }
