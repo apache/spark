@@ -64,7 +64,7 @@ class AnalysisExceptionPositionSuite extends AnalysisTest {
     verifyTableOrViewPosition("UPDATE unknown SET name='abc'", "unknown")
     verifyTableOrViewPosition(
       "MERGE INTO unknownTarget AS target USING TaBlE AS source " +
-      "ON target.col = source.col WHEN MATCHED THEN DELETE",
+        "ON target.col = source.col WHEN MATCHED THEN DELETE",
       "unknownTarget")
     verifyTableOrViewPosition(
       "MERGE INTO TaBlE AS target USING unknownSource AS source " +
