@@ -1026,7 +1026,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val explode = Alias(Explode(b), "c")()
 
     // view is a lazy seq
-    val rel = LocalRelation(columns.view)
+    val rel = LocalRelation(output = columns.view)
     val plan = Project(rel.output ++ (explode :: Nil), rel)
 
     assertAnalysisSuccess(plan)
