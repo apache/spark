@@ -502,11 +502,11 @@ def main(infile, outfile):
             except (resource.error, OSError, ValueError) as e:
                 # not all systems support resource limits, so warn instead of failing
                 print(warnings.formatwarning(
-                    "Failed to set memory limit: {0}\n".format(e),
+                    "Failed to set memory limit: {0}".format(e),
                     ResourceWarning,
                     __file__,
                     getframeinfo(currentframe()).lineno
-                ))
+                ), file=sys.stderr)
 
         # initialize global state
         taskContext = None
