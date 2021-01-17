@@ -625,22 +625,25 @@ object PushFoldableIntoBranches extends Rule[LogicalPlan] with PredicateHelper {
  */
 object RemoveDuplicatedBranches extends Rule[LogicalPlan] with PredicateHelper {
 
-  private def contains(branches: Seq[(Expression, Expression)], elem: (Expression, Expression)) = {
-    branches.exists { case (condExpr, valueExpr) =>
-      condExpr.semanticEquals(elem._1) && valueExpr.semanticEquals(elem._2)
+  /**
+   * Wrapper around a branch that provides semantic equality.
+   */
+  case class EquivalentBranch(br: (Expression, Expression)) {
+    override def equals(o: Any): Boolean = o match {
+      case other: EquivalentBranch if br._1.deterministic && other.br._1.deterministic =>
+        br._1.semanticEquals(other.br._1)
+      case _ => false
     }
-  }
 
-  private def deduplicate[T](branches: Seq[(Expression, Expression)]) = {
-    branches.foldLeft(Seq.empty[(Expression, Expression)]) { (seq, elem) =>
-      if (contains(seq, elem)) seq else seq :+ elem
-    }
+    override def hashCode: Int = br._1.semanticHash()
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case c @ CaseWhen(branches, _) if branches.length > 1 =>
-        c.copy(branches = deduplicate(branches))
+        val equivalentBranchSet = branches.map(EquivalentBranch).toSet
+        val dedup = equivalentBranchSet.map(_.br).toSeq
+        c.copy(branches = dedup)
     }
   }
 }
