@@ -107,7 +107,7 @@ class FallbackStorageSuite extends SparkFunSuite with LocalSparkContext {
     FallbackStorage.read(conf, ShuffleBlockId(1, 2L, 0))
   }
 
-  test("fallback storage API - cleanUp") {
+  test("SPARK-34142: fallback storage API - cleanUp") {
     withTempDir { dir =>
       Seq(true, false).foreach { cleanUp =>
         val appId = s"test$cleanUp"
