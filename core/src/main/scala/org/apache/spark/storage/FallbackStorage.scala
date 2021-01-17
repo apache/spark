@@ -23,12 +23,13 @@ import java.nio.ByteBuffer
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH
+import org.apache.spark.internal.config.{STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP, STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
@@ -116,6 +117,27 @@ object FallbackStorage extends Logging {
     if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
       master.registerBlockManager(
         FALLBACK_BLOCK_MANAGER_ID, Array.empty[String], 0, 0, new NoopRpcEndpointRef(conf))
+    }
+  }
+
+  /** Clean up the generated fallback location for this app. */
+  def cleanUp(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    if (conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined &&
+        conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP) &&
+        conf.contains("spark.app.id")) {
+      val fallbackPath =
+        new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get + "/" + conf.getAppId)
+      val fallbackUri = fallbackPath.toUri
+      val fallbackFileSystem = FileSystem.get(fallbackUri, hadoopConf)
+      // The fallback directory for this app may not be created yet.
+      if (fallbackFileSystem.exists(fallbackPath)) {
+        if (fallbackFileSystem.delete(fallbackPath, true)) {
+          logInfo(s"Succeed to clean up: $fallbackUri")
+        } else {
+          // Clean-up can fail due to the permission issues.
+          logWarning(s"Failed to clean up: $fallbackUri")
+        }
+      }
     }
   }
 
