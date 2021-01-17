@@ -46,12 +46,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       ifExists: String,
       specs: Map[String, Any]*): Unit = {
     checkPartitions(t, specs.map(_.mapValues(_.toString).toMap): _*)
-    val specStr = specs.map(
-      _.map {
-        case (k, v: String) => s"$k = '$v'"
-        case (k, v) => s"$k = $v"
-      }.mkString("PARTITION (", ", ", ")"))
-      .mkString(", ")
+    val specStr = specs.map(partSpecToString).mkString(", ")
     sql(s"ALTER TABLE $t DROP $ifExists $specStr")
     checkPartitions(t)
   }
