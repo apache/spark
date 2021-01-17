@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{DatabaseMetaData, ResultSet, SQLFeatureNotSupportedException}
 
 import org.apache.hive.common.util.HiveVersionInfo
-import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
@@ -97,7 +96,13 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       checkResult(metaData.getTables(null, "%", "%", Array("TABLE")),
         Seq("table1", "table2"))
 
+      checkResult(metaData.getTables(null, "*", "%", Array("TABLE")),
+        Seq("table1", "table2"))
+
       checkResult(metaData.getTables(null, "%", "%", Array("VIEW")),
+        Seq("view1", "view_global_temp_1", "view_temp_1"))
+
+      checkResult(metaData.getTables(null, "*", "%", Array("VIEW")),
         Seq("view1", "view_global_temp_1", "view_temp_1"))
 
       checkResult(metaData.getTables(null, "%", "view_global_temp_1", null),
@@ -175,6 +180,9 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       checkResult(metaData.getColumns(null, "%", "view_temp_1", "col2"),
         Seq(("view_temp_1", "col2", "4", "INT", "")))
 
+      checkResult(metaData.getColumns(null, "*", "view_temp_1", "col2"),
+        Seq(("view_temp_1", "col2", "4", "INT", "")))
+
       checkResult(metaData.getColumns(null, "default", "%", null),
         Seq(
           ("table1", "key", "4", "INT", "Int column"),
@@ -224,6 +232,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       val metaData = statement.getConnection.getMetaData
       // Hive does not have an overlay function, we use overlay to test.
       checkResult(metaData.getFunctions(null, null, "overlay"), Seq("overlay"))
+      checkResult(metaData.getFunctions(null, "*", "overlay"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, null, "overla*"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, "", "overla*"), Seq("overlay"))
       checkResult(metaData.getFunctions(null, null, "does-not-exist*"), Seq.empty)
