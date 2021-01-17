@@ -45,7 +45,7 @@ class AlterTableAddPartitionSuite
     }
   }
 
-  test("add a partition to fully partitioned table") {
+  test("SPARK-34143: add a partition to fully partitioned table") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (p0 INT, p1 STRING) $defaultUsing PARTITIONED BY (p0, p1)")
       sql(s"ALTER TABLE $t ADD PARTITION (p0 = 0, p1 = 'abc')")
