@@ -756,7 +756,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/Generalized
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](http://127.0.0.1:4000/api/python/reference/api/pyspark.ml.regression.GeneralizedLinearRegression.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.GeneralizedLinearRegression.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
 
 {% include_example python/ml/generalized_linear_regression_example.py %}
 </div>
@@ -1096,7 +1096,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/FMRegressor
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Python API docs](http://127.0.0.1:4000/api/python/reference/api/pyspark.ml.regression.FMRegressor.html#pyspark.ml.regression.FMRegressor) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.regression.FMRegressor.html#pyspark.ml.regression.FMRegressor) for more details.
 
 {% include_example python/ml/fm_regressor_example.py %}
 </div>
