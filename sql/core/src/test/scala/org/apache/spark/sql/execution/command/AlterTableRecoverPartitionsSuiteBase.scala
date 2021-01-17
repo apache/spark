@@ -28,8 +28,10 @@ import org.apache.spark.sql.QueryTest
  *     `org.apache.spark.sql.execution.command.v2.AlterTableRecoverPartitionsSuite`
  *   - V1 table catalog tests:
  *     `org.apache.spark.sql.execution.command.v1.AlterTableRecoverPartitionsSuiteBase`
- *     - V1 In-Memory catalog:
+ *     - V1 In-Memory catalog (sequential):
  *       `org.apache.spark.sql.execution.command.v1.AlterTableRecoverPartitionsSuite`
+ *     - V1 In-Memory catalog (parallel):
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableRecoverPartitionsParallelSuite`
  *     - V1 Hive External catalog:
  *       `org.apache.spark.sql.hive.execution.command.AlterTableRecoverPartitionsSuite`
  */
