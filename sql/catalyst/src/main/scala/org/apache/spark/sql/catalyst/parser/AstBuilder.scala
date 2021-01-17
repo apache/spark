@@ -2169,7 +2169,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[UnresolvedRelatiohn]] from a multi-part identifier context.
+   * Create an [[UnresolvedRelation]] from a multi-part identifier context.
    */
   private def createUnresolvedRelation(
       ctx: MultipartIdentifierContext): UnresolvedRelation = withOrigin(ctx) {
