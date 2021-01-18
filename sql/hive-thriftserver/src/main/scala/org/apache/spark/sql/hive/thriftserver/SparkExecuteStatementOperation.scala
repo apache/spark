@@ -132,6 +132,7 @@ private[hive] class SparkExecuteStatementOperation(
       getNextRowSetInternal(order, maxRowsL)
     } finally {
       sqlContext.sparkContext.clearJobGroup()
+      clearStatementId()
     }
   }
 
@@ -286,9 +287,7 @@ private[hive] class SparkExecuteStatementOperation(
       if (!runInBackground) {
         parentSession.getSessionState.getConf.setClassLoader(executionHiveClassLoader)
       }
-      // In Spark thrift server, we override the job group id by statementId
-      sqlContext.sparkContext
-        .setLocalProperty(SparkContext.SPARK_JOB_GROUP_OVERRIDE_ID, statementId)
+      setStatementId()
       sqlContext.sparkContext.setJobGroup(statementId, substitutorStatement, forceCancel)
       result = sqlContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -335,6 +334,7 @@ private[hive] class SparkExecuteStatementOperation(
         }
       }
       sqlContext.sparkContext.clearJobGroup()
+      clearStatementId()
     }
   }
 
@@ -371,6 +371,14 @@ private[hive] class SparkExecuteStatementOperation(
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
     }
+  }
+
+  private def setStatementId(): Unit = {
+    sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_STATEMENT_ID, statementId)
+  }
+
+  private def clearStatementId(): Unit = {
+    sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_STATEMENT_ID, null)
   }
 }
 

@@ -761,9 +761,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def setJobGroup(groupId: String,
       description: String, interruptOnCancel: Boolean = false): Unit = {
-    val actualGroupId = getJobGroupId(groupId)
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
-    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, actualGroupId)
+    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
     // Note: Specifying interruptOnCancel in setJobGroup (rather than cancelJobGroup) avoids
     // changing several public APIs and allows Spark cancellations outside of the cancelJobGroup
     // APIs to also take advantage of this property (e.g., internal job failures or canceling from
@@ -776,14 +775,6 @@ class SparkContext(config: SparkConf) extends Logging {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
     setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
-    setLocalProperty(SparkContext.SPARK_JOB_GROUP_OVERRIDE_ID, null)
-  }
-
-  /**
-   * Return the overridden group id if it exists, or the groupId from parameter
-   */
-  private def getJobGroupId(groupId: String): String = {
-    Option(getLocalProperty(SparkContext.SPARK_JOB_GROUP_OVERRIDE_ID)).getOrElse(groupId)
   }
 
   /**
@@ -2395,12 +2386,11 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Cancel active jobs for the specified group. See `org.apache.spark.SparkContext.setJobGroup`
-   * for more information. If the spark.jobGroup.overrideId is set, use the overrideId instead.
+   * for more information.
    */
   def cancelJobGroup(groupId: String): Unit = {
     assertNotStopped()
-    val actualGroupId = getJobGroupId(groupId)
-    dagScheduler.cancelJobGroup(actualGroupId)
+    dagScheduler.cancelJobGroup(groupId)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
@@ -2774,9 +2764,11 @@ object SparkContext extends Logging {
   private[spark] val SPARK_SCHEDULER_POOL = "spark.scheduler.pool"
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
-  // If it's set, all the jobs submitted by SQL queries should use it as job group id,
-  // regardless of what the current job group id is.
-  private[spark] val SPARK_JOB_GROUP_OVERRIDE_ID = "spark.jobGroup.overrideId"
+
+  /**
+   * Statement id is only used for thrift server
+   */
+  private[spark] val SPARK_STATEMENT_ID = "spark.statement.id"
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was

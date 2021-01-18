@@ -24,7 +24,7 @@ import scala.concurrent.{ExecutionContext, Promise}
 import scala.concurrent.duration.NANOSECONDS
 import scala.util.control.NonFatal
 
-import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.{broadcast, SparkContext, SparkException}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -74,7 +74,9 @@ case class BroadcastExchangeExec(
     child: SparkPlan) extends BroadcastExchangeLike {
   import BroadcastExchangeExec._
 
-  override val runId: UUID = UUID.randomUUID
+  // runId must be a UUID. We set it to statementId if defined.
+  override val runId: UUID = Option(sparkContext.getLocalProperty(SparkContext.SPARK_STATEMENT_ID))
+      .map(UUID.fromString).getOrElse(UUID.randomUUID)
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
