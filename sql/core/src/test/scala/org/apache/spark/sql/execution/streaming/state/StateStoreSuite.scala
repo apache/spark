@@ -580,7 +580,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 }
 
 abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
-    extends StateStoreCodecsTest with PrivateMethodTester {
+  extends StateStoreCodecsTest with PrivateMethodTester {
   import StateStoreTestsHelper._
   import StateStoreCoordinatorSuite._
 
@@ -1004,7 +1004,10 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     }
   }
 
+  /** Get the `SQLConf` by the given minimum delta and version to retain in memory */
   def getDefaultSQLConf(minDeltasForSnapshot: Int, numOfVersToRetainInMemory: Int): SQLConf
+
+  /** Get the `StateStoreConf` used by the tests with default setting */
   def getDefaultStoreConf(): StateStoreConf = StateStoreConf.empty
 
   protected def fileExists(
