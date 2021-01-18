@@ -369,10 +369,10 @@ private[spark] object HiveUtils extends Logging {
           logWarning(s"Hive jar path '${file.getPath}' does not exist.")
           Nil
         } else {
-          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURL).toSeq
+          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL).toSeq
         }
       } else {
-        file.toURL :: Nil
+        file.toURI.toURL :: Nil
       }
     }
 
