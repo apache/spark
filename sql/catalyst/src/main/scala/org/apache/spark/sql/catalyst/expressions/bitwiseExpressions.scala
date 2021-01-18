@@ -214,9 +214,9 @@ object BitwiseGetUtil {
       throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
     }
     val longValue = size match {
-      case java.lang.Byte.SIZE => target.asInstanceOf[Byte].longValue
-      case java.lang.Short.SIZE => target.asInstanceOf[Short].longValue
-      case java.lang.Integer.SIZE => target.asInstanceOf[Int].longValue
+      case java.lang.Byte.SIZE => target.asInstanceOf[Byte]
+      case java.lang.Short.SIZE => target.asInstanceOf[Short]
+      case java.lang.Integer.SIZE => target.asInstanceOf[Int]
       case java.lang.Long.SIZE => target.asInstanceOf[Long]
     }
     ((longValue >> pos) & 1).byteValue
