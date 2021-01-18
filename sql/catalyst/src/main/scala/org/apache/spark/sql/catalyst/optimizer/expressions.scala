@@ -642,8 +642,13 @@ object RemoveDuplicatedBranches extends Rule[LogicalPlan] with PredicateHelper {
     case q: LogicalPlan => q transformExpressionsUp {
       case c @ CaseWhen(branches, _) if branches.length > 1 =>
         val equivalentBranchSet = branches.map(EquivalentBranch).toSet
-        val dedup = equivalentBranchSet.map(_.br).toSeq
-        c.copy(branches = dedup)
+        if (equivalentBranchSet.size < branches.length) {
+          val dedup = equivalentBranchSet.map(_.br).toSeq
+          c.copy(branches = dedup)
+        } else {
+          c
+        }
+      }
     }
   }
 }
