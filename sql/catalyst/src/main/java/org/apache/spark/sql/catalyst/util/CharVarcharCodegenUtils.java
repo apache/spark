@@ -30,7 +30,7 @@ public class CharVarcharCodegenUtils {
     if (inputStr == null) {
       return null;
     } else {
-      UTF8String trimmed = inputStr.trimRight(SPACE);
+      UTF8String trimmed = inputStr.trimRight();
       if (trimmed.numChars() > limit) {
         throw new RuntimeException("Exceeds char type length limitation: " + limit);
       }
@@ -53,7 +53,7 @@ public class CharVarcharCodegenUtils {
       // Trailing spaces do not count in the length check. We need to retain the trailing spaces
       // (truncate to length N), as there is no read-time padding for varchar type.
       // TODO: create a special TrimRight function that can trim to a certain length.
-      UTF8String trimmed = inputStr.trimRight(SPACE);
+      UTF8String trimmed = inputStr.trimRight();
       if (trimmed.numChars() > limit) {
         throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
       }
