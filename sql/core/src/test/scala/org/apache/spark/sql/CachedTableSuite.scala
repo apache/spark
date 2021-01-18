@@ -1310,7 +1310,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
 
   test("SPARK-34027: refresh cache in partitions recovering") {
     withTable("t") {
-      sql(s"CREATE TABLE t (id int, part int) USING parquet PARTITIONED BY (part)")
+      sql("CREATE TABLE t (id int, part int) USING parquet PARTITIONED BY (part)")
       sql("INSERT INTO t PARTITION (part=0) SELECT 0")
       assert(!spark.catalog.isCached("t"))
       sql("CACHE TABLE t")
