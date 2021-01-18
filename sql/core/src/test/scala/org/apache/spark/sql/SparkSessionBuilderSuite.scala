@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
@@ -411,5 +413,25 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
         .sharedState
     }
     assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+  }
+
+  test("SPARK-34087: ExecutionListenerBus can be removed by user.") {
+    val spark = SparkSession
+      .builder()
+      .master("local")
+      .appName("SPARK-34087")
+      .getOrCreate()
+    (1 to 1000).foreach(_ => {
+      val session = spark.cloneSession()
+      session.listenerManager.clearListenerBus()
+      SparkSession.clearActiveSession()
+    })
+
+    val count = spark.sparkContext
+        .listenerBus
+        .listeners
+        .asScala
+        .count(_.getClass.getSimpleName == "ExecutionListenerBus")
+    assert(count == 1)
   }
 }

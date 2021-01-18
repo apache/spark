@@ -109,6 +109,16 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
     listenerBus.removeAllListeners()
   }
 
+  /**
+   * Removes [[ExecutionListenerBus]] from LiveListenerBus.queues. people should call this function
+   * when the manager belongs session was removed.
+   */
+  @DeveloperApi
+  def clearListenerBus(): Unit = {
+    session.sparkContext.removeSparkListener(listenerBus)
+  }
+
+
   /** Only exposed for testing. */
   private[sql] def listListeners(): Array[QueryExecutionListener] = {
     listenerBus.listeners.asScala.toArray
