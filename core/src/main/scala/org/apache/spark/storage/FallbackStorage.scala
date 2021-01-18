@@ -126,7 +126,7 @@ object FallbackStorage extends Logging {
         conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_CLEANUP) &&
         conf.contains("spark.app.id")) {
       val fallbackPath =
-        new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get + "/" + conf.getAppId)
+        new Path(conf.get(STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).get, conf.getAppId)
       val fallbackUri = fallbackPath.toUri
       val fallbackFileSystem = FileSystem.get(fallbackUri, hadoopConf)
       // The fallback directory for this app may not be created yet.
@@ -193,4 +193,3 @@ object FallbackStorage extends Logging {
     }
   }
 }
-
