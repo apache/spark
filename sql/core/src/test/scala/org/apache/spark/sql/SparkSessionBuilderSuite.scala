@@ -421,11 +421,11 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .master("local")
       .appName("SPARK-34087")
       .getOrCreate()
-    (1 to 1000).foreach(_ => {
+    (1 to 1000).foreach { _ =>
       val session = spark.cloneSession()
       session.listenerManager.clearListenerBus()
       SparkSession.clearActiveSession()
-    })
+    }
 
     val count = spark.sparkContext
         .listenerBus
