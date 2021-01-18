@@ -22,7 +22,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class CharVarcharCodegenUtils {
   private static final UTF8String SPACE = UTF8String.fromString(" ");
 
-  public static UTF8String lengthCheck(UTF8String inputStr, int limit) {
+  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
     if (inputStr != null && inputStr.numChars() > limit) {
       throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
     }
@@ -33,7 +33,7 @@ public class CharVarcharCodegenUtils {
    *  Trailing spaces do not count in the length check. We don't need to retain the trailing
    *  spaces, as we will pad char type columns/fields at read time.
    */
-  public static UTF8String trimBeforeLengthCheck(UTF8String inputStr, int limit) {
+  public static UTF8String charTypeWriteCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) {
       return null;
     } else {
@@ -45,11 +45,28 @@ public class CharVarcharCodegenUtils {
     }
   }
 
-  public static UTF8String paddingWithLengthCheck(UTF8String inputStr, int limit) {
+  public static UTF8String charTypeReadSidePadAndCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) return null;
     if (inputStr.numChars() > limit) {
       throw new RuntimeException("Exceeds char type length limitation: " + limit);
     }
     return inputStr.rpad(limit, SPACE);
+  }
+
+
+  public static UTF8String varcharTypeWriteSidePadAndCheck(UTF8String inputStr, int limit) {
+    if (inputStr == null) return null;
+    if (inputStr.numChars() <= limit) {
+      return inputStr;
+    } else {
+      // Trailing spaces do not count in the length check. We need to retain the trailing spaces
+      // (truncate to length N), as there is no read-time padding for varchar type.
+      // TODO: create a special TrimRight function that can trim to a certain length.
+      UTF8String trimmed = inputStr.trimRight(SPACE);
+      if (trimmed.numChars() > limit) {
+        throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
+      }
+      return trimmed.rpad(limit, SPACE);
+    }
   }
 }

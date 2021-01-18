@@ -165,7 +165,7 @@ object CharVarcharUtils extends Logging {
       StaticInvoke(
         classOf[CharVarcharCodegenUtils],
         StringType,
-        "paddingWithLengthCheck",
+        "charTypeReadSidePadAndCheck",
         expr :: Literal(length) :: Nil,
         propagateNull = false)
 
@@ -173,7 +173,7 @@ object CharVarcharUtils extends Logging {
       StaticInvoke(
         classOf[CharVarcharCodegenUtils],
         StringType,
-        "lengthCheck",
+        "varcharTypeReadSideCheck",
         expr :: Literal(length) :: Nil,
         propagateNull = false)
 
@@ -227,20 +227,17 @@ object CharVarcharUtils extends Logging {
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "trimBeforeLengthCheck",
+          "charTypeWriteCheck",
           expr :: Literal(length) :: Nil,
           propagateNull = false)
 
       case VarcharType(length) =>
-        val trimmed = StringTrimRight(expr)
-        // Trailing spaces do not count in the length check. We need to retain the trailing spaces
-        // (truncate to length N), as there is no read-time padding for varchar type.
-        // TODO: create a special TrimRight function that can trim to a certain length.
-        If(LessThanOrEqual(Length(expr), Literal(length)),
-          expr,
-          If(GreaterThan(Length(trimmed), Literal(length)),
-            raiseError("varchar", length),
-            StringRPad(trimmed, Literal(length))))
+        StaticInvoke(
+          classOf[CharVarcharCodegenUtils],
+          StringType,
+          "varcharTypeWriteSidePadAndCheck",
+          expr :: Literal(length) :: Nil,
+          propagateNull = false)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
