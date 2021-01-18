@@ -101,7 +101,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     if (stats.isEmpty) {
       throw new IllegalArgumentException(s"The table $tableName does not have stats")
     }
-    val tableSizeInStats = ".*(\\d) bytes.*".r
+    val tableSizeInStats = "^(\\d+) bytes.*$".r
     val size = stats.first().getString(0) match {
       case tableSizeInStats(s) => s.toInt
       case _ => throw new IllegalArgumentException("Not found table size in stats")
