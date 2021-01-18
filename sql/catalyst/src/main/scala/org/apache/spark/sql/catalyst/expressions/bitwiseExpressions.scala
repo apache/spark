@@ -207,7 +207,7 @@ case class BitwiseCount(child: Expression)
 }
 
 object BitwiseGetUtil {
-  def calculate(target: Any, pos: Int, size: Int): Long = {
+  def calculate(target: Any, pos: Int, size: Int): Byte = {
     if (pos < 0) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos less than zero")
     } else if (size <= pos) {
@@ -219,7 +219,7 @@ object BitwiseGetUtil {
       case java.lang.Integer.SIZE => target.asInstanceOf[Int].longValue
       case java.lang.Long.SIZE => target.asInstanceOf[Long]
     }
-    (longValue >> pos) & 1
+    ((longValue >> pos) & 1).byteValue
   }
 }
 
@@ -239,7 +239,7 @@ case class BitwiseGet(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType)
 
-  override def dataType: DataType = LongType
+  override def dataType: DataType = ByteType
 
   lazy val bitSize = left.dataType match {
     case ByteType => java.lang.Byte.SIZE

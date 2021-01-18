@@ -44,8 +44,8 @@
 | org.apache.spark.sql.catalyst.expressions.BitLength | bit_length | SELECT bit_length('Spark SQL') | struct<bit_length(Spark SQL):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseAnd | & | SELECT 3 & 5 | struct<(3 & 5):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseCount | bit_count | SELECT bit_count(0) | struct<bit_count(0):int> |
-| org.apache.spark.sql.catalyst.expressions.BitwiseGet | bit_get | SELECT bit_get(11, 0) | struct<bit_get(11, 0):bigint> |
-| org.apache.spark.sql.catalyst.expressions.BitwiseGet | getbit | SELECT getbit(11, 0) | struct<getbit(11, 0):bigint> |
+| org.apache.spark.sql.catalyst.expressions.BitwiseGet | bit_get | SELECT bit_get(11, 0) | struct<bit_get(11, 0):tinyint> |
+| org.apache.spark.sql.catalyst.expressions.BitwiseGet | getbit | SELECT getbit(11, 0) | struct<getbit(11, 0):tinyint> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseNot | ~ | SELECT ~ 0 | struct<~0:int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseOr | &#124; | SELECT 3 &#124; 5 | struct<(3 &#124; 5):int> |
 | org.apache.spark.sql.catalyst.expressions.BitwiseXor | ^ | SELECT 3 ^ 5 | struct<(3 ^ 5):int> |

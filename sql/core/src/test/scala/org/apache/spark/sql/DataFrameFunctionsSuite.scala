@@ -178,7 +178,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("bitwiseGet") {
-
     val df = Seq(
       (11L, 3),
       (11L, 2),
@@ -186,7 +185,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       (11L, 0),
       (11L, 63)
     ).toDF("a", "b")
-    checkAnswer(df.select(bitwiseGet($"a", $"b")), Seq(Row(1), Row(0), Row(1), Row(1), Row(0)))
+    checkAnswer(df.select(bitwiseGet($"a", $"b")),
+      Seq(Row(1.toByte), Row(0.toByte), Row(1.toByte), Row(1.toByte), Row(0.toByte)))
 
     val df2 = Seq((11L, 64)).toDF("a", "b")
     val msg = intercept[Exception] {

@@ -236,7 +236,7 @@ struct<b1:int,b2:int,bit_xor(b2) OVER (PARTITION BY b1 ORDER BY b2 ASC NULLS FIR
 -- !query
 select getbit(11L, 3), getbit(11L, 2), getbit(11L, 1), getbit(11L, 0)
 -- !query schema
-struct<getbit(11, 3):bigint,getbit(11, 2):bigint,getbit(11, 1):bigint,getbit(11, 0):bigint>
+struct<getbit(11, 3):tinyint,getbit(11, 2):tinyint,getbit(11, 1):tinyint,getbit(11, 0):tinyint>
 -- !query output
 1	0	1	1
 
@@ -244,7 +244,7 @@ struct<getbit(11, 3):bigint,getbit(11, 2):bigint,getbit(11, 1):bigint,getbit(11,
 -- !query
 select getbit(11L, 2 + 1), getbit(11L, 3 - 1), getbit(10L + 1, 1 * 1), getbit(cast(11L / 1 AS long), 1 - 1)
 -- !query schema
-struct<getbit(11, (2 + 1)):bigint,getbit(11, (3 - 1)):bigint,getbit((10 + 1), (1 * 1)):bigint,getbit(CAST((11 / 1) AS BIGINT), (1 - 1)):bigint>
+struct<getbit(11, (2 + 1)):tinyint,getbit(11, (3 - 1)):tinyint,getbit((10 + 1), (1 * 1)):tinyint,getbit(CAST((11 / 1) AS BIGINT), (1 - 1)):tinyint>
 -- !query output
 1	0	1	1
 
@@ -252,7 +252,7 @@ struct<getbit(11, (2 + 1)):bigint,getbit(11, (3 - 1)):bigint,getbit((10 + 1), (1
 -- !query
 select getbit(11L, 63)
 -- !query schema
-struct<getbit(11, 63):bigint>
+struct<getbit(11, 63):tinyint>
 -- !query output
 0
 
