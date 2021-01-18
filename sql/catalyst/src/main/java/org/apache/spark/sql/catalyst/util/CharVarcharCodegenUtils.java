@@ -22,18 +22,11 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class CharVarcharCodegenUtils {
   private static final UTF8String SPACE = UTF8String.fromString(" ");
 
-  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr != null && inputStr.numChars() > limit) {
-      throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
-    }
-    return inputStr;
-  }
-
   /**
    *  Trailing spaces do not count in the length check. We don't need to retain the trailing
    *  spaces, as we will pad char type columns/fields at read time.
    */
-  public static UTF8String charTypeWriteCheck(UTF8String inputStr, int limit) {
+  public static UTF8String charTypeWriteSideCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) {
       return null;
     } else {
@@ -53,6 +46,12 @@ public class CharVarcharCodegenUtils {
     return inputStr.rpad(limit, SPACE);
   }
 
+  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
+    if (inputStr != null && inputStr.numChars() > limit) {
+      throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
+    }
+    return inputStr;
+  }
 
   public static UTF8String varcharTypeWriteSidePadAndCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) return null;

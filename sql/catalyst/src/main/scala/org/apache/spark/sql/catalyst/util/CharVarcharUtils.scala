@@ -216,18 +216,13 @@ object CharVarcharUtils extends Logging {
     }.getOrElse(expr)
   }
 
-  private def raiseError(typeName: String, length: Int): Expression = {
-    val errMsg = UTF8String.fromString(s"Exceeds $typeName type length limitation: $length")
-      RaiseError(Literal(errMsg, StringType), StringType)
-  }
-
   private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     dt match {
       case CharType(length) =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "charTypeWriteCheck",
+          "charTypeWriteSideCheck",
           expr :: Literal(length) :: Nil,
           propagateNull = false)
 
