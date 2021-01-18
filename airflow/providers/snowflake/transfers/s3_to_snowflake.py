@@ -42,6 +42,8 @@ class S3ToSnowflakeOperator(BaseOperator):
     :param stage: reference to a specific snowflake stage. If the stage's schema is not the same as the
         table one, it must be specified
     :type stage: str
+    :param prefix: cloud storage location specified to limit the set of files to load
+    :type prefix: str
     :param file_format: reference to a specific file format
     :type file_format: str
     :param warehouse: name of warehouse (will overwrite any warehouse
@@ -73,9 +75,10 @@ class S3ToSnowflakeOperator(BaseOperator):
     def __init__(
         self,
         *,
-        s3_keys: list,
+        s3_keys: Optional[list] = None,
         table: str,
-        stage: Any,
+        stage: str,
+        prefix: Optional[str] = None,
         file_format: str,
         schema: str,  # TODO: shouldn't be required, rely on session/user defaults
         columns_array: Optional[list] = None,
@@ -94,6 +97,7 @@ class S3ToSnowflakeOperator(BaseOperator):
         self.warehouse = warehouse
         self.database = database
         self.stage = stage
+        self.prefix = prefix
         self.file_format = file_format
         self.schema = schema
         self.columns_array = columns_array
@@ -114,19 +118,20 @@ class S3ToSnowflakeOperator(BaseOperator):
             session_parameters=self.session_parameters,
         )
 
-        # Snowflake won't accept list of files it has to be tuple only.
-        # but in python tuple([1]) = (1,) => which is invalid for snowflake
-        files = str(self.s3_keys)
-        files = files.replace('[', '(')
-        files = files.replace(']', ')')
+        files = ""
+        if self.s3_keys:
+            files = "files=({})".format(", ".join(f"'{key}'" for key in self.s3_keys))
 
         # we can extend this based on stage
         base_sql = """
-                    FROM @{stage}/
-                    files={files}
+                    FROM @{stage}/{prefix}
+                    {files}
                     file_format={file_format}
                 """.format(
-            stage=self.stage, files=files, file_format=self.file_format
+            stage=self.stage,
+            prefix=(self.prefix if self.prefix else ""),
+            files=files,
+            file_format=self.file_format,
         )
 
         if self.columns_array:
@@ -141,6 +146,7 @@ class S3ToSnowflakeOperator(BaseOperator):
             """.format(
                 schema=self.schema, table=self.table, base_sql=base_sql
             )
+        copy_query = "\n".join(line.strip() for line in copy_query.splitlines())
 
         self.log.info('Executing COPY command...')
         snowflake_hook.run(copy_query, self.autocommit)
