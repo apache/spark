@@ -207,14 +207,19 @@ case class BitwiseCount(child: Expression)
 }
 
 object BitwiseGetUtil {
-  def calculate(target: Long, pos: Int): Long = {
+  def calculate(target: Any, pos: Int, size: Int): Long = {
     if (pos < 0) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos less than zero")
-    } else if (java.lang.Long.SIZE <= pos) {
-      throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the " +
-        "bit length of the target long")
+    } else if (size <= pos) {
+      throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
     }
-    (target >> pos) & 1
+    val longValue = size match {
+      case java.lang.Byte.SIZE => target.asInstanceOf[Byte].longValue
+      case java.lang.Short.SIZE => target.asInstanceOf[Short].longValue
+      case java.lang.Integer.SIZE => target.asInstanceOf[Int].longValue
+      case java.lang.Long.SIZE => target.asInstanceOf[Long]
+    }
+    (longValue >> pos) & 1
   }
 }
 
@@ -232,17 +237,25 @@ object BitwiseGetUtil {
 case class BitwiseGet(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
-  override def inputTypes: Seq[IntegralType] = Seq(LongType, IntegerType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType)
 
   override def dataType: DataType = LongType
 
+  lazy val bitSize = left.dataType match {
+    case ByteType => java.lang.Byte.SIZE
+    case ShortType => java.lang.Short.SIZE
+    case IntegerType => java.lang.Integer.SIZE
+    case LongType => java.lang.Long.SIZE
+  }
+
   override def nullSafeEval(target: Any, pos: Any): Any = {
-    BitwiseGetUtil.calculate(target.asInstanceOf[Long], pos.asInstanceOf[Int])
+    BitwiseGetUtil.calculate(target, pos.asInstanceOf[Int], bitSize)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (target, pos) =>
-      s"org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.calculate($target, $pos);"
+      "org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil" +
+        s".calculate($target, $pos, $bitSize);"
     )
   }
 

@@ -180,21 +180,21 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
   test("bitwiseGet") {
 
     val df = Seq(
-      (11, 3),
-      (11, 2),
-      (11, 1),
-      (11, 0),
-      (11, 63)
+      (11L, 3),
+      (11L, 2),
+      (11L, 1),
+      (11L, 0),
+      (11L, 63)
     ).toDF("a", "b")
     checkAnswer(df.select(bitwiseGet($"a", $"b")), Seq(Row(1), Row(0), Row(1), Row(1), Row(0)))
 
-    val df2 = Seq((11, 64)).toDF("a", "b")
+    val df2 = Seq((11L, 64)).toDF("a", "b")
     val msg = intercept[Exception] {
       df2.select(bitwiseGet($"a", $"b")).collect
     }.getMessage
-    assert(msg.contains("Invalid bit position: 64 exceeds the bit length of the target long"))
+    assert(msg.contains("Invalid bit position: 64 exceeds the bit upper limit"))
 
-    val df3 = Seq((11, -1)).toDF("a", "b")
+    val df3 = Seq((11L, -1)).toDF("a", "b")
     val msg2 = intercept[Exception] {
       df3.select(bitwiseGet($"a", $"b")).collect
     }.getMessage

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.dsl.expressions._
+ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
 
@@ -147,17 +147,30 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val row1 = create_row(11L, -1)
     val row2 = create_row(11L, 64)
+    val row3 = create_row(11, 32)
+    val row4 = create_row(11.toShort, 16)
+    val row5 = create_row(11.toByte, 16)
 
-    val t = 't.long.at(0)
+    val tl = 't.long.at(0)
+    val ti = 't.int.at(0)
+    val ts = 't.short.at(0)
+    val tb = 't.byte.at(0)
     val p = 'p.int.at(1)
 
-    val expr = BitwiseGet(t, p)
+    val expr = BitwiseGet(tl, p)
     checkExceptionInExpression[IllegalArgumentException](
       expr, row1, "Invalid bit position: -1 less than zero")
-
     checkExceptionInExpression[IllegalArgumentException](
-      expr, row2, "Invalid bit position: 64 exceeds the bit length of the target long")
+      expr, row2, "Invalid bit position: 64 exceeds the bit upper limit")
+    checkExceptionInExpression[IllegalArgumentException](
+      BitwiseGet(ti, p), row3, "Invalid bit position: 32 exceeds the bit upper limit")
+    checkExceptionInExpression[IllegalArgumentException](
+      BitwiseGet(ts, p), row4, "Invalid bit position: 16 exceeds the bit upper limit")
+    checkExceptionInExpression[IllegalArgumentException](
+      BitwiseGet(tb, p), row5, "Invalid bit position: 16 exceeds the bit upper limit")
 
-    checkConsistencyBetweenInterpretedAndCodegenAllowingException(BitwiseGet, LongType, IntegerType)
+    DataTypeTestUtils.integralType.foreach { dt =>
+      checkConsistencyBetweenInterpretedAndCodegenAllowingException(BitwiseGet, dt, IntegerType)
+    }
   }
 }
