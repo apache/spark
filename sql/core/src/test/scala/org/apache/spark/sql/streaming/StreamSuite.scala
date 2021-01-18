@@ -214,7 +214,7 @@ class StreamSuite extends StreamTest {
             .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort('a).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
