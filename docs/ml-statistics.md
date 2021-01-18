@@ -66,7 +66,7 @@ The output will be a DataFrame that contains the correlation matrix of the colum
 </div>
 
 <div data-lang="python" markdown="1">
-[`Correlation`](api/python/pyspark.ml.html#pyspark.ml.stat.Correlation$)
+[`Correlation`](api/python/reference/api/pyspark.ml.stat.Correlation.html)
 computes the correlation matrix for the input Dataset of Vectors using the specified method.
 The output will be a DataFrame that contains the correlation matrix of the column of vectors.
 
@@ -101,7 +101,7 @@ Refer to the [`ChiSquareTest` Java docs](api/java/org/apache/spark/ml/stat/ChiSq
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat.ChiSquareTest$) for details on the API.
+Refer to the [`ChiSquareTest` Python docs](api/python/reference/api/pyspark.ml.stat.ChiSquareTest.html) for details on the API.
 
 {% include_example python/ml/chi_square_test_example.py %}
 </div>
@@ -130,7 +130,7 @@ to compute the mean and variance for a vector column of the input dataframe, wit
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`Summarizer` Python docs](api/python/index.html#pyspark.ml.stat.Summarizer$) for details on the API.
+Refer to the [`Summarizer` Python docs](api/python/reference/api/pyspark.ml.stat.Summarizer.html) for details on the API.
 
 {% include_example python/ml/summarizer_example.py %}
 </div>

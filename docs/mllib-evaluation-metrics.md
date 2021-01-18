@@ -131,7 +131,7 @@ Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mll
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`BinaryClassificationMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.BinaryClassificationMetrics) and [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) for more details on the API.
+Refer to the [`BinaryClassificationMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.BinaryClassificationMetrics.html) and [`LogisticRegressionWithLBFGS` Python docs](api/python/reference/api/pyspark.mllib.classification.LogisticRegressionWithLBFGS.html) for more details on the API.
 
 {% include_example python/mllib/binary_classification_metrics_example.py %}
 </div>
@@ -257,7 +257,7 @@ Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`MulticlassMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MulticlassMetrics) for more details on the API.
+Refer to the [`MulticlassMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.MulticlassMetrics.html) for more details on the API.
 
 {% include_example python/mllib/multi_class_metrics_example.py %}
 
@@ -407,7 +407,7 @@ Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`MultilabelMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MultilabelMetrics) for more details on the API.
+Refer to the [`MultilabelMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.MultilabelMetrics.html) for more details on the API.
 
 {% include_example python/mllib/multi_label_metrics_example.py %}
 
@@ -535,7 +535,7 @@ Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/eva
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RankingMetrics) for more details on the API.
+Refer to the [`RegressionMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.RegressionMetrics.html) and [`RankingMetrics` Python docs](api/python/reference/api/pyspark.mllib.evaluation.RankingMetrics.html) for more details on the API.
 
 {% include_example python/mllib/ranking_metrics_example.py %}
 
