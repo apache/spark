@@ -38,7 +38,7 @@ public class CharVarcharCodegenUtils {
     }
   }
 
-  public static UTF8String charTypeReadSidePadAndCheck(UTF8String inputStr, int limit) {
+  public static UTF8String charTypeReadSideCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) return null;
     if (inputStr.numChars() > limit) {
       throw new RuntimeException("Exceeds char type length limitation: " + limit);
@@ -46,18 +46,10 @@ public class CharVarcharCodegenUtils {
     return inputStr.rpad(limit, SPACE);
   }
 
-  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr != null && inputStr.numChars() > limit) {
-      throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
-    }
-    return inputStr;
-  }
-
-  public static UTF8String varcharTypeWriteSidePadAndCheck(UTF8String inputStr, int limit) {
-    if (inputStr == null) return null;
-    if (inputStr.numChars() <= limit) {
+  public static UTF8String varcharTypeWriteSideCheck(UTF8String inputStr, int limit) {
+    if (inputStr != null && inputStr.numChars() <= limit) {
       return inputStr;
-    } else {
+    } else if (inputStr != null) {
       // Trailing spaces do not count in the length check. We need to retain the trailing spaces
       // (truncate to length N), as there is no read-time padding for varchar type.
       // TODO: create a special TrimRight function that can trim to a certain length.
@@ -65,7 +57,16 @@ public class CharVarcharCodegenUtils {
       if (trimmed.numChars() > limit) {
         throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
       }
-      return trimmed.rpad(limit, SPACE);
+      return inputStr.substring(0, limit);
+    } else {
+      return null;
     }
+  }
+
+  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
+    if (inputStr != null && inputStr.numChars() > limit) {
+      throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
+    }
+    return inputStr;
   }
 }

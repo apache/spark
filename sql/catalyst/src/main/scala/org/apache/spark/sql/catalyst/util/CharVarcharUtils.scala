@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 object CharVarcharUtils extends Logging {
 
@@ -165,7 +164,7 @@ object CharVarcharUtils extends Logging {
       StaticInvoke(
         classOf[CharVarcharCodegenUtils],
         StringType,
-        "charTypeReadSidePadAndCheck",
+        "charTypeReadSideCheck",
         expr :: Literal(length) :: Nil,
         propagateNull = false)
 
@@ -230,7 +229,7 @@ object CharVarcharUtils extends Logging {
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
-          "varcharTypeWriteSidePadAndCheck",
+          "varcharTypeWriteSideCheck",
           expr :: Literal(length) :: Nil,
           propagateNull = false)
 

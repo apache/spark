@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import org.apache.spark.benchmark.Benchmark
+
 /**
  * Benchmark for measure writing and reading char/varchar values with implicit length check
  * and padding.
@@ -49,26 +51,33 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
         str + " " * (length - str.length)
       }.write.parquet(path)
 
-      Seq("char", "varchar").foreach { typ =>
-        codegenBenchmark(s"read $typ with length $length", card) {
-          val tblName = s"${typ}_${length}_$card"
+      val benchmark = new Benchmark(s"Read with length $length", card, output = output)
+      Seq("string", "char", "varchar").foreach { typ =>
+        val tblName = s"${typ}_${length}_$card"
+        val colType = if (typ == "string") typ else s"$typ($length)"
+
+        benchmark.addCase(s"read $typ with length $length", 3) { _ =>
           withTable(tblName) {
-            spark.sql(s"CREATE TABLE $tblName (c $typ($length)) USING PARQUET LOCATION '$path'")
+            spark.sql(s"CREATE TABLE $tblName (c $colType) USING PARQUET LOCATION '$path'")
             spark.table(tblName).noop()
           }
         }
       }
+      benchmark.run()
     }
   }
 
   def writeBenchmark(card: Long, length: Int): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      Seq("char", "varchar").foreach { typ =>
-        codegenBenchmark(s"write $typ with length $length", card) {
-          val tblName = s"${typ}_${length}_$card"
+      val benchmark = new Benchmark(s"Write with length $length", card, output = output)
+      Seq("string", "char", "varchar").foreach { typ =>
+        val colType = if (typ == "string") typ else s"$typ($length)"
+        val tblName = s"${typ}_${length}_$card"
+
+        benchmark.addCase(s"write $typ with length $length", 3) { _ =>
           withTable(tblName) {
-            spark.sql(s"CREATE TABLE $tblName (c $typ($length)) USING PARQUET LOCATION '$path'")
+            spark.sql(s"CREATE TABLE $tblName (c $colType) USING PARQUET LOCATION '$path'")
             spark.range(card).map { v =>
               val str = v.toString
               str + " " * length
@@ -76,6 +85,7 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
           }
         }
       }
+      benchmark.run()
     }
   }
 

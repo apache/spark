@@ -4,59 +4,35 @@ Char Varchar Read Side Perf
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read char with length 20:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Read with length 20:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read char with length 20 wholestage off            4090           4091           2         24.5          40.9       1.0X
-read char with length 20 wholestage on             1550           1562          22         64.5          15.5       2.6X
+read string with length 20                         1476           1513          47         67.7          14.8       1.0X
+read char with length 20                           1670           1697          45         59.9          16.7       0.9X
+read varchar with length 20                        1665           1684          17         60.1          16.7       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read varchar with length 20:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------
-read varchar with length 20 wholestage off           4439           4479          56         22.5          44.4       1.0X
-read varchar with length 20 wholestage on            1640           1655          14         61.0          16.4       2.7X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read char with length 40:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Read with length 40:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read char with length 40 wholestage off            4424           4466          60         22.6          44.2       1.0X
-read char with length 40 wholestage on             1636           1648           9         61.1          16.4       2.7X
+read string with length 40                         1579           1594          22         63.3          15.8       1.0X
+read char with length 40                           1634           1653          19         61.2          16.3       1.0X
+read varchar with length 40                        1635           1663          43         61.2          16.4       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read varchar with length 40:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------
-read varchar with length 40 wholestage off           4298           4303           7         23.3          43.0       1.0X
-read varchar with length 40 wholestage on            1630           1682          48         61.3          16.3       2.6X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read char with length 60:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Read with length 60:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read char with length 60 wholestage off            4341           4345           6         23.0          43.4       1.0X
-read char with length 60 wholestage on             1626           1642          14         61.5          16.3       2.7X
+read string with length 60                         1606           1662          58         62.3          16.1       1.0X
+read char with length 60                           1594           1613          16         62.7          15.9       1.0X
+read varchar with length 60                        1613           1676          94         62.0          16.1       1.0X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read varchar with length 60:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------
-read varchar with length 60 wholestage off           4345           4411          93         23.0          43.5       1.0X
-read varchar with length 60 wholestage on            1616           1639          17         61.9          16.2       2.7X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read char with length 80:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Read with length 80:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read char with length 80 wholestage off            4294           4297           4         23.3          42.9       1.0X
-read char with length 80 wholestage on             1628           1662          33         61.4          16.3       2.6X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-read varchar with length 80:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
---------------------------------------------------------------------------------------------------------------------------
-read varchar with length 80 wholestage off           4321           4342          29         23.1          43.2       1.0X
-read varchar with length 80 wholestage on            1637           1648           9         61.1          16.4       2.6X
+read string with length 80                         1616           1620           4         61.9          16.2       1.0X
+read char with length 80                           1623           1649          41         61.6          16.2       1.0X
+read varchar with length 80                        1639           1658          18         61.0          16.4       1.0X
 
 
 ================================================================================================
@@ -65,58 +41,34 @@ Char Varchar Write Side Perf
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write char with length 20:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Write with length 20:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write char with length 20 wholestage off           5717           5743          37          1.7         571.7       1.0X
-write char with length 20 wholestage on            5080           5142          52          2.0         508.0       1.1X
+write string with length 20                        5280           5295          15          1.9         528.0       1.0X
+write char with length 20                         10517          10648         124          1.0        1051.7       0.5X
+write varchar with length 20                      12542          12581          57          0.8        1254.2       0.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write varchar with length 20:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
----------------------------------------------------------------------------------------------------------------------------
-write varchar with length 20 wholestage off           8139           8168          41          1.2         813.9       1.0X
-write varchar with length 20 wholestage on            7047           7092          43          1.4         704.7       1.2X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write char with length 40:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Write with length 40:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write char with length 40 wholestage off           7299           7318          26          1.4         729.9       1.0X
-write char with length 40 wholestage on            6945           6985          33          1.4         694.5       1.1X
+write string with length 40                        7275           7326          51          1.4         727.5       1.0X
+write char with length 40                         16817          17805        1212          0.6        1681.7       0.4X
+write varchar with length 40                      20285          20769         579          0.5        2028.5       0.4X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write varchar with length 40:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
----------------------------------------------------------------------------------------------------------------------------
-write varchar with length 40 wholestage off          11111          11112           2          0.9        1111.1       1.0X
-write varchar with length 40 wholestage on           10485          10539          31          1.0        1048.5       1.1X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write char with length 60:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Write with length 60:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write char with length 60 wholestage off           8631           8670          55          1.2         863.1       1.0X
-write char with length 60 wholestage on            8495           8516          13          1.2         849.5       1.0X
+write string with length 60                        9287           9404         157          1.1         928.7       1.0X
+write char with length 60                         22876          24001         974          0.4        2287.6       0.4X
+write varchar with length 60                      28270          28452         204          0.4        2827.0       0.3X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write varchar with length 60:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
----------------------------------------------------------------------------------------------------------------------------
-write varchar with length 60 wholestage off          14006          14029          32          0.7        1400.6       1.0X
-write varchar with length 60 wholestage on           13795          13901          92          0.7        1379.5       1.0X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write char with length 80:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+Write with length 80:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write char with length 80 wholestage off          10327          10327           1          1.0        1032.7       1.0X
-write char with length 80 wholestage on           10269          10315          40          1.0        1026.9       1.0X
-
-Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
-Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
-write varchar with length 80:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
----------------------------------------------------------------------------------------------------------------------------
-write varchar with length 80 wholestage off          17692          17702          15          0.6        1769.2       1.0X
-write varchar with length 80 wholestage on           17479          17582          83          0.6        1747.9       1.0X
+write string with length 80                       11124          11742         720          0.9        1112.4       1.0X
+write char with length 80                         29024          29781         733          0.3        2902.4       0.4X
+write varchar with length 80                      35604          36638         929          0.3        3560.4       0.3X
 
 
