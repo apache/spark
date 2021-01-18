@@ -648,7 +648,6 @@ object RemoveDuplicatedBranches extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           c
         }
-      }
     }
   }
 }
