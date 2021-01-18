@@ -35,7 +35,7 @@ import org.apache.spark.benchmark.Benchmark
 object CharVarcharBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  def withTable(tableNames: String*)(f: => Unit): Unit = {
+  private def withTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       tableNames.foreach { name =>
         spark.sql(s"DROP TABLE IF EXISTS $name")
@@ -43,22 +43,31 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def readBenchmark(card: Long, length: Int): Unit = {
+  private def createTable(tblName: String, colType: String, path: String): Unit = {
+    spark.sql(s"CREATE TABLE $tblName (c $colType) USING PARQUET LOCATION '$path'")
+  }
+
+  private def readBenchmark(card: Long, length: Int, hasSpaces: Boolean): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(card).map { v =>
         val str = v.toString
-        str + " " * (length - str.length)
+        if (hasSpaces) {
+          str + " " * (length - str.length)
+        } else {
+          str
+        }
       }.write.parquet(path)
 
-      val benchmark = new Benchmark(s"Read with length $length", card, output = output)
+      val benchmark =
+        new Benchmark(s"Read with length $length, hasSpaces: $hasSpaces", card, output = output)
       Seq("string", "char", "varchar").foreach { typ =>
         val tblName = s"${typ}_${length}_$card"
         val colType = if (typ == "string") typ else s"$typ($length)"
 
         benchmark.addCase(s"read $typ with length $length", 3) { _ =>
           withTable(tblName) {
-            spark.sql(s"CREATE TABLE $tblName (c $colType) USING PARQUET LOCATION '$path'")
+            createTable(tblName, colType, path)
             spark.table(tblName).noop()
           }
         }
@@ -67,20 +76,25 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  def writeBenchmark(card: Long, length: Int): Unit = {
+  def writeBenchmark(card: Long, length: Int, hasSpaces: Boolean): Unit = {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val benchmark = new Benchmark(s"Write with length $length", card, output = output)
+      val benchmark =
+        new Benchmark(s"Write with length $length, hasSpaces: $hasSpaces", card, output = output)
       Seq("string", "char", "varchar").foreach { typ =>
         val colType = if (typ == "string") typ else s"$typ($length)"
         val tblName = s"${typ}_${length}_$card"
 
         benchmark.addCase(s"write $typ with length $length", 3) { _ =>
           withTable(tblName) {
-            spark.sql(s"CREATE TABLE $tblName (c $colType) USING PARQUET LOCATION '$path'")
+            createTable(tblName, colType, path)
             spark.range(card).map { v =>
               val str = v.toString
-              str + " " * length
+              if (hasSpaces) {
+                str + " " * length
+              } else {
+                str
+              }
             }.write.insertInto(tblName)
           }
         }
@@ -90,15 +104,17 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    val N = 100L * 1000 * 1000
+    val range = Range(20, 101, 20)
     runBenchmark("Char Varchar Read Side Perf") {
-      for (len <- Range(20, 100, 20)) {
-        readBenchmark(100L * 1000 * 1000, len)
+      for (len <- range) {
+        readBenchmark(N, len, len >= 80)
       }
     }
 
     runBenchmark("Char Varchar Write Side Perf") {
-      for (len <- Range(20, 100, 20)) {
-        writeBenchmark(10L * 1000 * 1000, len)
+      for (len <- range) {
+        writeBenchmark(N / 10, len, len >= 80)
       }
     }
   }
