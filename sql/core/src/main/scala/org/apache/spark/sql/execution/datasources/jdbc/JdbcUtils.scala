@@ -306,13 +306,14 @@ object JdbcUtils extends Logging {
       }
       val metadata = new MetadataBuilder()
       // SPARK-33888
-      // - include scale in metadata for only DECIMAL & NUMERIC
+      // - include scale in metadata for only DECIMAL & NUMERIC as well as ARRAY (for Postgres)
       // - include TIME type metadata
       // - always build the metadata
       dataType match {
         // scalastyle:off
         case java.sql.Types.NUMERIC => metadata.putLong("scale", fieldScale)
         case java.sql.Types.DECIMAL => metadata.putLong("scale", fieldScale)
+        case java.sql.Types.ARRAY   => metadata.putLong("scale", fieldScale) // PostgresDialect.scala wants this information
         case java.sql.Types.TIME    => metadata.putBoolean("logical_time_type", true)
         case _                      =>
         // scalastyle:on
