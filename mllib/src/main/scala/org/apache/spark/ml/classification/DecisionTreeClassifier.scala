@@ -288,7 +288,9 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(nodeData).repartition(1).write.parquet(dataPath)
+      // 2,000,000 nodes is about 40MB
+      val numDataParts = (instance.numNodes / 2000000.0).ceil.toInt
+      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
     }
   }
 

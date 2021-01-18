@@ -470,12 +470,15 @@ private[ml] object EnsembleModelReadWrite {
     }
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     sql.createDataFrame(treesMetadataWeights).toDF("treeID", "metadata", "weights")
+      .repartition(1)
       .write.parquet(treesMetadataPath)
     val dataPath = new Path(path, "data").toString
+    // 2,000,000 nodes is about 40MB
+    val numDataParts = (instance.trees.map(_.numNodes).sum / 2000000.0).ceil.toInt
     val nodeDataRDD = sql.sparkContext.parallelize(instance.trees.zipWithIndex).flatMap {
       case (tree, treeID) => EnsembleNodeData.build(tree, treeID)
     }
-    sql.createDataFrame(nodeDataRDD).write.parquet(dataPath)
+    sql.createDataFrame(nodeDataRDD).repartition(numDataParts).write.parquet(dataPath)
   }
 
   /**
