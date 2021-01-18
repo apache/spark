@@ -52,7 +52,7 @@ Condition : ((isnotnull(cs_warehouse_sk#2) AND isnotnull(cs_item_sk#3)) AND isno
 
 (4) Exchange
 Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
-Arguments: hashpartitioning(cs_order_number#4, cs_item_sk#3, 5), true, [id=#6]
+Arguments: hashpartitioning(cs_order_number#4, cs_item_sk#3, 5), ENSURE_REQUIREMENTS, [id=#6]
 
 (5) Sort [codegen id : 2]
 Input [5]: [cs_sold_date_sk#1, cs_warehouse_sk#2, cs_item_sk#3, cs_order_number#4, cs_sales_price#5]
@@ -74,7 +74,7 @@ Condition : (isnotnull(cr_order_number#8) AND isnotnull(cr_item_sk#7))
 
 (9) Exchange
 Input [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
-Arguments: hashpartitioning(cr_order_number#8, cr_item_sk#7, 5), true, [id=#10]
+Arguments: hashpartitioning(cr_order_number#8, cr_item_sk#7, 5), ENSURE_REQUIREMENTS, [id=#10]
 
 (10) Sort [codegen id : 4]
 Input [3]: [cr_item_sk#7, cr_order_number#8, cr_refunded_cash#9]
@@ -183,7 +183,7 @@ Results [6]: [w_state#19, i_item_id#12, sum#25, isEmpty#26, sum#27, isEmpty#28]
 
 (33) Exchange
 Input [6]: [w_state#19, i_item_id#12, sum#25, isEmpty#26, sum#27, isEmpty#28]
-Arguments: hashpartitioning(w_state#19, i_item_id#12, 5), true, [id=#29]
+Arguments: hashpartitioning(w_state#19, i_item_id#12, 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (34) HashAggregate [codegen id : 9]
 Input [6]: [w_state#19, i_item_id#12, sum#25, isEmpty#26, sum#27, isEmpty#28]

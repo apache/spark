@@ -307,6 +307,13 @@ trait JoinSelectionHelper {
     }
   }
 
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = {
+    getBroadcastBuildSide(join.left, join.right, join.joinType,
+      join.hint, hintOnly = true, conf).isDefined ||
+      getBroadcastBuildSide(join.left, join.right, join.joinType,
+        join.hint, hintOnly = false, conf).isDefined
+  }
+
   def hintToBroadcastLeft(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(BROADCAST))
   }

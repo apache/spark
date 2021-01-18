@@ -96,7 +96,7 @@ Results [3]: [ws_item_sk#2, d_date#5, sum#9]
 
 (12) Exchange
 Input [3]: [ws_item_sk#2, d_date#5, sum#9]
-Arguments: hashpartitioning(ws_item_sk#2, d_date#5, 5), true, [id=#10]
+Arguments: hashpartitioning(ws_item_sk#2, d_date#5, 5), ENSURE_REQUIREMENTS, [id=#10]
 
 (13) HashAggregate [codegen id : 3]
 Input [3]: [ws_item_sk#2, d_date#5, sum#9]
@@ -107,7 +107,7 @@ Results [4]: [ws_item_sk#2 AS item_sk#12, d_date#5, MakeDecimal(sum(UnscaledValu
 
 (14) Exchange
 Input [4]: [item_sk#12, d_date#5, _w0#13, ws_item_sk#2]
-Arguments: hashpartitioning(ws_item_sk#2, 5), true, [id=#14]
+Arguments: hashpartitioning(ws_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (15) Sort [codegen id : 4]
 Input [4]: [item_sk#12, d_date#5, _w0#13, ws_item_sk#2]
@@ -123,7 +123,7 @@ Input [5]: [item_sk#12, d_date#5, _w0#13, ws_item_sk#2, cume_sales#15]
 
 (18) Exchange
 Input [3]: [item_sk#12, d_date#5, cume_sales#15]
-Arguments: hashpartitioning(item_sk#12, d_date#5, 5), true, [id=#16]
+Arguments: hashpartitioning(item_sk#12, d_date#5, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (19) Sort [codegen id : 6]
 Input [3]: [item_sk#12, d_date#5, cume_sales#15]
@@ -164,7 +164,7 @@ Results [3]: [ss_item_sk#18, d_date#21, sum#23]
 
 (27) Exchange
 Input [3]: [ss_item_sk#18, d_date#21, sum#23]
-Arguments: hashpartitioning(ss_item_sk#18, d_date#21, 5), true, [id=#24]
+Arguments: hashpartitioning(ss_item_sk#18, d_date#21, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (28) HashAggregate [codegen id : 9]
 Input [3]: [ss_item_sk#18, d_date#21, sum#23]
@@ -175,7 +175,7 @@ Results [4]: [ss_item_sk#18 AS item_sk#26, d_date#21, MakeDecimal(sum(UnscaledVa
 
 (29) Exchange
 Input [4]: [item_sk#26, d_date#21, _w0#27, ss_item_sk#18]
-Arguments: hashpartitioning(ss_item_sk#18, 5), true, [id=#28]
+Arguments: hashpartitioning(ss_item_sk#18, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (30) Sort [codegen id : 10]
 Input [4]: [item_sk#26, d_date#21, _w0#27, ss_item_sk#18]
@@ -191,7 +191,7 @@ Input [5]: [item_sk#26, d_date#21, _w0#27, ss_item_sk#18, cume_sales#29]
 
 (33) Exchange
 Input [3]: [item_sk#26, d_date#21, cume_sales#29]
-Arguments: hashpartitioning(item_sk#26, d_date#21, 5), true, [id=#30]
+Arguments: hashpartitioning(item_sk#26, d_date#21, 5), ENSURE_REQUIREMENTS, [id=#30]
 
 (34) Sort [codegen id : 12]
 Input [3]: [item_sk#26, d_date#21, cume_sales#29]
@@ -208,7 +208,7 @@ Input [6]: [item_sk#12, d_date#5, cume_sales#15, item_sk#26, d_date#21, cume_sal
 
 (37) Exchange
 Input [4]: [item_sk#31, d_date#32, web_sales#33, store_sales#34]
-Arguments: hashpartitioning(item_sk#31, 5), true, [id=#35]
+Arguments: hashpartitioning(item_sk#31, 5), ENSURE_REQUIREMENTS, [id=#35]
 
 (38) Sort [codegen id : 14]
 Input [4]: [item_sk#31, d_date#32, web_sales#33, store_sales#34]

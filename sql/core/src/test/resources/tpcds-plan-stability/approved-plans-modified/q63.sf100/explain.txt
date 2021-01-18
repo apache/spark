@@ -145,7 +145,7 @@ Results [3]: [i_manager_id#5, d_moy#19, sum#22]
 
 (25) Exchange
 Input [3]: [i_manager_id#5, d_moy#19, sum#22]
-Arguments: hashpartitioning(i_manager_id#5, d_moy#19, 5), true, [id=#23]
+Arguments: hashpartitioning(i_manager_id#5, d_moy#19, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (26) HashAggregate [codegen id : 5]
 Input [3]: [i_manager_id#5, d_moy#19, sum#22]
@@ -156,7 +156,7 @@ Results [3]: [i_manager_id#5, MakeDecimal(sum(UnscaledValue(ss_sales_price#14))#
 
 (27) Exchange
 Input [3]: [i_manager_id#5, sum_sales#25, _w0#26]
-Arguments: hashpartitioning(i_manager_id#5, 5), true, [id=#27]
+Arguments: hashpartitioning(i_manager_id#5, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (28) Sort [codegen id : 6]
 Input [3]: [i_manager_id#5, sum_sales#25, _w0#26]
@@ -168,7 +168,7 @@ Arguments: [avg(_w0#26) windowspecdefinition(i_manager_id#5, specifiedwindowfram
 
 (30) Filter [codegen id : 7]
 Input [4]: [i_manager_id#5, sum_sales#25, _w0#26, avg_monthly_sales#28]
-Condition : (CASE WHEN (avg_monthly_sales#28 > 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#25 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#28 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#28 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)
+Condition : ((isnotnull(avg_monthly_sales#28) AND (avg_monthly_sales#28 > 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#25 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#28 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#28 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000))
 
 (31) Project [codegen id : 7]
 Output [3]: [i_manager_id#5, sum_sales#25, avg_monthly_sales#28]

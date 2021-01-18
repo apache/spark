@@ -201,7 +201,7 @@ Results [2]: [c_customer_sk#21, c_current_addr_sk#22]
 
 (31) Exchange
 Input [2]: [c_customer_sk#21, c_current_addr_sk#22]
-Arguments: hashpartitioning(c_customer_sk#21, c_current_addr_sk#22, 5), true, [id=#24]
+Arguments: hashpartitioning(c_customer_sk#21, c_current_addr_sk#22, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (32) HashAggregate [codegen id : 11]
 Input [2]: [c_customer_sk#21, c_current_addr_sk#22]
@@ -331,7 +331,7 @@ Results [2]: [c_customer_sk#21, sum#43]
 
 (59) Exchange
 Input [2]: [c_customer_sk#21, sum#43]
-Arguments: hashpartitioning(c_customer_sk#21, 5), true, [id=#44]
+Arguments: hashpartitioning(c_customer_sk#21, 5), ENSURE_REQUIREMENTS, [id=#44]
 
 (60) HashAggregate [codegen id : 12]
 Input [2]: [c_customer_sk#21, sum#43]
@@ -349,7 +349,7 @@ Results [2]: [segment#46, count#48]
 
 (62) Exchange
 Input [2]: [segment#46, count#48]
-Arguments: hashpartitioning(segment#46, 5), true, [id=#49]
+Arguments: hashpartitioning(segment#46, 5), ENSURE_REQUIREMENTS, [id=#49]
 
 (63) HashAggregate [codegen id : 13]
 Input [2]: [segment#46, count#48]
@@ -401,7 +401,7 @@ Results [1]: [(d_month_seq + 1)#53]
 
 (70) Exchange
 Input [1]: [(d_month_seq + 1)#53]
-Arguments: hashpartitioning((d_month_seq + 1)#53, 5), true, [id=#54]
+Arguments: hashpartitioning((d_month_seq + 1)#53, 5), ENSURE_REQUIREMENTS, [id=#54]
 
 (71) HashAggregate [codegen id : 2]
 Input [1]: [(d_month_seq + 1)#53]
@@ -447,7 +447,7 @@ Results [1]: [(d_month_seq + 3)#55]
 
 (77) Exchange
 Input [1]: [(d_month_seq + 3)#55]
-Arguments: hashpartitioning((d_month_seq + 3)#55, 5), true, [id=#56]
+Arguments: hashpartitioning((d_month_seq + 3)#55, 5), ENSURE_REQUIREMENTS, [id=#56]
 
 (78) HashAggregate [codegen id : 2]
 Input [1]: [(d_month_seq + 3)#55]

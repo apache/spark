@@ -1466,8 +1466,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // So we use LikeAny or NotLikeAny instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
               ctx.NOT match {
-                case null => LikeAny(e, patterns.toSeq)
-                case _ => NotLikeAny(e, patterns.toSeq)
+                case null => LikeAny(e, patterns)
+                case _ => NotLikeAny(e, patterns)
               }
             } else {
               ctx.expression.asScala.map(expression)
@@ -1481,8 +1481,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               // So we use LikeAll or NotLikeAll instead.
               val patterns = expressions.map(_.eval(EmptyRow).asInstanceOf[UTF8String])
               ctx.NOT match {
-                case null => LikeAll(e, patterns.toSeq)
-                case _ => NotLikeAll(e, patterns.toSeq)
+                case null => LikeAll(e, patterns)
+                case _ => NotLikeAll(e, patterns)
               }
             } else {
               ctx.expression.asScala.map(expression)
@@ -1601,7 +1601,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitCast(ctx: CastContext): Expression = withOrigin(ctx) {
     val rawDataType = typedVisit[DataType](ctx.dataType())
     val dataType = CharVarcharUtils.replaceCharVarcharWithStringForCast(rawDataType)
-    Cast(expression(ctx.expression), dataType)
+    val cast = Cast(expression(ctx.expression), dataType)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast
   }
 
   /**
@@ -2658,7 +2660,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
             val fields = arguments.tail.map(arg => getFieldReference(applyCtx, arg))
 
-            BucketTransform(LiteralValue(numBuckets, IntegerType), fields.toSeq)
+            BucketTransform(LiteralValue(numBuckets, IntegerType), fields)
 
           case "years" =>
             YearsTransform(getSingleFieldReference(applyCtx, arguments))

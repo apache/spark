@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.internal.SQLConf
 
@@ -30,47 +29,24 @@ class AlterTableDropPartitionSuite
   with CommandSuiteBase {
 
   test("hive client calls") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
-      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
-
-      checkHiveClientCalls(expected = 19) {
-        sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
-      }
-      sql(s"CACHE TABLE $t")
-      checkHiveClientCalls(expected = 22) {
-        sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
-      }
-    }
-  }
-
-  test("SPARK-34060: update stats of cached table") {
-    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
-      withNamespaceAndTable("ns", "tbl") { t =>
-        def checkTableSize(expected: String): Unit = {
-          val stats =
-            sql(s"DESCRIBE TABLE EXTENDED $t")
-              .select("data_type")
-              .where("col_name = 'Statistics'")
-              .first()
-              .getString(0)
-          assert(stats.contains(expected))
+    Seq(false, true).foreach { statsOn =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> statsOn.toString) {
+        withNamespaceAndTable("ns", "tbl") { t =>
+          sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+          sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+          sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+          sql(s"ALTER TABLE $t ADD PARTITION (part=2)") // empty partition
+          checkHiveClientCalls(expected = if (statsOn) 27 else 19) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=2)")
+          }
+          checkHiveClientCalls(expected = if (statsOn) 32 else 19) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+          }
+          sql(s"CACHE TABLE $t")
+          checkHiveClientCalls(expected = if (statsOn) 35 else 22) {
+            sql(s"ALTER TABLE $t DROP PARTITION (part=1)")
+          }
         }
-
-        sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
-        sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
-        assert(!spark.catalog.isCached(t))
-        sql(s"CACHE TABLE $t")
-        assert(spark.catalog.isCached(t))
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
-        checkTableSize("4 bytes")
-
-        sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
-        assert(spark.catalog.isCached(t))
-        checkTableSize("2 bytes")
-        checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
       }
     }
   }

@@ -123,7 +123,7 @@ Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/Ran
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForest) and [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForestModel) for more details on the API.
+Refer to the [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForest.html) and [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForestModel.html) for more details on the API.
 
 {% include_example python/mllib/random_forest_classification_example.py %}
 </div>
@@ -154,7 +154,7 @@ Refer to the [`RandomForest` Java docs](api/java/org/apache/spark/mllib/tree/Ran
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForest) and [`RandomForest` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.RandomForestModel) for more details on the API.
+Refer to the [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForest.html) and [`RandomForest` Python docs](api/python/reference/api/pyspark.mllib.tree.RandomForestModel.html) for more details on the API.
 
 {% include_example python/mllib/random_forest_regression_example.py %}
 </div>
@@ -264,7 +264,7 @@ Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`GradientBoostedTrees` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTreesModel) for more details on the API.
+Refer to the [`GradientBoostedTrees` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTreesModel.html) for more details on the API.
 
 {% include_example python/mllib/gradient_boosting_classification_example.py %}
 </div>
@@ -295,7 +295,7 @@ Refer to the [`GradientBoostedTrees` Java docs](api/java/org/apache/spark/mllib/
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`GradientBoostedTrees` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTrees) and [`GradientBoostedTreesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.tree.GradientBoostedTreesModel) for more details on the API.
+Refer to the [`GradientBoostedTrees` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTrees.html) and [`GradientBoostedTreesModel` Python docs](api/python/reference/api/pyspark.mllib.tree.GradientBoostedTreesModel.html) for more details on the API.
 
 {% include_example python/mllib/gradient_boosting_regression_example.py %}
 </div>

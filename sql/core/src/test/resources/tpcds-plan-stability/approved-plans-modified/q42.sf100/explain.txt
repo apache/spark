@@ -107,7 +107,7 @@ Results [4]: [d_year#2, i_category_id#9, i_category#10, sum#14]
 
 (19) Exchange
 Input [4]: [d_year#2, i_category_id#9, i_category#10, sum#14]
-Arguments: hashpartitioning(d_year#2, i_category_id#9, i_category#10, 5), true, [id=#15]
+Arguments: hashpartitioning(d_year#2, i_category_id#9, i_category#10, 5), ENSURE_REQUIREMENTS, [id=#15]
 
 (20) HashAggregate [codegen id : 4]
 Input [4]: [d_year#2, i_category_id#9, i_category#10, sum#14]

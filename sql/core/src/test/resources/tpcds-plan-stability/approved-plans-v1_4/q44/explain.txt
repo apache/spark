@@ -64,7 +64,7 @@ Results [3]: [ss_item_sk#1, sum#6, count#7]
 
 (6) Exchange
 Input [3]: [ss_item_sk#1, sum#6, count#7]
-Arguments: hashpartitioning(ss_item_sk#1, 5), true, [id=#8]
+Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (7) HashAggregate [codegen id : 2]
 Input [3]: [ss_item_sk#1, sum#6, count#7]
@@ -83,7 +83,7 @@ Input [3]: [item_sk#10, rank_col#11, avg(ss_net_profit#3)#12]
 
 (10) Exchange
 Input [2]: [item_sk#10, rank_col#11]
-Arguments: SinglePartition, true, [id=#15]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#15]
 
 (11) Sort [codegen id : 3]
 Input [2]: [item_sk#10, rank_col#11]
@@ -121,7 +121,7 @@ Input [3]: [item_sk#20, rank_col#21, avg(ss_net_profit#3)#22]
 
 (19) Exchange
 Input [2]: [item_sk#20, rank_col#21]
-Arguments: SinglePartition, true, [id=#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
 
 (20) Sort [codegen id : 6]
 Input [2]: [item_sk#20, rank_col#21]
@@ -234,7 +234,7 @@ Results [3]: [ss_store_sk#2, sum#36, count#37]
 
 (42) Exchange
 Input [3]: [ss_store_sk#2, sum#36, count#37]
-Arguments: hashpartitioning(ss_store_sk#2, 5), true, [id=#38]
+Arguments: hashpartitioning(ss_store_sk#2, 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (43) HashAggregate [codegen id : 2]
 Input [3]: [ss_store_sk#2, sum#36, count#37]

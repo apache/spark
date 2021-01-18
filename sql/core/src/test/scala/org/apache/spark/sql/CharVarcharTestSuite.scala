@@ -189,8 +189,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (null)")
       checkAnswer(spark.table("t"), Row(null))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES ('123456')"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -202,8 +201,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         sql("INSERT INTO t VALUES (1, null)")
         checkAnswer(spark.table("t"), Row(1, null))
         val e = intercept[SparkException](sql("INSERT INTO t VALUES (1, '123456')"))
-        assert(e.getCause.getMessage.contains(
-          s"input string of length 6 exceeds $typeName type length limitation: 5"))
+        assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
       }
     }
   }
@@ -214,8 +212,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
       val e = intercept[SparkException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -225,8 +222,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(null))")
       checkAnswer(spark.table("t"), Row(Seq(null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array('a', '123456'))"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -234,8 +230,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), STRING>) USING $format")
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -245,8 +240,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (map('a', null))")
       checkAnswer(spark.table("t"), Row(Map("a" -> null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -254,11 +248,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), $typeName(5)>) USING $format")
       val e1 = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
-      assert(e1.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e1.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
       val e2 = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
-      assert(e2.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e2.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -268,8 +260,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t SELECT struct(array(null))")
       checkAnswer(spark.table("t"), Row(Row(Seq(null))))
       val e = intercept[SparkException](sql("INSERT INTO t SELECT struct(array('123456'))"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -279,8 +270,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(struct(null)))")
       checkAnswer(spark.table("t"), Row(Seq(Row(null))))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array(struct('123456')))"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -290,8 +280,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(array(null)))")
       checkAnswer(spark.table("t"), Row(Seq(Seq(null))))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array(array('123456')))"))
-      assert(e.getCause.getMessage.contains(
-        s"input string of length 6 exceeds $typeName type length limitation: 5"))
+      assert(e.getCause.getMessage.contains(s"Exceeds $typeName type length limitation: 5"))
     }
   }
 
@@ -312,11 +301,9 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (1234, 1234)")
       checkAnswer(spark.table("t"), Row("1234 ", "1234"))
       val e1 = intercept[SparkException](sql("INSERT INTO t VALUES (123456, 1)"))
-      assert(e1.getCause.getMessage.contains(
-        "input string of length 6 exceeds char type length limitation: 5"))
+      assert(e1.getCause.getMessage.contains("Exceeds char type length limitation: 5"))
       val e2 = intercept[SparkException](sql("INSERT INTO t VALUES (1, 123456)"))
-      assert(e2.getCause.getMessage.contains(
-        "input string of length 6 exceeds varchar type length limitation: 5"))
+      assert(e2.getCause.getMessage.contains("Exceeds varchar type length limitation: 5"))
     }
   }
 
@@ -474,6 +461,33 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       checkAnswer(sql("SELECT v, sum(i) FROM t GROUP BY v ORDER BY v"), Row("c", 1))
     }
   }
+
+  test("SPARK-34003: fix char/varchar fails w/ order by functions") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), i INT) USING $format")
+      sql("INSERT INTO t VALUES ('c', 1)")
+      checkAnswer(sql("SELECT substr(v, 1, 2), sum(i) FROM t GROUP BY v ORDER BY substr(v, 1, 2)"),
+        Row("c", 1))
+      checkAnswer(sql("SELECT sum(i) FROM t GROUP BY v ORDER BY substr(v, 1, 2)"),
+        Row(1))
+    }
+  }
+
+  test("SPARK-34114: varchar type will strip tailing spaces to certain length at write time") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('c      ')")
+      checkAnswer(spark.table("t"), Row("c  "))
+    }
+  }
+
+  test("SPARK-34114: varchar type will remain the value length with spaces at read time") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3)) USING $format")
+      sql("INSERT INTO t VALUES ('c ')")
+      checkAnswer(spark.table("t"), Row("c "))
+    }
+  }
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
@@ -615,8 +629,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           val e = intercept[SparkException] { sql("select * from t").collect() }
-          assert(e.getCause.getMessage.contains(
-            s"input string of length 6 exceeds $typ type length limitation: 2"))
+          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
         }
       }
     }
@@ -643,8 +656,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql(s"CREATE TABLE t (col $typ(2)) using $format")
           sql(s"ALTER TABLE t SET LOCATION '$dir'")
           val e = intercept[SparkException] { spark.table("t").collect() }
-          assert(e.getCause.getMessage.contains(
-            s"input string of length 6 exceeds $typ type length limitation: 2"))
+          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
         }
       }
     }
@@ -668,6 +680,19 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
       val rest = sql("SHOW CREATE TABLE t").head().getString(0)
       assert(rest.contains("VARCHAR(3)"))
       assert(rest.contains("CHAR(5)"))
+    }
+  }
+
+  test("SPARK-34114: should not trim right for read-side length check and char padding") {
+    Seq("char", "varchar").foreach { typ =>
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+          val e = intercept[SparkException] { sql("select * from t").collect() }
+          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
+        }
+      }
     }
   }
 }

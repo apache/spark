@@ -939,7 +939,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setAppName("test-cluster")
     conf.set(TASK_GPU_ID.amountConf, "1")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -954,7 +954,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "1")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -970,7 +970,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 

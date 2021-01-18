@@ -68,7 +68,7 @@ Condition : (isnotnull(c_customer_sk#1) AND isnotnull(c_current_addr_sk#2))
 
 (4) Exchange
 Input [4]: [c_customer_sk#1, c_current_addr_sk#2, c_first_name#3, c_last_name#4]
-Arguments: hashpartitioning(c_current_addr_sk#2, 5), true, [id=#5]
+Arguments: hashpartitioning(c_current_addr_sk#2, 5), ENSURE_REQUIREMENTS, [id=#5]
 
 (5) Sort [codegen id : 2]
 Input [4]: [c_customer_sk#1, c_current_addr_sk#2, c_first_name#3, c_last_name#4]
@@ -90,7 +90,7 @@ Condition : (isnotnull(ca_address_sk#6) AND isnotnull(ca_city#7))
 
 (9) Exchange
 Input [2]: [ca_address_sk#6, ca_city#7]
-Arguments: hashpartitioning(ca_address_sk#6, 5), true, [id=#8]
+Arguments: hashpartitioning(ca_address_sk#6, 5), ENSURE_REQUIREMENTS, [id=#8]
 
 (10) Sort [codegen id : 4]
 Input [2]: [ca_address_sk#6, ca_city#7]
@@ -107,7 +107,7 @@ Input [6]: [c_customer_sk#1, c_current_addr_sk#2, c_first_name#3, c_last_name#4,
 
 (13) Exchange
 Input [4]: [c_customer_sk#1, c_first_name#3, c_last_name#4, ca_city#7]
-Arguments: hashpartitioning(c_customer_sk#1, 5), true, [id=#9]
+Arguments: hashpartitioning(c_customer_sk#1, 5), ENSURE_REQUIREMENTS, [id=#9]
 
 (14) Sort [codegen id : 6]
 Input [4]: [c_customer_sk#1, c_first_name#3, c_last_name#4, ca_city#7]
@@ -222,7 +222,7 @@ Input [7]: [ss_customer_sk#11, ss_hdemo_sk#12, ss_addr_sk#13, ss_ticket_number#1
 
 (39) Exchange
 Input [5]: [ss_customer_sk#11, ss_addr_sk#13, ss_ticket_number#15, ss_coupon_amt#16, ss_net_profit#17]
-Arguments: hashpartitioning(ss_addr_sk#13, 5), true, [id=#29]
+Arguments: hashpartitioning(ss_addr_sk#13, 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (40) Sort [codegen id : 11]
 Input [5]: [ss_customer_sk#11, ss_addr_sk#13, ss_ticket_number#15, ss_coupon_amt#16, ss_net_profit#17]
@@ -260,7 +260,7 @@ Results [5]: [ss_ticket_number#15, ss_customer_sk#11, ca_city#7 AS bought_city#3
 
 (47) Exchange
 Input [5]: [ss_ticket_number#15, ss_customer_sk#11, bought_city#36, amt#37, profit#38]
-Arguments: hashpartitioning(ss_customer_sk#11, 5), true, [id=#39]
+Arguments: hashpartitioning(ss_customer_sk#11, 5), ENSURE_REQUIREMENTS, [id=#39]
 
 (48) Sort [codegen id : 15]
 Input [5]: [ss_ticket_number#15, ss_customer_sk#11, bought_city#36, amt#37, profit#38]

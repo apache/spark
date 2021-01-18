@@ -452,4 +452,28 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       }
     }
   }
+
+  test("SPARK-34076: should be able to drop temp view with cached tables") {
+    val t = "cachedTable"
+    val v = "tempView"
+    withTable(t) {
+      withTempView(v) {
+        sql(s"CREATE TEMPORARY VIEW $v AS SELECT key FROM src LIMIT 10")
+        sql(s"CREATE TABLE $t AS SELECT * FROM src")
+        sql(s"CACHE TABLE $t")
+      }
+    }
+  }
+
+  test("SPARK-34076: should be able to drop global temp view with cached tables") {
+    val t = "cachedTable"
+    val v = "globalTempView"
+    withTable(t) {
+      withGlobalTempView(v) {
+        sql(s"CREATE GLOBAL TEMPORARY VIEW $v AS SELECT key FROM src LIMIT 10")
+        sql(s"CREATE TABLE $t AS SELECT * FROM src")
+        sql(s"CACHE TABLE $t")
+      }
+    }
+  }
 }
