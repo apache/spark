@@ -3724,20 +3724,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
+    val hiveVersion = "2.3.8"
     // default transitive=false, only download specified jar
-    sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion")
     assert(sc.listJars()
-      .exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+      .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
 
     // test download ivy URL jar return multiple jars
     sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
     assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
     assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
-    sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7" +
+    sql(s"ADD JAR ivy://org.apache.hive:hive-contrib:$hiveVersion" +
       "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-contrib-$hiveVersion.jar")))
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-exec-$hiveVersion.jar")))
     assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
   }
 
