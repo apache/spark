@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object CharVarcharUtils extends Logging {
 
@@ -215,23 +216,29 @@ object CharVarcharUtils extends Logging {
     }.getOrElse(expr)
   }
 
+  private def raiseError(typeName: String, length: Int): Expression = {
+    val errMsg = UTF8String.fromString(s"Exceeds $typeName type length limitation: $length")
+    RaiseError(Literal(errMsg, StringType), StringType)
+  }
+
   private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     dt match {
       case CharType(length) =>
-        StaticInvoke(
-          classOf[CharVarcharCodegenUtils],
-          StringType,
-          "charTypeWriteSideCheck",
-          expr :: Literal(length) :: Nil,
-          propagateNull = false)
+        val trimmed = StringTrimRight(expr)
+        // Trailing spaces do not count in the length check. We don't need to retain the trailing
+        // spaces, as we will pad char type columns/fields at read time.
+        If(GreaterThan(Length(trimmed), Literal(length)), raiseError("char", length), trimmed)
 
       case VarcharType(length) =>
-        StaticInvoke(
-          classOf[CharVarcharCodegenUtils],
-          StringType,
-          "varcharTypeWriteSideCheck",
-          expr :: Literal(length) :: Nil,
-          propagateNull = false)
+        val trimmed = StringTrimRight(expr)
+        // Trailing spaces do not count in the length check. We need to retain the trailing spaces
+        // (truncate to length N), as there is no read-time padding for varchar type.
+        // TODO: create a special TrimRight function that can trim to a certain length.
+        If(LessThanOrEqual(Length(expr), Literal(length)),
+          expr,
+          If(GreaterThan(Length(trimmed), Literal(length)),
+            raiseError("varchar", length),
+            StringRPad(trimmed, Literal(length))))
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
