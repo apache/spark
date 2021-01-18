@@ -1913,7 +1913,7 @@ id | features                       | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.VarianceThresholdSelector))
+Refer to the [VarianceThresholdSelector Scala docs](api/scala/org/apache/spark/ml/feature/VarianceThresholdSelector.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VarianceThresholdSelectorExample.scala %}
