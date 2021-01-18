@@ -21,7 +21,7 @@ struct<rand(CAST((3 / 7) AS INT)):double>
 -- !query
 SELECT rand(NULL)
 -- !query schema
-struct<rand(CAST(NULL AS INT)):double>
+struct<rand(NULL):double>
 -- !query output
 0.7604953758285915
 
@@ -62,7 +62,7 @@ struct<randn(CAST((3 / 7) AS BIGINT)):double>
 -- !query
 SELECT randn(NULL)
 -- !query schema
-struct<randn(CAST(NULL AS INT)):double>
+struct<randn(NULL):double>
 -- !query output
 1.6034991609278433
 
