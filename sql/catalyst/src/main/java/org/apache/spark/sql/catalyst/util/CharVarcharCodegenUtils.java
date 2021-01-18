@@ -29,6 +29,22 @@ public class CharVarcharCodegenUtils {
     return inputStr;
   }
 
+  /**
+   *  Trailing spaces do not count in the length check. We don't need to retain the trailing
+   *  spaces, as we will pad char type columns/fields at read time.
+   */
+  public static UTF8String trimBeforeLengthCheck(UTF8String inputStr, int limit) {
+    if (inputStr == null) {
+      return null;
+    } else {
+      UTF8String trimmed = inputStr.trimRight(SPACE);
+      if (trimmed.numChars() > limit) {
+        throw new RuntimeException("Exceeds char type length limitation: " + limit);
+      }
+      return trimmed;
+    }
+  }
+
   public static UTF8String paddingWithLengthCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) return null;
     if (inputStr.numChars() > limit) {

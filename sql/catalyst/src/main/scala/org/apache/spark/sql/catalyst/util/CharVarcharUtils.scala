@@ -224,10 +224,12 @@ object CharVarcharUtils extends Logging {
   private def stringLengthCheck(expr: Expression, dt: DataType): Expression = {
     dt match {
       case CharType(length) =>
-        val trimmed = StringTrimRight(expr)
-        // Trailing spaces do not count in the length check. We don't need to retain the trailing
-        // spaces, as we will pad char type columns/fields at read time.
-        If(GreaterThan(Length(trimmed), Literal(length)), raiseError("char", length), trimmed)
+        StaticInvoke(
+          classOf[CharVarcharCodegenUtils],
+          StringType,
+          "trimBeforeLengthCheck",
+          expr :: Literal(length) :: Nil,
+          propagateNull = false)
 
       case VarcharType(length) =>
         val trimmed = StringTrimRight(expr)
