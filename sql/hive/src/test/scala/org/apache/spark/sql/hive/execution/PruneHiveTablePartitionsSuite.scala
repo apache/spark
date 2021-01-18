@@ -18,9 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.LongType
 
 class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
 
@@ -91,6 +93,40 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
         }
         assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale,
           expectedStr)
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneHiveTablePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(s"CREATE TABLE SPARK_34119 PARTITIONED BY (p) STORED AS textfile AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(20))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          320L,
+          Some(20),
+          Seq(ColumnStat(
+            distinctCount = Some(20),
+            min = Some(0),
+            max = Some(19),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          64L,
+          Some(4),
+          Seq(ColumnStat(
+            distinctCount = Some(4),
+            min = Some(0),
+            max = Some(19),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }

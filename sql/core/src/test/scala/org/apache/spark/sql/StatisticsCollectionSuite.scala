@@ -681,20 +681,34 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("SPARK-34119: Keep necessary stats after partition pruning") {
-    val table = "SPARK_34119"
-    withTable(table) {
-      sql(s"CREATE TABLE $table using parquet PARTITIONED BY (p) AS " +
-        "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
       withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-        checkColStats(
-          sql(s"SELECT * FROM $table WHERE p = '2'"),
-          mutable.LinkedHashMap(
-            "id" -> CatalogColumnStat(Some(2), Some("2"), Some("7"), Some(0),
-              Some(LongType.defaultSize), Some(LongType.defaultSize)),
-            "p" -> CatalogColumnStat(Some(1), None, None, Some(0),
-              Some(1), Some(1))))
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }
