@@ -135,7 +135,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> spark.catalog.dropTempView("people")
         """
         warnings.warn(
-            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
+            "Deprecated in 2.0, use createOrReplaceTempView instead.",
+            FutureWarning
+        )
         self._jdf.createOrReplaceTempView(name)
 
     def createTempView(self, name):
