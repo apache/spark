@@ -26,12 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -289,8 +289,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw new ArrayIndexOutOfBoundsException(
-            s"Invalid index: $index, numElements: ${inputExprs.length}")
+          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -1350,7 +1349,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       new URI(url.toString)
     } catch {
       case e: URISyntaxException if failOnError =>
-        throw new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+        throw QueryExecutionErrors.invalidUrlError(url, e)
       case _: URISyntaxException => null
     }
   }
@@ -2046,8 +2045,7 @@ object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw new AnalysisException("Invalid number of arguments for function decode. " +
-          s"Expected: 2; Found: ${params.length}")
+        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head

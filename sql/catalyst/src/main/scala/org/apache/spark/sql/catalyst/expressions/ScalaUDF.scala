@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.{createToCatalystConverter, createToScalaConverter => catalystCreateToScalaConverter, isPrimitive}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, DataType}
 import org.apache.spark.util.Utils
 
@@ -1100,7 +1100,8 @@ case class ScalaUDF(
         scalaConverter(i, c.dataType)
       }.toArray :+ (catalystConverter, false)).unzip
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
-    val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
+    val errorMsgTerm = ctx.addReferenceObj("errMsg",
+      QueryExecutionErrors.udfErrorMessage(funcCls, inputTypesString, outputType))
     val resultTerm = ctx.freshName("result")
 
     // codegen for children expressions
@@ -1178,11 +1179,10 @@ case class ScalaUDF(
 
   private[this] val resultConverter = catalystConverter
 
-  lazy val udfErrorMessage = {
-    val funcCls = Utils.getSimpleName(function.getClass)
-    val inputTypes = children.map(_.dataType.catalogString).mkString(", ")
-    val outputType = dataType.catalogString
-    s"Failed to execute user defined function($funcCls: ($inputTypes) => $outputType)"
+  lazy val (funcCls, inputTypesString, outputType) = {
+    (Utils.getSimpleName(function.getClass),
+      children.map(_.dataType.catalogString).mkString(", "),
+      dataType.catalogString)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -1190,7 +1190,8 @@ case class ScalaUDF(
       f(input)
     } catch {
       case e: Exception =>
-        throw new SparkException(udfErrorMessage, e)
+        throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
+          QueryExecutionErrors.udfErrorMessage(funcCls, inputTypesString, outputType), e)
     }
 
     resultConverter(result)

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -490,7 +491,7 @@ case class JsonTuple(children: Seq[Expression])
         // a special case that needs to be handled outside of this method.
         // if a requested field is null, the result must be null. the easiest
         // way to achieve this is just by ignoring null tokens entirely
-        throw new IllegalStateException("Do not attempt to copy a null field")
+        throw QueryExecutionErrors.copyNullFieldNotAllowedError
 
       case _ =>
         // handle other types including objects, arrays, booleans and numbers
@@ -571,8 +572,7 @@ case class JsonToStructs(
     val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
-        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_json", mode)
     }
     val (parserSchema, actualSchema) = nullableSchema match {
       case s: StructType =>

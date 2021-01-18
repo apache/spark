@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -362,7 +363,7 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw new ArithmeticException("divide by zero")
+          throw QueryExecutionErrors.divideByZeroError
         }
         evalOperation(input1, input2)
       }
@@ -611,7 +612,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw new ArithmeticException("divide by zero")
+          throw QueryExecutionErrors.divideByZeroError
         }
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
