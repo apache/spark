@@ -20,8 +20,8 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfterEach
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.scheduler.SparkListener
