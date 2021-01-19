@@ -272,37 +272,19 @@ trait TPCDSBase extends SharedSparkSession {
   )
 
   private val tablePartitionColumns = Map(
-    "catalog_sales" -> Seq("cs_sold_date_sk"),
-    "catalog_returns" -> Seq("cr_returned_date_sk"),
-    "inventory" -> Seq("inv_date_sk"),
-    "store_sales" -> Seq("ss_sold_date_sk"),
-    "store_returns" -> Seq("sr_returned_date_sk"),
-    "web_sales" -> Seq("ws_sold_date_sk"),
-    "web_returns" -> Seq("wr_returned_date_sk"),
-    "call_center" -> Seq.empty[String],
-    "catalog_page" -> Seq.empty[String],
-    "customer" -> Seq.empty[String],
-    "customer_address" -> Seq.empty[String],
-    "customer_demographics" -> Seq.empty[String],
-    "date_dim" -> Seq.empty[String],
-    "household_demographics" -> Seq.empty[String],
-    "income_band" -> Seq.empty[String],
-    "item" -> Seq.empty[String],
-    "promotion" -> Seq.empty[String],
-    "reason" -> Seq.empty[String],
-    "ship_mode" -> Seq.empty[String],
-    "store" -> Seq.empty[String],
-    "time_dim" -> Seq.empty[String],
-    "warehouse" -> Seq.empty[String],
-    "web_page" -> Seq.empty[String],
-    "web_site" -> Seq.empty[String]
+    "catalog_sales" -> Seq("`cs_sold_date_sk`"),
+    "catalog_returns" -> Seq("`cr_returned_date_sk`"),
+    "inventory" -> Seq("`inv_date_sk`"),
+    "store_sales" -> Seq("`ss_sold_date_sk`"),
+    "store_returns" -> Seq("`sr_returned_date_sk`"),
+    "web_sales" -> Seq("`ws_sold_date_sk`"),
+    "web_returns" -> Seq("`wr_returned_date_sk`")
   )
 
   private def partitionedByClause(tableName: String) = {
-    if (tablePartitionColumns(tableName).nonEmpty) {
-      s"PARTITIONED BY (${tablePartitionColumns(tableName).mkString(", ")})"
-    } else {
-      ""
+    tablePartitionColumns.get(tableName) match {
+      case Some(cols) if cols.nonEmpty => s"PARTITIONED BY (${cols.mkString(", ")})"
+      case _ => ""
     }
   }
 
