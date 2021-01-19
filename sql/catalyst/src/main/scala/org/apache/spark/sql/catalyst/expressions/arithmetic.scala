@@ -193,7 +193,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
           val javaType = CodeGenerator.boxedType(dataType)
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError($eval1, $symbol, $eval2);
+             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
+             |  $eval1, $symbol, $eval2);
              |}
            """.stripMargin
         } else {
