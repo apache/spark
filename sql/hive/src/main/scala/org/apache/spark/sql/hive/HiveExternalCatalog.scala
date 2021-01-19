@@ -1144,9 +1144,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withClient {
     val metaStoreParts = newParts.map(p => p.copy(spec = toMetaStorePartitionSpec(p.spec)))
-
-    val rawTable = getRawTable(db, table)
-
     // convert partition statistics to properties so that we can persist them through hive api
     val withStatsProps = metaStoreParts.map { p =>
       if (p.stats.isDefined) {

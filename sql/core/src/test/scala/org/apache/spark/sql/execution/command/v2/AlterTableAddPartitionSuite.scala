@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -42,6 +42,15 @@ class AlterTableAddPartitionSuite
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
       sql(s"ALTER TABLE $t ADD PARTITION (p1 = '')")
       checkPartitions(t, Map("p1" -> ""))
+    }
+  }
+
+  test("SPARK-34143: add a partition to fully partitioned table") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (p0 INT, p1 STRING) $defaultUsing PARTITIONED BY (p0, p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p0 = 0, p1 = 'abc')")
+      checkPartitions(t, Map("p0" -> "0", "p1" -> "abc"))
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, "abc"))
     }
   }
 }
