@@ -100,7 +100,7 @@ Results [3]: [ss_store_sk#3, ss_item_sk#2, sum#9]
 
 (12) Exchange
 Input [3]: [ss_store_sk#3, ss_item_sk#2, sum#9]
-Arguments: hashpartitioning(ss_store_sk#3, ss_item_sk#2, 5), true, [id=#10]
+Arguments: hashpartitioning(ss_store_sk#3, ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#10]
 
 (13) HashAggregate [codegen id : 8]
 Input [3]: [ss_store_sk#3, ss_item_sk#2, sum#9]
@@ -148,7 +148,7 @@ Results [3]: [ss_store_sk#15, ss_item_sk#14, sum#18]
 
 (22) Exchange
 Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#18]
-Arguments: hashpartitioning(ss_store_sk#15, ss_item_sk#14, 5), true, [id=#19]
+Arguments: hashpartitioning(ss_store_sk#15, ss_item_sk#14, 5), ENSURE_REQUIREMENTS, [id=#19]
 
 (23) HashAggregate [codegen id : 5]
 Input [3]: [ss_store_sk#15, ss_item_sk#14, sum#18]
@@ -166,7 +166,7 @@ Results [3]: [ss_store_sk#15, sum#24, count#25]
 
 (25) Exchange
 Input [3]: [ss_store_sk#15, sum#24, count#25]
-Arguments: hashpartitioning(ss_store_sk#15, 5), true, [id=#26]
+Arguments: hashpartitioning(ss_store_sk#15, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (26) HashAggregate [codegen id : 6]
 Input [3]: [ss_store_sk#15, sum#24, count#25]
@@ -217,7 +217,7 @@ Input [5]: [ss_store_sk#3, ss_item_sk#2, revenue#12, s_store_sk#30, s_store_name
 
 (36) Exchange
 Input [3]: [ss_item_sk#2, revenue#12, s_store_name#31]
-Arguments: hashpartitioning(ss_item_sk#2, 5), true, [id=#33]
+Arguments: hashpartitioning(ss_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#33]
 
 (37) Sort [codegen id : 9]
 Input [3]: [ss_item_sk#2, revenue#12, s_store_name#31]
@@ -239,7 +239,7 @@ Condition : isnotnull(i_item_sk#34)
 
 (41) Exchange
 Input [5]: [i_item_sk#34, i_item_desc#35, i_current_price#36, i_wholesale_cost#37, i_brand#38]
-Arguments: hashpartitioning(i_item_sk#34, 5), true, [id=#39]
+Arguments: hashpartitioning(i_item_sk#34, 5), ENSURE_REQUIREMENTS, [id=#39]
 
 (42) Sort [codegen id : 11]
 Input [5]: [i_item_sk#34, i_item_desc#35, i_current_price#36, i_wholesale_cost#37, i_brand#38]

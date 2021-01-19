@@ -245,7 +245,7 @@ Results [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#23
 
 (44) Exchange
 Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#23, cd_education_status#24, sum#30]
-Arguments: hashpartitioning(cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#23, cd_education_status#24, 5), true, [id=#31]
+Arguments: hashpartitioning(cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#23, cd_education_status#24, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (45) HashAggregate [codegen id : 8]
 Input [6]: [cc_call_center_id#2, cc_name#3, cc_manager#4, cd_marital_status#23, cd_education_status#24, sum#30]
@@ -256,7 +256,7 @@ Results [4]: [cc_call_center_id#2 AS Call_Center#33, cc_name#3 AS Call_Center_Na
 
 (46) Exchange
 Input [4]: [Call_Center#33, Call_Center_Name#34, Manager#35, Returns_Loss#36]
-Arguments: rangepartitioning(Returns_Loss#36 DESC NULLS LAST, 5), true, [id=#37]
+Arguments: rangepartitioning(Returns_Loss#36 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [id=#37]
 
 (47) Sort [codegen id : 9]
 Input [4]: [Call_Center#33, Call_Center_Name#34, Manager#35, Returns_Loss#36]

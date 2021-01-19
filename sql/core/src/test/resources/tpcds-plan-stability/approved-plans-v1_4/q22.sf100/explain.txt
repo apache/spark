@@ -105,7 +105,7 @@ Input [4]: [inv_date_sk#1, inv_item_sk#2, inv_quantity_on_hand#4, d_date_sk#7]
 
 (17) Exchange
 Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
-Arguments: hashpartitioning(inv_item_sk#2, 5), true, [id=#10]
+Arguments: hashpartitioning(inv_item_sk#2, 5), ENSURE_REQUIREMENTS, [id=#10]
 
 (18) Sort [codegen id : 4]
 Input [2]: [inv_item_sk#2, inv_quantity_on_hand#4]
@@ -127,7 +127,7 @@ Condition : isnotnull(i_item_sk#11)
 
 (22) Exchange
 Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
-Arguments: hashpartitioning(i_item_sk#11, 5), true, [id=#16]
+Arguments: hashpartitioning(i_item_sk#11, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (23) Sort [codegen id : 6]
 Input [5]: [i_item_sk#11, i_brand#12, i_class#13, i_category#14, i_product_name#15]
@@ -149,20 +149,20 @@ Arguments: [List(inv_quantity_on_hand#4, i_product_name#15, i_brand#12, i_class#
 (27) HashAggregate [codegen id : 7]
 Input [6]: [inv_quantity_on_hand#4, i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
 Keys [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
-Functions [1]: [partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Functions [1]: [partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [2]: [sum#22, count#23]
 Results [7]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, sum#24, count#25]
 
 (28) Exchange
 Input [7]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, sum#24, count#25]
-Arguments: hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, 5), true, [id=#26]
+Arguments: hashpartitioning(i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (29) HashAggregate [codegen id : 8]
 Input [7]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21, sum#24, count#25]
 Keys [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, spark_grouping_id#21]
-Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#27]
-Results [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(cast(inv_quantity_on_hand#4 as bigint))#27 AS qoh#28]
+Functions [1]: [avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#27]
+Results [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, avg(inv_quantity_on_hand#4)#27 AS qoh#28]
 
 (30) TakeOrderedAndProject
 Input [5]: [i_product_name#17, i_brand#18, i_class#19, i_category#20, qoh#28]

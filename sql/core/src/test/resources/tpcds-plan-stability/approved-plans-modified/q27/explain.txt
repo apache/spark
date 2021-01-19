@@ -211,20 +211,20 @@ Input [8]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_c
 (30) HashAggregate [codegen id : 5]
 Input [6]: [i_item_id#21, s_state#18, agg1#23, agg2#24, agg3#25, agg4#26]
 Keys [2]: [i_item_id#21, s_state#18]
-Functions [4]: [partial_avg(cast(agg1#23 as bigint)), partial_avg(UnscaledValue(agg2#24)), partial_avg(UnscaledValue(agg3#25)), partial_avg(UnscaledValue(agg4#26))]
+Functions [4]: [partial_avg(agg1#23), partial_avg(UnscaledValue(agg2#24)), partial_avg(UnscaledValue(agg3#25)), partial_avg(UnscaledValue(agg4#26))]
 Aggregate Attributes [8]: [sum#27, count#28, sum#29, count#30, sum#31, count#32, sum#33, count#34]
 Results [10]: [i_item_id#21, s_state#18, sum#35, count#36, sum#37, count#38, sum#39, count#40, sum#41, count#42]
 
 (31) Exchange
 Input [10]: [i_item_id#21, s_state#18, sum#35, count#36, sum#37, count#38, sum#39, count#40, sum#41, count#42]
-Arguments: hashpartitioning(i_item_id#21, s_state#18, 5), true, [id=#43]
+Arguments: hashpartitioning(i_item_id#21, s_state#18, 5), ENSURE_REQUIREMENTS, [id=#43]
 
 (32) HashAggregate [codegen id : 6]
 Input [10]: [i_item_id#21, s_state#18, sum#35, count#36, sum#37, count#38, sum#39, count#40, sum#41, count#42]
 Keys [2]: [i_item_id#21, s_state#18]
-Functions [4]: [avg(cast(agg1#23 as bigint)), avg(UnscaledValue(agg2#24)), avg(UnscaledValue(agg3#25)), avg(UnscaledValue(agg4#26))]
-Aggregate Attributes [4]: [avg(cast(agg1#23 as bigint))#44, avg(UnscaledValue(agg2#24))#45, avg(UnscaledValue(agg3#25))#46, avg(UnscaledValue(agg4#26))#47]
-Results [7]: [i_item_id#21, s_state#18, 0 AS g_state#48, avg(cast(agg1#23 as bigint))#44 AS agg1#49, cast((avg(UnscaledValue(agg2#24))#45 / 100.0) as decimal(11,6)) AS agg2#50, cast((avg(UnscaledValue(agg3#25))#46 / 100.0) as decimal(11,6)) AS agg3#51, cast((avg(UnscaledValue(agg4#26))#47 / 100.0) as decimal(11,6)) AS agg4#52]
+Functions [4]: [avg(agg1#23), avg(UnscaledValue(agg2#24)), avg(UnscaledValue(agg3#25)), avg(UnscaledValue(agg4#26))]
+Aggregate Attributes [4]: [avg(agg1#23)#44, avg(UnscaledValue(agg2#24))#45, avg(UnscaledValue(agg3#25))#46, avg(UnscaledValue(agg4#26))#47]
+Results [7]: [i_item_id#21, s_state#18, 0 AS g_state#48, avg(agg1#23)#44 AS agg1#49, cast((avg(UnscaledValue(agg2#24))#45 / 100.0) as decimal(11,6)) AS agg2#50, cast((avg(UnscaledValue(agg3#25))#46 / 100.0) as decimal(11,6)) AS agg3#51, cast((avg(UnscaledValue(agg4#26))#47 / 100.0) as decimal(11,6)) AS agg4#52]
 
 (33) Scan parquet default.store_sales
 Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
@@ -310,20 +310,20 @@ Input [7]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_c
 (52) HashAggregate [codegen id : 11]
 Input [5]: [i_item_id#21, agg1#23, agg2#24, agg3#25, agg4#26]
 Keys [1]: [i_item_id#21]
-Functions [4]: [partial_avg(cast(agg1#23 as bigint)), partial_avg(UnscaledValue(agg2#24)), partial_avg(UnscaledValue(agg3#25)), partial_avg(UnscaledValue(agg4#26))]
+Functions [4]: [partial_avg(agg1#23), partial_avg(UnscaledValue(agg2#24)), partial_avg(UnscaledValue(agg3#25)), partial_avg(UnscaledValue(agg4#26))]
 Aggregate Attributes [8]: [sum#54, count#55, sum#56, count#57, sum#58, count#59, sum#60, count#61]
 Results [9]: [i_item_id#21, sum#62, count#63, sum#64, count#65, sum#66, count#67, sum#68, count#69]
 
 (53) Exchange
 Input [9]: [i_item_id#21, sum#62, count#63, sum#64, count#65, sum#66, count#67, sum#68, count#69]
-Arguments: hashpartitioning(i_item_id#21, 5), true, [id=#70]
+Arguments: hashpartitioning(i_item_id#21, 5), ENSURE_REQUIREMENTS, [id=#70]
 
 (54) HashAggregate [codegen id : 12]
 Input [9]: [i_item_id#21, sum#62, count#63, sum#64, count#65, sum#66, count#67, sum#68, count#69]
 Keys [1]: [i_item_id#21]
-Functions [4]: [avg(cast(agg1#23 as bigint)), avg(UnscaledValue(agg2#24)), avg(UnscaledValue(agg3#25)), avg(UnscaledValue(agg4#26))]
-Aggregate Attributes [4]: [avg(cast(agg1#23 as bigint))#71, avg(UnscaledValue(agg2#24))#72, avg(UnscaledValue(agg3#25))#73, avg(UnscaledValue(agg4#26))#74]
-Results [7]: [i_item_id#21, null AS s_state#75, 1 AS g_state#76, avg(cast(agg1#23 as bigint))#71 AS agg1#77, cast((avg(UnscaledValue(agg2#24))#72 / 100.0) as decimal(11,6)) AS agg2#78, cast((avg(UnscaledValue(agg3#25))#73 / 100.0) as decimal(11,6)) AS agg3#79, cast((avg(UnscaledValue(agg4#26))#74 / 100.0) as decimal(11,6)) AS agg4#80]
+Functions [4]: [avg(agg1#23), avg(UnscaledValue(agg2#24)), avg(UnscaledValue(agg3#25)), avg(UnscaledValue(agg4#26))]
+Aggregate Attributes [4]: [avg(agg1#23)#71, avg(UnscaledValue(agg2#24))#72, avg(UnscaledValue(agg3#25))#73, avg(UnscaledValue(agg4#26))#74]
+Results [7]: [i_item_id#21, null AS s_state#75, 1 AS g_state#76, avg(agg1#23)#71 AS agg1#77, cast((avg(UnscaledValue(agg2#24))#72 / 100.0) as decimal(11,6)) AS agg2#78, cast((avg(UnscaledValue(agg3#25))#73 / 100.0) as decimal(11,6)) AS agg3#79, cast((avg(UnscaledValue(agg4#26))#74 / 100.0) as decimal(11,6)) AS agg4#80]
 
 (55) Scan parquet default.store_sales
 Output [8]: [ss_sold_date_sk#1, ss_item_sk#2, ss_cdemo_sk#3, ss_store_sk#4, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_coupon_amt#8]
@@ -405,20 +405,20 @@ Input [6]: [ss_item_sk#2, ss_quantity#5, ss_list_price#6, ss_sales_price#7, ss_c
 (73) HashAggregate [codegen id : 17]
 Input [4]: [agg1#23, agg2#24, agg3#25, agg4#26]
 Keys: []
-Functions [4]: [partial_avg(cast(agg1#23 as bigint)), partial_avg(UnscaledValue(agg2#24)), partial_avg(UnscaledValue(agg3#25)), partial_avg(UnscaledValue(agg4#26))]
+Functions [4]: [partial_avg(agg1#23), partial_avg(UnscaledValue(agg2#24)), partial_avg(UnscaledValue(agg3#25)), partial_avg(UnscaledValue(agg4#26))]
 Aggregate Attributes [8]: [sum#82, count#83, sum#84, count#85, sum#86, count#87, sum#88, count#89]
 Results [8]: [sum#90, count#91, sum#92, count#93, sum#94, count#95, sum#96, count#97]
 
 (74) Exchange
 Input [8]: [sum#90, count#91, sum#92, count#93, sum#94, count#95, sum#96, count#97]
-Arguments: SinglePartition, true, [id=#98]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#98]
 
 (75) HashAggregate [codegen id : 18]
 Input [8]: [sum#90, count#91, sum#92, count#93, sum#94, count#95, sum#96, count#97]
 Keys: []
-Functions [4]: [avg(cast(agg1#23 as bigint)), avg(UnscaledValue(agg2#24)), avg(UnscaledValue(agg3#25)), avg(UnscaledValue(agg4#26))]
-Aggregate Attributes [4]: [avg(cast(agg1#23 as bigint))#99, avg(UnscaledValue(agg2#24))#100, avg(UnscaledValue(agg3#25))#101, avg(UnscaledValue(agg4#26))#102]
-Results [7]: [null AS i_item_id#103, null AS s_state#104, 1 AS g_state#105, avg(cast(agg1#23 as bigint))#99 AS agg1#106, cast((avg(UnscaledValue(agg2#24))#100 / 100.0) as decimal(11,6)) AS agg2#107, cast((avg(UnscaledValue(agg3#25))#101 / 100.0) as decimal(11,6)) AS agg3#108, cast((avg(UnscaledValue(agg4#26))#102 / 100.0) as decimal(11,6)) AS agg4#109]
+Functions [4]: [avg(agg1#23), avg(UnscaledValue(agg2#24)), avg(UnscaledValue(agg3#25)), avg(UnscaledValue(agg4#26))]
+Aggregate Attributes [4]: [avg(agg1#23)#99, avg(UnscaledValue(agg2#24))#100, avg(UnscaledValue(agg3#25))#101, avg(UnscaledValue(agg4#26))#102]
+Results [7]: [null AS i_item_id#103, null AS s_state#104, 1 AS g_state#105, avg(agg1#23)#99 AS agg1#106, cast((avg(UnscaledValue(agg2#24))#100 / 100.0) as decimal(11,6)) AS agg2#107, cast((avg(UnscaledValue(agg3#25))#101 / 100.0) as decimal(11,6)) AS agg3#108, cast((avg(UnscaledValue(agg4#26))#102 / 100.0) as decimal(11,6)) AS agg4#109]
 
 (76) Union
 

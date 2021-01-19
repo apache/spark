@@ -173,7 +173,7 @@ Results [3]: [s_store_sk#8, sum#12, sum#13]
 
 (18) Exchange
 Input [3]: [s_store_sk#8, sum#12, sum#13]
-Arguments: hashpartitioning(s_store_sk#8, 5), true, [id=#14]
+Arguments: hashpartitioning(s_store_sk#8, 5), ENSURE_REQUIREMENTS, [id=#14]
 
 (19) HashAggregate [codegen id : 8]
 Input [3]: [s_store_sk#8, sum#12, sum#13]
@@ -229,7 +229,7 @@ Results [3]: [s_store_sk#23, sum#26, sum#27]
 
 (30) Exchange
 Input [3]: [s_store_sk#23, sum#26, sum#27]
-Arguments: hashpartitioning(s_store_sk#23, 5), true, [id=#28]
+Arguments: hashpartitioning(s_store_sk#23, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (31) HashAggregate [codegen id : 7]
 Input [3]: [s_store_sk#23, sum#26, sum#27]
@@ -286,7 +286,7 @@ Results [3]: [cs_call_center_sk#39, sum#44, sum#45]
 
 (42) Exchange
 Input [3]: [cs_call_center_sk#39, sum#44, sum#45]
-Arguments: hashpartitioning(cs_call_center_sk#39, 5), true, [id=#46]
+Arguments: hashpartitioning(cs_call_center_sk#39, 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (43) HashAggregate [codegen id : 11]
 Input [3]: [cs_call_center_sk#39, sum#44, sum#45]
@@ -334,7 +334,7 @@ Results [2]: [sum#57, sum#58]
 
 (52) Exchange
 Input [2]: [sum#57, sum#58]
-Arguments: SinglePartition, true, [id=#59]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#59]
 
 (53) HashAggregate [codegen id : 14]
 Input [2]: [sum#57, sum#58]
@@ -412,7 +412,7 @@ Results [3]: [wp_web_page_sk#71, sum#75, sum#76]
 
 (69) Exchange
 Input [3]: [wp_web_page_sk#71, sum#75, sum#76]
-Arguments: hashpartitioning(wp_web_page_sk#71, 5), true, [id=#77]
+Arguments: hashpartitioning(wp_web_page_sk#71, 5), ENSURE_REQUIREMENTS, [id=#77]
 
 (70) HashAggregate [codegen id : 23]
 Input [3]: [wp_web_page_sk#71, sum#75, sum#76]
@@ -468,7 +468,7 @@ Results [3]: [wp_web_page_sk#86, sum#89, sum#90]
 
 (81) Exchange
 Input [3]: [wp_web_page_sk#86, sum#89, sum#90]
-Arguments: hashpartitioning(wp_web_page_sk#86, 5), true, [id=#91]
+Arguments: hashpartitioning(wp_web_page_sk#86, 5), ENSURE_REQUIREMENTS, [id=#91]
 
 (82) HashAggregate [codegen id : 22]
 Input [3]: [wp_web_page_sk#86, sum#89, sum#90]
@@ -505,7 +505,7 @@ Results [9]: [channel#101, id#102, spark_grouping_id#103, sum#110, isEmpty#111, 
 
 (89) Exchange
 Input [9]: [channel#101, id#102, spark_grouping_id#103, sum#110, isEmpty#111, sum#112, isEmpty#113, sum#114, isEmpty#115]
-Arguments: hashpartitioning(channel#101, id#102, spark_grouping_id#103, 5), true, [id=#116]
+Arguments: hashpartitioning(channel#101, id#102, spark_grouping_id#103, 5), ENSURE_REQUIREMENTS, [id=#116]
 
 (90) HashAggregate [codegen id : 25]
 Input [9]: [channel#101, id#102, spark_grouping_id#103, sum#110, isEmpty#111, sum#112, isEmpty#113, sum#114, isEmpty#115]

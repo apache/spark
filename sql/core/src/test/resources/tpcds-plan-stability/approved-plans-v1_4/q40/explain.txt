@@ -168,7 +168,7 @@ Results [6]: [w_state#11, i_item_id#14, sum#24, isEmpty#25, sum#26, isEmpty#27]
 
 (30) Exchange
 Input [6]: [w_state#11, i_item_id#14, sum#24, isEmpty#25, sum#26, isEmpty#27]
-Arguments: hashpartitioning(w_state#11, i_item_id#14, 5), true, [id=#28]
+Arguments: hashpartitioning(w_state#11, i_item_id#14, 5), ENSURE_REQUIREMENTS, [id=#28]
 
 (31) HashAggregate [codegen id : 6]
 Input [6]: [w_state#11, i_item_id#14, sum#24, isEmpty#25, sum#26, isEmpty#27]

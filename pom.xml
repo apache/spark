@@ -120,20 +120,20 @@
     <sbt.project.name>spark</sbt.project.name>
     <slf4j.version>1.7.30</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>3.2.0</hadoop.version>
+    <hadoop.version>3.2.2</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <zookeeper.version>3.4.14</zookeeper.version>
+    <zookeeper.version>3.6.2</zookeeper.version>
     <curator.version>2.13.0</curator.version>
     <hive.group>org.apache.hive</hive.group>
     <hive.classifier>core</hive.classifier>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>2.3.7</hive.version>
-    <hive23.version>2.3.7</hive23.version>
+    <hive.version>2.3.8</hive.version>
+    <hive23.version>2.3.8</hive23.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>2.3</hive.version.short>
     <!-- note that this should be compatible with Kafka brokers version 0.10 and up -->
-    <kafka.version>2.6.0</kafka.version>
+    <kafka.version>2.7.0</kafka.version>
     <!-- After 10.15.1.3, the minimum required version is JDK9 -->
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.10.1</parquet.version>
@@ -163,7 +163,7 @@
     <commons.math3.version>3.4.1</commons.math3.version>
     <!-- managed up from 3.2.1 for SPARK-11652 -->
     <commons.collections.version>3.2.2</commons.collections.version>
-    <scala.version>2.12.10</scala.version>
+    <scala.version>2.12.13</scala.version>
     <scala.binary.version>2.12</scala.binary.version>
     <scalatest-maven-plugin.version>2.0.0</scalatest-maven-plugin.version>
     <scalafmt.parameters>--test</scalafmt.parameters>
@@ -244,6 +244,15 @@
     <orc.deps.scope>compile</orc.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
+
+    <!--
+      These default to Hadoop 3.x shaded client/minicluster jars, but are switched to hadoop-client
+      when the Hadoop profile is hadoop-2.7, because these are only available in 3.x. Note that,
+      as result we have to include the same hadoop-client dependency multiple times in hadoop-2.7.
+    -->
+    <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
+    <hadoop-client-runtime.artifact>hadoop-client-runtime</hadoop-client-runtime.artifact>
+    <hadoop-client-minicluster.artifact>hadoop-client-minicluster</hadoop-client-minicluster.artifact>
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -860,6 +869,11 @@
         <version>2.0.1</version>
       </dependency>
       <dependency>
+        <groupId>javax.xml.bind</groupId>
+        <artifactId>jaxb-api</artifactId>
+        <version>2.2.11</version>
+      </dependency>
+      <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
         <version>1.0</version>
@@ -1067,6 +1081,26 @@
         <version>${curator.version}</version>
         <scope>test</scope>
       </dependency>
+      <!-- Hadoop 3.x dependencies -->
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-api</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-runtime</artifactId>
+        <version>${hadoop.version}</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hadoop</groupId>
+        <artifactId>hadoop-client-minicluster</artifactId>
+        <version>${yarn.version}</version>
+        <scope>test</scope>
+      </dependency>
+      <!-- End of Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
@@ -1500,7 +1534,11 @@
           </exclusion>
           <exclusion>
             <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
+            <artifactId>netty-handler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport-native-epoll</artifactId>
           </exclusion>
           <exclusion>
             <groupId>com.github.spotbugs</groupId>
@@ -1655,6 +1693,14 @@
           <exclusion>
             <groupId>org.apache.ant</groupId>
             <artifactId>ant</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-auth</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.zookeeper</groupId>
@@ -1844,6 +1890,22 @@
           <exclusion>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>*</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>net.hydromatic</groupId>
+            <artifactId>eigenbase-properties</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>commons-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.janino</groupId>
+            <artifactId>janino</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.pentaho</groupId>
+            <artifactId>pentaho-aggdesigner-algorithm</artifactId>
           </exclusion>
           <!-- End of Hive 2.3 exclusion -->
         </exclusions>
@@ -2420,17 +2482,6 @@
                 </rules>
               </configuration>
             </execution>
-            <execution>
-              <id>enforce-no-duplicate-dependencies</id>
-              <goals>
-                <goal>enforce</goal>
-              </goals>
-              <configuration>
-                <rules>
-                  <banDuplicatePomDependencyVersions/>
-                </rules>
-              </configuration>
-            </execution>
           </executions>
         </plugin>
 	<plugin>
@@ -2529,7 +2580,7 @@
               <compilerPlugin>
                 <groupId>com.github.ghik</groupId>
                 <artifactId>silencer-plugin_${scala.version}</artifactId>
-                <version>1.6.0</version>
+                <version>1.7.1</version>
               </compilerPlugin>
             </compilerPlugins>
           </configuration>
@@ -2901,6 +2952,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
+          <createDependencyReducedPom>false</createDependencyReducedPom>
           <artifactSet>
             <includes>
               <include>org.spark-project.spark:unused</include>
@@ -3162,6 +3214,9 @@
         <hadoop.version>2.7.4</hadoop.version>
         <curator.version>2.7.1</curator.version>
         <commons-io.version>2.4</commons-io.version>
+        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
+        <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
       </properties>
     </profile>
 

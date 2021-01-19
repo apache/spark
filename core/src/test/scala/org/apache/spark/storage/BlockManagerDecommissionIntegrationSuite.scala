@@ -281,7 +281,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
           (update.blockUpdatedInfo.blockId.name,
             update.blockUpdatedInfo.blockManagerId)}
         val blocksToManagers = blockLocs.groupBy(_._1).mapValues(_.size)
-        assert(!blocksToManagers.filter(_._2 > 1).isEmpty,
+        assert(blocksToManagers.exists(_._2 > 1),
           s"We should have a block that has been on multiple BMs in rdds:\n ${rddUpdates} from:\n" +
           s"${blocksUpdated}\n but instead we got:\n ${blocksToManagers}")
       }

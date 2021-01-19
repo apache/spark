@@ -183,7 +183,7 @@ Results [5]: [s_store_id#25, sum#31, sum#32, sum#33, sum#34]
 
 (24) Exchange
 Input [5]: [s_store_id#25, sum#31, sum#32, sum#33, sum#34]
-Arguments: hashpartitioning(s_store_id#25, 5), true, [id=#35]
+Arguments: hashpartitioning(s_store_id#25, 5), ENSURE_REQUIREMENTS, [id=#35]
 
 (25) HashAggregate [codegen id : 6]
 Input [5]: [s_store_id#25, sum#31, sum#32, sum#33, sum#34]
@@ -278,7 +278,7 @@ Results [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
 
 (45) Exchange
 Input [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
-Arguments: hashpartitioning(cp_catalog_page_id#66, 5), true, [id=#76]
+Arguments: hashpartitioning(cp_catalog_page_id#66, 5), ENSURE_REQUIREMENTS, [id=#76]
 
 (46) HashAggregate [codegen id : 12]
 Input [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
@@ -396,7 +396,7 @@ Results [5]: [web_site_id#111, sum#117, sum#118, sum#119, sum#120]
 
 (71) Exchange
 Input [5]: [web_site_id#111, sum#117, sum#118, sum#119, sum#120]
-Arguments: hashpartitioning(web_site_id#111, 5), true, [id=#121]
+Arguments: hashpartitioning(web_site_id#111, 5), ENSURE_REQUIREMENTS, [id=#121]
 
 (72) HashAggregate [codegen id : 19]
 Input [5]: [web_site_id#111, sum#117, sum#118, sum#119, sum#120]
@@ -420,7 +420,7 @@ Results [9]: [channel#131, id#132, spark_grouping_id#133, sum#140, isEmpty#141, 
 
 (76) Exchange
 Input [9]: [channel#131, id#132, spark_grouping_id#133, sum#140, isEmpty#141, sum#142, isEmpty#143, sum#144, isEmpty#145]
-Arguments: hashpartitioning(channel#131, id#132, spark_grouping_id#133, 5), true, [id=#146]
+Arguments: hashpartitioning(channel#131, id#132, spark_grouping_id#133, 5), ENSURE_REQUIREMENTS, [id=#146]
 
 (77) HashAggregate [codegen id : 21]
 Input [9]: [channel#131, id#132, spark_grouping_id#133, sum#140, isEmpty#141, sum#142, isEmpty#143, sum#144, isEmpty#145]
