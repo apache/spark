@@ -15,35 +15,37 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                             HashAggregate [i_category,i_class,spark_grouping_id,ss_net_profit,ss_ext_sales_price] [sum,sum,sum,sum]
                               Expand [ss_ext_sales_price,ss_net_profit,i_category,i_class]
                                 Project [ss_ext_sales_price,ss_net_profit,i_category,i_class]
-                                  BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                    Project [ss_store_sk,ss_ext_sales_price,ss_net_profit,i_class,i_category]
-                                      BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                        InputAdapter
-                                          BroadcastExchange #3
-                                            WholeStageCodegen (2)
-                                              Project [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit]
-                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                  InputAdapter
-                                                    BroadcastExchange #4
-                                                      WholeStageCodegen (1)
-                                                        Filter [ss_item_sk,ss_store_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
+                                  BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                    Project [ss_item_sk,ss_ext_sales_price,ss_net_profit]
+                                      BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                        Project [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit]
+                                          BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                            Filter [ss_item_sk,ss_store_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
+                                                    SubqueryBroadcast [d_date_sk] #1
+                                                      ReusedExchange [d_date_sk] #3
+                                            InputAdapter
+                                              BroadcastExchange #3
+                                                WholeStageCodegen (1)
                                                   Project [d_date_sk]
                                                     Filter [d_year,d_date_sk]
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.date_dim [d_date_sk,d_year]
-                                        Filter [i_item_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.item [i_item_sk,i_class,i_category]
+                                        InputAdapter
+                                          BroadcastExchange #4
+                                            WholeStageCodegen (2)
+                                              Project [s_store_sk]
+                                                Filter [s_state,s_store_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.store [s_store_sk,s_state]
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
-                                          Project [s_store_sk]
-                                            Filter [s_state,s_store_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.store [s_store_sk,s_state]
+                                          Filter [i_item_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.item [i_item_sk,i_class,i_category]

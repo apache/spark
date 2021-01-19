@@ -14,47 +14,49 @@ TakeOrderedAndProject [w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_stat
                           WholeStageCodegen (5)
                             HashAggregate [w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy,ws_ext_sales_price,ws_quantity,ws_net_paid] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               Project [ws_quantity,ws_ext_sales_price,ws_net_paid,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy]
-                                BroadcastHashJoin [ws_ship_mode_sk,sm_ship_mode_sk]
-                                  Project [ws_ship_mode_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy]
-                                    BroadcastHashJoin [ws_sold_time_sk,t_time_sk]
-                                      Project [ws_sold_time_sk,ws_ship_mode_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy]
-                                        BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                          InputAdapter
-                                            BroadcastExchange #3
-                                              WholeStageCodegen (2)
-                                                Project [ws_sold_time_sk,ws_ship_mode_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,ws_sold_date_sk,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country]
-                                                  BroadcastHashJoin [ws_warehouse_sk,w_warehouse_sk]
-                                                    InputAdapter
-                                                      BroadcastExchange #4
-                                                        WholeStageCodegen (1)
-                                                          Filter [ws_warehouse_sk,ws_sold_time_sk,ws_ship_mode_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.web_sales [ws_sold_time_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,ws_sold_date_sk]
-                                                    Filter [w_warehouse_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country]
-                                          Filter [d_year,d_date_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
-                                      InputAdapter
-                                        BroadcastExchange #5
-                                          WholeStageCodegen (3)
-                                            Project [t_time_sk]
-                                              Filter [t_time,t_time_sk]
+                                BroadcastHashJoin [ws_warehouse_sk,w_warehouse_sk]
+                                  Project [ws_warehouse_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,d_year,d_moy]
+                                    BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                      Project [ws_warehouse_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,ws_sold_date_sk]
+                                        BroadcastHashJoin [ws_sold_time_sk,t_time_sk]
+                                          Project [ws_sold_time_sk,ws_warehouse_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,ws_sold_date_sk]
+                                            BroadcastHashJoin [ws_ship_mode_sk,sm_ship_mode_sk]
+                                              Filter [ws_warehouse_sk,ws_sold_time_sk,ws_ship_mode_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.time_dim [t_time_sk,t_time]
+                                                    Scan parquet default.web_sales [ws_sold_time_sk,ws_ship_mode_sk,ws_warehouse_sk,ws_quantity,ws_ext_sales_price,ws_net_paid,ws_sold_date_sk]
+                                                      SubqueryBroadcast [d_date_sk] #1
+                                                        ReusedExchange [d_date_sk,d_year,d_moy] #3
+                                              InputAdapter
+                                                BroadcastExchange #4
+                                                  WholeStageCodegen (1)
+                                                    Project [sm_ship_mode_sk]
+                                                      Filter [sm_carrier,sm_ship_mode_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.ship_mode [sm_ship_mode_sk,sm_carrier]
+                                          InputAdapter
+                                            BroadcastExchange #5
+                                              WholeStageCodegen (2)
+                                                Project [t_time_sk]
+                                                  Filter [t_time,t_time_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.time_dim [t_time_sk,t_time]
+                                      InputAdapter
+                                        BroadcastExchange #3
+                                          WholeStageCodegen (3)
+                                            Filter [d_year,d_date_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                   InputAdapter
                                     BroadcastExchange #6
                                       WholeStageCodegen (4)
-                                        Project [sm_ship_mode_sk]
-                                          Filter [sm_carrier,sm_ship_mode_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.ship_mode [sm_ship_mode_sk,sm_carrier]
+                                        Filter [w_warehouse_sk]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country]
                   WholeStageCodegen (12)
                     HashAggregate [w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(CASE WHEN (d_moy = 1) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 2) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 3) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 4) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 5) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 6) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 7) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 8) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 9) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 10) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 11) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 12) THEN CheckOverflow((promote_precision(cast(cs_sales_price as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 1) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 2) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 3) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 4) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 5) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 6) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 7) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 8) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 9) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 10) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 11) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),sum(CASE WHEN (d_moy = 12) THEN CheckOverflow((promote_precision(cast(cs_net_paid_inc_tax as decimal(12,2))) * promote_precision(cast(cast(cs_quantity as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true) ELSE 0.00 END),ship_carriers,year,jan_sales,feb_sales,mar_sales,apr_sales,may_sales,jun_sales,jul_sales,aug_sales,sep_sales,oct_sales,nov_sales,dec_sales,jan_net,feb_net,mar_net,apr_net,may_net,jun_net,jul_net,aug_net,sep_net,oct_net,nov_net,dec_net,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                       InputAdapter
@@ -62,32 +64,23 @@ TakeOrderedAndProject [w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_stat
                           WholeStageCodegen (11)
                             HashAggregate [w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy,cs_sales_price,cs_quantity,cs_net_paid_inc_tax] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
                               Project [cs_quantity,cs_sales_price,cs_net_paid_inc_tax,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy]
-                                BroadcastHashJoin [cs_ship_mode_sk,sm_ship_mode_sk]
-                                  Project [cs_ship_mode_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy]
-                                    BroadcastHashJoin [cs_sold_time_sk,t_time_sk]
-                                      Project [cs_sold_time_sk,cs_ship_mode_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country,d_year,d_moy]
-                                        BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                          InputAdapter
-                                            BroadcastExchange #8
-                                              WholeStageCodegen (8)
-                                                Project [cs_sold_time_sk,cs_ship_mode_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,cs_sold_date_sk,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country]
-                                                  BroadcastHashJoin [cs_warehouse_sk,w_warehouse_sk]
-                                                    InputAdapter
-                                                      BroadcastExchange #9
-                                                        WholeStageCodegen (7)
-                                                          Filter [cs_warehouse_sk,cs_sold_time_sk,cs_ship_mode_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.catalog_sales [cs_sold_time_sk,cs_ship_mode_sk,cs_warehouse_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,cs_sold_date_sk]
-                                                    Filter [w_warehouse_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.warehouse [w_warehouse_sk,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country]
-                                          Filter [d_year,d_date_sk]
-                                            ColumnarToRow
+                                BroadcastHashJoin [cs_warehouse_sk,w_warehouse_sk]
+                                  Project [cs_warehouse_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,d_year,d_moy]
+                                    BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
+                                      Project [cs_warehouse_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,cs_sold_date_sk]
+                                        BroadcastHashJoin [cs_sold_time_sk,t_time_sk]
+                                          Project [cs_sold_time_sk,cs_warehouse_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,cs_sold_date_sk]
+                                            BroadcastHashJoin [cs_ship_mode_sk,sm_ship_mode_sk]
+                                              Filter [cs_warehouse_sk,cs_sold_time_sk,cs_ship_mode_sk]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.catalog_sales [cs_sold_time_sk,cs_ship_mode_sk,cs_warehouse_sk,cs_quantity,cs_sales_price,cs_net_paid_inc_tax,cs_sold_date_sk]
+                                                      ReusedSubquery [d_date_sk] #1
                                               InputAdapter
-                                                Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                ReusedExchange [sm_ship_mode_sk] #4
+                                          InputAdapter
+                                            ReusedExchange [t_time_sk] #5
                                       InputAdapter
-                                        ReusedExchange [t_time_sk] #5
+                                        ReusedExchange [d_date_sk,d_year,d_moy] #3
                                   InputAdapter
-                                    ReusedExchange [sm_ship_mode_sk] #6
+                                    ReusedExchange [w_warehouse_sk,w_warehouse_name,w_warehouse_sq_ft,w_city,w_county,w_state,w_country] #6
