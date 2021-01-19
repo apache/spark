@@ -28,20 +28,23 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                       HashAggregate [ws_item_sk,wr_return_quantity,ws_quantity,wr_return_amt,ws_net_paid] [sum,sum,sum,isEmpty,sum,isEmpty,sum,sum,sum,isEmpty,sum,isEmpty]
                                                         Project [ws_item_sk,ws_quantity,ws_net_paid,wr_return_quantity,wr_return_amt]
                                                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                            Project [ws_sold_date_sk,ws_item_sk,ws_quantity,ws_net_paid,wr_return_quantity,wr_return_amt]
+                                                            Project [ws_item_sk,ws_quantity,ws_net_paid,ws_sold_date_sk,wr_return_quantity,wr_return_amt]
                                                               BroadcastHashJoin [ws_order_number,ws_item_sk,wr_order_number,wr_item_sk]
-                                                                Project [ws_sold_date_sk,ws_item_sk,ws_order_number,ws_quantity,ws_net_paid]
-                                                                  Filter [ws_net_profit,ws_net_paid,ws_quantity,ws_order_number,ws_item_sk,ws_sold_date_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit]
                                                                 InputAdapter
                                                                   BroadcastExchange #4
                                                                     WholeStageCodegen (1)
-                                                                      Filter [wr_return_amt,wr_order_number,wr_item_sk]
-                                                                        ColumnarToRow
-                                                                          InputAdapter
-                                                                            Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt]
+                                                                      Project [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_sold_date_sk]
+                                                                        Filter [ws_net_profit,ws_net_paid,ws_quantity,ws_order_number,ws_item_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit,ws_sold_date_sk]
+                                                                                SubqueryBroadcast [d_date_sk] #1
+                                                                                  ReusedExchange [d_date_sk] #5
+                                                                Project [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt]
+                                                                  Filter [wr_return_amt,wr_order_number,wr_item_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.web_returns [wr_item_sk,wr_order_number,wr_return_quantity,wr_return_amt,wr_returned_date_sk]
                                                             InputAdapter
                                                               BroadcastExchange #5
                                                                 WholeStageCodegen (2)
@@ -71,20 +74,22 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                       HashAggregate [cs_item_sk,cr_return_quantity,cs_quantity,cr_return_amount,cs_net_paid] [sum,sum,sum,isEmpty,sum,isEmpty,sum,sum,sum,isEmpty,sum,isEmpty]
                                                         Project [cs_item_sk,cs_quantity,cs_net_paid,cr_return_quantity,cr_return_amount]
                                                           BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                                            Project [cs_sold_date_sk,cs_item_sk,cs_quantity,cs_net_paid,cr_return_quantity,cr_return_amount]
+                                                            Project [cs_item_sk,cs_quantity,cs_net_paid,cs_sold_date_sk,cr_return_quantity,cr_return_amount]
                                                               BroadcastHashJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
-                                                                Project [cs_sold_date_sk,cs_item_sk,cs_order_number,cs_quantity,cs_net_paid]
-                                                                  Filter [cs_net_profit,cs_net_paid,cs_quantity,cs_order_number,cs_item_sk,cs_sold_date_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.catalog_sales [cs_sold_date_sk,cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit]
                                                                 InputAdapter
                                                                   BroadcastExchange #8
                                                                     WholeStageCodegen (8)
-                                                                      Filter [cr_return_amount,cr_order_number,cr_item_sk]
-                                                                        ColumnarToRow
-                                                                          InputAdapter
-                                                                            Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount]
+                                                                      Project [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_sold_date_sk]
+                                                                        Filter [cs_net_profit,cs_net_paid,cs_quantity,cs_order_number,cs_item_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit,cs_sold_date_sk]
+                                                                                ReusedSubquery [d_date_sk] #1
+                                                                Project [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount]
+                                                                  Filter [cr_return_amount,cr_order_number,cr_item_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_return_quantity,cr_return_amount,cr_returned_date_sk]
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #5
                   WholeStageCodegen (21)
@@ -108,19 +113,21 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                       HashAggregate [ss_item_sk,sr_return_quantity,ss_quantity,sr_return_amt,ss_net_paid] [sum,sum,sum,isEmpty,sum,isEmpty,sum,sum,sum,isEmpty,sum,isEmpty]
                                                         Project [ss_item_sk,ss_quantity,ss_net_paid,sr_return_quantity,sr_return_amt]
                                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                            Project [ss_sold_date_sk,ss_item_sk,ss_quantity,ss_net_paid,sr_return_quantity,sr_return_amt]
+                                                            Project [ss_item_sk,ss_quantity,ss_net_paid,ss_sold_date_sk,sr_return_quantity,sr_return_amt]
                                                               BroadcastHashJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
-                                                                Project [ss_sold_date_sk,ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid]
-                                                                  Filter [ss_net_profit,ss_net_paid,ss_quantity,ss_ticket_number,ss_item_sk,ss_sold_date_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit]
                                                                 InputAdapter
                                                                   BroadcastExchange #11
                                                                     WholeStageCodegen (15)
-                                                                      Filter [sr_return_amt,sr_ticket_number,sr_item_sk]
-                                                                        ColumnarToRow
-                                                                          InputAdapter
-                                                                            Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt]
+                                                                      Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_sold_date_sk]
+                                                                        Filter [ss_net_profit,ss_net_paid,ss_quantity,ss_ticket_number,ss_item_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]
+                                                                                ReusedSubquery [d_date_sk] #1
+                                                                Project [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt]
+                                                                  Filter [sr_return_amt,sr_ticket_number,sr_item_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_return_quantity,sr_return_amt,sr_returned_date_sk]
                                                             InputAdapter
                                                               ReusedExchange [d_date_sk] #5

@@ -23,27 +23,27 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,total_sum,i_cl
                                             HashAggregate [i_category,i_class,ws_net_paid] [sum,sum]
                                               Project [ws_net_paid,i_class,i_category]
                                                 BroadcastHashJoin [ws_item_sk,i_item_sk]
-                                                  Project [ws_item_sk,ws_net_paid]
-                                                    BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                      Filter [ws_sold_date_sk,ws_item_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_net_paid]
-                                                      InputAdapter
-                                                        BroadcastExchange #4
-                                                          WholeStageCodegen (1)
+                                                  InputAdapter
+                                                    BroadcastExchange #4
+                                                      WholeStageCodegen (2)
+                                                        Project [ws_item_sk,ws_net_paid]
+                                                          BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                                            InputAdapter
+                                                              BroadcastExchange #5
+                                                                WholeStageCodegen (1)
+                                                                  Filter [ws_item_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.web_sales [ws_item_sk,ws_net_paid,ws_sold_date_sk]
                                                             Project [d_date_sk]
                                                               Filter [d_month_seq,d_date_sk]
                                                                 ColumnarToRow
                                                                   InputAdapter
                                                                     Scan parquet default.date_dim [d_date_sk,d_month_seq]
-                                                  InputAdapter
-                                                    BroadcastExchange #5
-                                                      WholeStageCodegen (2)
-                                                        Filter [i_item_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.item [i_item_sk,i_class,i_category]
+                                                  Filter [i_item_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.item [i_item_sk,i_class,i_category]
                                   WholeStageCodegen (9)
                                     HashAggregate [i_category,sum,isEmpty] [sum(total_sum),total_sum,i_class,g_category,g_class,lochierarchy,sum,isEmpty]
                                       InputAdapter
