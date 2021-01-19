@@ -1398,6 +1398,8 @@ case class ExternalMapToCatalyst private(
     val mapCls = classOf[ArrayBasedMapData].getName
     val convertedKeyType = CodeGenerator.boxedType(keyConverter.dataType)
     val convertedValueType = CodeGenerator.boxedType(valueConverter.dataType)
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+      ".nullAsMapKeyNotAllowedError"
     val code = inputMap.code +
       code"""
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
@@ -1414,7 +1416,7 @@ case class ExternalMapToCatalyst private(
 
             ${genKeyConverter.code}
             if (${genKeyConverter.isNull}) {
-              throw new RuntimeException("Cannot use null as map key!");
+              throw $errorFunc();
             } else {
               $convertedKeys[$index] = ($convertedKeyType) ${genKeyConverter.value};
             }
@@ -1709,11 +1711,13 @@ case class GetExternalRowField(
     // because errMsgField is used only when the field is null.
     val errMsgField = ctx.addReferenceObj("errMsg", errMsg)
     val row = child.genCode(ctx)
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+      ".inputExternalRowCannotBeNullError"
     val code = code"""
       ${row.code}
 
       if (${row.isNull}) {
-        throw new RuntimeException("The input external row cannot be null.");
+        throw $errorFunc();
       }
 
       if (${row.value}.isNullAt($index)) {

@@ -1107,13 +1107,10 @@ class CodegenContext extends Logging {
           s"$returnType $value = ${addNewFunction(fnName, fn)}($inputVariables);"
         }
       } else {
-        val errMsg = "Failed to split subexpression code into small functions because the " +
-          "parameter length of at least one split function went over the JVM limit: " +
-          MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw new IllegalStateException(errMsg)
+          throw QueryExecutionErrors.failedSplitSubExpressionError(MAX_JVM_METHOD_PARAMS_LENGTH)
         } else {
-          logInfo(errMsg)
+          logInfo(QueryExecutionErrors.failedSplitSubExpressionMsg(MAX_JVM_METHOD_PARAMS_LENGTH))
           nonSplitExprCode
         }
       }
@@ -1404,15 +1401,15 @@ object CodeGenerator extends Logging {
       updateAndGetCompilationStats(evaluator)
     } catch {
       case e: InternalCompilerException =>
-        val msg = s"failed to compile: $e"
+        val msg = QueryExecutionErrors.failedToCompileMsg(e)
         logError(msg, e)
         logGeneratedCode(code)
-        throw new InternalCompilerException(msg, e)
+        throw QueryExecutionErrors.internalCompilerError(e)
       case e: CompileException =>
-        val msg = s"failed to compile: $e"
+        val msg = QueryExecutionErrors.failedToCompileMsg(e)
         logError(msg, e)
         logGeneratedCode(code)
-        throw new CompileException(msg, e.getLocation)
+        throw QueryExecutionErrors.compilerError(e)
     }
 
     (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)

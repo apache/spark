@@ -173,9 +173,9 @@ case class CheckOverflowInSum(
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      s"""
-         |throw new ArithmeticException("Overflow in sum of decimals.");
-         |""".stripMargin
+      val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+        ".overflowInSumOfDecimalError"
+      s"throw $errorFunc();"
     }
     val code = code"""
        |${childGen.code}

@@ -1100,8 +1100,6 @@ case class ScalaUDF(
         scalaConverter(i, c.dataType)
       }.toArray :+ (catalystConverter, false)).unzip
     val convertersTerm = ctx.addReferenceObj("converters", converters, s"$converterClassName[]")
-    val errorMsgTerm = ctx.addReferenceObj("errMsg",
-      QueryExecutionErrors.udfErrorMessage(funcCls, inputTypesString, outputType))
     val resultTerm = ctx.freshName("result")
 
     // codegen for children expressions
@@ -1145,6 +1143,7 @@ case class ScalaUDF(
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") + ".failedExecuteUserDefinedFunctionError"
 
     val funcInvocation = if (isPrimitive(dataType)
         // If the output is nullable, the returned value must be unwrapped from the Option
@@ -1159,7 +1158,7 @@ case class ScalaUDF(
          |try {
          |  $funcInvocation;
          |} catch (Exception e) {
-         |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
+         |  throw $errorFunc($funcCls, $inputTypesString, $outputType, e);
          |}
        """.stripMargin
 
@@ -1191,7 +1190,7 @@ case class ScalaUDF(
     } catch {
       case e: Exception =>
         throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-          QueryExecutionErrors.udfErrorMessage(funcCls, inputTypesString, outputType), e)
+          funcCls, inputTypesString, outputType, e)
     }
 
     resultConverter(result)

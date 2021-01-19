@@ -1172,6 +1172,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def changePrecision(d: ExprValue, decimalType: DecimalType,
       evPrim: ExprValue, evNull: ExprValue, canNullSafeCast: Boolean): Block = {
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+      ".cannotChangeDecimalPrecisionError"
     if (canNullSafeCast) {
       code"""
          |$d.changePrecision(${decimalType.precision}, ${decimalType.scale});
@@ -1182,8 +1184,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         s"$evNull = true;"
       } else {
         s"""
-           |throw new ArithmeticException($d.toDebugString() + " cannot be represented as " +
-           | "Decimal(${decimalType.precision}, ${decimalType.scale}).");
+           |throw $errorFunc($d, $decimalType).");
          """.stripMargin
       }
       code"""
@@ -1371,6 +1372,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castTimestampToIntegralTypeCode(
       ctx: CodegenContext,
       integralType: String): CastFunction = {
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+      ".castingCauseOverflowError"
     if (ansiEnabled) {
       val longValue = ctx.freshName("longValue")
       (c, evPrim, evNull) =>
@@ -1379,7 +1382,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
+            throw $errorFunc($c, $integralType);
           }
         """
     } else {
@@ -1399,12 +1402,14 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castIntegralTypeToIntegralTypeExactCode(integralType: String): CastFunction = {
     assert(ansiEnabled)
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+      ".castingCauseOverflowError"
     (c, evPrim, evNull) =>
       code"""
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
+          throw $errorFunc($c, $integralType);
         }
       """
   }
@@ -1423,6 +1428,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     assert(ansiEnabled)
     val (min, max) = lowerAndUpperBound(integralType)
     val mathClass = classOf[Math].getName
+    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+      ".castingCauseOverflowError"
     // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
     // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
     // for negative floating values, it is equivalent to `Math.ceil`.
@@ -1433,7 +1440,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
-          throw new ArithmeticException("Casting " + $c + " to $integralType causes overflow");
+          throw $errorFunc($c, $integralType);
         }
       """
   }
@@ -1558,9 +1565,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     from match {
       case StringType =>
         val floatStr = ctx.freshVariable("floatStr", StringType)
+        val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+          ".invalidInputSyntaxForNumericError"
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
+            s"""throw $errorFunc($c);"""
           } else {
             s"$evNull = true;"
           }
@@ -1594,9 +1603,11 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     from match {
       case StringType =>
         val doubleStr = ctx.freshVariable("doubleStr", StringType)
+        val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+          ".invalidInputSyntaxForNumericError"
         (c, evPrim, evNull) =>
           val handleNull = if (ansiEnabled) {
-            s"""throw new NumberFormatException("invalid input syntax for type numeric: " + $c);"""
+            s"""throw $errorFunc($c);"""
           } else {
             s"$evNull = true;"
           }

@@ -2113,6 +2113,8 @@ case class MakeTimestamp(
     val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
+      val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+        ".invalidFractionOfSecondError"
       s"""
       try {
         org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
@@ -2125,8 +2127,7 @@ case class MakeTimestamp(
             ldt = java.time.LocalDateTime.of(
               $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
-            throw new java.time.DateTimeException(
-              "The fraction of sec must be zero. Valid range is [0, 60].");
+            throw $errorFunc();
           }
         } else {
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);

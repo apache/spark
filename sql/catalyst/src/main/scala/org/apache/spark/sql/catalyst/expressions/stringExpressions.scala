@@ -341,10 +341,11 @@ case class Elt(
       }.mkString)
 
     val indexOutOfBoundBranch = if (failOnError) {
+      val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
+        ".invalidArrayIndexError"
       s"""
          |if (!$indexMatched) {
-         |  throw new ArrayIndexOutOfBoundsException(
-         |    "Invalid index: " + ${index.value} + ", numElements: " + ${inputExprs.length});
+         |  throw $errorFunc(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
     } else {

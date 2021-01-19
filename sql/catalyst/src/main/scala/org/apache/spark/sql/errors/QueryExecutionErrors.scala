@@ -22,6 +22,8 @@ import java.net.URISyntaxException
 import java.time.DateTimeException
 
 import org.apache.hadoop.fs.Path
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
@@ -107,12 +109,10 @@ object QueryExecutionErrors {
     new SparkException(s"Unsupported data type $dt")
   }
 
-  def udfErrorMessage(funcCls: String, inputTypes: String, outputType: String): String = {
-    s"Failed to execute user defined function ($funcCls: ($inputTypes) => $outputType)"
-  }
-
-  def failedExecuteUserDefinedFunctionError(msg: String, e: Exception): Throwable = {
-    new SparkException(msg, e)
+  def failedExecuteUserDefinedFunctionError(
+      funcCls: String, inputTypes: String, outputType: String, e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to execute user defined function ($funcCls: ($inputTypes) => $outputType)", e)
   }
 
   def divideByZeroError(): Throwable = {
@@ -296,5 +296,34 @@ object QueryExecutionErrors {
 
   def tableStatsNotSpecifiedError(): Throwable = {
     new IllegalStateException("table stats must be specified.")
+  }
+
+  def unaryMinusCauseOverflowError(originValue: Short): Throwable = {
+    new ArithmeticException(s"- $originValue caused overflow.")
+  }
+
+  def binaryArithmeticCauseOverflowError(eval1: Short, symbol: String, eval2: Short): Throwable = {
+    new ArithmeticException(s"$eval1 $symbol $eval2 caused overflow.")
+  }
+
+  def failedSplitSubExpressionMsg(length: Int): String = {
+    "Failed to split subexpression code into small functions because " +
+      s"the parameter length of at least one split function went over the JVM limit: $length"
+  }
+
+  def failedSplitSubExpressionError(length: Int): Throwable = {
+    new IllegalStateException(failedSplitSubExpressionMsg(length))
+  }
+
+  def failedToCompileMsg(e: Exception): String = {
+    s"failed to compile: $e"
+  }
+
+  def internalCompilerError(e: InternalCompilerException): Throwable = {
+    new InternalCompilerException(failedToCompileMsg(e), e)
+  }
+
+  def compilerError(e: CompileException): Throwable = {
+    new CompileException(failedToCompileMsg(e), e.getLocation)
   }
 }
