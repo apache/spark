@@ -277,9 +277,7 @@ case class GetArrayItem(
       }
 
       val indexOutOfBoundBranch = if (failOnError) {
-        val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-          ".invalidArrayIndexError"
-        s"throw $errorFunc($index, $eval1.numElements());"
+        s"throw QueryExecutionErrors.invalidArrayIndexError($index, $eval1.numElements());"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -388,9 +386,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-          ".mapKeyNotExistError"
-        s"throw $errorFunc($eval2 );"
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2 );"
       } else {
         s"${ev.isNull} = true;"
       }

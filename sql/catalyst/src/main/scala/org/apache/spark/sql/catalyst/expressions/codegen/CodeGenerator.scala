@@ -1386,7 +1386,8 @@ object CodeGenerator extends Logging {
       classOf[Expression].getName,
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
-      classOf[InputMetrics].getName
+      classOf[InputMetrics].getName,
+      QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 

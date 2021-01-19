@@ -173,9 +173,7 @@ case class CheckOverflowInSum(
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-        ".overflowInSumOfDecimalError"
-      s"throw $errorFunc();"
+      s"throw QueryExecutionErrors.overflowInSumOfDecimalError();"
     }
     val code = code"""
        |${childGen.code}

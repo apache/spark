@@ -1143,7 +1143,6 @@ case class ScalaUDF(
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
     val boxedType = CodeGenerator.boxedType(dataType)
-    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") + ".failedExecuteUserDefinedFunctionError"
 
     val funcInvocation = if (isPrimitive(dataType)
         // If the output is nullable, the returned value must be unwrapped from the Option
@@ -1158,7 +1157,8 @@ case class ScalaUDF(
          |try {
          |  $funcInvocation;
          |} catch (Exception e) {
-         |  throw $errorFunc($funcCls, $inputTypesString, $outputType, e);
+         |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
+         |    $funcCls, $inputTypesString, $outputType, e);
          |}
        """.stripMargin
 

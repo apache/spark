@@ -55,15 +55,13 @@ case class UnaryMinus(
     case _: DecimalType => defineCodeGen(ctx, ev, c => s"$c.unary_$$minus()")
     case ByteType | ShortType if failOnError =>
       nullSafeCodeGen(ctx, ev, eval => {
-        val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-          ".unaryMinusCauseOverflowError"
         val javaBoxedType = CodeGenerator.boxedType(dataType)
         val javaType = CodeGenerator.javaType(dataType)
         val originValue = ctx.freshName("origin")
         s"""
            |$javaType $originValue = ($javaType)($eval);
            |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw $errorFunc($originValue);
+           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
            |}
            |${ev.value} = ($javaType)(-($originValue));
            """.stripMargin
@@ -193,11 +191,9 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
         val tmpResult = ctx.freshName("tmpResult")
         val overflowCheck = if (failOnError) {
           val javaType = CodeGenerator.boxedType(dataType)
-          val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-            ".binaryArithmeticCauseOverflowError"
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw $errorFunc($eval1, $symbol, $eval2);
+             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError($eval1, $symbol, $eval2);
              |}
            """.stripMargin
         } else {
@@ -394,12 +390,10 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       s"($javaType)(${eval1.value} $symbol ${eval2.value})"
     }
-    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-      ".divideByZeroError"
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw $errorFunc();"
+        s"throw QueryExecutionErrors.divideByZeroError();"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -675,13 +669,11 @@ case class Pmod(
           }
         """
     }
-    val errorFunc = QueryExecutionErrors.getClass.getName.stripSuffix("$") +
-      ".divideByZeroError"
 
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        s"throw $errorFunc();"
+        s"throw QueryExecutionErrors.divideByZeroError();"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -698,7 +690,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"""if ($isZero) throw $errorFunc();"""
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
       } else {
         ""
       }
