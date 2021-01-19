@@ -76,7 +76,7 @@ trait QueryExecutionListener {
 class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
   extends Logging {
 
-  private val listenerBus = new ExecutionListenerBus(session)
+  private[sql] val listenerBus = new ExecutionListenerBus(session)
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf

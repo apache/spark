@@ -20,12 +20,15 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+
 import org.apache.spark.internal.config.EXECUTOR_ALLOW_SPARK_CONTEXT
 import org.apache.spark.internal.config.UI.UI_ENABLED
+import org.apache.spark.scheduler.SparkListener
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -433,5 +436,57 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
         .asScala
         .count(_.getClass.getSimpleName == "ExecutionListenerBus")
     assert(count == 1)
+  }
+
+  test("SPARK-34087: ExecutionListenerManager.clearListenerBus should not clear shared listener.") {
+
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("SPARK-34087")
+    val context = new SparkContext(conf)
+    val sparkListener = new SparkListener {}
+    context.addSparkListener(sparkListener)
+
+    def addDummyListener(session: SparkSession): QueryExecutionListener = {
+      val listener = new QueryExecutionListener {
+        override def onSuccess(funcName: String,
+                               qe: QueryExecution, durationNs: Long): Unit = {}
+        override def onFailure(funcName: String,
+                               qe: QueryExecution, exception: Exception): Unit = {}
+      }
+      session.listenerManager.register(listener)
+      listener
+    }
+    val session1 = SparkSession
+      .builder()
+      .sparkContext(context)
+      .master("local")
+      .getOrCreate()
+    val session2 = session1.cloneSession()
+    addDummyListener(session1)
+    val session2QueryExecutionListener = addDummyListener(session2)
+
+    val executionListenerBusCount = context.listenerBus
+      .listeners
+      .asScala
+      .count(_.getClass.getSimpleName == "ExecutionListenerBus")
+    context.listenerBus.waitUntilEmpty()
+    assert(executionListenerBusCount == 2) // each session create one ExecutionListenerBus
+
+    session1.listenerManager.clearListenerBus()
+    SparkSession.clearActiveSession()
+    SparkSession.clearDefaultSession()
+
+    val listeners = context.listenerBus
+      .listeners
+      .asScala
+
+    // shared SparkListener should not clear by session1.
+    assert(listeners.contains(sparkListener))
+    assert(!listeners.contains(session1.listenerManager.listenerBus))
+    // session2 ExecutionListenerBus should not clear by session1.
+    assert(listeners.contains(session2.listenerManager.listenerBus))
+    // session2 QueryExecutionListener should not clear by session1.
+    assert(session2.listenerManager.listListeners().contains(session2QueryExecutionListener))
   }
 }
