@@ -68,4 +68,35 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
       Utils.deleteRecursively(ivyPath)
     }
   }
+
+  test("SPARK-33212: test getVersionParts()") {
+    assert(IsolatedClientLoader.getVersionParts("3.2.2").contains((3, 2, 2)))
+    assert(IsolatedClientLoader.getVersionParts("3.2.2.4").contains((3, 2, 2)))
+    assert(IsolatedClientLoader.getVersionParts("3.2.2-SNAPSHOT").contains((3, 2, 2)))
+    assert(IsolatedClientLoader.getVersionParts("3.2.2.4XXX").contains((3, 2, 2)))
+    assert(IsolatedClientLoader.getVersionParts("3.2").contains((3, 2, 0)))
+    assert(IsolatedClientLoader.getVersionParts("3").contains((3, 0, 0)))
+
+    // illegal cases
+    assert(IsolatedClientLoader.getVersionParts("ABC").isEmpty)
+    assert(IsolatedClientLoader.getVersionParts("3X").isEmpty)
+    assert(IsolatedClientLoader.getVersionParts("3.2-SNAPSHOT").isEmpty)
+    assert(IsolatedClientLoader.getVersionParts("3.2ABC").isEmpty)
+    assert(IsolatedClientLoader.getVersionParts("3-ABC").isEmpty)
+    assert(IsolatedClientLoader.getVersionParts("3.2.4XYZ").isEmpty)
+  }
+
+  test("SPARK-32212: test supportHadoopShadedClient()") {
+    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2"))
+    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.3"))
+    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2.1"))
+    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2-XYZ"))
+    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2.4-SNAPSHOT"))
+
+    // negative cases
+    assert(!IsolatedClientLoader.supportHadoopShadedClient("3.1.3"))
+    assert(!IsolatedClientLoader.supportHadoopShadedClient("3.2"))
+    assert(!IsolatedClientLoader.supportHadoopShadedClient("3.2.1"))
+    assert(!IsolatedClientLoader.supportHadoopShadedClient("4"))
+  }
 }
