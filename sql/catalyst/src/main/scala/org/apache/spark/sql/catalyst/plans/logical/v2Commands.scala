@@ -491,7 +491,8 @@ case class ShowTables(
 
   override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("tableName", StringType, nullable = false)())
+    AttributeReference("tableName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)())
 }
 
 /**

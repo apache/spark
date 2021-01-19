@@ -342,16 +342,17 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case ShowTables(DatabaseInSessionCatalog(db), pattern) =>
-      ShowTablesCommand(Some(db), pattern)
+    case s @ ShowTables(DatabaseInSessionCatalog(db), pattern) =>
+      ShowTablesCommand(Some(db), pattern, s.output)
 
-    case ShowTableExtended(
+    case s @ ShowTableExtended(
         DatabaseInSessionCatalog(db),
         pattern,
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
       ShowTablesCommand(
         databaseName = Some(db),
         tableIdentifierPattern = Some(pattern),
+        s.output,
         isExtended = true,
         partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 

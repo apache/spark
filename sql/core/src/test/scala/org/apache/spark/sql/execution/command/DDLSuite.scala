@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseE
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1744,6 +1745,19 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("select a, b, c from partitionedTable"),
         Row(1, 2, 3) :: Row(4, 5, 6) :: Row(7, 8, 9) :: Nil
       )
+    }
+  }
+
+  test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
+      checkAnswer(sql("show tables"), Row("default", "tbl", false))
+      checkAnswer(sql("show tables")
+        .select(col("namespace"), col("tableName"), col("isTemporary")),
+        Row("default", "tbl", false))
+      assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+      assert(sql("show table extended like 'tbl'").select(col("namespace"), col("tableName"),
+          col("isTemporary"), col("information")).collect()(0).length == 4)
     }
   }
 
