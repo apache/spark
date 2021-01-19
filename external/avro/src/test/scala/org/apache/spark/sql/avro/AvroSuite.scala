@@ -392,11 +392,11 @@ abstract class AvroSuite
         }.getMessage
         assert(message.contains("No Avro files found."))
 
-        val srcFile = new File("src/test/resources/episodes.avro")
-        val destFile = new File(dir, "episodes.avro")
-        FileUtils.copyFile(srcFile, destFile)
+        Files.copy(
+          Paths.get(new URL(episodesAvro).toURI),
+          Paths.get(dir.getCanonicalPath, "episodes.avro"))
 
-        val result = spark.read.format("avro").load(srcFile.getAbsolutePath).collect()
+        val result = spark.read.format("avro").load(episodesAvro).collect()
         checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
       }
     }
