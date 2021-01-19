@@ -356,9 +356,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
       AlterTableAddPartitionExec(
-        table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
+        table,
+        parts.asResolvedPartitionSpecs,
+        ignoreIfExists,
+        recacheTable(r)) :: Nil
 
     case AlterTableDropPartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _),
