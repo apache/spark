@@ -57,7 +57,15 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitGlobalLimit(p: GlobalLimit): Statistics = fallback(p)
 
-  override def visitIntersect(p: Intersect): Statistics = fallback(p)
+  override def visitIntersect(p: Intersect): Statistics = {
+    val stats = p.children.map(_.stats)
+    val rowCount = if (stats.exists(_.rowCount.isEmpty)) {
+      None
+    } else {
+      Some(stats.map(_.rowCount.get).min)
+    }
+    Statistics(sizeInBytes = stats.map(_.sizeInBytes).min, rowCount = rowCount)
+  }
 
   override def visitJoin(p: Join): Statistics = {
     JoinEstimation(p).estimate.getOrElse(fallback(p))
