@@ -942,7 +942,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           sql("DROP VIEW t1")
 
           // dropping a temp view trigger cache invalidation on dependents iff the config is
-          // turned on
+          // turned off
           assert(storeAnalyzed ==
             spark.sharedState.cacheManager.lookupCachedData(oldView).isDefined)
           if (!storeAnalyzed) {
@@ -1398,6 +1398,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
           }
         }
       }
+    }
+  }
+
+  test("SPARK-34052: cached temp view should become invalid after the source table is dropped") {
+    val t = "t"
+    withTable(t) {
+      sql(s"CREATE TABLE $t USING parquet AS SELECT * FROM VALUES(1, 'a') AS $t(a, b)")
+      sql(s"CACHE TABLE v AS SELECT a FROM $t")
+      checkAnswer(sql("SELECT * FROM v"), Row(1) :: Nil)
+      sql(s"DROP TABLE $t")
+      val e = intercept[AnalysisException](sql("SELECT * FROM v"))
+      assert(e.message.contains(s"Table or view not found: $t"))
     }
   }
 }
