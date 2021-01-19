@@ -528,7 +528,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         override def run(): Unit = Utils.tryLogNonFatalError {
           val stragglers = executorsToDecommission.filter(executorsPendingDecommission.contains(_))
           if (!stragglers.isEmpty) {
-            logError(s"${stragglers.toList} failed to decommission in ${cleanup_interval}, killing.")
+            logError(
+              s"${stragglers.toList} failed to decommission in ${cleanup_interval}, killing.")
             killExecutors(stragglers, false, false, true)
           }
         }
