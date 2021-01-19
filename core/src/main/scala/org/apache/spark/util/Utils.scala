@@ -1943,7 +1943,6 @@ private[spark] object Utils extends Logging {
     // we directly use the Java APIs instead.
     System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
   }
-  }
 
   /**
    * Terminates a process waiting for at most the specified duration.
