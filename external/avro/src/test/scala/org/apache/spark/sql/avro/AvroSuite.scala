@@ -774,7 +774,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assertExceptionMsg[IncompatibleSchemaException](e,
-        "Cannot write \"NOT-IN-ENUM\" since it's not defined in enum")
+        """"NOT-IN-ENUM" cannot be written since it's not defined in enum""")
     }
   }
 
@@ -827,7 +827,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assertExceptionMsg[IncompatibleSchemaException](e2,
-        "Cannot write \"NOT-IN-ENUM\" since it's not defined in enum")
+        """"NOT-IN-ENUM" cannot be written since it's not defined in enum""")
     }
   }
 
@@ -868,7 +868,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assertExceptionMsg[IncompatibleSchemaException](e1,
-        "Cannot write 3 bytes of binary data into FIXED Type with size of 2 bytes")
+        "3 bytes of binary data cannot be written into FIXED type with size of 2 bytes")
 
       // Writing df containing binary data that doesn't fit FIXED size will throw an exception
       val e2 = intercept[SparkException] {
@@ -879,7 +879,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assertExceptionMsg[IncompatibleSchemaException](e2,
-        "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes")
+        "1 byte of binary data cannot be written into FIXED type with size of 2 bytes")
     }
   }
 
@@ -920,7 +920,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assertExceptionMsg[IncompatibleSchemaException](e1,
-        "Cannot write 3 bytes of binary data into FIXED Type with size of 2 bytes")
+        "3 bytes of binary data cannot be written into FIXED type with size of 2 bytes")
 
       // Writing df containing binary data that doesn't fit FIXED size will throw an exception
       val e2 = intercept[SparkException] {
@@ -931,7 +931,7 @@ abstract class AvroSuite
           .save(s"$tempDir/${UUID.randomUUID()}")
       }
       assertExceptionMsg[IncompatibleSchemaException](e2,
-        "Cannot write 1 byte of binary data into FIXED Type with size of 2 bytes")
+        "1 byte of binary data cannot be written into FIXED type with size of 2 bytes")
     }
   }
 
@@ -1310,7 +1310,7 @@ abstract class AvroSuite
           df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
         }
         assertExceptionMsg[IncompatibleSchemaException](e,
-          "Searching for field 'FOO' in Avro schema gave 0 matches")
+          "Cannot find field 'FOO' in Avro schema at top-level record")
       }
     }
   }
