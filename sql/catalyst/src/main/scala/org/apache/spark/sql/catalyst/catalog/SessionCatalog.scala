@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias.SUBQUERY_TYPE_TAG
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -854,7 +855,9 @@ class SessionCatalog(
   def lookupTempView(table: String): Option[SubqueryAlias] = {
     val formattedTable = formatTableName(table)
     getTempView(formattedTable).map { view =>
-      SubqueryAlias(formattedTable, view)
+      val s = SubqueryAlias(formattedTable, view)
+      s.setTagValue(SUBQUERY_TYPE_TAG, "tempView")
+      s
     }
   }
 
@@ -863,7 +866,9 @@ class SessionCatalog(
     if (formattedDB == globalTempViewManager.database) {
       val formattedTable = formatTableName(table)
       getGlobalTempView(formattedTable).map { view =>
-        SubqueryAlias(formattedTable, formattedDB, view)
+        val s = SubqueryAlias(formattedTable, formattedDB, view)
+        s.setTagValue(SUBQUERY_TYPE_TAG, "tempView")
+        s
       }
     } else {
       None

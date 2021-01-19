@@ -1086,7 +1086,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = resolveViews(view))
+        p.makeCopy(Array(p.identifier, resolveViews(view)))
       case _ => plan
     }
 
