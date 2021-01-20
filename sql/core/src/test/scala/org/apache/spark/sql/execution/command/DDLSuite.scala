@@ -1750,7 +1750,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet ")
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
+      sql("show tables").show()
+      sql("show table extended like 'tbl'").show()
       checkAnswer(sql("show tables"), Row("default", "tbl", false))
       checkAnswer(sql("show tables")
         .select(col("namespace"), col("tableName"), col("isTemporary")),
