@@ -109,6 +109,13 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     size
   }
 
+  def partSpecToString(spec: Map[String, Any]): String = {
+    spec.map {
+      case (k, v: String) => s"$k = '$v'"
+      case (k, v) => s"$k = $v"
+    }.mkString("PARTITION (", ", ", ")")
+  }
+
   def cacheRelation(name: String): Unit = {
     assert(!spark.catalog.isCached(name))
     sql(s"CACHE TABLE $name")
