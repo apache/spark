@@ -107,10 +107,14 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
       }),
 
     "show_tables" -> Map(
+      /* show_tables() */
+      tvf() { case Seq() =>
+        ShowTables(UnresolvedNamespace(Seq.empty[String]), None)
+      },
+
       /* show_tables(identifier) */
       tvf("identifier" -> StringType) { case Seq(identifier: UTF8String) =>
-        val tokens = identifier.toString.split(".")
-        ShowTables(UnresolvedNamespace(identifier.toString.split(".")), None)
+        ShowTables(UnresolvedNamespace(identifier.toString.split('.')), None)
       },
 
       /* show_tables(identifier, pattern) */
@@ -144,7 +148,6 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
                   Some(resolver(casted.map(_.eval())))
                 } catch {
                   case e: AnalysisException =>
-                    e.printStackTrace()
                     failAnalysis()
                 }
               case _ =>
@@ -172,7 +175,6 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
         }
         Project(aliases, resolvedFunc)
       } else {
-        println(resolvedFunc)
         resolvedFunc
       }
   }

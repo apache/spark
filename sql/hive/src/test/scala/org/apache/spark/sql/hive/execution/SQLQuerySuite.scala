@@ -2584,8 +2584,24 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("test xxx") {
-    sql("select tableName from show_tables('default')").explain(true)
+  test("SPARK-33630: Support SHOW command as table valued function") {
+    withDatabase("d1") {
+      withTable("t1", "t2") {
+        sql("CREATE DATABASE d1")
+        sql("CREATE TABLE t1(a INT) USING PARQUET")
+        sql("CREATE TABLE d1.t1(a INT) USING PARQUET")
+        sql("CREATE TABLE d1.t2(a INT) USING PARQUET")
+
+        checkAnswer(sql("SELECT * from show_tables()"),
+          Row("default", "t1", false) :: Nil)
+        checkAnswer(sql("SELECT * from show_tables('default')"),
+          Row("default", "t1", false) :: Nil)
+        checkAnswer(sql("SELECT * from show_tables('d1')"),
+          Row("d1", "t1", false) :: Row("d1", "t2", false) :: Nil)
+        checkAnswer(sql("SELECT * from show_tables('d1', 't1*')"),
+          Row("default", "t1", false) :: Nil)
+      }
+    }
   }
 }
 
