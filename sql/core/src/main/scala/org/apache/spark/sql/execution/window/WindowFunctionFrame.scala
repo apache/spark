@@ -130,8 +130,6 @@ abstract class OffsetWindowFunctionFrameBase(
     newMutableProjection(boundExpressions, Nil).target(target)
   }
 
-  var selectedRow: UnsafeRow = null
-
   /** Holder the UnsafeRow where the input operator by function is not null. */
   protected var nextSelectedRow = EmptyRow
 
@@ -317,6 +315,7 @@ class UnboundedOffsetWindowFunctionFrame(
           projection(nextSelectedRow)
         }
       } else {
+        var selectedRow: UnsafeRow = null
         while (inputIndex < offset) {
           selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
           inputIndex += 1
@@ -353,6 +352,8 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
   assert(offset > 0)
+
+  var selectedRow: UnsafeRow = null
 
   override def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     input = rows
