@@ -22,6 +22,7 @@ import java.util.Locale
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, GenericInternalRow, GetArrayItem, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
@@ -254,6 +255,8 @@ object StatFunctions extends Logging {
       } else {
         stats.toLowerCase(Locale.ROOT) match {
           case "count" => (child: Expression) => Count(child).toAggregateExpression()
+          case "count_distinct" => (child: Expression) =>
+            UnresolvedFunction("count", Seq(child), isDistinct = true)
           case "mean" => (child: Expression) => Average(child).toAggregateExpression()
           case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
