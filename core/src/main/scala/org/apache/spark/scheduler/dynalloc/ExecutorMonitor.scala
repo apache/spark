@@ -546,7 +546,7 @@ private[spark] class ExecutorMonitor(
           } else {
             Long.MaxValue
           }
-          math.min(_cacheTimeout, _shuffleTimeout)
+          math.max(_cacheTimeout, _shuffleTimeout)
         } else {
           idleTimeoutNs
         }
