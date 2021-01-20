@@ -463,30 +463,37 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .master("local")
       .getOrCreate()
     val session2 = session1.cloneSession()
-    addDummyListener(session1)
-    val session2QueryExecutionListener = addDummyListener(session2)
+    try {
+      addDummyListener(session1)
+      val session2QueryExecutionListener = addDummyListener(session2)
 
-    val executionListenerBusCount = context.listenerBus
-      .listeners
-      .asScala
-      .count(_.getClass.getSimpleName == "ExecutionListenerBus")
-    context.listenerBus.waitUntilEmpty()
-    assert(executionListenerBusCount == 2) // each session create one ExecutionListenerBus
+      val executionListenerBusCount = context.listenerBus
+        .listeners
+        .asScala
+        .count(_.getClass.getSimpleName == "ExecutionListenerBus")
+      context.listenerBus.waitUntilEmpty()
+      assert(executionListenerBusCount == 2) // each session create one ExecutionListenerBus
 
-    session1.listenerManager.clearListenerBus()
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
+      session1.listenerManager.clearListenerBus()
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
 
-    val listeners = context.listenerBus
-      .listeners
-      .asScala
+      val listeners = context.listenerBus
+        .listeners
+        .asScala
 
-    // shared SparkListener should not clear by session1.
-    assert(listeners.contains(sparkListener))
-    assert(!listeners.contains(session1.listenerManager.listenerBus))
-    // session2 ExecutionListenerBus should not clear by session1.
-    assert(listeners.contains(session2.listenerManager.listenerBus))
-    // session2 QueryExecutionListener should not clear by session1.
-    assert(session2.listenerManager.listListeners().contains(session2QueryExecutionListener))
+      // shared SparkListener should not clear by session1.
+      assert(listeners.contains(sparkListener))
+      assert(!listeners.contains(session1.listenerManager.listenerBus))
+      // session2 ExecutionListenerBus should not clear by session1.
+      assert(listeners.contains(session2.listenerManager.listenerBus))
+      // session2 QueryExecutionListener should not clear by session1.
+      assert(session2.listenerManager.listListeners().contains(session2QueryExecutionListener))
+    } finally {
+      session1.stop
+      session2.stop
+      SparkSession.clearActiveSession()
+      SparkSession.clearDefaultSession()
+    }
   }
 }
