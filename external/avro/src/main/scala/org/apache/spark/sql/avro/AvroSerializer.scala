@@ -32,7 +32,6 @@ import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.AvroUtils.toFieldStr
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -68,20 +67,15 @@ private[sql] class AvroSerializer(
 
   private val converter: Any => Any = {
     val actualAvroType = resolveNullableType(rootAvroType, nullable)
-    val baseConverter = try {
-      rootCatalystType match {
-        case st: StructType =>
-          newStructConverter(st, actualAvroType, Nil, Nil).asInstanceOf[Any => Any]
-        case _ =>
-          val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
-          val converter = newConverter(rootCatalystType, actualAvroType, Nil, Nil)
-          (data: Any) =>
-            tmpRow.update(0, data)
-            converter.apply(tmpRow, 0)
-      }
-    } catch {
-      case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-        s"Cannot convert Catalyst type $rootCatalystType to Avro type $rootAvroType.", ise)
+    val baseConverter = rootCatalystType match {
+      case st: StructType =>
+        newStructConverter(st, actualAvroType).asInstanceOf[Any => Any]
+      case _ =>
+        val tmpRow = new SpecificInternalRow(Seq(rootCatalystType))
+        val converter = newConverter(rootCatalystType, actualAvroType)
+        (data: Any) =>
+          tmpRow.update(0, data)
+          converter.apply(tmpRow, 0)
     }
     if (nullable) {
       (data: Any) =>
@@ -99,10 +93,7 @@ private[sql] class AvroSerializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private def newConverter(catalystType: DataType, avroType: Schema,
-    catalystPath: Seq[String], avroPath: Seq[String]): Converter = {
-    val errorPrefix = s"Cannot convert Catalyst ${toFieldStr(catalystPath)} " +
-      s"to Avro ${toFieldStr(avroPath)} because "
+  private def newConverter(catalystType: DataType, avroType: Schema): Converter = {
     (catalystType, avroType.getType) match {
       case (NullType, NULL) =>
         (getter, ordinal) => null
@@ -139,9 +130,9 @@ private[sql] class AvroSerializer(
         (getter, ordinal) =>
           val data = getter.getUTF8String(ordinal).toString
           if (!enumSymbols.contains(data)) {
-            throw new IncompatibleSchemaException(errorPrefix +
-              s""""$data" cannot be written since it's not defined in enum """ +
-                enumSymbols.mkString("\"", "\", \"", "\""))
+            throw new IncompatibleSchemaException(
+              "Cannot write \"" + data + "\" since it's not defined in enum \"" +
+                enumSymbols.mkString("\", \"") + "\"")
           }
           new EnumSymbol(avroType, data)
 
@@ -149,13 +140,14 @@ private[sql] class AvroSerializer(
         (getter, ordinal) => new Utf8(getter.getUTF8String(ordinal).getBytes)
 
       case (BinaryType, FIXED) =>
-        val size = avroType.getFixedSize
+        val size = avroType.getFixedSize()
         (getter, ordinal) =>
           val data: Array[Byte] = getter.getBinary(ordinal)
           if (data.length != size) {
-            def len2str(len: Int): String = s"$len ${if (len > 1) "bytes" else "byte"}"
-            throw new IncompatibleSchemaException(errorPrefix + len2str(data.length) +
-                " of binary data cannot be written into FIXED type with size of " + len2str(size))
+            throw new IncompatibleSchemaException(
+              s"Cannot write ${data.length} ${if (data.length > 1) "bytes" else "byte"} of " +
+                "binary data into FIXED Type with size of " +
+                s"$size ${if (size > 1) "bytes" else "byte"}")
           }
           new Fixed(avroType, data)
 
@@ -172,14 +164,13 @@ private[sql] class AvroSerializer(
             DateTimeUtils.microsToMillis(timestampRebaseFunc(getter.getLong(ordinal)))
           case _: TimestampMicros => (getter, ordinal) =>
             timestampRebaseFunc(getter.getLong(ordinal))
-          case other => throw new IncompatibleSchemaException(errorPrefix +
-            s"Catalyst Timestamp type cannot be converted to Avro logical type $other")
+          case other => throw new IncompatibleSchemaException(
+            s"Cannot convert Catalyst Timestamp type to Avro logical type ${other}")
         }
 
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(
-          et, resolveNullableType(avroType.getElementType, containsNull),
-          catalystPath :+ "element", avroPath :+ "element")
+          et, resolveNullableType(avroType.getElementType, containsNull))
         (getter, ordinal) => {
           val arrayData = getter.getArray(ordinal)
           val len = arrayData.numElements()
@@ -199,14 +190,13 @@ private[sql] class AvroSerializer(
         }
 
       case (st: StructType, RECORD) =>
-        val structConverter = newStructConverter(st, avroType, catalystPath, avroPath)
+        val structConverter = newStructConverter(st, avroType)
         val numFields = st.length
         (getter, ordinal) => structConverter(getter.getStruct(ordinal, numFields))
 
       case (MapType(kt, vt, valueContainsNull), MAP) if kt == StringType =>
         val valueConverter = newConverter(
-          vt, resolveNullableType(avroType.getValueType, valueContainsNull),
-          catalystPath :+ "value", avroPath :+ "value")
+          vt, resolveNullableType(avroType.getValueType, valueContainsNull))
         (getter, ordinal) =>
           val mapData = getter.getMap(ordinal)
           val len = mapData.numElements()
@@ -225,40 +215,29 @@ private[sql] class AvroSerializer(
           }
           result
 
-      case _ =>
-        throw new IncompatibleSchemaException(errorPrefix +
-          s"schema is incompatible (sqlType = $catalystType, avroType = $avroType)")
+      case other =>
+        throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystType to " +
+          s"Avro type $avroType.")
     }
   }
 
   private def newStructConverter(
-      catalystStruct: StructType,
-      avroStruct: Schema,
-      catalystPath: Seq[String],
-      avroPath: Seq[String]): InternalRow => Record = {
-
-    val avroPathStr = toFieldStr(avroPath)
-    if (avroStruct.getType != RECORD) {
-      throw new IncompatibleSchemaException(s"$avroPathStr was not a RECORD")
-    }
-    val avroFields = avroStruct.getFields.asScala
-    if (avroFields.size != catalystStruct.length) {
-      throw new IncompatibleSchemaException(
-        s"Avro $avroPathStr schema length (${avroFields.size}) doesn't match " +
-        s"Catalyst ${toFieldStr(catalystPath)} schema length (${catalystStruct.length})")
+      catalystStruct: StructType, avroStruct: Schema): InternalRow => Record = {
+    if (avroStruct.getType != RECORD || avroStruct.getFields.size() != catalystStruct.length) {
+      throw new IncompatibleSchemaException(s"Cannot convert Catalyst type $catalystStruct to " +
+        s"Avro type $avroStruct.")
     }
 
     val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
       catalystStruct.map { catalystField =>
-        val avroField = AvroUtils.getAvroFieldForCatalystField(
-          avroFields, catalystField, avroPath, catalystPath) match {
+        val avroField = AvroUtils
+            .getAvroFieldForCatalystField(avroStruct.getFields.asScala, catalystField) match {
           case Some(f) => f
-          case None => throw new IncompatibleSchemaException(s"Cannot find " +
-              s"${toFieldStr(catalystPath :+ catalystField.name)} in Avro schema at $avroPathStr")
+          case None => throw new IncompatibleSchemaException(
+            s"Cannot find ${catalystField.name} in Avro schema")
         }
-        val converter = newConverter(catalystField.dataType,
-          resolveNullableType(avroField.schema(), catalystField.nullable),
-          catalystPath :+ catalystField.name, avroPath :+ avroField.name)
+        val converter = newConverter(catalystField.dataType, resolveNullableType(
+          avroField.schema(), catalystField.nullable))
         (avroField.pos(), converter)
       }.toArray.unzip
 
