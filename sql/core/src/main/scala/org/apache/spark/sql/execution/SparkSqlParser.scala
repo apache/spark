@@ -212,8 +212,9 @@ class SparkSqlAstBuilder extends AstBuilder {
         s"prefix ${catalogAndNamespace.quoted} to " +
         "the table name in CACHE TABLE AS SELECT", ctx)
     }
+    val queryText = Option(ctx.query).map(source(_))
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    CacheTableCommand(tableName, query, ctx.LAZY != null, options)
+    CacheTableCommand(tableName, query, queryText, ctx.LAZY != null, options)
   }
 
 

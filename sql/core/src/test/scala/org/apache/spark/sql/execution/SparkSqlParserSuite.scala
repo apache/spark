@@ -342,24 +342,26 @@ class SparkSqlParserSuite extends AnalysisTest {
   test("CACHE TABLE") {
     assertEqual(
       "CACHE TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, false, Map.empty))
+      CacheTableCommand(Seq("a", "b", "c"), None, None, false, Map.empty))
 
     assertEqual(
       "CACHE TABLE t AS SELECT * FROM testData",
       CacheTableCommand(
         Seq("t"),
         Some(Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData")))),
+        Some("SELECT * FROM testData"),
         false,
         Map.empty))
 
     assertEqual(
       "CACHE LAZY TABLE a.b.c",
-      CacheTableCommand(Seq("a", "b", "c"), None, true, Map.empty))
+      CacheTableCommand(Seq("a", "b", "c"), None, None, true, Map.empty))
 
     assertEqual(
       "CACHE LAZY TABLE a.b.c OPTIONS('storageLevel' 'DISK_ONLY')",
       CacheTableCommand(
         Seq("a", "b", "c"),
+        None,
         None,
         true,
         Map("storageLevel" -> "DISK_ONLY")))
