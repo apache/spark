@@ -994,11 +994,13 @@ class SessionCatalog(
     // Go through temporary views and invalidate them.
     // If the database is defined, this may be a global temporary view.
     // If the database is not defined, there is a good chance this is a temp view.
-    if (name.database.isEmpty) {
-      tempViews.get(tableName).foreach(_.refresh())
+    val isTempOrGlobalView = if (name.database.isEmpty) {
+      tempViews.get(tableName).map(_.refresh()).isDefined
     } else if (dbName == globalTempViewManager.database) {
-      globalTempViewManager.get(tableName).foreach(_.refresh())
-    } else {
+      globalTempViewManager.get(tableName).map(_.refresh()).isDefined
+    } else false
+
+    if (!isTempOrGlobalView) {
       // Also invalidate the table relation cache.
       val qualifiedTableName = QualifiedTableName(dbName, tableName)
       tableRelationCache.invalidate(qualifiedTableName)
