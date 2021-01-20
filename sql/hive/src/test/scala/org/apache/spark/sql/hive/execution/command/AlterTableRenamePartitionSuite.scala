@@ -44,7 +44,7 @@ class AlterTableRenamePartitionSuite
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, PART int) $defaultUsing PARTITIONED BY (PART)")
       sql(s"INSERT INTO $t PARTITION (PART=0) SELECT 0")
-      checkHiveClientCalls(expected = 26) {
+      checkHiveClientCalls(expected = 23) {
         sql(s"ALTER TABLE $t PARTITION (PART=0) RENAME TO PARTITION (PART=1)")
       }
     }
