@@ -42,7 +42,7 @@ $ sudo gem install jekyll jekyll-redirect-from rouge
 If your ruby version is 3.0 or higher, you should install `webrick` too.
 
 ```sh
-$ sudo gem install jekyll jekyll-redirect-from rouge webrick
+$ sudo gem install jekyll jekyll-redirect-from webrick
 ```
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
