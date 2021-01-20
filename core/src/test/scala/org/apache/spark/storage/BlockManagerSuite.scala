@@ -1904,7 +1904,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getPeers(store3.blockManagerId).map(_.executorId).toSet === Set(exec2))
   }
 
-  test("test decommissionRddCacheBlocks should offload all cached blocks") {
+  test("test decommissionRddCacheBlocks should migrate all cached blocks") {
     val store1 = makeBlockManager(1000, "exec1")
     val store2 = makeBlockManager(1000, "exec2")
     val store3 = makeBlockManager(1000, "exec3")
@@ -1922,7 +1922,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store3.blockManagerId))
   }
 
-  test("test decommissionRddCacheBlocks should keep the block if it is not able to offload") {
+  test("test decommissionRddCacheBlocks should keep the block if it is not able to migrate") {
     val store1 = makeBlockManager(3500, "exec1")
     val store2 = makeBlockManager(1000, "exec2")
 
@@ -1938,9 +1938,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val decomManager = new BlockManagerDecommissioner(conf, store1)
     decomManager.decommissionRddCacheBlocks()
-    // Smaller block offloaded to store2
+    // Smaller block migrated to store2
     assert(master.getLocations(blockIdSmall) === Seq(store2.blockManagerId))
-    // Larger block still present in store1 as it can't be offloaded
+    // Larger block still present in store1 as it can't be migrated
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
