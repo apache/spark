@@ -2583,6 +2583,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("test xxx") {
+    sql("select tableName from show_tables('default')").explain(true)
+  }
 }
 
 @SlowHiveTest

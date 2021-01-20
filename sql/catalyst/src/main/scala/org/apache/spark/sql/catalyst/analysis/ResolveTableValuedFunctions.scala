@@ -21,9 +21,10 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range, ShowTables}
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Rule that resolves table-valued function references.
@@ -103,6 +104,20 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
           "numPartitions" -> IntegerType) {
         case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
           Range(start, end, step, Some(numPartitions))
+      }),
+
+    "show_tables" -> Map(
+      /* show_tables(identifier) */
+      tvf("identifier" -> StringType) { case Seq(identifier: UTF8String) =>
+        val tokens = identifier.toString.split(".")
+        ShowTables(UnresolvedNamespace(identifier.toString.split(".")), None)
+      },
+
+      /* show_tables(identifier, pattern) */
+      tvf("identifier" -> StringType, "pattern" -> StringType) {
+        case Seq(identifier: UTF8String, pattern: UTF8String) =>
+          ShowTables(UnresolvedNamespace(identifier.toString.split(".")),
+            Some(pattern.toString))
       })
   )
 
@@ -129,6 +144,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
                   Some(resolver(casted.map(_.eval())))
                 } catch {
                   case e: AnalysisException =>
+                    e.printStackTrace()
                     failAnalysis()
                 }
               case _ =>
@@ -156,6 +172,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
         }
         Project(aliases, resolvedFunc)
       } else {
+        println(resolvedFunc)
         resolvedFunc
       }
   }
