@@ -1156,9 +1156,9 @@ case class ScalaUDF(
          |$boxedType $resultTerm = null;
          |try {
          |  $funcInvocation;
-         |} catch (Exception e) {
+         |} catch (Throwable e) {
          |  throw QueryExecutionErrors.failedExecuteUserDefinedFunctionError(
-         |    $funcCls, $inputTypesString, $outputType, e);
+         |    "$funcCls", "$inputTypesString", "$outputType", e);
          |}
        """.stripMargin
 
@@ -1178,11 +1178,9 @@ case class ScalaUDF(
 
   private[this] val resultConverter = catalystConverter
 
-  lazy val (funcCls, inputTypesString, outputType) = {
-    (Utils.getSimpleName(function.getClass),
-      children.map(_.dataType.catalogString).mkString(", "),
-      dataType.catalogString)
-  }
+  lazy val funcCls = Utils.getSimpleName(function.getClass)
+  lazy val inputTypesString = children.map(_.dataType.catalogString).mkString(", ")
+  lazy val outputType = dataType.catalogString
 
   override def eval(input: InternalRow): Any = {
     val result = try {

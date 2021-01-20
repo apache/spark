@@ -109,8 +109,8 @@ object QueryExecutionErrors {
     new SparkException(s"Unsupported data type $dt")
   }
 
-  def failedExecuteUserDefinedFunctionError(
-      funcCls: String, inputTypes: String, outputType: String, e: Exception): Throwable = {
+  def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
+      outputType: String, e: Throwable): Throwable = {
     new SparkException(
       s"Failed to execute user defined function ($funcCls: ($inputTypes) => $outputType)", e)
   }
