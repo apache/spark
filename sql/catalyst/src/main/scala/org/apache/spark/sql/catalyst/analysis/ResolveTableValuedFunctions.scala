@@ -120,7 +120,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
       /* show_tables(identifier, pattern) */
       tvf("identifier" -> StringType, "pattern" -> StringType) {
         case Seq(identifier: UTF8String, pattern: UTF8String) =>
-          ShowTables(UnresolvedNamespace(identifier.toString.split(".")),
+          ShowTables(UnresolvedNamespace(identifier.toString.split('.')),
             Some(pattern.toString))
       })
   )

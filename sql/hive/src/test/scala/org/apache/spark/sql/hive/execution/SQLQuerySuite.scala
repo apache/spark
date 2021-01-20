@@ -2573,7 +2573,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         checkAnswer(sql("SELECT * from show_tables('d1')"),
           Row("d1", "t1", false) :: Row("d1", "t2", false) :: Nil)
         checkAnswer(sql("SELECT * from show_tables('d1', 't1*')"),
-          Row("default", "t1", false) :: Nil)
+          Row("d1", "t1", false) :: Nil)
       }
     }
   }
