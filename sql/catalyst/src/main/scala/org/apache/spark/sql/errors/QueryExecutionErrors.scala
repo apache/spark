@@ -71,7 +71,7 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Cannot terminate expression: $generator")
   }
 
-  def castingCauseOverflowError(t: Any, targetType: String): Throwable = {
+  def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
     new ArithmeticException(s"Casting $t to $targetType causes overflow")
   }
 
@@ -115,7 +115,7 @@ object QueryExecutionErrors {
       s"Failed to execute user defined function ($funcCls: ($inputTypes) => $outputType)", e)
   }
 
-  def divideByZeroError(): Throwable = {
+  def divideByZeroError(): ArithmeticException = {
     new ArithmeticException("divide by zero")
   }
 
@@ -139,7 +139,7 @@ object QueryExecutionErrors {
     new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
   }
 
-  def overflowInSumOfDecimalError(): Throwable = {
+  def overflowInSumOfDecimalError(): ArithmeticException = {
     new ArithmeticException("Overflow in sum of decimals.")
   }
 
@@ -227,7 +227,7 @@ object QueryExecutionErrors {
       "resulting collection.")
   }
 
-  def nullAsMapKeyNotAllowedError(): Throwable = {
+  def nullAsMapKeyNotAllowedError(): RuntimeException = {
     new RuntimeException("Cannot use null as map key!")
   }
 
@@ -236,7 +236,7 @@ object QueryExecutionErrors {
       "in any enclosing class nor any supertype")
   }
 
-  def inputExternalRowCannotBeNullError(): Throwable = {
+  def inputExternalRowCannotBeNullError(): RuntimeException = {
     new RuntimeException("The input external row cannot be null.")
   }
 

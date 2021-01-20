@@ -1378,7 +1378,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           if ($longValue == ($integralType) $longValue) {
             $evPrim = ($integralType) $longValue;
           } else {
-            throw QueryExecutionErrors.castingCauseOverflowError($c, $integralType);
+            throw QueryExecutionErrors.castingCauseOverflowError($c, "$integralType");
           }
         """
     } else {
@@ -1403,7 +1403,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if ($c == ($integralType) $c) {
           $evPrim = ($integralType) $c;
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, $integralType);
+          throw QueryExecutionErrors.castingCauseOverflowError($c, "$integralType");
         }
       """
   }
@@ -1432,7 +1432,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
           $evPrim = ($integralType) $c;
         } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, $integralType);
+          throw QueryExecutionErrors.castingCauseOverflowError($c, "$integralType");
         }
       """
   }
