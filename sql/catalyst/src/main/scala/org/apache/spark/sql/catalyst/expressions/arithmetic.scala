@@ -411,7 +411,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"""if ($isZero) throw $errorFunc();"""
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
       } else {
         ""
       }
