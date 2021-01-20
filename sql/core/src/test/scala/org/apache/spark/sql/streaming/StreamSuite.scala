@@ -29,6 +29,7 @@ import scala.util.control.ControlThrowable
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.parquet.hadoop.ParquetOutputFormat
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkContext, TaskContext, TestUtils}
@@ -214,7 +215,7 @@ class StreamSuite extends StreamTest {
             .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).sort('a).as[Long]
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -225,7 +226,9 @@ class StreamSuite extends StreamTest {
 
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
     Seq("", "parquet").foreach { useV1Source =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1Source) {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1Source,
+        ParquetOutputFormat.PAGE_WRITE_CHECKSUM_ENABLED -> "false") {
         assertDF(df)
         assertDF(df)
       }
