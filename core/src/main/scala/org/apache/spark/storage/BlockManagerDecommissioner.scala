@@ -150,8 +150,9 @@ private[storage] class BlockManagerDecommissioner(
             }
           }
         } catch {
-          case _: InterruptedException if !keepRunning =>
-            logInfo("Stop shuffle block migration")
+          case _: InterruptedException =>
+            logInfo(s"Stop shuffle block migration${if (keepRunning) " unexpectedly"}.")
+            keepRunning = false
           case NonFatal(e) =>
             keepRunning = false
             logError("Error occurred during shuffle blocks migration.", e)
@@ -207,8 +208,9 @@ private[storage] class BlockManagerDecommissioner(
               s"waiting for ${sleepInterval}ms before the next round migration.")
             Thread.sleep(sleepInterval)
           } catch {
-            case _: InterruptedException if stopped =>
-              logInfo("Stop RDD blocks migration.")
+            case _: InterruptedException =>
+              logInfo(s"Stop RDD blocks migration${if (!stopped && !stoppedRDD) " unexpectedly"}.")
+              stoppedRDD = true
             case NonFatal(e) =>
               logError("Error occurred during RDD blocks migration.", e)
               stoppedRDD = true
