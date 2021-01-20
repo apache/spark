@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
@@ -34,7 +35,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
   override def showSchema: StructType = {
     new StructType()
-      .add("database", StringType, nullable = false)
+      .add("namespace", StringType, nullable = false)
       .add("tableName", StringType, nullable = false)
       .add("isTemporary", BooleanType, nullable = false)
   }
@@ -74,7 +75,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     withSourceViews {
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
       val schema = new StructType()
-        .add("database", StringType, nullable = false)
+        .add("namespace", StringType, nullable = false)
         .add("tableName", StringType, nullable = false)
         .add("isTemporary", BooleanType, nullable = false)
         .add("information", StringType, nullable = false)
@@ -136,6 +137,21 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
         df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
         assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
       }
+    }
+  }
+
+  test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
+      sql("show tables").show()
+      sql("show table extended like 'tbl'").show()
+      checkAnswer(sql("show tables"), Row("default", "tbl", false))
+      checkAnswer(sql("show tables")
+        .select(col("namespace"), col("tableName"), col("isTemporary")),
+        Row("default", "tbl", false))
+      assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+      assert(sql("show table extended like 'tbl'").select(col("namespace"), col("tableName"),
+        col("isTemporary"), col("information")).collect()(0).length == 4)
     }
   }
 }
