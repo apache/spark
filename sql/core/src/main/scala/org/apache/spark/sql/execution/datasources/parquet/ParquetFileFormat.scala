@@ -127,6 +127,9 @@ class ParquetFileFormat
       conf.setEnum(ParquetOutputFormat.JOB_SUMMARY_LEVEL, JobSummaryLevel.NONE)
     }
 
+    // PARQUET-1580: Disables page-level CRC checksums by default.
+    conf.setBooleanIfUnset(ParquetOutputFormat.PAGE_WRITE_CHECKSUM_ENABLED, false)
+
     if (ParquetOutputFormat.getJobSummaryLevel(conf) != JobSummaryLevel.NONE
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
