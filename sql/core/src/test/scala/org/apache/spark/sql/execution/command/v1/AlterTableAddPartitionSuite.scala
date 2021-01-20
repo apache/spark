@@ -124,7 +124,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
     }
   }
 
-  test("SPARK-34138: keep dependents cashed after table altering") {
+  test("SPARK-34138: keep dependents cached after table altering") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
