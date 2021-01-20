@@ -117,7 +117,7 @@ private[storage] class BlockManagerDecommissioner(
                   buffer,
                   StorageLevel.DISK_ONLY,
                   null) // class tag, we don't need for shuffle
-                logDebug(s"Migrated sub block $blockId")
+                logDebug(s"Migrated sub-block $blockId")
               }
               logInfo(s"Migrated $shuffleBlockInfo to $peer")
             } catch {
