@@ -18,13 +18,12 @@
 package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
-
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, BroadcastQueryStageExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
@@ -162,6 +161,50 @@ abstract class DynamicPartitionPruningSuiteBase
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
       spark.sessionState.conf.unsetConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY)
       super.afterAll()
+    }
+  }
+
+  /**
+   * Check if the query plan has a partition pruning filter
+   * inserted as a custom broadcast query stage.
+   */
+  def checkPartitionPruningPredicateWithAQE(
+      df: DataFrame,
+      withSubquery: Boolean,
+      withBroadcast: Boolean): Unit = {
+    df.collect()
+
+    val planAfter = df.queryExecution.executedPlan
+    assert(planAfter.toString.startsWith("AdaptiveSparkPlan isFinalPlan=true"))
+    val adaptivePlan = planAfter.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+
+    val dpExprs = collectDynamicPruningExpressions(adaptivePlan)
+    val hasSubquery = dpExprs.exists {
+      case InSubqueryExec(_, _: SubqueryExec, _, _) => true
+      case _ => false
+    }
+    val subqueryBroadcast = dpExprs.collect {
+      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
+    }
+
+    val hasFilter = if (withSubquery) "Should" else "Shouldn't"
+    assert(hasSubquery == withSubquery,
+      s"$hasFilter trigger DPP with a subquery duplicate:\n${df.queryExecution}")
+    val hasBroadcast = if (withBroadcast) "Should" else "Shouldn't"
+    assert(subqueryBroadcast.nonEmpty == withBroadcast,
+      s"$hasBroadcast trigger DPP with a reused broadcast exchange:\n${df.queryExecution}")
+
+    subqueryBroadcast.foreach { s =>
+      s.child match {
+        case bqs: BroadcastQueryStageExec =>
+          val result = collect(adaptivePlan) {
+            case b: BroadcastExchangeLike if (b eq bqs.broadcast) => b
+          }
+          val hasReuse = result.length == 1 && bqs.plan.isInstanceOf[ReusedExchangeExec]
+          assert(hasReuse, s"$s\nshould have been reused in\n$adaptivePlan")
+        case _ =>
+          fail(s"Invalid child node found in\n$s")
+      }
     }
   }
 
@@ -1369,4 +1412,19 @@ class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase
 
 class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase {
   override val adaptiveExecutionOn: Boolean = true
+
+  test("simple inner join triggers DPP with mock-up tables test when enable AQE") {
+
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+        """.stripMargin)
+
+      checkPartitionPruningPredicateWithAQE(df, false, true)
+
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
+    }
+  }
 }

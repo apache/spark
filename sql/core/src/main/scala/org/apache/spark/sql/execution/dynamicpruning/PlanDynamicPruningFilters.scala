@@ -76,7 +76,7 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession)
           val broadcastValues =
             SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
-        } else if (onlyInBroadcast) {
+        } else if (onlyInBroadcast || SQLConf.get.adaptiveExecutionEnabled) {
           // it is not worthwhile to execute the query, so we fall-back to a true literal
           DynamicPruningExpression(Literal.TrueLiteral)
         } else {
