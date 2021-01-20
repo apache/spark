@@ -100,7 +100,7 @@ private[storage] class BlockManagerDecommissioner(
         try {
           val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
-          if (blocks.isEmpty) {
+          if (blocks.size < 2) {
             logInfo(s"Ignore empty shuffle block $shuffleBlockInfo")
           } else {
             logInfo(s"Got migration sub-blocks $blocks. Trying to migrate $shuffleBlockInfo " +
@@ -127,7 +127,7 @@ private[storage] class BlockManagerDecommissioner(
                 // migrating blocks and then the shuffle TTL cleaner kicks in. However this
                 // could also happen with manually managed shuffles or a GC event on the
                 // driver a no longer referenced RDD with shuffle files.
-                if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).isEmpty) {
+                if (bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo).size < 2) {
                   logWarning(s"Skipping block $shuffleBlockInfo, block deleted.")
                 } else if (fallbackStorage.isDefined) {
                   fallbackStorage.foreach(_.copy(shuffleBlockInfo, bm))
