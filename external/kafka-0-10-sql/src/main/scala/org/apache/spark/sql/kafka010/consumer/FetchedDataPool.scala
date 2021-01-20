@@ -170,11 +170,14 @@ private[consumer] object FetchedDataPool {
   }
 
   private object CachedFetchedData {
+    import KafkaDataConsumer.AvailableOffsetRange
+
     def empty(): CachedFetchedData = {
       val emptyData = FetchedData(
         ju.Collections.emptyListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
         UNKNOWN_OFFSET,
-        UNKNOWN_OFFSET)
+        UNKNOWN_OFFSET,
+        AvailableOffsetRange(UNKNOWN_OFFSET, UNKNOWN_OFFSET))
 
       CachedFetchedData(emptyData)
     }
