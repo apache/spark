@@ -207,19 +207,12 @@ case class BitwiseCount(child: Expression)
 }
 
 object BitwiseGetUtil {
-  def calculate(target: Any, pos: Int, size: Int): Byte = {
+  def checkPosition(pos: Int, size: Int): Unit = {
     if (pos < 0) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos less than zero")
     } else if (size <= pos) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
     }
-    val longValue = size match {
-      case java.lang.Byte.SIZE => target.asInstanceOf[Byte]
-      case java.lang.Short.SIZE => target.asInstanceOf[Short]
-      case java.lang.Integer.SIZE => target.asInstanceOf[Int]
-      case java.lang.Long.SIZE => target.asInstanceOf[Long]
-    }
-    ((longValue >> pos) & 1).byteValue
   }
 }
 
@@ -249,14 +242,18 @@ case class BitwiseGet(left: Expression, right: Expression)
   }
 
   override def nullSafeEval(target: Any, pos: Any): Any = {
-    BitwiseGetUtil.calculate(target, pos.asInstanceOf[Int], bitSize)
+    val posInt = pos.asInstanceOf[Int]
+    BitwiseGetUtil.checkPosition(posInt, bitSize)
+    ((target.asInstanceOf[Number].longValue() >> posInt) & 1).toByte
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (target, pos) =>
-      "org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil" +
-        s".calculate($target, $pos, $bitSize);"
-    )
+    nullSafeCodeGen(ctx, ev, (target, pos) => {
+      s"""
+         |org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.checkPosition($pos, $bitSize);
+         |${ev.value} = (byte) ((((long) $target) >> $pos) & 1);
+       """.stripMargin
+    })
   }
 
   override def prettyName: String =
