@@ -21,9 +21,10 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range, ShowNamespaces}
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Rule that resolves table-valued function references.
@@ -103,6 +104,24 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
           "numPartitions" -> IntegerType) {
         case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
           Range(start, end, step, Some(numPartitions))
+      }),
+
+    "show_namespaces" -> Map(
+      /* show_namespace() */
+      tvf() { case Seq() =>
+        ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None)
+      },
+
+      /* show_tables(identifier) */
+      tvf("identifier" -> StringType) { case Seq(identifier: UTF8String) =>
+        ShowNamespaces(UnresolvedNamespace(identifier.toString.split('.')), None)
+      },
+
+      /* show_namespaces(identifier, pattern) */
+      tvf("identifier" -> StringType, "pattern" -> StringType) {
+        case Seq(identifier: UTF8String, pattern: UTF8String) =>
+          ShowNamespaces(UnresolvedNamespace(identifier.toString.split('.')),
+            Some(pattern.toString))
       })
   )
 

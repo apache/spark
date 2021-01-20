@@ -2581,6 +2581,21 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-34172: Support SHOW DATABASES/NAMESPACES as table valued function") {
+    withDatabase("d1", "d2") {
+      sql("CREATE DATABASE d1")
+      sql("CREATE DATABASE d2")
+
+      sql("SHOW DATABASES").explain(true)
+      sql("SHOW DATABASES").show()
+      sql("SELECT * from show_namespaces()").explain(true)
+      checkAnswer(sql("SELECT * from show_namespaces()"),
+        Row(null) :: Nil)
+      checkAnswer(sql("SELECT * from show_namespaces('', 'd1*')"),
+        Row("d1", "t1", false) :: Row("d1", "t2", false) :: Nil)
+    }
+  }
 }
 
 @SlowHiveTest
