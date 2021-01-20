@@ -364,24 +364,15 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
       findNextRowWithNonNullInput()
       selectedRow = nextSelectedRow.asInstanceOf[UnsafeRow]
     } else {
-      while (inputIndex < offset - 1) {
-        if (inputIterator.hasNext) inputIterator.next()
-        inputIndex += 1
-      }
-      if (inputIndex < input.length) {
+      while (inputIndex < offset) {
         selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+        inputIndex += 1
       }
     }
   }
 
-  lazy val boundary = if (ignoreNulls) {
-    inputIndex - 1
-  } else {
-    inputIndex
-  }
-
   override def write(index: Int, current: InternalRow): Unit = {
-    if (index >= boundary && selectedRow != null) {
+    if (index >= inputIndex - 1 && selectedRow != null) {
       projection(selectedRow)
     } else {
       fillDefaultValue(EmptyRow)
