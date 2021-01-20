@@ -69,7 +69,7 @@ class AlterTableAddPartitionSuite
     }
   }
 
-  test("SPARK-34099, SPARK-34161: keep dependents cashed after table altering") {
+  test("SPARK-34099, SPARK-34161: keep dependents cached after table altering") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (id, part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
