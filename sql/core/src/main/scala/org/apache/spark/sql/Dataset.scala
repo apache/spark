@@ -2713,6 +2713,14 @@ class Dataset[T] private[sql](
    *   ds.select("age", "height").summary().show()
    * }}}
    *
+   * Specify statistics to output custom summaries:
+   *
+   * {{{
+   *   ds.summary("count", "count_distinct").show()
+   * }}}
+   *
+   * The distinct count isn't included by default.
+   *
    * See also [[describe]] for basic statistics.
    *
    * @param statistics Statistics from above list to be computed.
