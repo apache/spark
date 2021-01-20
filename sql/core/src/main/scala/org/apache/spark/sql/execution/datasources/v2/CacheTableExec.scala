@@ -20,11 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.Locale
 
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.LocalTempView
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
+import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.storage.StorageLevel
 
 trait BaseCacheTableExec extends V2CommandExec {
@@ -86,12 +88,25 @@ case class CacheTableExec(
 case class CacheTableAsSelectExec(
     tempViewName: String,
     query: LogicalPlan,
+    originalText: String,
     override val isLazy: Boolean,
     override val options: Map[String, String]) extends BaseCacheTableExec {
   override lazy val relationName: String = tempViewName
 
   override lazy val planToCache: LogicalPlan = {
-    Dataset.ofRows(sparkSession, query).createTempView(tempViewName)
+    Dataset.ofRows(sparkSession,
+      CreateViewCommand(
+        name = TableIdentifier(tempViewName),
+        userSpecifiedColumns = Nil,
+        comment = None,
+        properties = Map.empty,
+        originalText = Some(originalText),
+        child = query,
+        allowExisting = false,
+        replace = false,
+        viewType = LocalTempView
+      )
+    )
     dataFrameForCachedPlan.logicalPlan
   }
 
