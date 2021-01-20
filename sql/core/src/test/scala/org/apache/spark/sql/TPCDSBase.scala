@@ -271,6 +271,7 @@ trait TPCDSBase extends SharedSparkSession {
       """.stripMargin
   )
 
+  // The partition column is consistent with the databricks/spark-sql-perf project.
   private val tablePartitionColumns = Map(
     "catalog_sales" -> Seq("`cs_sold_date_sk`"),
     "catalog_returns" -> Seq("`cr_returned_date_sk`"),
