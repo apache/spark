@@ -209,7 +209,7 @@ case class BitwiseCount(child: Expression)
 object BitwiseGetUtil {
   def checkPosition(pos: Int, size: Int): Unit = {
     if (pos < 0) {
-      throw new IllegalArgumentException(s"Invalid bit position: $pos less than zero")
+      throw new IllegalArgumentException(s"Invalid bit position: $pos is less than zero")
     } else if (size <= pos) {
       throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
     }
@@ -219,7 +219,7 @@ object BitwiseGetUtil {
 @ExpressionDescription(
   usage = """
             |_FUNC_(expr, pos) - Returns the value of the bit (0 or 1) at the specified position.
-            |  The positions are numbered right to left, starting at zero.
+            |  The positions are numbered from right to left, starting at zero.
             |  The position argument cannot be negative.
           """,
   examples = """
