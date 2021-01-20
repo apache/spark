@@ -998,11 +998,11 @@ class SessionCatalog(
       tempViews.get(tableName).foreach(_.refresh())
     } else if (dbName == globalTempViewManager.database) {
       globalTempViewManager.get(tableName).foreach(_.refresh())
+    } else {
+      // Also invalidate the table relation cache.
+      val qualifiedTableName = QualifiedTableName(dbName, tableName)
+      tableRelationCache.invalidate(qualifiedTableName)
     }
-
-    // Also invalidate the table relation cache.
-    val qualifiedTableName = QualifiedTableName(dbName, tableName)
-    tableRelationCache.invalidate(qualifiedTableName)
   }
 
   /**
