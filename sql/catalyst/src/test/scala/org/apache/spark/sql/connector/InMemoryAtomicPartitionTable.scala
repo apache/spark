@@ -42,6 +42,7 @@ class InMemoryAtomicPartitionTable (
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
     } else {
+      createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
     }
   }
