@@ -684,13 +684,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Return the length of string stripped at most `numOfSpaces` tailing spaces
+   * Return the string stripped at most `numOfSpaces` tailing spaces
    */
-  public int effectiveLength(int numOfSpaces) {
+  public UTF8String trimTrailingSpaces(int numSpaces) {
     int endIdx = numBytes - 1;
-    int trimTo = numBytes - numOfSpaces;
+    int trimTo = numBytes - numSpaces;
     while (endIdx >= trimTo && getByte(endIdx) == 0x20) endIdx--;
-    return ++endIdx;
+    return copyUTF8String(0, endIdx);
   }
 
   /**

@@ -57,11 +57,11 @@ public class CharVarcharCodegenUtils {
         // Trailing spaces do not count in the length check. We need to retain the trailing spaces
         // (truncate to length N), as there is no read-time padding for varchar type.
         int tailSpacesMayNeedTrim = numChars - limit;
-        int lengthAfterTrim = inputStr.effectiveLength(tailSpacesMayNeedTrim);
-        if (lengthAfterTrim == limit) {
-          return inputStr.substring(0, limit);
-        } else {
+        UTF8String trimmed = inputStr.trimTrailingSpaces(tailSpacesMayNeedTrim);
+        if (trimmed.numChars() > limit) {
           throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
+        } else {
+          return trimmed;
         }
       }
     }
