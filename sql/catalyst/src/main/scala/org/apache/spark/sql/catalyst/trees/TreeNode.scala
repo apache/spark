@@ -91,7 +91,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   private val tags: mutable.Map[TreeNodeTag[_], Any] = mutable.Map.empty
 
-  protected def copyTagsFrom(other: BaseType): Unit = {
+  def copyTagsFrom(other: BaseType): Unit = {
     // SPARK-32753: it only makes sense to copy tags to a new node
     // but it's too expensive to detect other cases likes node removal
     // so we make a compromise here to copy tags to node with no tags
