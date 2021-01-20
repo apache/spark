@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.time.{LocalDate, LocalDateTime}
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
@@ -294,6 +294,19 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       assert(partTable.partitionExists(InternalRow(null)))
       sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
       assert(!partTable.partitionExists(InternalRow(null)))
+    }
+  }
+
+  test("SPARK-34143: add a partition to fully partitioned table") {
+    val t = "testpart.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (p0 INT, p1 STRING) USING foo PARTITIONED BY (p0, p1)")
+      sql(s"ALTER TABLE $t ADD PARTITION (p0 = 0, p1 = 'abc')")
+      val partTable = catalog("testpart").asTableCatalog
+        .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl"))
+        .asPartitionable
+      assert(partTable.partitionExists(InternalRow(0, UTF8String.fromString("abc"))))
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, "abc"))
     }
   }
 }
