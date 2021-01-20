@@ -1030,7 +1030,7 @@ class JDBCSuite extends QueryTest
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
   }
 
-  test("Test DataFrame.where for LocalDate and Instant") {
+  test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
     // Test for SPARK-33867
     val timestamp = Instant.parse("2001-02-20T11:22:33.543543Z")
     val date = LocalDate.parse("1995-01-01")

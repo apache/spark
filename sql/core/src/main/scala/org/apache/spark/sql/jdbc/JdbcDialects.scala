@@ -67,9 +67,6 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
 @DeveloperApi
 abstract class JdbcDialect extends Serializable with Logging{
 
-  private lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -182,7 +179,10 @@ abstract class JdbcDialect extends Serializable with Logging{
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
-    case timestampValue: Instant => "'" + timestampFormatter.format(timestampValue) + "'"
+    case timestampValue: Instant =>
+      val timestampFormatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      "'" + timestampFormatter.format(timestampValue) + "'"
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate => "'" + dateValue + "'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
