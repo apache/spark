@@ -825,9 +825,20 @@ case class DescribeColumnCommand(
 case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute] = Seq.empty,
+    attributes: Seq[Attribute] = Seq.empty,
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
+
+  override val output: Seq[Attribute] = if (attributes.isEmpty) {
+    // The output should be delivered by logical nodes(ShowTables and ShowTableExtended) in normal.
+    // Since the output is not specified when constructing ShowTablesCommand in SQLContext.tables,
+    // in order to maintain backward compatibility, output is defined here.
+    AttributeReference("namespace", StringType, nullable = false)() ::
+      AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+  } else {
+    attributes
+  }
 
   override def producedAttributes: AttributeSet = outputSet
 
