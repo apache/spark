@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
@@ -538,8 +538,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
     // this will clear the relation cache and caches of all its dependants.
-    relation.children.foreach { child =>
-      sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, child)
+    relation match {
+      case SubqueryAlias(_, relationPlan) =>
+        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)
+      case _ =>
+        throw new AnalysisException(
+          s"Unexpected type ${relation.getClass.getCanonicalName} of the relation $tableName")
     }
   }
 
