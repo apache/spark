@@ -81,7 +81,7 @@ private[storage] class BlockManagerDecommissioner(
       }
     }
 
-    private def fetchNextShuffleBlock(): (ShuffleBlockInfo, Int) = {
+    private def nextShuffleBlockToMigrate(): (ShuffleBlockInfo, Int) = {
       while (!Thread.currentThread().isInterrupted) {
         Option(shufflesToMigrate.poll()) match {
           case Some(head) => return head
@@ -98,7 +98,7 @@ private[storage] class BlockManagerDecommissioner(
       // Once a block fails to transfer to an executor stop trying to transfer more blocks
       while (keepRunning) {
         try {
-          val (shuffleBlockInfo, retryCount) = fetchNextShuffleBlock()
+          val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
           if (blocks.isEmpty) {
             logInfo(s"Ignore empty shuffle block $shuffleBlockInfo")
