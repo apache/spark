@@ -383,6 +383,15 @@ private[ml] object DecisionTreeModelReadWrite {
           node.impurityStats.rawCount, -1.0, -1, -1, SplitData(-1, Array.emptyDoubleArray, -1))),
           id)
     }
+
+    /**
+     * When save a tree model, infer the number of partitions based on number of nodes.
+     */
+    def inferNumPartitions(numNodes: Long): Int = {
+      require(numNodes > 0)
+      // 7,280,000 nodes is about 128MB
+      (numNodes / 7280000.0).ceil.toInt
+    }
   }
 
   /**
@@ -474,8 +483,7 @@ private[ml] object EnsembleModelReadWrite {
       .write.parquet(treesMetadataPath)
 
     val dataPath = new Path(path, "data").toString
-    // 7,280,000 nodes is about 128MB
-    val numDataParts = (instance.trees.map(_.numNodes).sum / 7280000.0).ceil.toInt
+    val numDataParts = NodeData.inferNumPartitions(instance.trees.map(_.numNodes.toLong).sum)
     val nodeDataRDD = sparkSession.sparkContext.parallelize(instance.trees.zipWithIndex)
       .flatMap { case (tree, treeID) => EnsembleNodeData.build(tree, treeID) }
     sparkSession.createDataFrame(nodeDataRDD)

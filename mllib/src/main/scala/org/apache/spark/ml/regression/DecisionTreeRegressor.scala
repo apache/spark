@@ -294,8 +294,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      // 7,280,000 nodes is about 128MB
-      val numDataParts = (instance.numNodes / 7280000.0).ceil.toInt
+      val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
       sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
     }
   }
