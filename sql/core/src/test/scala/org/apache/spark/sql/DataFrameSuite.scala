@@ -940,6 +940,13 @@ class DataFrameSuite extends QueryTest
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
     assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
     checkAnswer(summaryDF, summaryResult)
+
+    val approxSummaryDF = person3.summary("count", "approx_count_distinct")
+    val approxSummaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("approx_count_distinct", "4", "5", "3"))
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
   test("summary advanced") {

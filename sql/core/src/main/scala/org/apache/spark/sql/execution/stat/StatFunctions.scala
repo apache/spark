@@ -256,6 +256,8 @@ object StatFunctions extends Logging {
           case "count" => (child: Expression) => Count(child).toAggregateExpression()
           case "count_distinct" => (child: Expression) =>
             Count(child).toAggregateExpression(isDistinct = true)
+          case "approx_count_distinct" => (child: Expression) =>
+            HyperLogLogPlusPlus(child).toAggregateExpression()
           case "mean" => (child: Expression) => Average(child).toAggregateExpression()
           case "stddev" => (child: Expression) => StddevSamp(child).toAggregateExpression()
           case "min" => (child: Expression) => Min(child).toAggregateExpression()
