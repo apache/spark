@@ -676,7 +676,7 @@ case class AlterTableRecoverPartitionsCommand(
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
-    catalog.refreshTable(tableName)
+    spark.catalog.refreshTable(tableIdentWithDB)
     logInfo(s"Recovered all partitions ($total).")
     Seq.empty[Row]
   }

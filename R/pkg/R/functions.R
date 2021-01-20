@@ -247,7 +247,7 @@ NULL
 #'            used to transform the data.  The first argument is the key, the second argument
 #'            is the value.
 #'          }
-#' @param zero a \code{Column} used as the initial value in \code{array_aggregate}
+#' @param initialValue a \code{Column} used as the initial value in \code{array_aggregate}
 #' @param merge a \code{function} a binary function \code{(Column, Column) -> Column}
 #'          used in \code{array_aggregate}to merge values (the second argument)
 #'          into accumulator (the first argument).
@@ -3666,11 +3666,11 @@ invoke_higher_order_function <- function(name, cols, funs) {
 #' @aliases array_aggregate array_aggregate,characterOrColumn,Column,function-method
 #' @note array_aggregate since 3.1.0
 setMethod("array_aggregate",
-          signature(x = "characterOrColumn", zero = "Column", merge = "function"),
-          function(x, zero, merge, finish = NULL) {
+          signature(x = "characterOrColumn", initialValue = "Column", merge = "function"),
+          function(x, initialValue, merge, finish = NULL) {
             invoke_higher_order_function(
               "ArrayAggregate",
-              cols = list(x, zero),
+              cols = list(x, initialValue),
               funs = if (is.null(finish)) {
                 list(merge)
               } else {

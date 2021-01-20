@@ -5,7 +5,7 @@
 -- !query
 select bit_count(null)
 -- !query schema
-struct<bit_count(CAST(NULL AS INT)):int>
+struct<bit_count(NULL):int>
 -- !query output
 NULL
 
