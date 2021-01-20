@@ -159,7 +159,7 @@ class BitwiseExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val expr = BitwiseGet(tl, p)
     checkExceptionInExpression[IllegalArgumentException](
-      expr, row1, "Invalid bit position: -1 less than zero")
+      expr, row1, "Invalid bit position: -1 is less than zero")
     checkExceptionInExpression[IllegalArgumentException](
       expr, row2, "Invalid bit position: 64 exceeds the bit upper limit")
     checkExceptionInExpression[IllegalArgumentException](
