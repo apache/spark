@@ -226,7 +226,7 @@ Condition : ((((((((isnotnull(ss_item_sk#2) AND isnotnull(ss_ticket_number#9)) A
 
 (4) Exchange
 Input [12]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_store_sk#7, ss_promo_sk#8, ss_ticket_number#9, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12]
-Arguments: hashpartitioning(cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#9 as bigint), 5), true, [id=#13]
+Arguments: hashpartitioning(cast(ss_item_sk#2 as bigint), cast(ss_ticket_number#9 as bigint), 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (5) Sort [codegen id : 2]
 Input [12]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_store_sk#7, ss_promo_sk#8, ss_ticket_number#9, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12]
@@ -248,7 +248,7 @@ Condition : (isnotnull(sr_item_sk#14) AND isnotnull(sr_ticket_number#15))
 
 (9) Exchange
 Input [2]: [sr_item_sk#14, sr_ticket_number#15]
-Arguments: hashpartitioning(sr_item_sk#14, sr_ticket_number#15, 5), true, [id=#16]
+Arguments: hashpartitioning(sr_item_sk#14, sr_ticket_number#15, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (10) Sort [codegen id : 4]
 Input [2]: [sr_item_sk#14, sr_ticket_number#15]
@@ -279,7 +279,7 @@ Condition : (isnotnull(cs_item_sk#17) AND isnotnull(cs_order_number#18))
 
 (16) Exchange
 Input [3]: [cs_item_sk#17, cs_order_number#18, cs_ext_list_price#19]
-Arguments: hashpartitioning(cs_item_sk#17, cs_order_number#18, 5), true, [id=#20]
+Arguments: hashpartitioning(cs_item_sk#17, cs_order_number#18, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (17) Sort [codegen id : 6]
 Input [3]: [cs_item_sk#17, cs_order_number#18, cs_ext_list_price#19]
@@ -301,7 +301,7 @@ Condition : (isnotnull(cr_item_sk#21) AND isnotnull(cr_order_number#22))
 
 (21) Exchange
 Input [5]: [cr_item_sk#21, cr_order_number#22, cr_refunded_cash#23, cr_reversed_charge#24, cr_store_credit#25]
-Arguments: hashpartitioning(cr_item_sk#21, cr_order_number#22, 5), true, [id=#26]
+Arguments: hashpartitioning(cr_item_sk#21, cr_order_number#22, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (22) Sort [codegen id : 8]
 Input [5]: [cr_item_sk#21, cr_order_number#22, cr_refunded_cash#23, cr_reversed_charge#24, cr_store_credit#25]
@@ -325,7 +325,7 @@ Results [4]: [cs_item_sk#17, sum#30, sum#31, isEmpty#32]
 
 (26) Exchange
 Input [4]: [cs_item_sk#17, sum#30, sum#31, isEmpty#32]
-Arguments: hashpartitioning(cs_item_sk#17, 5), true, [id=#33]
+Arguments: hashpartitioning(cs_item_sk#17, 5), ENSURE_REQUIREMENTS, [id=#33]
 
 (27) HashAggregate [codegen id : 10]
 Input [4]: [cs_item_sk#17, sum#30, sum#31, isEmpty#32]
@@ -411,7 +411,7 @@ Input [14]: [ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_ad
 
 (45) Exchange
 Input [12]: [ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44]
-Arguments: hashpartitioning(ss_customer_sk#3, 5), true, [id=#46]
+Arguments: hashpartitioning(ss_customer_sk#3, 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (46) Sort [codegen id : 14]
 Input [12]: [ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44]
@@ -433,7 +433,7 @@ Condition : (((((isnotnull(c_customer_sk#47) AND isnotnull(c_first_sales_date_sk
 
 (50) Exchange
 Input [6]: [c_customer_sk#47, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, c_first_shipto_date_sk#51, c_first_sales_date_sk#52]
-Arguments: hashpartitioning(c_customer_sk#47, 5), true, [id=#53]
+Arguments: hashpartitioning(c_customer_sk#47, 5), ENSURE_REQUIREMENTS, [id=#53]
 
 (51) Sort [codegen id : 16]
 Input [6]: [c_customer_sk#47, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, c_first_shipto_date_sk#51, c_first_sales_date_sk#52]
@@ -489,7 +489,7 @@ Input [18]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_
 
 (63) Exchange
 Input [16]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#55, d_year#58]
-Arguments: hashpartitioning(ss_cdemo_sk#4, 5), true, [id=#59]
+Arguments: hashpartitioning(ss_cdemo_sk#4, 5), ENSURE_REQUIREMENTS, [id=#59]
 
 (64) Sort [codegen id : 20]
 Input [16]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#55, d_year#58]
@@ -511,7 +511,7 @@ Condition : (isnotnull(cd_demo_sk#60) AND isnotnull(cd_marital_status#61))
 
 (68) Exchange
 Input [2]: [cd_demo_sk#60, cd_marital_status#61]
-Arguments: hashpartitioning(cd_demo_sk#60, 5), true, [id=#62]
+Arguments: hashpartitioning(cd_demo_sk#60, 5), ENSURE_REQUIREMENTS, [id=#62]
 
 (69) Sort [codegen id : 22]
 Input [2]: [cd_demo_sk#60, cd_marital_status#61]
@@ -528,7 +528,7 @@ Input [18]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_
 
 (72) Exchange
 Input [16]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#55, d_year#58, cd_marital_status#61]
-Arguments: hashpartitioning(c_current_cdemo_sk#48, 5), true, [id=#63]
+Arguments: hashpartitioning(c_current_cdemo_sk#48, 5), ENSURE_REQUIREMENTS, [id=#63]
 
 (73) Sort [codegen id : 24]
 Input [16]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#55, d_year#58, cd_marital_status#61]
@@ -618,7 +618,7 @@ Input [15]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11,
 
 (93) Exchange
 Input [13]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#55, d_year#58, hd_income_band_sk#69, hd_income_band_sk#72]
-Arguments: hashpartitioning(ss_addr_sk#6, 5), true, [id=#73]
+Arguments: hashpartitioning(ss_addr_sk#6, 5), ENSURE_REQUIREMENTS, [id=#73]
 
 (94) Sort [codegen id : 31]
 Input [13]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#55, d_year#58, hd_income_band_sk#69, hd_income_band_sk#72]
@@ -640,7 +640,7 @@ Condition : isnotnull(ca_address_sk#74)
 
 (98) Exchange
 Input [5]: [ca_address_sk#74, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78]
-Arguments: hashpartitioning(ca_address_sk#74, 5), true, [id=#79]
+Arguments: hashpartitioning(ca_address_sk#74, 5), ENSURE_REQUIREMENTS, [id=#79]
 
 (99) Sort [codegen id : 33]
 Input [5]: [ca_address_sk#74, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78]
@@ -657,7 +657,7 @@ Input [18]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11,
 
 (102) Exchange
 Input [16]: [ss_item_sk#2, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#55, d_year#58, hd_income_band_sk#69, hd_income_band_sk#72, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78]
-Arguments: hashpartitioning(c_current_addr_sk#50, 5), true, [id=#80]
+Arguments: hashpartitioning(c_current_addr_sk#50, 5), ENSURE_REQUIREMENTS, [id=#80]
 
 (103) Sort [codegen id : 35]
 Input [16]: [ss_item_sk#2, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#55, d_year#58, hd_income_band_sk#69, hd_income_band_sk#72, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78]
@@ -722,7 +722,7 @@ Input [19]: [ss_item_sk#2, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt
 Output [4]: [i_item_sk#89, i_current_price#90, i_color#91, i_product_name#92]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), In(i_color, [purple,burlywood,indian,spring,floral,medium]), GreaterThanOrEqual(i_current_price,64.00), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_current_price), In(i_color, [purple,burlywood,indian,spring,floral,medium]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
 
 (118) ColumnarToRow [codegen id : 40]
@@ -730,7 +730,7 @@ Input [4]: [i_item_sk#89, i_current_price#90, i_color#91, i_product_name#92]
 
 (119) Filter [codegen id : 40]
 Input [4]: [i_item_sk#89, i_current_price#90, i_color#91, i_product_name#92]
-Condition : ((((((isnotnull(i_current_price#90) AND i_color#91 IN (purple,burlywood,indian,spring,floral,medium)) AND (i_current_price#90 >= 64.00)) AND (cast(i_current_price#90 as decimal(12,2)) <= 74.00)) AND (cast(i_current_price#90 as decimal(12,2)) >= 65.00)) AND (cast(i_current_price#90 as decimal(12,2)) <= 79.00)) AND isnotnull(i_item_sk#89))
+Condition : ((((((isnotnull(i_current_price#90) AND i_color#91 IN (purple,burlywood,indian,spring,floral,medium)) AND (i_current_price#90 >= 64.00)) AND (i_current_price#90 <= 74.00)) AND (i_current_price#90 >= 65.00)) AND (i_current_price#90 <= 79.00)) AND isnotnull(i_item_sk#89))
 
 (120) Project [codegen id : 40]
 Output [2]: [i_item_sk#89, i_product_name#92]
@@ -758,7 +758,7 @@ Results [19]: [i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_st
 
 (125) Exchange
 Input [19]: [i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#82, ca_street_name#83, ca_city#84, ca_zip#85, d_year#40, d_year#55, d_year#58, count#98, sum#99, sum#100, sum#101]
-Arguments: hashpartitioning(i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#82, ca_street_name#83, ca_city#84, ca_zip#85, d_year#40, d_year#55, d_year#58, 5), true, [id=#102]
+Arguments: hashpartitioning(i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#82, ca_street_name#83, ca_city#84, ca_zip#85, d_year#40, d_year#55, d_year#58, 5), ENSURE_REQUIREMENTS, [id=#102]
 
 (126) HashAggregate [codegen id : 42]
 Input [19]: [i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#82, ca_street_name#83, ca_city#84, ca_zip#85, d_year#40, d_year#55, d_year#58, count#98, sum#99, sum#100, sum#101]
@@ -769,7 +769,7 @@ Results [17]: [i_product_name#92 AS product_name#107, i_item_sk#89 AS item_sk#10
 
 (127) Exchange
 Input [17]: [product_name#107, item_sk#108, store_name#109, store_zip#110, b_street_number#111, b_streen_name#112, b_city#113, b_zip#114, c_street_number#115, c_street_name#116, c_city#117, c_zip#118, syear#119, cnt#120, s1#121, s2#122, s3#123]
-Arguments: hashpartitioning(item_sk#108, store_name#109, store_zip#110, 5), true, [id=#124]
+Arguments: hashpartitioning(item_sk#108, store_name#109, store_zip#110, 5), ENSURE_REQUIREMENTS, [id=#124]
 
 (128) Sort [codegen id : 43]
 Input [17]: [product_name#107, item_sk#108, store_name#109, store_zip#110, b_street_number#111, b_streen_name#112, b_city#113, b_zip#114, c_street_number#115, c_street_name#116, c_city#117, c_zip#118, syear#119, cnt#120, s1#121, s2#122, s3#123]
@@ -851,7 +851,7 @@ Input [14]: [ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_ad
 
 (147) Exchange
 Input [12]: [ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44]
-Arguments: hashpartitioning(ss_customer_sk#3, 5), true, [id=#126]
+Arguments: hashpartitioning(ss_customer_sk#3, 5), ENSURE_REQUIREMENTS, [id=#126]
 
 (148) Sort [codegen id : 57]
 Input [12]: [ss_item_sk#2, ss_customer_sk#3, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44]
@@ -899,7 +899,7 @@ Input [18]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_
 
 (159) Exchange
 Input [16]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#128, d_year#130]
-Arguments: hashpartitioning(ss_cdemo_sk#4, 5), true, [id=#131]
+Arguments: hashpartitioning(ss_cdemo_sk#4, 5), ENSURE_REQUIREMENTS, [id=#131]
 
 (160) Sort [codegen id : 63]
 Input [16]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#128, d_year#130]
@@ -923,7 +923,7 @@ Input [18]: [ss_item_sk#2, ss_cdemo_sk#4, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_
 
 (165) Exchange
 Input [16]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#128, d_year#130, cd_marital_status#61]
-Arguments: hashpartitioning(c_current_cdemo_sk#48, 5), true, [id=#132]
+Arguments: hashpartitioning(c_current_cdemo_sk#48, 5), ENSURE_REQUIREMENTS, [id=#132]
 
 (166) Sort [codegen id : 67]
 Input [16]: [ss_item_sk#2, ss_hdemo_sk#5, ss_addr_sk#6, ss_promo_sk#8, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_cdemo_sk#48, c_current_hdemo_sk#49, c_current_addr_sk#50, d_year#128, d_year#130, cd_marital_status#61]
@@ -983,7 +983,7 @@ Input [15]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11,
 
 (180) Exchange
 Input [13]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#128, d_year#130, hd_income_band_sk#69, hd_income_band_sk#136]
-Arguments: hashpartitioning(ss_addr_sk#6, 5), true, [id=#137]
+Arguments: hashpartitioning(ss_addr_sk#6, 5), ENSURE_REQUIREMENTS, [id=#137]
 
 (181) Sort [codegen id : 74]
 Input [13]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#128, d_year#130, hd_income_band_sk#69, hd_income_band_sk#136]
@@ -1007,7 +1007,7 @@ Input [18]: [ss_item_sk#2, ss_addr_sk#6, ss_wholesale_cost#10, ss_list_price#11,
 
 (186) Exchange
 Input [16]: [ss_item_sk#2, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#128, d_year#130, hd_income_band_sk#69, hd_income_band_sk#136, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78]
-Arguments: hashpartitioning(c_current_addr_sk#50, 5), true, [id=#138]
+Arguments: hashpartitioning(c_current_addr_sk#50, 5), ENSURE_REQUIREMENTS, [id=#138]
 
 (187) Sort [codegen id : 78]
 Input [16]: [ss_item_sk#2, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt#12, d_year#40, s_store_name#43, s_zip#44, c_current_addr_sk#50, d_year#128, d_year#130, hd_income_band_sk#69, hd_income_band_sk#136, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78]
@@ -1074,7 +1074,7 @@ Results [19]: [i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_st
 
 (202) Exchange
 Input [19]: [i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#140, ca_street_name#141, ca_city#142, ca_zip#143, d_year#40, d_year#128, d_year#130, count#149, sum#150, sum#151, sum#152]
-Arguments: hashpartitioning(i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#140, ca_street_name#141, ca_city#142, ca_zip#143, d_year#40, d_year#128, d_year#130, 5), true, [id=#153]
+Arguments: hashpartitioning(i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#140, ca_street_name#141, ca_city#142, ca_zip#143, d_year#40, d_year#128, d_year#130, 5), ENSURE_REQUIREMENTS, [id=#153]
 
 (203) HashAggregate [codegen id : 85]
 Input [19]: [i_product_name#92, i_item_sk#89, s_store_name#43, s_zip#44, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, ca_street_number#140, ca_street_name#141, ca_city#142, ca_zip#143, d_year#40, d_year#128, d_year#130, count#149, sum#150, sum#151, sum#152]
@@ -1085,7 +1085,7 @@ Results [8]: [i_item_sk#89 AS item_sk#158, s_store_name#43 AS store_name#159, s_
 
 (204) Exchange
 Input [8]: [item_sk#158, store_name#159, store_zip#160, syear#161, cnt#162, s1#163, s2#164, s3#165]
-Arguments: hashpartitioning(item_sk#158, store_name#159, store_zip#160, 5), true, [id=#166]
+Arguments: hashpartitioning(item_sk#158, store_name#159, store_zip#160, 5), ENSURE_REQUIREMENTS, [id=#166]
 
 (205) Sort [codegen id : 86]
 Input [8]: [item_sk#158, store_name#159, store_zip#160, syear#161, cnt#162, s1#163, s2#164, s3#165]
@@ -1102,7 +1102,7 @@ Input [25]: [product_name#107, item_sk#108, store_name#109, store_zip#110, b_str
 
 (208) Exchange
 Input [21]: [product_name#107, store_name#109, store_zip#110, b_street_number#111, b_streen_name#112, b_city#113, b_zip#114, c_street_number#115, c_street_name#116, c_city#117, c_zip#118, syear#119, cnt#120, s1#121, s2#122, s3#123, s1#163, s2#164, s3#165, syear#161, cnt#162]
-Arguments: rangepartitioning(product_name#107 ASC NULLS FIRST, store_name#109 ASC NULLS FIRST, cnt#162 ASC NULLS FIRST, 5), true, [id=#167]
+Arguments: rangepartitioning(product_name#107 ASC NULLS FIRST, store_name#109 ASC NULLS FIRST, cnt#162 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#167]
 
 (209) Sort [codegen id : 88]
 Input [21]: [product_name#107, store_name#109, store_zip#110, b_street_number#111, b_streen_name#112, b_city#113, b_zip#114, c_street_number#115, c_street_name#116, c_city#117, c_zip#118, syear#119, cnt#120, s1#121, s2#122, s3#123, s1#163, s2#164, s3#165, syear#161, cnt#162]

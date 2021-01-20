@@ -125,16 +125,16 @@ class InstallCommand(install):
         spark_dist = os.path.join(self.install_lib, "pyspark", "spark-distribution")
         rmtree(spark_dist, ignore_errors=True)
 
-        if ("HADOOP_VERSION" in os.environ) or ("HIVE_VERSION" in os.environ):
-            # Note that SPARK_VERSION environment is just a testing purpose.
-            # HIVE_VERSION environment variable is also internal for now in case
+        if ("PYSPARK_HADOOP_VERSION" in os.environ) or ("PYSPARK_HIVE_VERSION" in os.environ):
+            # Note that PYSPARK_VERSION environment is just a testing purpose.
+            # PYSPARK_HIVE_VERSION environment variable is also internal for now in case
             # we support another version of Hive in the future.
             spark_version, hadoop_version, hive_version = install_module.checked_versions(
-                os.environ.get("SPARK_VERSION", VERSION).lower(),
-                os.environ.get("HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
-                os.environ.get("HIVE_VERSION", install_module.DEFAULT_HIVE).lower())
+                os.environ.get("PYSPARK_VERSION", VERSION).lower(),
+                os.environ.get("PYSPARK_HADOOP_VERSION", install_module.DEFAULT_HADOOP).lower(),
+                os.environ.get("PYSPARK_HIVE_VERSION", install_module.DEFAULT_HIVE).lower())
 
-            if ("SPARK_VERSION" not in os.environ and
+            if ("PYSPARK_VERSION" not in os.environ and
                 ((install_module.DEFAULT_HADOOP, install_module.DEFAULT_HIVE) ==
                     (hadoop_version, hive_version))):
                 # Do not download and install if they are same as default.
@@ -250,7 +250,7 @@ try:
         license='http://www.apache.org/licenses/LICENSE-2.0',
         # Don't forget to update python/docs/source/getting_started/install.rst
         # if you're updating the versions or dependencies.
-        install_requires=['py4j==0.10.9'],
+        install_requires=['py4j==0.10.9.1'],
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],

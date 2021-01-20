@@ -202,7 +202,7 @@ Results [3]: [ws_order_number#5, sum#24, sum#25]
 
 (36) Exchange
 Input [3]: [ws_order_number#5, sum#24, sum#25]
-Arguments: hashpartitioning(ws_order_number#5, 5), true, [id=#26]
+Arguments: hashpartitioning(ws_order_number#5, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (37) HashAggregate [codegen id : 7]
 Input [3]: [ws_order_number#5, sum#24, sum#25]
@@ -220,7 +220,7 @@ Results [3]: [sum#24, sum#25, count#28]
 
 (39) Exchange
 Input [3]: [sum#24, sum#25, count#28]
-Arguments: SinglePartition, true, [id=#29]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#29]
 
 (40) HashAggregate [codegen id : 8]
 Input [3]: [sum#24, sum#25, count#28]

@@ -20,6 +20,7 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -610,7 +611,13 @@ class JDBCSuite extends QueryTest
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
+    val epochMillis = java.time.LocalTime.ofNanoOfDay(
+      TimeUnit.MILLISECONDS.toNanos(rows(0).getAs[Int](0)))
+      .atDate(java.time.LocalDate.ofEpochDay(0))
+      .atZone(java.time.ZoneId.systemDefault())
+      .toInstant()
+      .toEpochMilli()
+    cal.setTime(new Date(epochMillis))
     assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
     assert(cal.get(Calendar.MINUTE) === 34)
     assert(cal.get(Calendar.SECOND) === 56)
@@ -625,7 +632,24 @@ class JDBCSuite extends QueryTest
     assert(cal.get(Calendar.HOUR) === 11)
     assert(cal.get(Calendar.MINUTE) === 22)
     assert(cal.get(Calendar.SECOND) === 33)
+    assert(cal.get(Calendar.MILLISECOND) === 543)
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
+  }
+
+  test("SPARK-33888: test TIME types") {
+    val rows = spark.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      .cache().collect()
+    val expectedTimeRaw = java.sql.Time.valueOf("12:34:56")
+    val expectedTimeMillis = Math.toIntExact(
+      java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
+        expectedTimeRaw.toLocalTime().toNanoOfDay()
+      )
+    )
+    assert(rows(0).getAs[Int](0) === expectedTimeMillis)
+    assert(rows(1).getAs[Int](0) === expectedTimeMillis)
+    assert(cachedRows(0).getAs[Int](0) === expectedTimeMillis)
   }
 
   test("test DATE types") {
@@ -698,7 +722,7 @@ class JDBCSuite extends QueryTest
   test("Remap types via JdbcDialects") {
     JdbcDialects.registerDialect(testH2Dialect)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
-    assert(df.schema.filter(_.dataType != org.apache.spark.sql.types.StringType).isEmpty)
+    assert(!df.schema.exists(_.dataType != org.apache.spark.sql.types.StringType))
     val rows = df.collect()
     assert(rows(0).get(0).isInstanceOf[String])
     assert(rows(0).get(1).isInstanceOf[String])

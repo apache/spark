@@ -207,7 +207,7 @@ Results [11]: [c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_
 
 (36) Exchange
 Input [11]: [c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, sum#34]
-Arguments: hashpartitioning(c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, 5), true, [id=#35]
+Arguments: hashpartitioning(c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, 5), ENSURE_REQUIREMENTS, [id=#35]
 
 (37) HashAggregate [codegen id : 7]
 Input [11]: [c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, sum#34]
@@ -225,7 +225,7 @@ Results [5]: [c_last_name#25, c_first_name#24, s_store_name#10, sum#40, isEmpty#
 
 (39) Exchange
 Input [5]: [c_last_name#25, c_first_name#24, s_store_name#10, sum#40, isEmpty#41]
-Arguments: hashpartitioning(c_last_name#25, c_first_name#24, s_store_name#10, 5), true, [id=#42]
+Arguments: hashpartitioning(c_last_name#25, c_first_name#24, s_store_name#10, 5), ENSURE_REQUIREMENTS, [id=#42]
 
 (40) HashAggregate [codegen id : 8]
 Input [5]: [c_last_name#25, c_first_name#24, s_store_name#10, sum#40, isEmpty#41]
@@ -244,7 +244,7 @@ Input [5]: [c_last_name#25, c_first_name#24, s_store_name#10, paid#44, sum(netpa
 
 (43) Exchange
 Input [4]: [c_last_name#25, c_first_name#24, s_store_name#10, paid#44]
-Arguments: rangepartitioning(c_last_name#25 ASC NULLS FIRST, c_first_name#24 ASC NULLS FIRST, s_store_name#10 ASC NULLS FIRST, 5), true, [id=#48]
+Arguments: rangepartitioning(c_last_name#25 ASC NULLS FIRST, c_first_name#24 ASC NULLS FIRST, s_store_name#10 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#48]
 
 (44) Sort [codegen id : 9]
 Input [4]: [c_last_name#25, c_first_name#24, s_store_name#10, paid#44]
@@ -457,7 +457,7 @@ Results [11]: [c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_
 
 (80) Exchange
 Input [11]: [c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, sum#55]
-Arguments: hashpartitioning(c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, 5), true, [id=#56]
+Arguments: hashpartitioning(c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, 5), ENSURE_REQUIREMENTS, [id=#56]
 
 (81) HashAggregate [codegen id : 7]
 Input [11]: [c_last_name#25, c_first_name#24, s_store_name#10, ca_state#29, s_state#12, i_color#18, i_current_price#16, i_manager_id#20, i_units#19, i_size#17, sum#55]
@@ -475,13 +475,13 @@ Results [2]: [sum#60, count#61]
 
 (83) Exchange
 Input [2]: [sum#60, count#61]
-Arguments: SinglePartition, true, [id=#62]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#62]
 
 (84) HashAggregate [codegen id : 8]
 Input [2]: [sum#60, count#61]
 Keys: []
 Functions [1]: [avg(netpaid#37)]
 Aggregate Attributes [1]: [avg(netpaid#37)#63]
-Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#37)#63)), DecimalType(24,8), true) AS (CAST(0.05 AS DECIMAL(21,6)) * CAST(avg(netpaid) AS DECIMAL(21,6)))#64]
+Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#37)#63)), DecimalType(24,8), true) AS (0.05 * avg(netpaid))#64]
 
 

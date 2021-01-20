@@ -165,6 +165,32 @@ class InMemoryTable(
 
   protected def addPartitionKey(key: Seq[Any]): Unit = {}
 
+  protected def renamePartitionKey(
+      partitionSchema: StructType,
+      from: Seq[Any],
+      to: Seq[Any]): Boolean = {
+    val rows = dataMap.remove(from).getOrElse(new BufferedRows(from.mkString("/")))
+    val newRows = new BufferedRows(to.mkString("/"))
+    rows.rows.foreach { r =>
+      val newRow = new GenericInternalRow(r.numFields)
+      for (i <- 0 until r.numFields) newRow.update(i, r.get(i, schema(i).dataType))
+      for (i <- 0 until partitionSchema.length) {
+        val j = schema.fieldIndex(partitionSchema(i).name)
+        newRow.update(j, to(i))
+      }
+      newRows.withRow(newRow)
+    }
+    dataMap.put(to, newRows).foreach { _ =>
+      throw new IllegalStateException(
+        s"The ${to.mkString("[", ", ", "]")} partition exists already")
+    }
+    true
+  }
+
+  protected def removePartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
+    dataMap.remove(key)
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
@@ -248,11 +274,13 @@ class InMemoryTable(
         this
       }
 
-      override def buildForBatch(): BatchWrite = writer
+      override def build(): Write = new Write {
+        override def toBatch: BatchWrite = writer
 
-      override def buildForStreaming(): StreamingWrite = streamingWriter match {
-        case exc: StreamingNotSupportedOperation => exc.throwsException()
-        case s => s
+        override def toStreaming: StreamingWrite = streamingWriter match {
+          case exc: StreamingNotSupportedOperation => exc.throwsException()
+          case s => s
+        }
       }
     }
   }

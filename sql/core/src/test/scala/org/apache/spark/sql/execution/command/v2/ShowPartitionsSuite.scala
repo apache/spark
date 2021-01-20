@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check V2 table catalogs.
+ */
 class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSuiteBase {
   test("a table does not support partitioning") {
     val table = s"non_part_$catalog.tab1"
@@ -35,17 +38,11 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
     }
   }
 
-  test("SPARK-33889: null and empty string as partition values") {
-    import testImplicits._
+  test("SPARK-33889, SPARK-33904: null and empty string as partition values") {
     withNamespaceAndTable("ns", "tbl") { t =>
-      val df = Seq((0, ""), (1, null)).toDF("a", "part")
-      df.write
-        .partitionBy("part")
-        .format("parquet")
-        .mode(SaveMode.Overwrite)
-        .saveAsTable(t)
-
+      createNullPartTable(t, "parquet")
       runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("part=") :: Row("part=null") :: Nil)
+      checkAnswer(spark.table(t), Row(0, "") :: Row(1, null) :: Nil)
     }
   }
 }

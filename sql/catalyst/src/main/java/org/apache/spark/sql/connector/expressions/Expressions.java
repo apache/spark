@@ -171,6 +171,8 @@ public class Expressions {
    * @param direction direction of the sort
    * @param nullOrder null order of the sort
    * @return a SortOrder
+   *
+   * @since 3.2.0
    */
   public static SortOrder sort(Expression expr, SortDirection direction, NullOrdering nullOrder) {
     return LogicalExpressions.sort(expr, direction, nullOrder);

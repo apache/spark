@@ -34,7 +34,7 @@ GROUP BY udf(GREATEST(COALESCE(udf(t2.int_col1), 109), COALESCE(t1.int_col1, udf
 HAVING (udf(SUM(COALESCE(udf(t1.int_col1), udf(t2.int_col0)))))
             > (udf(COALESCE(t1.int_col1, t2.int_col0)) * 2)
 -- !query schema
-struct<CAST(udf(cast(sum(cast(cast(udf(cast(coalesce(int_col1, int_col0) as string)) as int) as bigint)) as string)) AS BIGINT):bigint,(CAST(udf(cast(coalesce(int_col1, int_col0) as string)) AS INT) * 2):int>
+struct<udf(sum(udf(coalesce(int_col1, int_col0)))):bigint,(udf(coalesce(int_col1, int_col0)) * 2):int>
 -- !query output
 -367	-734
 -507	-1014

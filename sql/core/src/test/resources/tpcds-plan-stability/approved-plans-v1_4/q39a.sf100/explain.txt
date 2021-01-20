@@ -158,24 +158,24 @@ Input [6]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#7, i_item_sk#9, w_
 (23) HashAggregate [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#4, i_item_sk#9, w_warehouse_sk#11, w_warehouse_name#12, d_moy#7]
 Keys [4]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7]
-Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [5]: [n#14, avg#15, m2#16, sum#17, count#18]
 Results [9]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, n#19, avg#20, m2#21, sum#22, count#23]
 
 (24) Exchange
 Input [9]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, n#19, avg#20, m2#21, sum#22, count#23]
-Arguments: hashpartitioning(w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, 5), true, [id=#24]
+Arguments: hashpartitioning(w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (25) HashAggregate [codegen id : 5]
 Input [9]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7, n#19, avg#20, m2#21, sum#22, count#23]
 Keys [4]: [w_warehouse_name#12, w_warehouse_sk#11, i_item_sk#9, d_moy#7]
-Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#25, avg(cast(inv_quantity_on_hand#4 as bigint))#26]
-Results [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stddev_samp(cast(inv_quantity_on_hand#4 as double))#25 AS stdev#27, avg(cast(inv_quantity_on_hand#4 as bigint))#26 AS mean#28]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#25, avg(inv_quantity_on_hand#4)#26]
+Results [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stddev_samp(cast(inv_quantity_on_hand#4 as double))#25 AS stdev#27, avg(inv_quantity_on_hand#4)#26 AS mean#28]
 
 (26) Filter [codegen id : 5]
 Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stdev#27, mean#28]
-Condition : (CASE WHEN (mean#28 = 0.0) THEN 0.0 ELSE (stdev#27 / mean#28) END > 1.0)
+Condition : (((isnotnull(mean#28) AND isnotnull(stdev#27)) AND NOT (mean#28 = 0.0)) AND ((stdev#27 / mean#28) > 1.0))
 
 (27) Project [codegen id : 5]
 Output [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, CASE WHEN (mean#28 = 0.0) THEN null ELSE (stdev#27 / mean#28) END AS cov#29]
@@ -183,7 +183,7 @@ Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, stdev#27, mean#28]
 
 (28) Exchange
 Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29]
-Arguments: hashpartitioning(i_item_sk#9, w_warehouse_sk#11, 5), true, [id=#30]
+Arguments: hashpartitioning(i_item_sk#9, w_warehouse_sk#11, 5), ENSURE_REQUIREMENTS, [id=#30]
 
 (29) Sort [codegen id : 6]
 Input [5]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29]
@@ -261,24 +261,24 @@ Input [6]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, d_moy#33, i_item_sk#35, 
 (46) HashAggregate [codegen id : 10]
 Input [5]: [inv_quantity_on_hand#4, i_item_sk#35, w_warehouse_sk#36, w_warehouse_name#37, d_moy#33]
 Keys [4]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33]
-Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Functions [2]: [partial_stddev_samp(cast(inv_quantity_on_hand#4 as double)), partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [5]: [n#38, avg#39, m2#40, sum#41, count#42]
 Results [9]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, n#43, avg#44, m2#45, sum#46, count#47]
 
 (47) Exchange
 Input [9]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, n#43, avg#44, m2#45, sum#46, count#47]
-Arguments: hashpartitioning(w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, 5), true, [id=#48]
+Arguments: hashpartitioning(w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, 5), ENSURE_REQUIREMENTS, [id=#48]
 
 (48) HashAggregate [codegen id : 11]
 Input [9]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33, n#43, avg#44, m2#45, sum#46, count#47]
 Keys [4]: [w_warehouse_name#37, w_warehouse_sk#36, i_item_sk#35, d_moy#33]
-Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#49, avg(cast(inv_quantity_on_hand#4 as bigint))#50]
-Results [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stddev_samp(cast(inv_quantity_on_hand#4 as double))#49 AS stdev#51, avg(cast(inv_quantity_on_hand#4 as bigint))#50 AS mean#52]
+Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double)), avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#4 as double))#49, avg(inv_quantity_on_hand#4)#50]
+Results [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stddev_samp(cast(inv_quantity_on_hand#4 as double))#49 AS stdev#51, avg(inv_quantity_on_hand#4)#50 AS mean#52]
 
 (49) Filter [codegen id : 11]
 Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stdev#51, mean#52]
-Condition : (CASE WHEN (mean#52 = 0.0) THEN 0.0 ELSE (stdev#51 / mean#52) END > 1.0)
+Condition : (((isnotnull(mean#52) AND isnotnull(stdev#51)) AND NOT (mean#52 = 0.0)) AND ((stdev#51 / mean#52) > 1.0))
 
 (50) Project [codegen id : 11]
 Output [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, CASE WHEN (mean#52 = 0.0) THEN null ELSE (stdev#51 / mean#52) END AS cov#53]
@@ -286,7 +286,7 @@ Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, stdev#51, mean#52]
 
 (51) Exchange
 Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
-Arguments: hashpartitioning(i_item_sk#35, w_warehouse_sk#36, 5), true, [id=#54]
+Arguments: hashpartitioning(i_item_sk#35, w_warehouse_sk#36, 5), ENSURE_REQUIREMENTS, [id=#54]
 
 (52) Sort [codegen id : 12]
 Input [5]: [w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
@@ -299,7 +299,7 @@ Join condition: None
 
 (54) Exchange
 Input [10]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29, w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]
-Arguments: rangepartitioning(w_warehouse_sk#11 ASC NULLS FIRST, i_item_sk#9 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#28 ASC NULLS FIRST, cov#29 ASC NULLS FIRST, d_moy#33 ASC NULLS FIRST, mean#52 ASC NULLS FIRST, cov#53 ASC NULLS FIRST, 5), true, [id=#55]
+Arguments: rangepartitioning(w_warehouse_sk#11 ASC NULLS FIRST, i_item_sk#9 ASC NULLS FIRST, d_moy#7 ASC NULLS FIRST, mean#28 ASC NULLS FIRST, cov#29 ASC NULLS FIRST, d_moy#33 ASC NULLS FIRST, mean#52 ASC NULLS FIRST, cov#53 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#55]
 
 (55) Sort [codegen id : 14]
 Input [10]: [w_warehouse_sk#11, i_item_sk#9, d_moy#7, mean#28, cov#29, w_warehouse_sk#36, i_item_sk#35, d_moy#33, mean#52, cov#53]

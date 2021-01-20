@@ -206,7 +206,7 @@ object SparkBuild extends PomBuild {
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = if (scalaBinaryVersion.value == "2.13") "1.7.1" else "1.6.0"
+        val silencerVersion = "1.7.1"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -958,18 +958,24 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
-    javacOptions in (JavaUnidoc, unidoc) := Seq(
-      "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
-      "-public",
-      "-noqualifier", "java.lang",
-      "-tag", """example:a:Example\:""",
-      "-tag", """note:a:Note\:""",
-      "-tag", "group:X",
-      "-tag", "tparam:X",
-      "-tag", "constructor:X",
-      "-tag", "todo:X",
-      "-tag", "groupname:X"
-    ),
+    javacOptions in (JavaUnidoc, unidoc) := {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major == 1) major = versionParts(1).toInt
+
+      Seq(
+        "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
+        "-public",
+        "-noqualifier", "java.lang",
+        "-tag", """example:a:Example\:""",
+        "-tag", """note:a:Note\:""",
+        "-tag", "group:X",
+        "-tag", "tparam:X",
+        "-tag", "constructor:X",
+        "-tag", "todo:X",
+        "-tag", "groupname:X",
+      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+    },
 
     // Use GitHub repository for Scaladoc source links
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",

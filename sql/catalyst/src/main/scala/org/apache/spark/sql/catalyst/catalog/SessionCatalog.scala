@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.types.StructType
@@ -120,8 +121,7 @@ class SessionCatalog(
    */
   private def validateName(name: String): Unit = {
     if (!validNameFormat.pattern.matcher(name).matches()) {
-      throw new AnalysisException(s"`$name` is not a valid name for tables/databases. " +
-        "Valid names only contain alphabet characters, numbers and _.")
+      throw QueryCompilationErrors.invalidNameForTableOrDatabaseError(name)
     }
   }
 
@@ -216,9 +216,8 @@ class SessionCatalog(
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
     val dbName = formatDatabaseName(dbDefinition.name)
     if (dbName == globalTempViewManager.database) {
-      throw new AnalysisException(
-        s"${globalTempViewManager.database} is a system preserved database, " +
-          "you cannot create a database with this name.")
+      throw QueryCompilationErrors.cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(
+        globalTempViewManager.database)
     }
     validateName(dbName)
     externalCatalog.createDatabase(
@@ -238,7 +237,7 @@ class SessionCatalog(
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
     val dbName = formatDatabaseName(db)
     if (dbName == DEFAULT_DATABASE) {
-      throw new AnalysisException(s"Can not drop default database")
+      throw QueryCompilationErrors.cannotDropDefaultDatabaseError
     }
     if (cascade && databaseExists(dbName)) {
       listTables(dbName).foreach { t =>
@@ -279,11 +278,8 @@ class SessionCatalog(
   def setCurrentDatabase(db: String): Unit = {
     val dbName = formatDatabaseName(db)
     if (dbName == globalTempViewManager.database) {
-      throw new AnalysisException(
-        s"${globalTempViewManager.database} is a system preserved database, " +
-          "you cannot use it as current database. To access global temporary views, you should " +
-          "use qualified name with the GLOBAL_TEMP_DATABASE, e.g. SELECT * FROM " +
-          s"${globalTempViewManager.database}.viewName.")
+      throw QueryCompilationErrors.cannotUsePreservedDatabaseAsCurrentDatabaseError(
+        globalTempViewManager.database)
     }
     requireDbExists(dbName)
     synchronized { currentDb = dbName }
@@ -320,7 +316,7 @@ class SessionCatalog(
       validateLocation: Boolean = true): Unit = {
     val isExternal = tableDefinition.tableType == CatalogTableType.EXTERNAL
     if (isExternal && tableDefinition.storage.locationUri.isEmpty) {
-      throw new AnalysisException(s"CREATE EXTERNAL TABLE must be accompanied by LOCATION")
+      throw QueryCompilationErrors.createExternalTableWithoutLocationError
     }
 
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
@@ -359,8 +355,8 @@ class SessionCatalog(
       val fs = tableLocation.getFileSystem(hadoopConf)
 
       if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-        throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
-          s". The associated location('${tableLocation.toString}') already exists.")
+        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
+          "create", table.identifier, tableLocation)
       }
     }
   }
@@ -428,11 +424,7 @@ class SessionCatalog(
     val nonExistentColumnNames =
       oldDataSchema.map(_.name).filterNot(columnNameResolved(newDataSchema, _))
     if (nonExistentColumnNames.nonEmpty) {
-      throw new AnalysisException(
-        s"""
-           |Some existing schema fields (${nonExistentColumnNames.mkString("[", ",", "]")}) are
-           |not present in the new schema. We don't support dropping columns yet.
-         """.stripMargin)
+      throw QueryCompilationErrors.dropNonExistentColumnsNotSupportedError(nonExistentColumnNames)
     }
 
     externalCatalog.alterTableDataSchema(db, table, newDataSchema)
@@ -508,10 +500,8 @@ class SessionCatalog(
       if (dbs.distinct.size != 1) {
         val tables = names.map(name => formatTableName(name.table))
         val qualifiedTableNames = dbs.zip(tables).map { case (d, t) => QualifiedTableName(d, t)}
-        throw new AnalysisException(
-          s"Only the tables/views belong to the same database can be retrieved. Querying " +
-          s"tables/views are $qualifiedTableNames"
-        )
+        throw QueryCompilationErrors.cannotRetrieveTableOrViewNotInSameDatabaseError(
+          qualifiedTableNames)
       }
       val db = formatDatabaseName(dbs.head)
       requireDbExists(db)
@@ -722,8 +712,7 @@ class SessionCatalog(
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
     newName.database.map(formatDatabaseName).foreach { newDb =>
       if (db != newDb) {
-        throw new AnalysisException(
-          s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
+        throw QueryCompilationErrors.renameTableSourceAndDestinationMismatchError(db, newDb)
       }
     }
 
@@ -741,13 +730,12 @@ class SessionCatalog(
         externalCatalog.renameTable(db, oldTableName, newTableName)
       } else {
         if (newName.database.isDefined) {
-          throw new AnalysisException(
-            s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': cannot specify database " +
-              s"name '${newName.database.get}' in the destination table")
+          throw QueryCompilationErrors.cannotRenameTempViewWithDatabaseSpecifiedError(
+            oldName, newName)
         }
         if (tempViews.contains(newTableName)) {
-          throw new AnalysisException(s"RENAME TEMPORARY VIEW from '$oldName' to '$newName': " +
-            "destination table already exists")
+          throw QueryCompilationErrors.cannotRenameTempViewToExistingTableError(
+            oldName, newName)
         }
         val table = tempViews(oldTableName)
         tempViews.remove(oldTableName)
@@ -1190,10 +1178,10 @@ class SessionCatalog(
    */
   private def requireNonEmptyValueInPartitionSpec(specs: Seq[TablePartitionSpec]): Unit = {
     specs.foreach { s =>
-      if (s.values.exists(_.isEmpty)) {
+      if (s.values.exists(v => v != null && v.isEmpty)) {
         val spec = s.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
+        throw QueryCompilationErrors.invalidPartitionSpecError(
+          s"The spec ($spec) contains an empty partition column value")
       }
     }
   }
@@ -1223,10 +1211,10 @@ class SessionCatalog(
     val defined = table.partitionColumnNames
     specs.foreach { s =>
       if (!s.keys.forall(defined.contains)) {
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
-            s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
-            s"in table '${table.identifier}'")
+        throw QueryCompilationErrors.invalidPartitionSpecError(
+          s"The spec (${s.keys.mkString(", ")}) must be contained " +
+          s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
+          s"in table '${table.identifier}'")
       }
     }
   }
@@ -1382,8 +1370,8 @@ class SessionCatalog(
 
       // Check input argument size
       if (e.inputTypes.size != input.size) {
-        throw new AnalysisException(s"Invalid number of arguments for function $name. " +
-          s"Expected: ${e.inputTypes.size}; Found: ${input.size}")
+        throw QueryCompilationErrors.invalidFunctionArgumentsError(
+          name, e.inputTypes.size.toString, input.size)
       }
       e
     } else {
@@ -1409,15 +1397,14 @@ class SessionCatalog(
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val func = funcDefinition.identifier
     if (functionRegistry.functionExists(func) && !overrideIfExists) {
-      throw new AnalysisException(s"Function $func already exists")
+      throw QueryCompilationErrors.functionAlreadyExistsError(func)
     }
     val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
     val builder =
       functionBuilder.getOrElse {
         val className = funcDefinition.className
         if (!Utils.classIsLoadable(className)) {
-          throw new AnalysisException(s"Can not load class '$className' when registering " +
-            s"the function '$func', please make sure it is on the classpath")
+          throw QueryCompilationErrors.cannotLoadClassWhenRegisteringFunctionError(className, func)
         }
         makeFunctionBuilder(func.unquotedString, className)
       }
@@ -1522,7 +1509,6 @@ class SessionCatalog(
   def lookupFunction(
       name: FunctionIdentifier,
       children: Seq[Expression]): Expression = synchronized {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
     // Note: the implementation of this function is a little bit convoluted.
     // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
     // (built-in, temp, and external).
@@ -1545,9 +1531,7 @@ class SessionCatalog(
       case Seq() => getCurrentDatabase
       case Seq(_, db) => db
       case Seq(catalog, namespace @ _*) =>
-        throw new AnalysisException(
-          s"V2 catalog does not support functions yet. " +
-            s"catalog: ${catalog}, namespace: '${namespace.quoted}'")
+        throw QueryCompilationErrors.v2CatalogNotSupportFunctionError(catalog, namespace)
     }
 
     // If the name itself is not qualified, add the current database to it.
@@ -1568,7 +1552,6 @@ class SessionCatalog(
       externalCatalog.getFunction(database, name.funcName)
     } catch {
       case _: AnalysisException => failFunctionLookup(name)
-      case _: NoSuchPermanentFunctionException => failFunctionLookup(name)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,
@@ -1685,8 +1668,8 @@ class SessionCatalog(
       val newTableLocation = new Path(new Path(databaseLocation), formatTableName(newName.table))
       val fs = newTableLocation.getFileSystem(hadoopConf)
       if (fs.exists(newTableLocation)) {
-        throw new AnalysisException(s"Can not rename the managed table('$oldName')" +
-          s". The associated location('$newTableLocation') already exists.")
+        throw QueryCompilationErrors.cannotOperateManagedTableWithExistingLocationError(
+          "rename", oldName, newTableLocation)
       }
     }
   }

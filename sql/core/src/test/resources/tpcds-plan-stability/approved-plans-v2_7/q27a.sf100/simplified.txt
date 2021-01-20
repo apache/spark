@@ -1,7 +1,7 @@
 TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
   Union
     WholeStageCodegen (6)
-      HashAggregate [i_item_id,s_state,sum,count,sum,count,sum,count,sum,count] [avg(cast(agg1 as bigint)),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+      HashAggregate [i_item_id,s_state,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id,s_state] #1
             WholeStageCodegen (5)
@@ -49,7 +49,7 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                               InputAdapter
                                 Scan parquet default.item [i_item_sk,i_item_id]
     WholeStageCodegen (12)
-      HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cast(agg1 as bigint)),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),s_state,g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+      HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),s_state,g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange [i_item_id] #6
             WholeStageCodegen (11)
@@ -81,7 +81,7 @@ TakeOrderedAndProject [i_item_id,s_state,g_state,agg1,agg2,agg3,agg4]
                     InputAdapter
                       ReusedExchange [i_item_sk,i_item_id] #5
     WholeStageCodegen (18)
-      HashAggregate [sum,count,sum,count,sum,count,sum,count] [avg(cast(agg1 as bigint)),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),i_item_id,s_state,g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+      HashAggregate [sum,count,sum,count,sum,count,sum,count] [avg(agg1),avg(UnscaledValue(agg2)),avg(UnscaledValue(agg3)),avg(UnscaledValue(agg4)),i_item_id,s_state,g_state,agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
         InputAdapter
           Exchange #8
             WholeStageCodegen (17)

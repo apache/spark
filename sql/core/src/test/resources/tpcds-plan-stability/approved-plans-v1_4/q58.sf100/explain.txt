@@ -188,7 +188,7 @@ Results [2]: [i_item_id#13, sum#16]
 
 (24) Exchange
 Input [2]: [i_item_id#13, sum#16]
-Arguments: hashpartitioning(i_item_id#13, 5), true, [id=#17]
+Arguments: hashpartitioning(i_item_id#13, 5), ENSURE_REQUIREMENTS, [id=#17]
 
 (25) HashAggregate [codegen id : 15]
 Input [2]: [i_item_id#13, sum#16]
@@ -294,7 +294,7 @@ Results [2]: [i_item_id#13, sum#28]
 
 (47) Exchange
 Input [2]: [i_item_id#13, sum#28]
-Arguments: hashpartitioning(i_item_id#13, 5), true, [id=#29]
+Arguments: hashpartitioning(i_item_id#13, 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (48) HashAggregate [codegen id : 9]
 Input [2]: [i_item_id#13, sum#28]
@@ -413,7 +413,7 @@ Results [2]: [i_item_id#13, sum#41]
 
 (73) Exchange
 Input [2]: [i_item_id#13, sum#41]
-Arguments: hashpartitioning(i_item_id#13, 5), true, [id=#42]
+Arguments: hashpartitioning(i_item_id#13, 5), ENSURE_REQUIREMENTS, [id=#42]
 
 (74) HashAggregate [codegen id : 14]
 Input [2]: [i_item_id#13, sum#41]

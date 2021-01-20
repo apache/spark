@@ -1277,36 +1277,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assertUnsupported("ALTER VIEW dbx.tab1 DROP IF EXISTS PARTITION (b='2')")
   }
 
-
-  test("show databases") {
-    sql("CREATE DATABASE showdb2B")
-    sql("CREATE DATABASE showdb1A")
-
-    // check the result as well as its order
-    checkDataset(sql("SHOW DATABASES"), Row("default"), Row("showdb1a"), Row("showdb2b"))
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE '*db1A'"),
-      Row("showdb1a") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES '*db1A'"),
-      Row("showdb1a") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE 'showdb1A'"),
-      Row("showdb1a") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
-      Row("showdb1a") ::
-        Row("showdb2b") :: Nil)
-
-    checkAnswer(
-      sql("SHOW DATABASES LIKE 'non-existentdb'"),
-      Nil)
-  }
-
   test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(

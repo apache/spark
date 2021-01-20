@@ -140,7 +140,7 @@ Results [7]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_
 
 (24) Exchange
 Input [7]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, sum#19]
-Arguments: hashpartitioning(i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, 5), true, [id=#20]
+Arguments: hashpartitioning(i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (25) HashAggregate [codegen id : 5]
 Input [7]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, sum#19]
@@ -151,7 +151,7 @@ Results [8]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_
 
 (26) Exchange
 Input [8]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, sum_sales#22, _w0#23]
-Arguments: hashpartitioning(i_category#16, i_brand#14, s_store_name#10, s_company_name#11, 5), true, [id=#24]
+Arguments: hashpartitioning(i_category#16, i_brand#14, s_store_name#10, s_company_name#11, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (27) Sort [codegen id : 6]
 Input [8]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, sum_sales#22, _w0#23]
@@ -163,7 +163,7 @@ Arguments: [avg(_w0#23) windowspecdefinition(i_category#16, i_brand#14, s_store_
 
 (29) Filter [codegen id : 7]
 Input [9]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, sum_sales#22, _w0#23, avg_monthly_sales#25]
-Condition : (CASE WHEN NOT (avg_monthly_sales#25 = 0.000000) THEN CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(38,16), true) ELSE null END > 0.1000000000000000)
+Condition : ((isnotnull(avg_monthly_sales#25) AND NOT (avg_monthly_sales#25 = 0.000000)) AND (CheckOverflow((promote_precision(abs(CheckOverflow((promote_precision(cast(sum_sales#22 as decimal(22,6))) - promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(22,6), true))) / promote_precision(cast(avg_monthly_sales#25 as decimal(22,6)))), DecimalType(38,16), true) > 0.1000000000000000))
 
 (30) Project [codegen id : 7]
 Output [8]: [i_category#16, i_class#15, i_brand#14, s_store_name#10, s_company_name#11, d_moy#7, sum_sales#22, avg_monthly_sales#25]

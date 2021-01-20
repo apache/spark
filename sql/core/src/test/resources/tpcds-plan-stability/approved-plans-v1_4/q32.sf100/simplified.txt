@@ -3,11 +3,11 @@ CollectLimit
     Project
       BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
         Project [cs_sold_date_sk]
-          BroadcastHashJoin [i_item_sk,cs_item_sk,cs_ext_discount_amt,(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6)))]
+          BroadcastHashJoin [i_item_sk,cs_item_sk,cs_ext_discount_amt,(1.3 * avg(cs_ext_discount_amt))]
             InputAdapter
               BroadcastExchange #1
                 WholeStageCodegen (4)
-                  Project [i_item_sk,(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6)))]
+                  Project [i_item_sk,(1.3 * avg(cs_ext_discount_amt))]
                     BroadcastHashJoin [i_item_sk,cs_item_sk]
                       InputAdapter
                         BroadcastExchange #2
@@ -17,8 +17,8 @@ CollectLimit
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.item [i_item_sk,i_manufact_id]
-                      Filter [(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6)))]
-                        HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6))),cs_item_sk,sum,count]
+                      Filter [(1.3 * avg(cs_ext_discount_amt))]
+                        HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(1.3 * avg(cs_ext_discount_amt)),cs_item_sk,sum,count]
                           InputAdapter
                             Exchange [cs_item_sk] #3
                               WholeStageCodegen (3)

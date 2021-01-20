@@ -21,12 +21,14 @@ license: |
 
 ### Description
 
-A LIKE predicate is used to search for a specific pattern.
+A LIKE predicate is used to search for a specific pattern. This predicate also supports multiple patterns with quantifiers include `ANY`, `SOME` and `ALL`.
 
 ### Syntax
 
 ```sql
 [ NOT ] { LIKE search_pattern [ ESCAPE esc_char ] | [ RLIKE | REGEXP ] regex_pattern }
+
+[ NOT ] { LIKE quantifiers ( search_pattern [ , ... ]) }
 ```
 
 ### Parameters
@@ -45,6 +47,10 @@ A LIKE predicate is used to search for a specific pattern.
 * **regex_pattern**
 
     Specifies a regular expression search pattern to be searched by the `RLIKE` or `REGEXP` clause.
+    
+* **quantifiers**
+
+    Specifies the predicate quantifiers include `ANY`, `SOME` and `ALL`. `ANY` or `SOME` means if one of the patterns matches the input, then return true; `ALL` means if all the patterns matches the input, then return true.
 
 ### Examples
 
@@ -111,6 +117,58 @@ SELECT * FROM person WHERE name LIKE '%$_%' ESCAPE '$';
 +---+------+---+
 |500|Evan_W| 16|
 +---+------+---+
+
+SELECT * FROM person WHERE name LIKE ALL ('%an%', '%an');
++---+----+----+
+| id|name| age|
++---+----+----+
+|400| Dan|  50|
++---+----+----+
+
+SELECT * FROM person WHERE name LIKE ANY ('%an%', '%an');
++---+------+---+
+| id|  name|age|
++---+------+---+
+|400|   Dan| 50|
+|500|Evan_W| 16|
++---+------+---+
+
+SELECT * FROM person WHERE name LIKE SOME ('%an%', '%an');
++---+------+---+
+| id|  name|age|
++---+------+---+
+|400|   Dan| 50|
+|500|Evan_W| 16|
++---+------+---+
+
+SELECT * FROM person WHERE name NOT LIKE ALL ('%an%', '%an');
++---+----+----+
+| id|name| age|
++---+----+----+
+|100|John|  30|
+|200|Mary|null|
+|300|Mike|  80|
++---+----+----+
+
+SELECT * FROM person WHERE name NOT LIKE ANY ('%an%', '%an');
++---+------+----+
+| id|  name| age|
++---+------+----+
+|100|  John|  30|
+|200|  Mary|null|
+|300|  Mike|  80|
+|500|Evan_W|  16|
++---+------+----+
+
+SELECT * FROM person WHERE name NOT LIKE SOME ('%an%', '%an');
++---+------+----+
+| id|  name| age|
++---+------+----+
+|100|  John|  30|
+|200|  Mary|null|
+|300|  Mike|  80|
+|500|Evan_W|  16|
++---+------+----+
 ```
 
 ### Related Statements

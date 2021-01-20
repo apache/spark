@@ -276,7 +276,7 @@ Results [1]: [sum#29]
 
 (46) Exchange
 Input [1]: [sum#29]
-Arguments: SinglePartition, true, [id=#30]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#30]
 
 (47) HashAggregate [codegen id : 8]
 Input [1]: [sum#29]
@@ -356,7 +356,7 @@ Results [1]: [sum#34]
 
 (64) Exchange
 Input [1]: [sum#34]
-Arguments: SinglePartition, true, [id=#35]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#35]
 
 (65) HashAggregate [codegen id : 15]
 Input [1]: [sum#34]
@@ -378,7 +378,7 @@ Input [2]: [promotions#32, total#37]
 
 (69) Exchange
 Input [3]: [promotions#32, total#37, (CAST((CAST(CAST(promotions AS DECIMAL(15,4)) AS DECIMAL(15,4)) / CAST(CAST(total AS DECIMAL(15,4)) AS DECIMAL(15,4))) AS DECIMAL(35,20)) * CAST(CAST(100 AS DECIMAL(3,0)) AS DECIMAL(35,20)))#39]
-Arguments: rangepartitioning(promotions#32 ASC NULLS FIRST, total#37 ASC NULLS FIRST, 5), true, [id=#40]
+Arguments: rangepartitioning(promotions#32 ASC NULLS FIRST, total#37 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#40]
 
 (70) Sort [codegen id : 17]
 Input [3]: [promotions#32, total#37, (CAST((CAST(CAST(promotions AS DECIMAL(15,4)) AS DECIMAL(15,4)) / CAST(CAST(total AS DECIMAL(15,4)) AS DECIMAL(15,4))) AS DECIMAL(35,20)) * CAST(CAST(100 AS DECIMAL(3,0)) AS DECIMAL(35,20)))#39]

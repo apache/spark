@@ -946,7 +946,8 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if (row.taskMetrics && row.taskMetrics.shuffleReadMetrics && row.taskMetrics.shuffleReadMetrics.localBytesRead > 0) {
+                                if (row.taskMetrics && row.taskMetrics.shuffleReadMetrics &&
+                                    (row.taskMetrics.shuffleReadMetrics.localBytesRead > 0 || row.taskMetrics.shuffleReadMetrics.remoteBytesRead > 0)) {
                                     var totalBytesRead = parseInt(row.taskMetrics.shuffleReadMetrics.localBytesRead) + parseInt(row.taskMetrics.shuffleReadMetrics.remoteBytesRead);
                                     if (type === 'display') {
                                         return formatBytes(totalBytesRead, type) + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;

@@ -262,7 +262,7 @@ Results [4]: [cs_item_sk#16, sum#28, sum#29, isEmpty#30]
 
 (20) Exchange
 Input [4]: [cs_item_sk#16, sum#28, sum#29, isEmpty#30]
-Arguments: hashpartitioning(cs_item_sk#16, 5), true, [id=#31]
+Arguments: hashpartitioning(cs_item_sk#16, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (21) HashAggregate [codegen id : 4]
 Input [4]: [cs_item_sk#16, sum#28, sum#29, isEmpty#30]
@@ -599,7 +599,7 @@ Input [19]: [ss_item_sk#2, ss_wholesale_cost#10, ss_list_price#11, ss_coupon_amt
 Output [4]: [i_item_sk#82, i_current_price#83, i_color#84, i_product_name#85]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_current_price), In(i_color, [purple,burlywood,indian,spring,floral,medium]), GreaterThanOrEqual(i_current_price,64.00), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_current_price), In(i_color, [purple,burlywood,indian,spring,floral,medium]), GreaterThanOrEqual(i_current_price,64.00), LessThanOrEqual(i_current_price,74.00), GreaterThanOrEqual(i_current_price,65.00), LessThanOrEqual(i_current_price,79.00), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_current_price:decimal(7,2),i_color:string,i_product_name:string>
 
 (97) ColumnarToRow [codegen id : 19]
@@ -607,7 +607,7 @@ Input [4]: [i_item_sk#82, i_current_price#83, i_color#84, i_product_name#85]
 
 (98) Filter [codegen id : 19]
 Input [4]: [i_item_sk#82, i_current_price#83, i_color#84, i_product_name#85]
-Condition : ((((((isnotnull(i_current_price#83) AND i_color#84 IN (purple,burlywood,indian,spring,floral,medium)) AND (i_current_price#83 >= 64.00)) AND (cast(i_current_price#83 as decimal(12,2)) <= 74.00)) AND (cast(i_current_price#83 as decimal(12,2)) >= 65.00)) AND (cast(i_current_price#83 as decimal(12,2)) <= 79.00)) AND isnotnull(i_item_sk#82))
+Condition : ((((((isnotnull(i_current_price#83) AND i_color#84 IN (purple,burlywood,indian,spring,floral,medium)) AND (i_current_price#83 >= 64.00)) AND (i_current_price#83 <= 74.00)) AND (i_current_price#83 >= 65.00)) AND (i_current_price#83 <= 79.00)) AND isnotnull(i_item_sk#82))
 
 (99) Project [codegen id : 19]
 Output [2]: [i_item_sk#82, i_product_name#85]
@@ -635,7 +635,7 @@ Results [19]: [i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_st
 
 (104) Exchange
 Input [19]: [i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, d_year#38, d_year#52, d_year#55, count#91, sum#92, sum#93, sum#94]
-Arguments: hashpartitioning(i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, d_year#38, d_year#52, d_year#55, 5), true, [id=#95]
+Arguments: hashpartitioning(i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, d_year#38, d_year#52, d_year#55, 5), ENSURE_REQUIREMENTS, [id=#95]
 
 (105) HashAggregate [codegen id : 42]
 Input [19]: [i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#75, ca_street_name#76, ca_city#77, ca_zip#78, d_year#38, d_year#52, d_year#55, count#91, sum#92, sum#93, sum#94]
@@ -886,7 +886,7 @@ Results [19]: [i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_st
 
 (164) Exchange
 Input [19]: [i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#127, ca_street_name#128, ca_city#129, ca_zip#130, d_year#38, d_year#119, d_year#121, count#136, sum#137, sum#138, sum#139]
-Arguments: hashpartitioning(i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#127, ca_street_name#128, ca_city#129, ca_zip#130, d_year#38, d_year#119, d_year#121, 5), true, [id=#140]
+Arguments: hashpartitioning(i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#127, ca_street_name#128, ca_city#129, ca_zip#130, d_year#38, d_year#119, d_year#121, 5), ENSURE_REQUIREMENTS, [id=#140]
 
 (165) HashAggregate [codegen id : 41]
 Input [19]: [i_product_name#85, i_item_sk#82, s_store_name#41, s_zip#42, ca_street_number#69, ca_street_name#70, ca_city#71, ca_zip#72, ca_street_number#127, ca_street_name#128, ca_city#129, ca_zip#130, d_year#38, d_year#119, d_year#121, count#136, sum#137, sum#138, sum#139]
@@ -910,7 +910,7 @@ Input [25]: [product_name#100, item_sk#101, store_name#102, store_zip#103, b_str
 
 (169) Exchange
 Input [21]: [product_name#100, store_name#102, store_zip#103, b_street_number#104, b_streen_name#105, b_city#106, b_zip#107, c_street_number#108, c_street_name#109, c_city#110, c_zip#111, syear#112, cnt#113, s1#114, s2#115, s3#116, s1#150, s2#151, s3#152, syear#148, cnt#149]
-Arguments: rangepartitioning(product_name#100 ASC NULLS FIRST, store_name#102 ASC NULLS FIRST, cnt#149 ASC NULLS FIRST, 5), true, [id=#154]
+Arguments: rangepartitioning(product_name#100 ASC NULLS FIRST, store_name#102 ASC NULLS FIRST, cnt#149 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#154]
 
 (170) Sort [codegen id : 43]
 Input [21]: [product_name#100, store_name#102, store_zip#103, b_street_number#104, b_streen_name#105, b_city#106, b_zip#107, c_street_number#108, c_street_name#109, c_city#110, c_zip#111, syear#112, cnt#113, s1#114, s2#115, s3#116, s1#150, s2#151, s3#152, syear#148, cnt#149]

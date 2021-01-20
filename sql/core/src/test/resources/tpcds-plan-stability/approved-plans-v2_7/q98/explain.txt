@@ -107,7 +107,7 @@ Results [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_pri
 
 (18) Exchange
 Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, sum#15]
-Arguments: hashpartitioning(i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, 5), true, [id=#16]
+Arguments: hashpartitioning(i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (19) HashAggregate [codegen id : 4]
 Input [6]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, sum#15]
@@ -118,7 +118,7 @@ Results [8]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_pri
 
 (20) Exchange
 Input [8]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, itemrevenue#18, _w0#19, _w1#20]
-Arguments: hashpartitioning(i_class#8, 5), true, [id=#21]
+Arguments: hashpartitioning(i_class#8, 5), ENSURE_REQUIREMENTS, [id=#21]
 
 (21) Sort [codegen id : 5]
 Input [8]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, itemrevenue#18, _w0#19, _w1#20]
@@ -134,7 +134,7 @@ Input [9]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price
 
 (24) Exchange
 Input [7]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, itemrevenue#18, revenueratio#23]
-Arguments: rangepartitioning(i_category#9 ASC NULLS FIRST, i_class#8 ASC NULLS FIRST, i_item_id#5 ASC NULLS FIRST, i_item_desc#6 ASC NULLS FIRST, revenueratio#23 ASC NULLS FIRST, 5), true, [id=#24]
+Arguments: rangepartitioning(i_category#9 ASC NULLS FIRST, i_class#8 ASC NULLS FIRST, i_item_id#5 ASC NULLS FIRST, i_item_desc#6 ASC NULLS FIRST, revenueratio#23 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#24]
 
 (25) Sort [codegen id : 7]
 Input [7]: [i_item_id#5, i_item_desc#6, i_category#9, i_class#8, i_current_price#7, itemrevenue#18, revenueratio#23]

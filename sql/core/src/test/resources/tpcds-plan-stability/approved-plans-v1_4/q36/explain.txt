@@ -149,18 +149,18 @@ Results [5]: [i_category#16, i_class#17, spark_grouping_id#18, sum#21, sum#22]
 
 (26) Exchange
 Input [5]: [i_category#16, i_class#17, spark_grouping_id#18, sum#21, sum#22]
-Arguments: hashpartitioning(i_category#16, i_class#17, spark_grouping_id#18, 5), true, [id=#23]
+Arguments: hashpartitioning(i_category#16, i_class#17, spark_grouping_id#18, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (27) HashAggregate [codegen id : 5]
 Input [5]: [i_category#16, i_class#17, spark_grouping_id#18, sum#21, sum#22]
 Keys [3]: [i_category#16, i_class#17, spark_grouping_id#18]
 Functions [2]: [sum(UnscaledValue(ss_net_profit#5)), sum(UnscaledValue(ss_ext_sales_price#4))]
 Aggregate Attributes [2]: [sum(UnscaledValue(ss_net_profit#5))#24, sum(UnscaledValue(ss_ext_sales_price#4))#25]
-Results [7]: [CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#24,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#25,17,2))), DecimalType(37,20), true) AS gross_margin#26, i_category#16, i_class#17, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS lochierarchy#27, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS _w1#28, CASE WHEN (cast(cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint) as int) = 0) THEN i_category#16 END AS _w2#29, CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#24,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#25,17,2))), DecimalType(37,20), true) AS _w3#30]
+Results [7]: [CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#24,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#25,17,2))), DecimalType(37,20), true) AS gross_margin#26, i_category#16, i_class#17, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS lochierarchy#27, (cast((shiftright(spark_grouping_id#18, 1) & 1) as tinyint) + cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint)) AS _w1#28, CASE WHEN (cast((shiftright(spark_grouping_id#18, 0) & 1) as tinyint) = 0) THEN i_category#16 END AS _w2#29, CheckOverflow((promote_precision(MakeDecimal(sum(UnscaledValue(ss_net_profit#5))#24,17,2)) / promote_precision(MakeDecimal(sum(UnscaledValue(ss_ext_sales_price#4))#25,17,2))), DecimalType(37,20), true) AS _w3#30]
 
 (28) Exchange
 Input [7]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28, _w2#29, _w3#30]
-Arguments: hashpartitioning(_w1#28, _w2#29, 5), true, [id=#31]
+Arguments: hashpartitioning(_w1#28, _w2#29, 5), ENSURE_REQUIREMENTS, [id=#31]
 
 (29) Sort [codegen id : 6]
 Input [7]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28, _w2#29, _w3#30]
@@ -176,5 +176,5 @@ Input [8]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, _w1#28,
 
 (32) TakeOrderedAndProject
 Input [5]: [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, rank_within_parent#32]
-Arguments: 100, [lochierarchy#27 DESC NULLS LAST, CASE WHEN (cast(lochierarchy#27 as int) = 0) THEN i_category#16 END ASC NULLS FIRST, rank_within_parent#32 ASC NULLS FIRST], [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, rank_within_parent#32]
+Arguments: 100, [lochierarchy#27 DESC NULLS LAST, CASE WHEN (lochierarchy#27 = 0) THEN i_category#16 END ASC NULLS FIRST, rank_within_parent#32 ASC NULLS FIRST], [gross_margin#26, i_category#16, i_class#17, lochierarchy#27, rank_within_parent#32]
 

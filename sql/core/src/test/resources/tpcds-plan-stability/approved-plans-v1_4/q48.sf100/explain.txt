@@ -166,18 +166,18 @@ Input [3]: [ss_sold_date_sk#1, ss_quantity#5, d_date_sk#18]
 (30) HashAggregate [codegen id : 5]
 Input [1]: [ss_quantity#5]
 Keys: []
-Functions [1]: [partial_sum(cast(ss_quantity#5 as bigint))]
+Functions [1]: [partial_sum(ss_quantity#5)]
 Aggregate Attributes [1]: [sum#21]
 Results [1]: [sum#22]
 
 (31) Exchange
 Input [1]: [sum#22]
-Arguments: SinglePartition, true, [id=#23]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
 
 (32) HashAggregate [codegen id : 6]
 Input [1]: [sum#22]
 Keys: []
-Functions [1]: [sum(cast(ss_quantity#5 as bigint))]
-Aggregate Attributes [1]: [sum(cast(ss_quantity#5 as bigint))#24]
-Results [1]: [sum(cast(ss_quantity#5 as bigint))#24 AS sum(ss_quantity)#25]
+Functions [1]: [sum(ss_quantity#5)]
+Aggregate Attributes [1]: [sum(ss_quantity#5)#24]
+Results [1]: [sum(ss_quantity#5)#24 AS sum(ss_quantity)#25]
 

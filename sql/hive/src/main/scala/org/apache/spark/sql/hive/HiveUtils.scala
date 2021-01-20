@@ -60,7 +60,7 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildStaticConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        "<code>0.12.0</code> through <code>2.3.7</code> and " +
+        "<code>0.12.0</code> through <code>2.3.8</code> and " +
         "<code>3.0.0</code> through <code>3.1.2</code>.")
     .version("1.4.0")
     .stringConf
@@ -369,10 +369,10 @@ private[spark] object HiveUtils extends Logging {
           logWarning(s"Hive jar path '${file.getPath}' does not exist.")
           Nil
         } else {
-          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURL).toSeq
+          files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar")).map(_.toURI.toURL).toSeq
         }
       } else {
-        file.toURL :: Nil
+        file.toURI.toURL :: Nil
       }
     }
 
@@ -460,7 +460,7 @@ private[spark] object HiveUtils extends Logging {
         version = metaVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
-        execJars = jars.toSeq,
+        execJars = jars,
         config = configurations,
         isolationOn = true,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,

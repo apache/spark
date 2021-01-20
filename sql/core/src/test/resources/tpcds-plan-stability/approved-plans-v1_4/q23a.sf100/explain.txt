@@ -116,7 +116,7 @@ Condition : isnotnull(cs_sold_date_sk#1)
 
 (4) Exchange
 Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
-Arguments: hashpartitioning(cs_item_sk#3, 5), true, [id=#6]
+Arguments: hashpartitioning(cs_item_sk#3, 5), ENSURE_REQUIREMENTS, [id=#6]
 
 (5) Sort [codegen id : 2]
 Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#4, cs_list_price#5]
@@ -169,7 +169,7 @@ Input [4]: [ss_sold_date_sk#7, ss_item_sk#8, d_date_sk#9, d_date#10]
 
 (16) Exchange
 Input [2]: [ss_item_sk#8, d_date#10]
-Arguments: hashpartitioning(ss_item_sk#8, 5), true, [id=#13]
+Arguments: hashpartitioning(ss_item_sk#8, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (17) Sort [codegen id : 5]
 Input [2]: [ss_item_sk#8, d_date#10]
@@ -191,7 +191,7 @@ Condition : isnotnull(i_item_sk#14)
 
 (21) Exchange
 Input [2]: [i_item_sk#14, i_item_desc#15]
-Arguments: hashpartitioning(i_item_sk#14, 5), true, [id=#16]
+Arguments: hashpartitioning(i_item_sk#14, 5), ENSURE_REQUIREMENTS, [id=#16]
 
 (22) Sort [codegen id : 7]
 Input [2]: [i_item_sk#14, i_item_desc#15]
@@ -243,7 +243,7 @@ Input [5]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_item_sk#3, cs_quantity#
 
 (32) Exchange
 Input [4]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_quantity#4, cs_list_price#5]
-Arguments: hashpartitioning(cs_bill_customer_sk#2, 5), true, [id=#23]
+Arguments: hashpartitioning(cs_bill_customer_sk#2, 5), ENSURE_REQUIREMENTS, [id=#23]
 
 (33) Sort [codegen id : 10]
 Input [4]: [cs_sold_date_sk#1, cs_bill_customer_sk#2, cs_quantity#4, cs_list_price#5]
@@ -265,7 +265,7 @@ Condition : isnotnull(ss_customer_sk#24)
 
 (37) Exchange
 Input [3]: [ss_customer_sk#24, ss_quantity#25, ss_sales_price#26]
-Arguments: hashpartitioning(ss_customer_sk#24, 5), true, [id=#27]
+Arguments: hashpartitioning(ss_customer_sk#24, 5), ENSURE_REQUIREMENTS, [id=#27]
 
 (38) Sort [codegen id : 12]
 Input [3]: [ss_customer_sk#24, ss_quantity#25, ss_sales_price#26]
@@ -287,7 +287,7 @@ Condition : isnotnull(c_customer_sk#28)
 
 (42) Exchange
 Input [1]: [c_customer_sk#28]
-Arguments: hashpartitioning(c_customer_sk#28, 5), true, [id=#29]
+Arguments: hashpartitioning(c_customer_sk#28, 5), ENSURE_REQUIREMENTS, [id=#29]
 
 (43) Sort [codegen id : 14]
 Input [1]: [c_customer_sk#28]
@@ -384,7 +384,7 @@ Condition : isnotnull(ws_sold_date_sk#41)
 
 (63) Exchange
 Input [5]: [ws_sold_date_sk#41, ws_item_sk#42, ws_bill_customer_sk#43, ws_quantity#44, ws_list_price#45]
-Arguments: hashpartitioning(ws_item_sk#42, 5), true, [id=#46]
+Arguments: hashpartitioning(ws_item_sk#42, 5), ENSURE_REQUIREMENTS, [id=#46]
 
 (64) Sort [codegen id : 19]
 Input [5]: [ws_sold_date_sk#41, ws_item_sk#42, ws_bill_customer_sk#43, ws_quantity#44, ws_list_price#45]
@@ -450,7 +450,7 @@ Input [5]: [ws_sold_date_sk#41, ws_item_sk#42, ws_bill_customer_sk#43, ws_quanti
 
 (78) Exchange
 Input [4]: [ws_sold_date_sk#41, ws_bill_customer_sk#43, ws_quantity#44, ws_list_price#45]
-Arguments: hashpartitioning(ws_bill_customer_sk#43, 5), true, [id=#52]
+Arguments: hashpartitioning(ws_bill_customer_sk#43, 5), ENSURE_REQUIREMENTS, [id=#52]
 
 (79) Sort [codegen id : 27]
 Input [4]: [ws_sold_date_sk#41, ws_bill_customer_sk#43, ws_quantity#44, ws_list_price#45]
@@ -537,7 +537,7 @@ Results [2]: [sum#62, isEmpty#63]
 
 (98) Exchange
 Input [2]: [sum#62, isEmpty#63]
-Arguments: SinglePartition, true, [id=#64]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#64]
 
 (99) HashAggregate [codegen id : 36]
 Input [2]: [sum#62, isEmpty#63]
@@ -622,7 +622,7 @@ Input [5]: [ss_sold_date_sk#7, ss_customer_sk#24, ss_quantity#25, ss_sales_price
 
 (110) Exchange
 Input [3]: [ss_customer_sk#24, ss_quantity#25, ss_sales_price#26]
-Arguments: hashpartitioning(ss_customer_sk#24, 5), true, [id=#68]
+Arguments: hashpartitioning(ss_customer_sk#24, 5), ENSURE_REQUIREMENTS, [id=#68]
 
 (111) Sort [codegen id : 3]
 Input [3]: [ss_customer_sk#24, ss_quantity#25, ss_sales_price#26]
@@ -644,7 +644,7 @@ Condition : isnotnull(c_customer_sk#28)
 
 (115) Exchange
 Input [1]: [c_customer_sk#28]
-Arguments: hashpartitioning(c_customer_sk#28, 5), true, [id=#69]
+Arguments: hashpartitioning(c_customer_sk#28, 5), ENSURE_REQUIREMENTS, [id=#69]
 
 (116) Sort [codegen id : 5]
 Input [1]: [c_customer_sk#28]
@@ -682,7 +682,7 @@ Results [1]: [max#77]
 
 (122) Exchange
 Input [1]: [max#77]
-Arguments: SinglePartition, true, [id=#78]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#78]
 
 (123) HashAggregate [codegen id : 7]
 Input [1]: [max#77]

@@ -152,20 +152,20 @@ Input [7]: [inv_warehouse_sk#3, inv_quantity_on_hand#4, i_brand#9, i_class#10, i
 (23) HashAggregate [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#4, i_brand#9, i_class#10, i_category#11, i_product_name#12]
 Keys [4]: [i_product_name#12, i_brand#9, i_class#10, i_category#11]
-Functions [1]: [partial_avg(cast(inv_quantity_on_hand#4 as bigint))]
+Functions [1]: [partial_avg(inv_quantity_on_hand#4)]
 Aggregate Attributes [2]: [sum#16, count#17]
 Results [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#18, count#19]
 
 (24) Exchange
 Input [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#18, count#19]
-Arguments: hashpartitioning(i_product_name#12, i_brand#9, i_class#10, i_category#11, 5), true, [id=#20]
+Arguments: hashpartitioning(i_product_name#12, i_brand#9, i_class#10, i_category#11, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (25) HashAggregate [codegen id : 5]
 Input [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#18, count#19]
 Keys [4]: [i_product_name#12, i_brand#9, i_class#10, i_category#11]
-Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#21]
-Results [5]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, avg(cast(inv_quantity_on_hand#4 as bigint))#21 AS qoh#22]
+Functions [1]: [avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#21]
+Results [5]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, avg(inv_quantity_on_hand#4)#21 AS qoh#22]
 
 (26) HashAggregate [codegen id : 5]
 Input [5]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, qoh#22]
@@ -187,9 +187,9 @@ Output [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#29, co
 (29) HashAggregate [codegen id : 10]
 Input [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#29, count#30]
 Keys [4]: [i_product_name#12, i_brand#9, i_class#10, i_category#11]
-Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#31]
-Results [4]: [i_product_name#12, i_brand#9, i_class#10, avg(cast(inv_quantity_on_hand#4 as bigint))#31 AS qoh#22]
+Functions [1]: [avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#31]
+Results [4]: [i_product_name#12, i_brand#9, i_class#10, avg(inv_quantity_on_hand#4)#31 AS qoh#22]
 
 (30) HashAggregate [codegen id : 10]
 Input [4]: [i_product_name#12, i_brand#9, i_class#10, qoh#22]
@@ -200,7 +200,7 @@ Results [5]: [i_product_name#12, i_brand#9, i_class#10, sum#34, count#35]
 
 (31) Exchange
 Input [5]: [i_product_name#12, i_brand#9, i_class#10, sum#34, count#35]
-Arguments: hashpartitioning(i_product_name#12, i_brand#9, i_class#10, 5), true, [id=#36]
+Arguments: hashpartitioning(i_product_name#12, i_brand#9, i_class#10, 5), ENSURE_REQUIREMENTS, [id=#36]
 
 (32) HashAggregate [codegen id : 11]
 Input [5]: [i_product_name#12, i_brand#9, i_class#10, sum#34, count#35]
@@ -215,9 +215,9 @@ Output [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#40, co
 (34) HashAggregate [codegen id : 16]
 Input [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#40, count#41]
 Keys [4]: [i_product_name#12, i_brand#9, i_class#10, i_category#11]
-Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#42]
-Results [3]: [i_product_name#12, i_brand#9, avg(cast(inv_quantity_on_hand#4 as bigint))#42 AS qoh#22]
+Functions [1]: [avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#42]
+Results [3]: [i_product_name#12, i_brand#9, avg(inv_quantity_on_hand#4)#42 AS qoh#22]
 
 (35) HashAggregate [codegen id : 16]
 Input [3]: [i_product_name#12, i_brand#9, qoh#22]
@@ -228,7 +228,7 @@ Results [4]: [i_product_name#12, i_brand#9, sum#45, count#46]
 
 (36) Exchange
 Input [4]: [i_product_name#12, i_brand#9, sum#45, count#46]
-Arguments: hashpartitioning(i_product_name#12, i_brand#9, 5), true, [id=#47]
+Arguments: hashpartitioning(i_product_name#12, i_brand#9, 5), ENSURE_REQUIREMENTS, [id=#47]
 
 (37) HashAggregate [codegen id : 17]
 Input [4]: [i_product_name#12, i_brand#9, sum#45, count#46]
@@ -243,9 +243,9 @@ Output [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#52, co
 (39) HashAggregate [codegen id : 22]
 Input [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#52, count#53]
 Keys [4]: [i_product_name#12, i_brand#9, i_class#10, i_category#11]
-Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#54]
-Results [2]: [i_product_name#12, avg(cast(inv_quantity_on_hand#4 as bigint))#54 AS qoh#22]
+Functions [1]: [avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#54]
+Results [2]: [i_product_name#12, avg(inv_quantity_on_hand#4)#54 AS qoh#22]
 
 (40) HashAggregate [codegen id : 22]
 Input [2]: [i_product_name#12, qoh#22]
@@ -256,7 +256,7 @@ Results [3]: [i_product_name#12, sum#57, count#58]
 
 (41) Exchange
 Input [3]: [i_product_name#12, sum#57, count#58]
-Arguments: hashpartitioning(i_product_name#12, 5), true, [id=#59]
+Arguments: hashpartitioning(i_product_name#12, 5), ENSURE_REQUIREMENTS, [id=#59]
 
 (42) HashAggregate [codegen id : 23]
 Input [3]: [i_product_name#12, sum#57, count#58]
@@ -271,9 +271,9 @@ Output [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#65, co
 (44) HashAggregate [codegen id : 28]
 Input [6]: [i_product_name#12, i_brand#9, i_class#10, i_category#11, sum#65, count#66]
 Keys [4]: [i_product_name#12, i_brand#9, i_class#10, i_category#11]
-Functions [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))]
-Aggregate Attributes [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#67]
-Results [1]: [avg(cast(inv_quantity_on_hand#4 as bigint))#67 AS qoh#22]
+Functions [1]: [avg(inv_quantity_on_hand#4)]
+Aggregate Attributes [1]: [avg(inv_quantity_on_hand#4)#67]
+Results [1]: [avg(inv_quantity_on_hand#4)#67 AS qoh#22]
 
 (45) HashAggregate [codegen id : 28]
 Input [1]: [qoh#22]
@@ -284,7 +284,7 @@ Results [2]: [sum#70, count#71]
 
 (46) Exchange
 Input [2]: [sum#70, count#71]
-Arguments: SinglePartition, true, [id=#72]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#72]
 
 (47) HashAggregate [codegen id : 29]
 Input [2]: [sum#70, count#71]

@@ -134,7 +134,7 @@ Results [3]: [cr_returning_customer_sk#2, ca_state#9, sum#12]
 
 (18) Exchange
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#12]
-Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), true, [id=#13]
+Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), ENSURE_REQUIREMENTS, [id=#13]
 
 (19) HashAggregate [codegen id : 11]
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#12]
@@ -194,7 +194,7 @@ Results [3]: [cr_returning_customer_sk#2, ca_state#9, sum#19]
 
 (31) Exchange
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#19]
-Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), true, [id=#20]
+Arguments: hashpartitioning(cr_returning_customer_sk#2, ca_state#9, 5), ENSURE_REQUIREMENTS, [id=#20]
 
 (32) HashAggregate [codegen id : 7]
 Input [3]: [cr_returning_customer_sk#2, ca_state#9, sum#19]
@@ -212,31 +212,31 @@ Results [3]: [ctr_state#16, sum#24, count#25]
 
 (34) Exchange
 Input [3]: [ctr_state#16, sum#24, count#25]
-Arguments: hashpartitioning(ctr_state#16, 5), true, [id=#26]
+Arguments: hashpartitioning(ctr_state#16, 5), ENSURE_REQUIREMENTS, [id=#26]
 
 (35) HashAggregate [codegen id : 8]
 Input [3]: [ctr_state#16, sum#24, count#25]
 Keys [1]: [ctr_state#16]
 Functions [1]: [avg(ctr_total_return#17)]
 Aggregate Attributes [1]: [avg(ctr_total_return#17)#27]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#17)#27) * 1.200000), DecimalType(24,7), true) AS (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#28, ctr_state#16 AS ctr_state#16#29]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#17)#27) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#28, ctr_state#16 AS ctr_state#16#29]
 
 (36) Filter [codegen id : 8]
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#28, ctr_state#16#29]
-Condition : isnotnull((CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#28)
+Input [2]: [(avg(ctr_total_return) * 1.2)#28, ctr_state#16#29]
+Condition : isnotnull((avg(ctr_total_return) * 1.2)#28)
 
 (37) BroadcastExchange
-Input [2]: [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#28, ctr_state#16#29]
+Input [2]: [(avg(ctr_total_return) * 1.2)#28, ctr_state#16#29]
 Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#30]
 
 (38) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ctr_state#16]
 Right keys [1]: [ctr_state#16#29]
-Join condition: (cast(ctr_total_return#17 as decimal(24,7)) > (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#28)
+Join condition: (cast(ctr_total_return#17 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#28)
 
 (39) Project [codegen id : 11]
 Output [2]: [ctr_customer_sk#15, ctr_total_return#17]
-Input [5]: [ctr_customer_sk#15, ctr_state#16, ctr_total_return#17, (CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))#28, ctr_state#16#29]
+Input [5]: [ctr_customer_sk#15, ctr_state#16, ctr_total_return#17, (avg(ctr_total_return) * 1.2)#28, ctr_state#16#29]
 
 (40) Scan parquet default.customer
 Output [6]: [c_customer_sk#31, c_customer_id#32, c_current_addr_sk#33, c_salutation#34, c_first_name#35, c_last_name#36]
