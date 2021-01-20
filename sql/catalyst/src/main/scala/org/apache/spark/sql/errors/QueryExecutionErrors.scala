@@ -75,7 +75,8 @@ object QueryExecutionErrors {
     new ArithmeticException(s"Casting $t to $targetType causes overflow")
   }
 
-  def cannotChangeDecimalPrecisionError(value: Decimal, decimalType: DecimalType): Throwable = {
+  def cannotChangeDecimalPrecisionError(
+      value: Decimal, decimalType: DecimalType): ArithmeticException = {
     new ArithmeticException(s"${value.toDebugString} cannot be represented as " +
       s"Decimal(${decimalType.precision}, ${decimalType.scale}).")
   }
@@ -143,7 +144,7 @@ object QueryExecutionErrors {
     new ArithmeticException("Overflow in sum of decimals.")
   }
 
-  def mapSizeExceedArraySizeWhenZipMapError(size: Int): Throwable = {
+  def mapSizeExceedArraySizeWhenZipMapError(size: Int): RuntimeException = {
     new RuntimeException(s"Unsuccessful try to zip maps with $size " +
       "unique keys due to exceeding the array size limit " +
       s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
@@ -153,11 +154,11 @@ object QueryExecutionErrors {
     new IllegalStateException("Do not attempt to copy a null field")
   }
 
-  def literalTypeUnsupportedError(v: Any): Throwable = {
+  def literalTypeUnsupportedError(v: Any): RuntimeException = {
     new RuntimeException(s"Unsupported literal type ${v.getClass} $v")
   }
 
-  def noDefaultForDataTypeError(dataType: DataType): Throwable = {
+  def noDefaultForDataTypeError(dataType: DataType): RuntimeException = {
     new RuntimeException(s"no default for type $dataType")
   }
 
@@ -222,7 +223,7 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("not resolved")
   }
 
-  def classUnsupportedByMapObjectsError(cls: Class[_]): Throwable = {
+  def classUnsupportedByMapObjectsError(cls: Class[_]): RuntimeException = {
     new RuntimeException(s"class `${cls.getName}` is not supported by `MapObjects` as " +
       "resulting collection.")
   }
@@ -244,7 +245,7 @@ object QueryExecutionErrors {
     s"The ${index}th field '$fieldName' of input row cannot be null."
   }
 
-  def fieldCannotBeNullError(index: Int, fieldName: String): Throwable = {
+  def fieldCannotBeNullError(index: Int, fieldName: String): RuntimeException = {
     new RuntimeException(fieldCannotBeNullMsg(index, fieldName))
   }
 
@@ -298,11 +299,12 @@ object QueryExecutionErrors {
     new IllegalStateException("table stats must be specified.")
   }
 
-  def unaryMinusCauseOverflowError(originValue: Short): Throwable = {
+  def unaryMinusCauseOverflowError(originValue: Short): ArithmeticException = {
     new ArithmeticException(s"- $originValue caused overflow.")
   }
 
-  def binaryArithmeticCauseOverflowError(eval1: Short, symbol: String, eval2: Short): Throwable = {
+  def binaryArithmeticCauseOverflowError(
+      eval1: Short, symbol: String, eval2: Short): ArithmeticException = {
     new ArithmeticException(s"$eval1 $symbol $eval2 caused overflow.")
   }
 
