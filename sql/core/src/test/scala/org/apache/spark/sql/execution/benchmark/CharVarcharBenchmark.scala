@@ -112,9 +112,16 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
       }
     }
 
-    runBenchmark("Char Varchar Write Side Perf") {
+    runBenchmark("Char Varchar Write Side Perf w/o Tailing Spaces") {
       for (len <- range) {
-        writeBenchmark(N / 10, len, len >= 80)
+        writeBenchmark(N / 10, len, hasSpaces = false)
+      }
+    }
+
+    runBenchmark("Char Varchar Write Side Perf w Tailing Spaces") {
+      for (len <- range) {
+        // in write side length check, we only visit the last few spaces
+        writeBenchmark(N / 10, len, hasSpaces = true)
       }
     }
   }

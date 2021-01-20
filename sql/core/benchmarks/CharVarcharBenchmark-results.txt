@@ -6,85 +6,130 @@ Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Read with length 20, hasSpaces: false:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read string with length 20                         1504           1508           4         66.5          15.0       1.0X
-read char with length 20                           1680           1684           3         59.5          16.8       0.9X
-read varchar with length 20                        1659           1682          26         60.3          16.6       0.9X
+read string with length 20                         1500           1517          26         66.7          15.0       1.0X
+read char with length 20                           1682           1691          12         59.5          16.8       0.9X
+read varchar with length 20                        1669           1700          43         59.9          16.7       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Read with length 40, hasSpaces: false:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read string with length 40                         1662           1678          15         60.2          16.6       1.0X
-read char with length 40                           1721           1731           9         58.1          17.2       1.0X
-read varchar with length 40                        1694           1706          12         59.0          16.9       1.0X
+read string with length 40                         1552           1567          14         64.4          15.5       1.0X
+read char with length 40                           1687           1698          14         59.3          16.9       0.9X
+read varchar with length 40                        1682           1712          47         59.4          16.8       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Read with length 60, hasSpaces: false:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read string with length 60                         1623           1643          23         61.6          16.2       1.0X
-read char with length 60                           1644           1685          66         60.8          16.4       1.0X
-read varchar with length 60                        1660           1680          18         60.2          16.6       1.0X
+read string with length 60                         1582           1592          15         63.2          15.8       1.0X
+read char with length 60                           1677           1693          15         59.6          16.8       0.9X
+read varchar with length 60                        1678           1698          35         59.6          16.8       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Read with length 80, hasSpaces: true:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read string with length 80                         1629           1678          57         61.4          16.3       1.0X
-read char with length 80                           1630           1667          65         61.3          16.3       1.0X
-read varchar with length 80                        1664           1684          34         60.1          16.6       1.0X
+read string with length 80                         1590           1622          51         62.9          15.9       1.0X
+read char with length 80                           1698           1731          33         58.9          17.0       0.9X
+read varchar with length 80                        1701           1775          69         58.8          17.0       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Read with length 100, hasSpaces: true:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-read string with length 100                        1594           1612          17         62.7          15.9       1.0X
-read char with length 100                          1631           1642          11         61.3          16.3       1.0X
-read varchar with length 100                       1635           1644          13         61.1          16.4       1.0X
+read string with length 100                        1578           1619          44         63.4          15.8       1.0X
+read char with length 100                          1655           1658           2         60.4          16.5       1.0X
+read varchar with length 100                       1703           1736          54         58.7          17.0       0.9X
 
 
 ================================================================================================
-Char Varchar Write Side Perf
+Char Varchar Write Side Perf w/o Tailing Spaces
 ================================================================================================
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Write with length 20, hasSpaces: false:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 20                        2760           2784          21          3.6         276.0       1.0X
-write char with length 20                          2898           2917          22          3.5         289.8       1.0X
-write varchar with length 20                       2876           2892          14          3.5         287.6       1.0X
+write string with length 20                        2323           2359          47          4.3         232.3       1.0X
+write char with length 20                          2471           2512          59          4.0         247.1       0.9X
+write varchar with length 20                       2454           2462           8          4.1         245.4       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Write with length 40, hasSpaces: false:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 40                        2726           2734           9          3.7         272.6       1.0X
-write char with length 40                          2885           2898          16          3.5         288.5       0.9X
-write varchar with length 40                       2844           2860          15          3.5         284.4       1.0X
+write string with length 40                        2305           2325          22          4.3         230.5       1.0X
+write char with length 40                          2466           2570          91          4.1         246.6       0.9X
+write varchar with length 40                       2447           2483          60          4.1         244.7       0.9X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Write with length 60, hasSpaces: false:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 60                        2724           2739          21          3.7         272.4       1.0X
-write char with length 60                          2868           2912          44          3.5         286.8       0.9X
-write varchar with length 60                       2870           2896          23          3.5         287.0       0.9X
+write string with length 60                        2277           2325          72          4.4         227.7       1.0X
+write char with length 60                          2444           2498          74          4.1         244.4       0.9X
+write varchar with length 60                       2447           2462          24          4.1         244.7       0.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Write with length 80, hasSpaces: false:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+write string with length 80                        2296           2328          27          4.4         229.6       1.0X
+write char with length 80                          2456           2618         145          4.1         245.6       0.9X
+write varchar with length 80                       2446           2495          54          4.1         244.6       0.9X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Write with length 100, hasSpaces: false:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+write string with length 100                       2276           2299          19          4.4         227.6       1.0X
+write char with length 100                         2465           2471           7          4.1         246.5       0.9X
+write varchar with length 100                      2439           2492          49          4.1         243.9       0.9X
+
+
+================================================================================================
+Char Varchar Write Side Perf w Tailing Spaces
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Write with length 20, hasSpaces: true:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+write string with length 20                        4483           4555         108          2.2         448.3       1.0X
+write char with length 20                          4825           4862          32          2.1         482.5       0.9X
+write varchar with length 20                       6078           6123          40          1.6         607.8       0.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Write with length 40, hasSpaces: true:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+write string with length 40                        5884           5944          57          1.7         588.4       1.0X
+write char with length 40                          6463           6487          21          1.5         646.3       0.9X
+write varchar with length 40                       8785           8836          44          1.1         878.5       0.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
+Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
+Write with length 60, hasSpaces: true:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+write string with length 60                        7276           7325          72          1.4         727.6       1.0X
+write char with length 60                          7868           7961         122          1.3         786.8       0.9X
+write varchar with length 60                      11363          11403          49          0.9        1136.3       0.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Write with length 80, hasSpaces: true:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 80                        9094           9154          71          1.1         909.4       1.0X
-write char with length 80                          9471           9489          19          1.1         947.1       1.0X
-write varchar with length 80                      15099          15130          28          0.7        1509.9       0.6X
+write string with length 80                        8784           8843          64          1.1         878.4       1.0X
+write char with length 80                          9345           9424          69          1.1         934.5       0.9X
+write varchar with length 80                      14162          14192          36          0.7        1416.2       0.6X
 
 Java HotSpot(TM) 64-Bit Server VM 1.8.0_251-b08 on Mac OS X 10.16
 Intel(R) Core(TM) i9-9980HK CPU @ 2.40GHz
 Write with length 100, hasSpaces: true:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-write string with length 100                      10152          10253          94          1.0        1015.2       1.0X
-write char with length 100                        10831          10834           3          0.9        1083.1       0.9X
-write varchar with length 100                     19486          19560          73          0.5        1948.6       0.5X
+write string with length 100                       9939           9977          39          1.0         993.9       1.0X
+write char with length 100                        10431          10529          85          1.0        1043.1       1.0X
+write varchar with length 100                     16777          16859         107          0.6        1677.7       0.6X
 
 

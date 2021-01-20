@@ -684,6 +684,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Return the length of string stripped the tailing space after `limit`.
+   */
+  public int canTrimRightTo(int numOfSpaces) {
+    int endIdx = numBytes - 1;
+    int trimTo = numBytes - numOfSpaces;
+    while (endIdx >= trimTo && getByte(endIdx) == 0x20) endIdx--;
+    return ++endIdx;
+  }
+
+  /**
    * Trims instances of the given trim string from the end of this string.
    *
    * @param trimString the trim character string
