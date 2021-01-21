@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, toJavaTimestamp}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
 import org.apache.spark.sql.internal.SQLConf
@@ -587,7 +588,7 @@ object JdbcUtils extends Logging {
     case TimestampType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
-          stmt.setTimestamp(pos + 1, java.sql.Timestamp.from(row.getAs[Instant](pos)))
+          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
       } else {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
