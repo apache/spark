@@ -125,7 +125,7 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
       assert(types(4).equals("class java.sql.Date"))
       assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
       assert(
-        rows(0).getAs[Integer](1).equals(Timestamp.valueOf("1970-01-01 13:31:24").getTime.toInt))
+        rows(0).getAs[Integer](1) === Timestamp.valueOf("1970-01-01 13:31:24").getTime)
       assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
       assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
       assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))

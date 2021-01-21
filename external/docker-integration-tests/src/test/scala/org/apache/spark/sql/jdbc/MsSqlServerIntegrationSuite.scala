@@ -195,7 +195,7 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
       assert(row.getString(3).equals("1901-05-09 23:59:59.0000000 +14:00"))
       assert(row.getAs[Timestamp](4).equals(Timestamp.valueOf("1996-01-01 23:24:00.0")))
       assert(
-        row.getAs[Integer](5).equals(Timestamp.valueOf("1970-01-01 13:31:24.0").getTime.toInt))
+        row.getAs[Integer](5) === Timestamp.valueOf("1970-01-01 13:31:24.0").getTime)
     }
   }
 
