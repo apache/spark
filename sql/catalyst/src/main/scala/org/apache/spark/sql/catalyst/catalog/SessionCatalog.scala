@@ -170,6 +170,13 @@ class SessionCatalog(
     tableRelationCache.invalidate(key)
   }
 
+  /** This method discards any cached table relation plans for the given table identifier. */
+  def invalidateCachedTable(name: TableIdentifier): Unit = {
+    val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
+    val tableName = formatTableName(name.table)
+    invalidateCachedTable(QualifiedTableName(dbName, tableName))
+  }
+
   /** This method provides a way to invalidate all the cached plans. */
   def invalidateAllCachedTables(): Unit = {
     tableRelationCache.invalidateAll()

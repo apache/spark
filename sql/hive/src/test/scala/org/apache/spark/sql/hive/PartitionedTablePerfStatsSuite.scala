@@ -390,8 +390,8 @@ class PartitionedTablePerfStatsSuite
     withSQLConf(SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key -> "false") {
       withTable("test") {
         withTempDir { dir =>
-          HiveCatalogMetrics.reset()
           setupPartitionedHiveTable("test", dir, 50)
+          HiveCatalogMetrics.reset()
           // select the table in multi-threads
           val executorPool = Executors.newFixedThreadPool(10)
           (1 to 10).map(threadId => {
@@ -405,8 +405,8 @@ class PartitionedTablePerfStatsSuite
           })
           executorPool.shutdown()
           executorPool.awaitTermination(30, TimeUnit.SECONDS)
-          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 100)
-          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 50)
+          assert(HiveCatalogMetrics.METRIC_PARALLEL_LISTING_JOB_COUNT.getCount() == 1)
         }
       }
     }
