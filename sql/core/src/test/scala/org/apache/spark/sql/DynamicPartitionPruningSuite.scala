@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, BroadcastQueryStageExec}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, BroadcastExchangeLike, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
@@ -184,7 +184,9 @@ abstract class DynamicPartitionPruningSuiteBase
       case _ => false
     }
     val subqueryBroadcast = dpExprs.collect {
-      case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) => b
+      case InSubqueryExec(_, SubqueryExec(_, adaptivePlan: AdaptiveSparkPlanExec, _), _, _)
+        if (adaptivePlan.executedPlan.isInstanceOf[SubqueryBroadcastExec]) =>
+        adaptivePlan.executedPlan.asInstanceOf[SubqueryBroadcastExec]
     }
 
     val hasFilter = if (withSubquery) "Should" else "Shouldn't"
@@ -196,12 +198,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
     subqueryBroadcast.foreach { s =>
       s.child match {
-        case bqs: BroadcastQueryStageExec =>
-          val result = collect(adaptivePlan) {
-            case b: BroadcastExchangeLike if (b eq bqs.broadcast) => b
-          }
-          val hasReuse = result.length == 1 && bqs.plan.isInstanceOf[ReusedExchangeExec]
-          assert(hasReuse, s"$s\nshould have been reused in\n$adaptivePlan")
+        case BroadcastQueryStageExec(_, _: ReusedExchangeExec) =>
         case _ =>
           fail(s"Invalid child node found in\n$s")
       }
@@ -1415,14 +1412,14 @@ class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase 
 
   test("simple inner join triggers DPP with mock-up tables test when enable AQE") {
 
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true") {
       val df = sql(
         """
           |SELECT f.date_id, f.store_id FROM fact_sk f
           |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
         """.stripMargin)
-
-      checkPartitionPruningPredicateWithAQE(df, false, true)
+      checkPartitionPruningPredicateWithAQE(df, true, true)
 
       checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }

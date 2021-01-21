@@ -20,15 +20,15 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, BindReferences, ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
-import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.Exchange
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange}
+import org.apache.spark.sql.execution.joins.{HashedRelationBroadcastMode, HashJoin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -52,17 +52,13 @@ case class InsertAdaptiveSparkPlan(
         try {
           // Plan sub-queries recursively and pass in the shared stage cache for exchange reuse.
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
-          val dppRule = PlanDynamicPruningFilters(adaptiveExecutionContext.session)
-          val dppPlan =
-            AdaptiveSparkPlanExec.applyPhysicalRules(plan, Seq(dppRule))
-
           val subqueryMap = buildSubqueryMap(plan)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
 
           val preprocessingRules = Seq(
             planSubqueriesRule)
           // Run pre-processing rules.
-          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(dppPlan, preprocessingRules)
+          val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(plan, preprocessingRules)
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
@@ -118,8 +114,8 @@ case class InsertAdaptiveSparkPlan(
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
    * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SubqueryExec] = {
-    val subqueryMap = mutable.HashMap.empty[Long, SubqueryExec]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
+    val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]
     plan.foreach(_.expressions.foreach(_.foreach {
       case expressions.ScalarSubquery(p, _, exprId)
           if !subqueryMap.contains(exprId.id) =>
@@ -133,6 +129,33 @@ case class InsertAdaptiveSparkPlan(
         val executedPlan = compileSubquery(query)
         verifyAdaptivePlan(executedPlan, query)
         val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
+        subqueryMap.put(exprId.id, subquery)
+      case expressions.DynamicPruningSubquery(value, buildPlan,
+          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId)
+          if !subqueryMap.contains(exprId.id) =>
+        val executedPlan = compileSubquery(buildPlan)
+        verifyAdaptivePlan(executedPlan, buildPlan)
+        val adaptivePlan = executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+
+        // Insert the broadcast exchange
+        val packedKeys =
+          BindReferences.bindReferences(HashJoin.rewriteKeyExpr(buildKeys),
+            adaptivePlan.inputPlan.output)
+        val mode = HashedRelationBroadcastMode(packedKeys)
+        // plan a broadcast exchange of the build side of the join
+        val exchange = BroadcastExchangeExec(mode, adaptivePlan.inputPlan)
+        val name = s"dynamicpruning#${exprId.id}"
+
+        // place the broadcast adaptor for reusing the broadcast results on the probe side
+        val broadcastValues =
+        SubqueryBroadcastExec(name, broadcastKeyIndex, buildKeys, exchange)
+
+        // Update the inputPlan and the currentPhysicalPlan of the adaptivePlan.
+        adaptivePlan.inputPlan = broadcastValues
+        broadcastValues.setLogicalLink(adaptivePlan.currentPhysicalPlan.logicalLink.get)
+        adaptivePlan.currentPhysicalPlan = broadcastValues
+
+        val subquery = SubqueryExec(s"subquery#${exprId.id}", adaptivePlan)
         subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))
