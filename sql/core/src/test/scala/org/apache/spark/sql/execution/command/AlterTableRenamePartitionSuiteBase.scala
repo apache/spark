@@ -179,7 +179,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     }
   }
 
-  test("SPARK-34138: keep dependents cached after table altering") {
+  test("SPARK-34161, SPARK-34138, SPARK-34099: keep dependents cached after table altering") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
