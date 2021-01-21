@@ -90,7 +90,7 @@ private[storage] class FallbackStorage(conf: SparkConf) extends Logging {
   }
 }
 
-class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
+private[storage] class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
   import scala.concurrent.ExecutionContext.Implicits.global
   override def address: RpcAddress = null
   override def name: String = "fallback"
@@ -100,7 +100,7 @@ class NoopRpcEndpointRef(conf: SparkConf) extends RpcEndpointRef(conf) {
   }
 }
 
-object FallbackStorage extends Logging {
+private[spark] object FallbackStorage extends Logging {
   /** We use one block manager id as a place holder. */
   val FALLBACK_BLOCK_MANAGER_ID: BlockManagerId = BlockManagerId("fallback", "remote", 7337)
 

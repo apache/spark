@@ -111,7 +111,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   }
 }
 
-class StreamingQueryPagedTable(
+private[ui] class StreamingQueryPagedTable(
     request: HttpServletRequest,
     parent: StreamingQueryTab,
     data: Seq[StreamingQueryUIData],
@@ -206,12 +206,13 @@ class StreamingQueryPagedTable(
   }
 }
 
-case class StructuredStreamingRow(
+private[ui] case class StructuredStreamingRow(
     duration: Long,
     avgInput: Double,
     avgProcess: Double,
     streamingUIData: StreamingQueryUIData)
 
+private[ui]
 class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: String, desc: Boolean,
     pageSize: Int, isActive: Boolean) extends PagedDataSource[StructuredStreamingRow](pageSize) {
 

@@ -31,6 +31,8 @@ case class ExecutorDecommissionInfo(message: String, workerHost: Option[String] 
  * State related to decommissioning that is kept by the TaskSchedulerImpl. This state is derived
  * from the info message above but it is kept distinct to allow the state to evolve independently
  * from the message.
+ *
+ * @since 3.1.0
  */
 case class ExecutorDecommissionState(
     // Timestamp the decommissioning commenced as per the Driver's clock,
