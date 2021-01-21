@@ -199,7 +199,7 @@ private[consumer] case class FetchedData(
   def offsetAfterPoll: Long = _offsetAfterPoll
 
   /**
-   * Returns the tuple of earliest and latest offset that are the available offset range when
+   * Returns the tuple of earliest and latest offsets that is the available offset range when
    * polling the records.
    */
   def availableOffsetRange: (Long, Long) =
