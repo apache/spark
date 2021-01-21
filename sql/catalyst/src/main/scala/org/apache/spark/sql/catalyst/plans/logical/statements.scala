@@ -182,7 +182,7 @@ case class CreateViewStatement(
     replace: Boolean,
     viewType: ViewType) extends ParsedStatement {
 
-   override def children: Seq[LogicalPlan] = Seq(child)
+  override def children: Seq[LogicalPlan] = Seq(child)
 }
 
 /**

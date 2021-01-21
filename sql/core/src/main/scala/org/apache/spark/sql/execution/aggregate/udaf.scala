@@ -325,7 +325,8 @@ case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    name: Option[String] = None)
   extends ImperativeAggregate
   with NonSQLExpression
   with Logging

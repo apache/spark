@@ -26,13 +26,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchDatabaseException, NoSuchNamespaceException, TableAlreadyExistsException}
-import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
@@ -2031,7 +2029,7 @@ class DataSourceV2SQLSuite
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+      sql(s"CREATE VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }
@@ -2277,56 +2275,6 @@ class DataSourceV2SQLSuite
       sql("USE testcat.ns")
       checkAnswer(sql("SELECT * FROM t"), Row(2))
     }
-  }
-
-  test("spark-34152") {
-    // unset this config to use the default v2 session catalog.
-    spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
-
-    val udf = new SparkUserDefinedFunction(
-      (input: Any) => if (input == null) {
-        null
-      } else {
-        input.toString
-      },
-      StringType,
-      inputEncoders = Seq.fill(1)(None),
-      name = Some("udf")) {
-
-      override def apply(exprs: Column*): Column = {
-        assert(exprs.length == 1, "Defined UDF only has one column")
-        val expr = exprs.head.expr
-        assert(expr.resolved, "column should be resolved to use the same type " +
-          "as input. Try df(name) or df.col(name)")
-        Column(Cast(createScalaUDF(Cast(expr, StringType) :: Nil), expr.dataType))
-      }
-    }
-
-    spark.udf.register("udf", udf)
-
-    // withSQLConf("spark.sql.legacy.storeAnalyzedPlanForView" -> "true") {
-      sql("CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (1) AS GROUPING(a)")
-      sql("CREATE TEMPORARY VIEW ta AS SELECT udf(a) AS a FROM t1")
-      sql("SELECT * from ta")
-    // }
-
-
-//    sql("CREATE TEMPORARY VIEW t1 AS SELECT * FROM VALUES (1) AS GROUPING(a)")
-//    sql("CREATE TEMPORARY VIEW t2 AS SELECT * FROM VALUES (1) AS GROUPING(a)")
-//    sql("CREATE TEMPORARY VIEW t3 AS SELECT * FROM VALUES (1), (1) AS GROUPING(a)")
-//    sql("CREATE TEMPORARY VIEW t4 AS SELECT * FROM VALUES (1), (1) AS GROUPING(a)")
-//
-//    sql("CREATE TEMPORARY VIEW ta AS " +
-//      "SELECT udf(a) AS a, udf('a') AS tag FROM t1 " +
-//      "UNION ALL " +
-//      "SELECT udf(a) AS a, udf('b') AS tag FROM t2")
-//
-//    sql("CREATE TEMPORARY VIEW tb AS " +
-//      "SELECT udf(a) AS a, udf('a') AS tag FROM t3 " +
-//      "UNION ALL " +
-//      "SELECT udf(a) AS a, udf('b') AS tag FROM t4")
-//
-//    sql("SELECT tb.* FROM ta INNER JOIN tb ON ta.a = tb.a AND ta.tag = tb.tag")
   }
 
   test("SPARK-30284: CREATE VIEW should track the current catalog and namespace") {

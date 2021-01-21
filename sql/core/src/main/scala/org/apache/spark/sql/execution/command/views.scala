@@ -24,7 +24,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedRelation, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, PythonUDF, ScalaUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Subque
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias.SUBQUERY_TYPE_TAG
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
+import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -559,24 +560,26 @@ object ViewHelper {
       catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
       child.collect {
+        case s @ SubqueryAlias(_, view: View) if view.isTempView =>
+          Seq(s.identifier.qualifier :+ s.identifier.name)
         case s: SubqueryAlias if s.getTagValue(SUBQUERY_TYPE_TAG).exists(_ == "tempView") =>
           Seq(s.identifier.qualifier :+ s.identifier.name)
-        case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
-          Seq(nameParts)
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+        case plan if plan.resolved => plan.expressions.flatMap(_.collect {
           case e: SubqueryExpression => collectTempViews(e.plan)
         }).flatten
       }.flatten.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
+      def isTemporaryFunction(name: String): Boolean = {
+        catalog.isTemporaryFunction(FunctionIdentifier(name))
+      }
       child.collect {
         case plan if plan.resolved => plan.expressions.flatMap(_.collect {
           case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: PythonUDF if catalog.isTemporaryFunction(FunctionIdentifier(e.name)) =>
-            Seq(e.name)
-          case e: ScalaUDF
-              if e.udfName.exists(name => catalog.isTemporaryFunction(FunctionIdentifier(name))) =>
+          case e: PythonUDF if isTemporaryFunction(e.name) => Seq(e.name)
+          case e: ScalaUDAF if e.name.exists(name => isTemporaryFunction(name)) => Seq(e.name.get)
+          case e: ScalaUDF if e.udfName.exists(name => isTemporaryFunction(name)) =>
             Seq(e.udfName.get)
         }).flatten
       }.flatten.distinct

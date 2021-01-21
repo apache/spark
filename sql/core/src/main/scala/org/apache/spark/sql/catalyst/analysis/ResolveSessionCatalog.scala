@@ -476,7 +476,7 @@ class ResolveSessionCatalog(
 
     case CreateViewStatement(
       tbl, userSpecifiedColumns, comment, properties,
-      originalText, child, allowExisting, replace, viewType) =>
+      originalText, child, allowExisting, replace, viewType) if child.resolved =>
 
       val v1TableName = if (viewType != PersistedView) {
         // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
