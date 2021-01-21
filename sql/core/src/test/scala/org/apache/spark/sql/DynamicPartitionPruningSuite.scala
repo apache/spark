@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
+
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
