@@ -148,8 +148,7 @@
     the link to metrics.dropwizard.io in docs/monitoring.md.
     -->
     <codahale.metrics.version>4.1.1</codahale.metrics.version>
-    <avro.version>1.8.2</avro.version>
-    <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+    <avro.version>1.10.1</avro.version>
     <aws.kinesis.client.version>1.12.0</aws.kinesis.client.version>
     <!-- Should be consistent with Kinesis client dependency -->
     <aws.java.sdk.version>1.11.655</aws.java.sdk.version>
@@ -194,10 +193,6 @@
     <jpam.version>1.1</jpam.version>
     <selenium.version>3.141.59</selenium.version>
     <htmlunit.version>2.40.0</htmlunit.version>
-    <!--
-    Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
-    -->
-    <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <!--
@@ -1208,47 +1203,15 @@
       </dependency>
       <dependency>
         <groupId>org.apache.avro</groupId>
-        <artifactId>avro-ipc</artifactId>
-        <version>${avro.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>io.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>jetty</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>jetty-util</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>servlet-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <!-- avro-mapred for some reason depends on avro-ipc's test jar, so undo that. -->
-      <dependency>
-        <groupId>org.apache.avro</groupId>
-        <artifactId>avro-ipc</artifactId>
-        <classifier>tests</classifier>
-        <version>${avro.version}</version>
-        <scope>test</scope>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.avro</groupId>
         <artifactId>avro-mapred</artifactId>
         <version>${avro.version}</version>
-        <classifier>${avro.mapred.classifier}</classifier>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
           <exclusion>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro-ipc-jetty</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
@@ -1266,9 +1229,18 @@
           </exclusion>
           <exclusion>
             <groupId>org.apache.velocity</groupId>
-            <artifactId>velocity</artifactId>
+            <artifactId>velocity-engine-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.tukaani</groupId>
+        <artifactId>xz</artifactId>
+        <version>1.8</version>
       </dependency>
       <!-- See SPARK-23654 for info on this dependency;
       It is used to keep javax.activation at v1.1.1 after dropping
@@ -2388,12 +2360,6 @@
             <artifactId>jna</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>com.thoughtworks.paranamer</groupId>
-        <artifactId>paranamer</artifactId>
-        <version>${paranamer.version}</version>
-        <scope>runtime</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.arrow</groupId>

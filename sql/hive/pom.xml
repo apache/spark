@@ -122,12 +122,9 @@
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
     </dependency>
-    <!-- use the build matching the hadoop api of avro-mapred (i.e. no classifier for hadoop 1 API,
-    hadoop2 classifier for hadoop 2 API. avro-mapred is a dependency of org.spark-project.hive:hive-serde -->
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
-      <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>commons-httpclient</groupId>
@@ -216,6 +213,15 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>scala-2.13</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 
