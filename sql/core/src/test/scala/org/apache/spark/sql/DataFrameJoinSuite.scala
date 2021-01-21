@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo,
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -265,16 +264,7 @@ class DataFrameJoinSuite extends QueryTest
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
       val df = spark.range(2)
       // this throws an exception before the fix
-      val plan = df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
-
-      plan match {
-        // SPARK-34178: we can't match the plan before the fix due to
-        // the right side plan doesn't contains dataset id.
-        case Join(
-          LogicalPlanWithDatasetId(_, leftId),
-          LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
-          assert(leftId === rightId)
-      }
+      df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
     }
   }
 
