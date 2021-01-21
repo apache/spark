@@ -1463,10 +1463,8 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-33933: Materialize BroadcastQueryStage first in AQE") {
     val testAppender = new LogAppender("aqe query stage materialization order test")
-    val df = spark.sparkContext.parallelize(Range(0, 10))
-      .flatMap(x => {
-        for (i <- Range(0, 100)) yield (x % 26, x % 10)
-      }).toDF("index", "pv")
+    val df = spark.range(1000).select($"id" % 26, $"id" % 10)
+      .toDF("index", "pv")
     val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
       .toDF("index", "name")
     val testDf = df.groupBy("index")
