@@ -592,8 +592,7 @@ class Word2VecModel private[spark] (
     val localWordList = wordList
     val localNumWords = numWords
     if (vecNorm == 0) {
-      Iterator.range(0, num + 1)
-        .map(i => (localWordList(i), 0.0))
+      Iterator.tabulate(num + 1)(i => (localWordList(i), 0.0))
         .filterNot(t => wordOpt.contains(t._1))
         .take(num)
         .toArray
