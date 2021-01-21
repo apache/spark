@@ -16,6 +16,12 @@ SHOW TABLES 'show_t*';
 SHOW TABLES LIKE 'show_t1*|show_t2*';
 SHOW TABLES IN showdb 'show_t*';
 SHOW TABLES IN showdb LIKE 'show_t*';
+SHOW TABLES 'show_t%';
+SHOW TABLES LIKE 'show_t1*|show_t2*';
+SHOW TABLES IN showdb 'show_t*';
+SHOW TABLES IN showdb LIKE 'show_t%';
+SHOW TABLES IN showdb LIKE 'show__%';
+SHOW TABLES IN showdb LIKE 'sho_\\_%';
 
 -- SHOW TABLE EXTENDED
 SHOW TABLE EXTENDED LIKE 'show_t*';
