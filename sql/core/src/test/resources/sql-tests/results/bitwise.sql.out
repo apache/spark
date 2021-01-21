@@ -263,7 +263,7 @@ select getbit(11L, -1)
 struct<>
 -- !query output
 java.lang.IllegalArgumentException
-Invalid bit position: -1 less than zero
+Invalid bit position: -1 is less than zero
 
 
 -- !query

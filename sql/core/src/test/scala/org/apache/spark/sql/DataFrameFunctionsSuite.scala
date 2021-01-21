@@ -198,7 +198,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val msg2 = intercept[Exception] {
       df3.select(bitwiseGet($"a", $"b")).collect
     }.getMessage
-    assert(msg2.contains("Invalid bit position: -1 less than zero"))
+    assert(msg2.contains("Invalid bit position: -1 is less than zero"))
   }
 
   test("bin") {
