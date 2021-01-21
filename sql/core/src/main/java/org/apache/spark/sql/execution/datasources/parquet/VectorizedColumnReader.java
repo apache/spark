@@ -42,7 +42,9 @@ import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupporte
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
+import org.apache.spark.sql.types.IntegerType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
@@ -147,7 +149,19 @@ public class VectorizedColumnReader {
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
       try {
-        this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
+        PrimitiveType primitiveType = descriptor.getPrimitiveType();
+        if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
+            primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS()) {
+          PrimitiveType adjustedType = new PrimitiveType(primitiveType.getRepetition(),
+              PrimitiveType.PrimitiveTypeName.INT32, primitiveType.getTypeLength(),
+              primitiveType.getName(), primitiveType.getOriginalType(),
+              primitiveType.getDecimalMetadata(), primitiveType.getId());
+          ColumnDescriptor desc = new ColumnDescriptor(descriptor.getPath(),
+              adjustedType, descriptor.getMaxRepetitionLevel(), descriptor.getMaxDefinitionLevel());
+          this.dictionary = dictionaryPage.getEncoding().initDictionary(desc, dictionaryPage);
+        } else {
+          this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
+        }
         this.isCurrentPageDictionaryEncoded = true;
       } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
@@ -577,11 +591,12 @@ public class VectorizedColumnReader {
     if (column.dataType() == DataTypes.LongType ||
         canReadAsLongDecimal(column.dataType())) {
       defColumn.readLongs(
-        num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn,
+          DecimalType.is32BitDecimalType(column.dataType()));
     } else if (originalType == OriginalType.TIMESTAMP_MICROS) {
       if ("CORRECTED".equals(datetimeRebaseMode)) {
         defColumn.readLongs(
-          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
+          num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn, false);
       } else {
         boolean failIfRebase = "EXCEPTION".equals(datetimeRebaseMode);
         defColumn.readLongsWithRebase(
