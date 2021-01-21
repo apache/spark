@@ -41,7 +41,7 @@ object StringUtils extends Logging {
    * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
-  def escapeLikeRegex(pattern: String, escapeChar: Char): String = {
+  def escapeLikeRegex(pattern: String, escapeChar: Char, supportStar: Boolean = false): String = {
     val in = pattern.toIterator
     val out = new StringBuilder()
 
@@ -60,6 +60,7 @@ object StringUtils extends Logging {
         case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
+        case '*' if supportStar => out ++= ".*"
         case c => out ++= Pattern.quote(Character.toString(c))
       }
     }
@@ -90,7 +91,7 @@ object StringUtils extends Logging {
     val funcNames = scala.collection.mutable.SortedSet.empty[String]
     pattern.trim().split("\\|").foreach { subPattern =>
       try {
-        val regex = ("(?i)" + escapeLikeRegex(subPattern, '\\')).r
+        val regex = ("(?i)" + escapeLikeRegex(subPattern, '\\', true)).r
         funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
       } catch {
         case _: PatternSyntaxException =>
