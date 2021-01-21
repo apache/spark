@@ -54,7 +54,7 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
     }
   }
 
-  test("cbo") {
+  test("SPARK-34188: read side length check should not blocks CBO size estimating") {
     withTable("t") {
       sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(4)) USING $format")
       val stats = Some(CatalogStatistics(400L, Some(20L), Map(
@@ -64,8 +64,9 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
           None, CatalogColumnStat.VERSION))
       ))
       spark.sessionState.catalog.alterTableStats(TableIdentifier("t"), stats)
-      withSQLConf((SQLConf.CBO_ENABLED.key, "true")) {
-        spark.table("t").where("v > '123'")
+      withSQLConf((SQLConf.CBO_ENABLED.key, "true"), (SQLConf.PLAN_STATS_ENABLED.key, "true")) {
+        val newStat = spark.table("t").where("v = '124'").queryExecution.optimizedPlan.stats
+        assert(newStat.rowCount.get === 1)
       }
     }
   }

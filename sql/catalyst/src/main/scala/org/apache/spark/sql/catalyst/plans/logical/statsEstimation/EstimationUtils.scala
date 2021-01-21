@@ -23,7 +23,7 @@ import scala.math.BigDecimal.RoundingMode
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
 import org.apache.spark.sql.types.{DecimalType, _}
 
 object EstimationUtils {
@@ -82,8 +82,8 @@ object EstimationUtils {
     expressions.flatMap {
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
         Some(alias.toAttribute -> attributeStats(attr))
-      case alias @ Alias(s: StaticInvoke, _) if alias.explicitMetadata.nonEmpty &&
-          CharVarcharUtils.getRawType(alias.explicitMetadata.get).nonEmpty => s.children.flatMap {
+      case alias @ Alias(StaticInvoke(cls, _, _, arguments, _, _), _)
+          if cls.isAssignableFrom(classOf[CharVarcharCodegenUtils]) => arguments.head match {
         case attr: Attribute if attributeStats.contains(attr) =>
           Some(alias.toAttribute -> attributeStats(attr))
         case _ => None
