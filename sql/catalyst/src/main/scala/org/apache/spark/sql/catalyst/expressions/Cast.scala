@@ -670,7 +670,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       if (!ansiEnabled) {
         null
       } else {
-        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(value, decimalType)
+        throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+          value, decimalType.precision, decimalType.scale)
       }
     }
   }
@@ -1182,7 +1183,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         s"$evNull = true;"
       } else {
         s"""
-           |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError($d, $decimalType)");
+           |throw QueryExecutionErrors.cannotChangeDecimalPrecisionError(
+           |  $d, ${decimalType.precision}, ${decimalType.scale});
          """.stripMargin
       }
       code"""

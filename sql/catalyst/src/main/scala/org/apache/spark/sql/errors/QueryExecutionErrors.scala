@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
-import org.apache.spark.sql.types.{DataType, Decimal, DecimalType}
+import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -76,12 +76,12 @@ object QueryExecutionErrors {
   }
 
   def cannotChangeDecimalPrecisionError(
-      value: Decimal, decimalType: DecimalType): ArithmeticException = {
+      value: Decimal, decimalPrecision: Int, decimalScale: Int): ArithmeticException = {
     new ArithmeticException(s"${value.toDebugString} cannot be represented as " +
-      s"Decimal(${decimalType.precision}, ${decimalType.scale}).")
+      s"Decimal($decimalPrecision, $decimalScale).")
   }
 
-  def invalidInputSyntaxForNumericError(s: UTF8String): Throwable = {
+  def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
     new NumberFormatException(s"invalid input syntax for type numeric: $s")
   }
 
