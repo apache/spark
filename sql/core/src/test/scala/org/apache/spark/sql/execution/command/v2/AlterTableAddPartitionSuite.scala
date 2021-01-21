@@ -68,4 +68,35 @@ class AlterTableAddPartitionSuite
       checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0), Row(1)))
     }
   }
+
+  test("SPARK-34099, SPARK-34161: keep dependents cached after table altering") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (id, part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      cacheRelation(t)
+      checkCachedRelation(t, Seq(Row(0, 0)))
+
+      withView("v0") {
+        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        cacheRelation("v0")
+        sql(s"ALTER TABLE $t ADD PARTITION (id=0, part=1)")
+        checkCachedRelation("v0", Seq(Row(0, 0), Row(0, 1)))
+      }
+
+      withTempView("v1") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        cacheRelation("v1")
+        sql(s"ALTER TABLE $t ADD PARTITION (id=1, part=2)")
+        checkCachedRelation("v1", Seq(Row(0, 0), Row(0, 1), Row(1, 2)))
+      }
+
+      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      withGlobalTempView(v2) {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        cacheRelation(v2)
+        sql(s"ALTER TABLE $t ADD PARTITION (id=2, part=3)")
+        checkCachedRelation(v2, Seq(Row(0, 0), Row(0, 1), Row(1, 2), Row(2, 3)))
+      }
+    }
+  }
 }
