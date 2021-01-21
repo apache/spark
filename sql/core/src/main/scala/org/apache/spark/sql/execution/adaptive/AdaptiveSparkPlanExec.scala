@@ -191,9 +191,9 @@ case class AdaptiveSparkPlanExec(
 
           // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
           // for tasks to be scheduled and leading to broadcast timeout.
-          // This partial fix only grantee the start of materialization for BroadcastQueryStage
+          // This partial fix only guarantees the start of materialization for BroadcastQueryStage
           // is prior to others, but because the submission of collect job for broadcasting is
-          // run in another thread, the issue is not completely solved.
+          // running in another thread, the issue is not completely resolved.
           val reorderedNewStages = result.newStages
             .sortWith {
               case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
