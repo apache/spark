@@ -194,7 +194,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
              |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
-             |  $eval1, $symbol, $eval2);
+             |  $eval1, "$symbol", $eval2);
              |}
            """.stripMargin
         } else {

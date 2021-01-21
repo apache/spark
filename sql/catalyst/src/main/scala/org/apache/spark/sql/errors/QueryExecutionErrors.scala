@@ -120,7 +120,7 @@ object QueryExecutionErrors {
     new ArithmeticException("divide by zero")
   }
 
-  def invalidArrayIndexError(index: Int, numElements: Int): Throwable = {
+  def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
     new ArrayIndexOutOfBoundsException(s"Invalid index: $index, numElements: $numElements")
   }
 
