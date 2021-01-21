@@ -532,7 +532,12 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val relation = sparkSession.table(tableIdent).queryExecution.analyzed
 
     relation.refresh()
-    sessionCatalog.invalidateCachedTable(tableIdent)
+
+    // Temporary and global temporary views are not supposed to be put into the relation cache
+    // since they are tracked separately.
+    if (!sessionCatalog.isTemporaryTable(tableIdent)) {
+      sessionCatalog.invalidateCachedTable(tableIdent)
+    }
 
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
