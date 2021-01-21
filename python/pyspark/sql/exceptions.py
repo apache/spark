@@ -24,7 +24,7 @@ class CapturedException(Exception):
     def __init__(self, desc, stackTrace, cause=None):
         self.desc = desc
         self.stackTrace = stackTrace
-        self.cause = convert_exception(cause) if cause is not None else None
+        self.cause = _convert_exception(cause) if cause is not None else None
 
     def __str__(self):
         sql_conf = SparkContext._jvm.org.apache.spark.sql.internal.SQLConf.get()
@@ -77,7 +77,7 @@ class UnknownException(CapturedException):
     """
 
 
-def convert_exception(e):
+def _convert_exception(e):
     s = e.toString()
     c = e.getCause()
     stacktrace = SparkContext._jvm.org.apache.spark.util.Utils.exceptionString(e)
@@ -105,12 +105,12 @@ def convert_exception(e):
     return UnknownException(s, stacktrace, c)
 
 
-def capture_sql_exception(f):
+def _capture_sql_exception(f):
     def deco(*a, **kw):
         try:
             return f(*a, **kw)
         except py4j.protocol.Py4JJavaError as e:
-            converted = convert_exception(e.java_exception)
+            converted = _convert_exception(e.java_exception)
             if not isinstance(converted, UnknownException):
                 # Hide where the exception came from that shows a non-Pythonic
                 # JVM exception message.
@@ -133,6 +133,6 @@ def install_exception_handler():
     """
     original = py4j.protocol.get_return_value
     # The original `get_return_value` is not patched, it's idempotent.
-    patched = capture_sql_exception(original)
+    patched = _capture_sql_exception(original)
     # only patch the one used in py4j.java_gateway (call Java API)
     py4j.java_gateway.get_return_value = patched
