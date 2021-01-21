@@ -1262,7 +1262,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Reading with user provided schema respects case sensitivity for field matching") {
+  test("SPARK-34133: Reading user provided schema respects case sensitivity for field matching") {
     val wrongCaseSchema = new StructType()
         .add("STRING", StringType, nullable = false)
         .add("UNION_STRING_NULL", StringType, nullable = true)
@@ -1282,7 +1282,7 @@ abstract class AvroSuite
     }
   }
 
-  test("Writing with user provided schema respects case sensitivity for field matching") {
+  test("SPARK-34133: Writing user provided schema respects case sensitivity for field matching") {
     withTempDir { tempDir =>
       val avroSchema =
         """
@@ -1311,6 +1311,42 @@ abstract class AvroSuite
         }
         assertExceptionMsg(e, "Cannot find FOO in Avro schema")
       }
+    }
+  }
+
+  test("SPARK-34133: Writing user provided schema with multiple matching Avro fields fails") {
+    withTempDir { tempDir =>
+      val avroSchema =
+        """
+          |{
+          |  "type" : "record",
+          |  "name" : "test_schema",
+          |  "fields" : [
+          |    {"name": "foo", "type": "int"},
+          |    {"name": "FOO", "type": "string"}
+          |  ]
+          |}
+      """.stripMargin
+
+      val errorMsg = "Searching for 'foo' in Avro schema gave 2 matches. Candidates: [foo, FOO]"
+      assertExceptionMsg(intercept[SparkException] {
+        val fooBarDf = Seq((1, "3"), (2, "4")).toDF("foo", "bar")
+        fooBarDf.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save-fail")
+      }, errorMsg)
+
+      val savePath = s"$tempDir/save"
+      withSQLConf((SQLConf.CASE_SENSITIVE.key, "true")) {
+        val fooFooDf = Seq((1, "3"), (2, "4")).toDF("foo", "FOO")
+        fooFooDf.write.option("avroSchema", avroSchema).format("avro").save(savePath)
+
+        val loadedDf = spark.read.format("avro").schema(fooFooDf.schema).load(savePath)
+        assert(loadedDf.collect().toSet === fooFooDf.collect().toSet)
+      }
+
+      assertExceptionMsg(intercept[SparkException] {
+        val fooSchema = new StructType().add("foo", IntegerType)
+        spark.read.format("avro").schema(fooSchema).load(savePath).collect()
+      }, errorMsg)
     }
   }
 

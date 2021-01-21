@@ -330,7 +330,7 @@ private[sql] class AvroDeserializer(
     var i = 0
     while (i < length) {
       val sqlField = sqlType.fields(i)
-      AvroUtils.getAvroFieldForCatalystField(avroType.getFields.asScala, sqlField) match {
+      AvroUtils.getAvroFieldByName(avroType, sqlField.name) match {
         case Some(avroField) =>
           validFieldIndexes += avroField.pos()
 
