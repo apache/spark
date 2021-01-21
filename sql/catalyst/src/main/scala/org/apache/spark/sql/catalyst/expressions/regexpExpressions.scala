@@ -174,7 +174,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
         s"""
           String $rightStr = $eval2.toString();
           $patternClass $pattern = $patternClass.compile(
-            $escapeFunc($rightStr, '$escapedEscapeChar'));
+            $escapeFunc($rightStr, '$escapedEscapeChar', false));
           ${ev.value} = $pattern.matcher($eval1.toString()).matches();
         """
       })
