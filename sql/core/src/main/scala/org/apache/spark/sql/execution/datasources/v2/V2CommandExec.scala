@@ -61,7 +61,7 @@ abstract class V2CommandExec extends SparkPlan {
 
   override def producedAttributes: AttributeSet = outputSet
 
-  protected def toCatalystRow(strs: String*): InternalRow = {
+  protected def toCatalystRow(strs: Any*): InternalRow = {
     rowSerializer(new GenericRowWithSchema(strs.toArray, schema)).copy()
   }
 
