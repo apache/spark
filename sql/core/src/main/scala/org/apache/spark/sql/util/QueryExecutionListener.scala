@@ -110,8 +110,22 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
   }
 
   /**
-   * Removes [[ExecutionListenerBus]] from LiveListenerBus.queues. people should call this function
-   * when the manager belongs session was removed.
+   * Removes [[ExecutionListenerBus]] from LiveListenerBus.queues.
+   * Each SparkSession has its own listener manager, and this manager won't be cleared by Spark.
+   * Developers are expected to call this function (to clean up the listener manager) while
+   * destroying a session
+   *
+   * == Example ==
+   *
+   * {{{
+   *   val newSession = spark.cloneSession()
+   *   // run query
+   *   newSession.sql(...)
+   *   // destroy current spark session.
+   *   newSession.listenerManager.clearListenerBus()
+   *   SparkSession.clearActiveSession()
+   *   SparkSession.clearDefaultSession()
+   * }}}
    */
   @DeveloperApi
   def clearListenerBus(): Unit = {
