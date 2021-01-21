@@ -386,7 +386,7 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val keyNotFoundBranch = if (failOnError) {
-        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2 );"
+        s"throw QueryExecutionErrors.mapKeyNotExistError($eval2);"
       } else {
         s"${ev.isNull} = true;"
       }

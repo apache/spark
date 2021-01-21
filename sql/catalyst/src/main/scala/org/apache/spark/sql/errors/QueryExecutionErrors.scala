@@ -124,7 +124,7 @@ object QueryExecutionErrors {
     new ArrayIndexOutOfBoundsException(s"Invalid index: $index, numElements: $numElements")
   }
 
-  def mapKeyNotExistError(key: Any): Throwable = {
+  def mapKeyNotExistError(key: Any): NoSuchElementException = {
     new NoSuchElementException(s"Key $key does not exist.")
   }
 
@@ -136,7 +136,7 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Unsupported input type ${dataType.catalogString}")
   }
 
-  def invalidFractionOfSecondError(): Throwable = {
+  def invalidFractionOfSecondError(): DateTimeException = {
     new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
   }
 
