@@ -54,7 +54,6 @@ case class InsertAdaptiveSparkPlan(
           // Fall back to non-AQE mode if AQE is not supported in any of the sub-queries.
           val subqueryMap = buildSubqueryMap(plan)
           val planSubqueriesRule = PlanAdaptiveSubqueries(subqueryMap)
-
           val preprocessingRules = Seq(
             planSubqueriesRule)
           // Run pre-processing rules.
@@ -114,8 +113,8 @@ case class InsertAdaptiveSparkPlan(
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
    * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
-    val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SubqueryExec] = {
+    val subqueryMap = mutable.HashMap.empty[Long, SubqueryExec]
     plan.foreach(_.expressions.foreach(_.foreach {
       case expressions.ScalarSubquery(p, _, exprId)
           if !subqueryMap.contains(exprId.id) =>

@@ -711,7 +711,6 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, QueryStageExec] =
     new TrieMap[SparkPlan, QueryStageExec]()
-
 }
 
 /**
