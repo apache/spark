@@ -34,16 +34,8 @@ public class CharVarcharCodegenUtils {
       if (trimmed.numChars() > limit) {
         throw new RuntimeException("Exceeds char type length limitation: " + limit);
       }
-      return trimmed;
+      return trimmed.rpad(limit, SPACE);
     }
-  }
-
-  public static UTF8String charTypeReadSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr == null) return null;
-    if (inputStr.numChars() > limit) {
-      throw new RuntimeException("Exceeds char type length limitation: " + limit);
-    }
-    return inputStr.rpad(limit, SPACE);
   }
 
   public static UTF8String varcharTypeWriteSideCheck(UTF8String inputStr, int limit) {
@@ -65,12 +57,5 @@ public class CharVarcharCodegenUtils {
         }
       }
     }
-  }
-
-  public static UTF8String varcharTypeReadSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr != null && inputStr.numChars() > limit) {
-      throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
-    }
-    return inputStr;
   }
 }

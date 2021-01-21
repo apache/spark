@@ -56,7 +56,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
       checkColType(spark.table("t").schema(1), CharType(5))
 
-      sql("ALTER TABLE t DROP PARTITION(c='a')")
+      sql("ALTER TABLE t DROP PARTITION(c='a    ')")
       sql("INSERT OVERWRITE t VALUES ('1', null)")
       checkAnswer(spark.table("t"), Row("1", null))
     }
@@ -628,8 +628,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         withTable("t") {
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
-          val e = intercept[SparkException] { sql("select * from t").collect() }
-          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
+          checkAnswer(sql("select * from t"), Row("123456"))
         }
       }
     }
@@ -655,8 +654,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format")
           sql(s"ALTER TABLE t SET LOCATION '$dir'")
-          val e = intercept[SparkException] { spark.table("t").collect() }
-          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
+          checkAnswer(spark.table("t"), Row("123456"))
         }
       }
     }
@@ -689,8 +687,7 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
         withTable("t") {
           sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
-          val e = intercept[SparkException] { sql("select * from t").collect() }
-          assert(e.getCause.getMessage.contains(s"Exceeds $typ type length limitation: 2"))
+          checkAnswer(spark.table("t"), Row("12  "))
         }
       }
     }

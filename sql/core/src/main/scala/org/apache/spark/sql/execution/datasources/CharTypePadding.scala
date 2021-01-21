@@ -17,63 +17,23 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BinaryComparison, Expression, In, Literal, StringRPad}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{CharType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * This rule performs char type padding and length check for both char and varchar.
- *
- * When reading values from column/field of type CHAR(N) or VARCHAR(N), the underlying string value
- * might be over length (e.g. tables w/ external locations), it will fail in this case.
- * Otherwise, right-pad the values to length N for CHAR(N) and remain the same for VARCHAR(N).
+ * This rule performs char type padding both char.
  *
  * When comparing char type column/field with string literal or char type column/field,
  * right-pad the shorter one to the longer length.
  */
-object PaddingAndLengthCheckForCharVarchar extends Rule[LogicalPlan] {
+object CharTypePadding extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    val padded = plan.resolveOperatorsUpWithNewOutput {
-      case r: LogicalRelation =>
-        val projectList = CharVarcharUtils.paddingWithLengthCheck(r.output)
-        if (projectList == r.output) {
-          r -> Nil
-        } else {
-          val cleanedOutput = r.output.map(CharVarcharUtils.cleanAttrMetadata)
-          val padded = Project(projectList, r.copy(output = cleanedOutput))
-          padded -> r.output.zip(padded.output)
-        }
-
-      case r: DataSourceV2Relation =>
-        val projectList = CharVarcharUtils.paddingWithLengthCheck(r.output)
-        if (projectList == r.output) {
-          r -> Nil
-        } else {
-          val cleanedOutput = r.output.map(CharVarcharUtils.cleanAttrMetadata)
-          val padded = Project(projectList, r.copy(output = cleanedOutput))
-          padded -> r.output.zip(padded.output)
-        }
-
-      case r: HiveTableRelation =>
-        val projectList = CharVarcharUtils.paddingWithLengthCheck(r.output)
-        if (projectList == r.output) {
-          r -> Nil
-        } else {
-          val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
-          val cleanedPartCols = r.partitionCols.map(CharVarcharUtils.cleanAttrMetadata)
-          val padded = Project(projectList,
-            r.copy(dataCols = cleanedDataCols, partitionCols = cleanedPartCols))
-          padded -> r.output.zip(padded.output)
-        }
-    }
-
-    padded.resolveOperatorsUp {
+    plan.resolveOperatorsUp {
       case operator if operator.resolved => operator.transformExpressionsUp {
         // String literal is treated as char type when it's compared to a char type column.
         // We should pad the shorter one to the longer length.

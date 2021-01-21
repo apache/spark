@@ -92,7 +92,7 @@ class HiveSessionStateBuilder(
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
-        PaddingAndLengthCheckForCharVarchar +:
+        CharTypePadding +:
         HiveAnalysis +:
         customPostHocResolutionRules
 
