@@ -55,7 +55,7 @@ abstract class StringRegexExpression extends BinaryExpression
     null
   } else {
     // Let it raise exception if couldn't compile the regex string
-    Pattern.compile(escape(str))
+    Pattern.compile(escape(str), Pattern.DOTALL)
   }
 
   protected def pattern(str: String) = if (cache == null) compile(str) else cache
@@ -124,7 +124,8 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   def this(left: Expression, right: Expression) = this(left, right, '\\')
 
-  override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
+  // (?s) enables dotall mode, causing "." to match new lines
+  override def escape(v: String): String = "(?s)" + StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
@@ -197,7 +198,7 @@ sealed abstract class MultiLikeBase
   protected lazy val hasNull: Boolean = patterns.contains(null)
 
   protected lazy val cache = patterns.filterNot(_ == null)
-    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\')))
+    .map(s => Pattern.compile(StringUtils.escapeLikeRegex(s.toString, '\\'), Pattern.DOTALL))
 
   protected lazy val matchFunc = if (isNotSpecified) {
     (p: Pattern, inputValue: String) => !p.matcher(inputValue).matches()

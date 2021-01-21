@@ -63,7 +63,7 @@ object StringUtils extends Logging {
         case c => out ++= Pattern.quote(Character.toString(c))
       }
     }
-    "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
+    out.result()
   }
 
   private[this] val trueStrings =
@@ -81,7 +81,7 @@ object StringUtils extends Logging {
   /**
    * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
    * @param names the names list to be filtered
-   * @param pattern the filter pattern, only '*' and '|' are allowed as wildcards, others will
+   * @param pattern the filter pattern, only '%', '_' and '|' are allowed as wildcards, others will
    *                follow regular expression convention, case insensitive match and white spaces
    *                on both ends will be ignored
    * @return the filtered names list in order
@@ -90,7 +90,7 @@ object StringUtils extends Logging {
     val funcNames = scala.collection.mutable.SortedSet.empty[String]
     pattern.trim().split("\\|").foreach { subPattern =>
       try {
-        val regex = ("(?i)" + subPattern.replaceAll("\\*", ".*")).r
+        val regex = ("(?i)" + escapeLikeRegex(subPattern, '\\')).r
         funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
       } catch {
         case _: PatternSyntaxException =>
