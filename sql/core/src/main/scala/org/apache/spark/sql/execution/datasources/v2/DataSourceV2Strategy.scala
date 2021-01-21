@@ -356,9 +356,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
       AlterTableAddPartitionExec(
-        table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
+        table,
+        parts.asResolvedPartitionSpecs,
+        ignoreIfExists,
+        recacheTable(r)) :: Nil
 
     case AlterTableDropPartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _),
@@ -416,7 +419,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
 
     case r: CacheTableAsSelect =>
-      CacheTableAsSelectExec(r.tempViewName, r.plan, r.isLazy, r.options) :: Nil
+      CacheTableAsSelectExec(r.tempViewName, r.plan, r.originalText, r.isLazy, r.options) :: Nil
 
     case r: UncacheTable =>
       UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil

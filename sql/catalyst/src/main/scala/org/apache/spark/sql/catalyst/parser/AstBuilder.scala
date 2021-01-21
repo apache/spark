@@ -3729,7 +3729,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val isLazy = ctx.LAZY != null
     if (query.isDefined) {
-      CacheTableAsSelect(tableName.head, query.get, isLazy, options)
+      CacheTableAsSelect(tableName.head, query.get, source(ctx.query()), isLazy, options)
     } else {
       CacheTable(relation, tableName, isLazy, options)
     }
