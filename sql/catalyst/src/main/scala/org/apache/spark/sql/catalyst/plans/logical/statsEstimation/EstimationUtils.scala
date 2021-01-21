@@ -21,7 +21,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{DecimalType, _}
 
 object EstimationUtils {
@@ -77,9 +79,16 @@ object EstimationUtils {
   def getAliasStats(
       expressions: Seq[Expression],
       attributeStats: AttributeMap[ColumnStat]): Seq[(Attribute, ColumnStat)] = {
-    expressions.collect {
+    expressions.flatMap {
       case alias @ Alias(attr: Attribute, _) if attributeStats.contains(attr) =>
-        alias.toAttribute -> attributeStats(attr)
+        Some(alias.toAttribute -> attributeStats(attr))
+      case alias @ Alias(s: StaticInvoke, _) if alias.explicitMetadata.nonEmpty &&
+          CharVarcharUtils.getRawType(alias.explicitMetadata.get).nonEmpty => s.children.flatMap {
+        case attr: Attribute if attributeStats.contains(attr) =>
+          Some(alias.toAttribute -> attributeStats(attr))
+        case _ => None
+      }
+      case _ => None
     }
   }
 

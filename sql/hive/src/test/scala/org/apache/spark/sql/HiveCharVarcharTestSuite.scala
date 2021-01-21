@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
 
@@ -48,6 +51,22 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       val rest = sql("SHOW CREATE TABLE t AS SERDE").head().getString(0)
       assert(rest.contains("VARCHAR(3)"))
       assert(rest.contains("CHAR(5)"))
+    }
+  }
+
+  test("cbo") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(v VARCHAR(3), c CHAR(4)) USING $format")
+      val stats = Some(CatalogStatistics(400L, Some(20L), Map(
+        "v" -> CatalogColumnStat(Some(20L), Some("1"), Some("123"), Some(0), Some(4), Some(4), None,
+          CatalogColumnStat.VERSION),
+        "c" -> CatalogColumnStat(Some(19L), Some("0"), Some("1234"), Some(0), Some(4), Some(4),
+          None, CatalogColumnStat.VERSION))
+      ))
+      spark.sessionState.catalog.alterTableStats(TableIdentifier("t"), stats)
+      withSQLConf((SQLConf.CBO_ENABLED.key, "true")) {
+        spark.table("t").where("v > '123'")
+      }
     }
   }
 }

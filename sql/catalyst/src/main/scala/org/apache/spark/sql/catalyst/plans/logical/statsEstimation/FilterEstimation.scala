@@ -23,8 +23,10 @@ import scala.collection.mutable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
 import org.apache.spark.sql.types._
 
 case class FilterEstimation(plan: Filter) extends Logging {
@@ -45,9 +47,14 @@ case class FilterEstimation(plan: Filter) extends Logging {
   def estimate: Option[Statistics] = {
     if (childStats.rowCount.isEmpty) return None
 
+    val cleanedCond = plan.condition.transform {
+      case StaticInvoke(cls, _, _, arguments, _, _)
+        if cls.isAssignableFrom(classOf[CharVarcharCodegenUtils]) => arguments.head
+    }
+
     // Estimate selectivity of this filter predicate, and update column stats if needed.
     // For not-supported condition, set filter selectivity to a conservative estimate 100%
-    val filterSelectivity = calculateFilterSelectivity(plan.condition).getOrElse(1.0)
+    val filterSelectivity = calculateFilterSelectivity(cleanedCond).getOrElse(1.0)
 
     val filteredRowCount: BigInt = ceil(BigDecimal(childStats.rowCount.get) * filterSelectivity)
     val newColStats = if (filteredRowCount == 0) {
