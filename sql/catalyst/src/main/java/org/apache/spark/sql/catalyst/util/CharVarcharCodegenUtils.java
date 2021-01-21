@@ -22,19 +22,24 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class CharVarcharCodegenUtils {
   private static final UTF8String SPACE = UTF8String.fromString(" ");
 
-  /**
-   *  Trailing spaces do not count in the length check. We don't need to retain the trailing
-   *  spaces, as we will pad char type columns/fields at read time.
-   */
   public static UTF8String charTypeWriteSideCheck(UTF8String inputStr, int limit) {
     if (inputStr == null) {
       return null;
     } else {
-      UTF8String trimmed = inputStr.trimRight();
-      if (trimmed.numChars() > limit) {
-        throw new RuntimeException("Exceeds char type length limitation: " + limit);
+      int numChars = inputStr.numChars();
+      if (numChars == limit) {
+        return inputStr;
+      } else if (numChars <= limit) {
+        return inputStr.rpad(limit, SPACE);
+      } else {
+        int maxAllowedNumTailSpaces = numChars - limit;
+        UTF8String trimmed = inputStr.trimTrailingSpaces(maxAllowedNumTailSpaces);
+        if (trimmed.numChars() > limit) {
+          throw new RuntimeException("Exceeds char type length limitation: " + limit);
+        } else {
+          return trimmed;
+        }
       }
-      return trimmed.rpad(limit, SPACE);
     }
   }
 
@@ -46,8 +51,6 @@ public class CharVarcharCodegenUtils {
       if (numChars <= limit) {
         return inputStr;
       } else {
-        // Trailing spaces do not count in the length check. We need to retain the trailing spaces
-        // (truncate to length N), as there is no read-time padding for varchar type.
         int maxAllowedNumTailSpaces = numChars - limit;
         UTF8String trimmed = inputStr.trimTrailingSpaces(maxAllowedNumTailSpaces);
         if (trimmed.numChars() > limit) {
