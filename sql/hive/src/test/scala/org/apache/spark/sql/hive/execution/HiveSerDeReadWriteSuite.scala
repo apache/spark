@@ -97,7 +97,8 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
   private def checkCharTypes(fileFormat: String): Unit = {
     withTable("hive_serde") {
       hiveClient.runSqlHive(s"CREATE TABLE hive_serde (c1 CHAR(10)) STORED AS $fileFormat")
-      hiveClient.runSqlHive("INSERT INTO TABLE hive_serde values('s')")
+      // SPARK-34192: runHive can not ensure char padding, changed to spark sql
+      spark.sql("INSERT INTO TABLE hive_serde values('s')")
       checkAnswer(spark.table("hive_serde"), Row("s" + " " * 9))
       spark.sql(s"INSERT INTO TABLE hive_serde values('s3')")
       checkAnswer(spark.table("hive_serde"), Seq(Row("s" + " " * 9), Row("s3" + " " * 8)))
