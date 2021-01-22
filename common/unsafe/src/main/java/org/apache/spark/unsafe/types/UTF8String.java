@@ -687,6 +687,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Trims at most `numSpaces` space characters (ASCII 32) from the end of this string.
    */
   public UTF8String trimTrailingSpaces(int numSpaces) {
+    assert numSpaces > 0;
     int endIdx = numBytes - 1;
     int trimTo = numBytes - numSpaces;
     while (endIdx >= trimTo && getByte(endIdx) == 0x20) endIdx--;

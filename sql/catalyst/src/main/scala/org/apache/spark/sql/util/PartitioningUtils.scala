@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.util
 
-import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils.charTypeWriteSideCheck
 import org.apache.spark.sql.types.{CharType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 object PartitioningUtils {
   /**
@@ -42,8 +43,15 @@ object PartitioningUtils {
       }
 
       val normalizedVal = normalizedFiled.dataType match {
-        case CharType(len) if value != null =>
-          StringUtils.rightPad(value.toString, len).asInstanceOf[T]
+        case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+          val newVal = value match {
+            case Some(v) =>
+              Some(charTypeWriteSideCheck(UTF8String.fromString(v.toString), len).toString)
+            case None => None
+            case other =>
+              charTypeWriteSideCheck(UTF8String.fromString(other.toString), len).toString
+          }
+          newVal.asInstanceOf[T]
         case _ => value
       }
       normalizedFiled.name -> normalizedVal

@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{CharType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * This rule performs char type padding both char.
+ * This rule performs string padding for char type comparison.
  *
  * When comparing char type column/field with string literal or char type column/field,
  * right-pad the shorter one to the longer length.
