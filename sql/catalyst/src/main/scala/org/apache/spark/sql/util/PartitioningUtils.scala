@@ -39,7 +39,6 @@ object PartitioningUtils {
       tblName: String,
       resolver: Resolver): Map[String, T] = {
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      CharVarcharUtils.getRawSchema(partCols)
       val normalizedFiled = CharVarcharUtils.getRawSchema(partCols)
         .find(f => resolver(f.name, key))
         .getOrElse {

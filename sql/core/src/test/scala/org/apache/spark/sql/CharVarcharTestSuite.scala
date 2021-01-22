@@ -229,7 +229,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
       val e = intercept[SparkException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+    }
   }
 
   test("length check for input string values: nested in array") {
@@ -238,14 +239,16 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(null))")
       checkAnswer(spark.table("t"), Row(Seq(null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array('a', '123456'))"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+    }
   }
 
   test("length check for input string values: nested in map key") {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), STRING>) USING $format")
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+    }
   }
 
   test("length check for input string values: nested in map value") {
@@ -254,7 +257,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (map('a', null))")
       checkAnswer(spark.table("t"), Row(Map("a" -> null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
+    }
   }
 
   test("length check for input string values: nested in both map key and value") {
