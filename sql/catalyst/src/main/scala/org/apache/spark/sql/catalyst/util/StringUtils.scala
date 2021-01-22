@@ -66,7 +66,7 @@ object StringUtils extends Logging {
       }
     }
     if (!filterPattern) {
-      "(s?)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
+      "(?s)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
     } else {
       out.result()
     }
