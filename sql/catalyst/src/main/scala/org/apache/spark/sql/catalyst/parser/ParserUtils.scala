@@ -27,6 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.QueryParsingErrors
 
 /**
  * A collection of utility methods for use during the parsing process.
@@ -39,20 +40,20 @@ object ParserUtils {
   }
 
   def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
-    throw new ParseException(s"Operation not allowed: $message", ctx)
+    throw QueryParsingErrors.operationNotAllowedError(message, ctx)
   }
 
   def checkDuplicateClauses[T](
       nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
     if (nodes.size() > 1) {
-      throw new ParseException(s"Found duplicate clauses: $clauseName", ctx)
+      throw QueryParsingErrors.duplicateClausesError(clauseName, ctx)
     }
   }
 
   /** Check if duplicate keys exist in a set of key-value pairs. */
   def checkDuplicateKeys[T](keyPairs: Seq[(String, T)], ctx: ParserRuleContext): Unit = {
     keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
-      throw new ParseException(s"Found duplicate keys '$key'.", ctx)
+      throw QueryParsingErrors.duplicateKeysError(key, ctx)
     }
   }
 

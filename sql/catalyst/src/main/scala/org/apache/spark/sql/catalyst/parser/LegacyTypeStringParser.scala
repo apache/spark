@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import scala.util.parsing.combinator.RegexParsers
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -87,6 +88,6 @@ object LegacyTypeStringParser extends RegexParsers {
   def parseString(asString: String): DataType = parseAll(dataType, asString) match {
     case Success(result, _) => result
     case failure: NoSuccess =>
-      throw new IllegalArgumentException(s"Unsupported dataType: $asString, $failure")
+      throw QueryExecutionErrors.dataTypeUnsupportedError(asString, failure.toString)
   }
 }
