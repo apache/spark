@@ -2724,7 +2724,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
 
     if (!ctx.PROPERTIES.isEmpty && !ctx.DBPROPERTIES.isEmpty) {
-      throw QueryParsingErrors.emptyInputForTableSampleError(ctx)
+      throw QueryParsingErrors.propertiesAndDbPropertiesBothSpecifiedError(ctx)
     }
 
     var properties = ctx.tablePropertyList.asScala.headOption
