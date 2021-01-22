@@ -60,8 +60,6 @@ object StringUtils extends Logging {
         case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
-        case '*' if filterPattern => out ++= ".*"
-        case '.' if filterPattern => out ++= "."
         case c => out ++= Pattern.quote(Character.toString(c))
       }
     }
@@ -96,7 +94,9 @@ object StringUtils extends Logging {
     val funcNames = scala.collection.mutable.SortedSet.empty[String]
     pattern.trim().split("\\|").foreach { subPattern =>
       try {
-        val regex = ("(?i)" + escapeLikeRegex(subPattern, '\\', true)).r
+        val resolvedSubPattern = subPattern.replaceAll("\\*", "\\%")
+          .replaceAll("\\.", "\\_")
+        val regex = ("(?i)" + escapeLikeRegex(resolvedSubPattern, '\\')).r
         funcNames ++= names.filter{ name => regex.pattern.matcher(name).matches() }
       } catch {
         case _: PatternSyntaxException =>
