@@ -37,26 +37,43 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     assert(CharVarcharUtils.getRawType(f.metadata) == Some(dt))
   }
 
-  test("char type values should be padded: top-level columns") {
+  test("char type values should be padded or trimmed: top-level columns") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format")
-      sql("INSERT INTO t VALUES ('1', 'a')")
-      checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-      checkColType(spark.table("t").schema(1), CharType(5))
+      (0 to 5).map(n => "a" + " " * n).foreach { v =>
+        sql(s"INSERT OVERWRITE t VALUES ('1', '$v')")
+        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
+        checkColType(spark.table("t").schema(1), CharType(5))
+      }
 
       sql("INSERT OVERWRITE t VALUES ('1', null)")
       checkAnswer(spark.table("t"), Row("1", null))
+
+      val e = intercept[SparkException](sql("INSERT OVERWRITE t VALUES ('1', 'abcdef')"))
+      assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
     }
   }
 
-  test("char type values should be padded: partitioned columns") {
+  test("char type values should be padded or trimmed: partitioned columns") {
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
-      sql("INSERT INTO t VALUES ('1', 'a')")
-      checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-      checkColType(spark.table("t").schema(1), CharType(5))
+      (0 to 5).map(n => "a" + " " * n).foreach { v =>
+        sql(s"INSERT OVERWRITE t VALUES ('1', '$v')")
+        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
+        checkColType(spark.table("t").schema(1), CharType(5))
+      }
+      val e1 = intercept[SparkException](sql("INSERT OVERWRITE t VALUES ('1', 'abcdef')"))
+      assert(e1.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
 
-      sql("ALTER TABLE t DROP PARTITION(c='a')")
+      (0 to 5).map(n => "a" + " " * n).foreach { v =>
+        sql(s"INSERT OVERWRITE t VALUES ('1', '$v')")
+        sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
+        checkAnswer(spark.table("t"), Nil)
+      }
+
+      val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c='abcdef')"))
+      assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+
       sql("INSERT OVERWRITE t VALUES ('1', null)")
       checkAnswer(spark.table("t"), Row("1", null))
     }
@@ -212,8 +229,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t SELECT struct(null)")
       checkAnswer(spark.table("t"), Row(Row(null)))
       val e = intercept[SparkException](sql("INSERT INTO t SELECT struct('123456')"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
-    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
   }
 
   test("length check for input string values: nested in array") {
@@ -222,16 +238,14 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (array(null))")
       checkAnswer(spark.table("t"), Row(Seq(null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (array('a', '123456'))"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
-    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
   }
 
   test("length check for input string values: nested in map key") {
     testTableWrite { typeName =>
       sql(s"CREATE TABLE t(c MAP<$typeName(5), STRING>) USING $format")
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('123456', 'a'))"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
-    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
   }
 
   test("length check for input string values: nested in map value") {
@@ -240,8 +254,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t VALUES (map('a', null))")
       checkAnswer(spark.table("t"), Row(Map("a" -> null)))
       val e = intercept[SparkException](sql("INSERT INTO t VALUES (map('a', '123456'))"))
-      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))
-    }
+      assert(e.getCause.getMessage.contains(s"Exceeds char/varchar type length limitation: 5"))    }
   }
 
   test("length check for input string values: nested in both map key and value") {

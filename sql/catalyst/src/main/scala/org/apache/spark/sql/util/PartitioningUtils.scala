@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils.charTypeWriteSideCheck
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.types.{CharType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -38,9 +39,12 @@ object PartitioningUtils {
       tblName: String,
       resolver: Resolver): Map[String, T] = {
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedFiled = partCols.find(f => resolver(f.name, key)).getOrElse {
-        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
-      }
+      CharVarcharUtils.getRawSchema(partCols)
+      val normalizedFiled = CharVarcharUtils.getRawSchema(partCols)
+        .find(f => resolver(f.name, key))
+        .getOrElse {
+          throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+        }
 
       val normalizedVal = normalizedFiled.dataType match {
         case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
