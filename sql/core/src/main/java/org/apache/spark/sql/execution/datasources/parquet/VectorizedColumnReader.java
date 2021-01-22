@@ -150,7 +150,12 @@ public class VectorizedColumnReader {
       try {
         PrimitiveType primitiveType = descriptor.getPrimitiveType();
         if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
-            primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS()) {
+            primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+            primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT64) {
+          // We need to make sure that we initialize the right type for the dictionary otherwise
+          // Encoding#initDictionary will initialize it to PrimitiveTypeName.INT64 and
+          // WritableColumnVector will throw an exception when trying to decode to an Int when the
+          // dictionary is in fact initialized as Long
           PrimitiveType adjustedType = new PrimitiveType(primitiveType.getRepetition(),
               PrimitiveType.PrimitiveTypeName.INT32, primitiveType.getTypeLength(),
               primitiveType.getName(), primitiveType.getOriginalType(),
