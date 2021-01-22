@@ -216,8 +216,9 @@ private[sql] object AvroUtils extends Logging {
    *                                     is used and `avroSchema` has two or more fields that have
    *                                     the same name with difference case).
    */
-  private[avro] def getAvroFieldByName(avroSchema: Schema, name: String):
-  Option[Schema.Field] = {
+  private[avro] def getAvroFieldByName(
+      avroSchema: Schema,
+      name: String): Option[Schema.Field] = {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
