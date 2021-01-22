@@ -87,9 +87,9 @@ object StringUtils extends Logging {
   /**
    * This utility can be used for filtering pattern in the "Like" of "Show Tables / Functions" DDL
    * @param names the names list to be filtered
-   * @param pattern the filter pattern, only '%', '_' and '|' are allowed as wildcards, others will
-   *                follow regular expression convention, case insensitive match and white spaces
-   *                on both ends will be ignored
+   * @param pattern the filter pattern, only '*', '%', '_' and '|' are allowed as wildcards, others
+   *                will follow regular expression convention, case insensitive match and white
+   *                spaces on both ends will be ignored
    * @return the filtered names list in order
    */
   def filterPattern(names: Seq[String], pattern: String): Seq[String] = {
