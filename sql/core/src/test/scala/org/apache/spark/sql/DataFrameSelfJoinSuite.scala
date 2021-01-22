@@ -219,4 +219,13 @@ class DataFrameSelfJoinSuite extends QueryTest with SharedSparkSession {
         Seq((1, 2), (1, 2), (2, 4), (2, 4)).map(Row.fromTuple))
     }
   }
+
+  test("SPARK-34200: ambiguous column reference should consider attribute availability") {
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 a, 2 b")
+      val df1 = spark.table("t")
+      val df2 = df1.select("a")
+      checkAnswer(df1.join(df2, df1("b") === 2), Row(1, 2, 1))
+    }
+  }
 }
