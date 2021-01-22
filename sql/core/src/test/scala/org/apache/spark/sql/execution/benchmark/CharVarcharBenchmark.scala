@@ -59,12 +59,11 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
         benchmark.addCase(s"write $typ with length $length", 3) { _ =>
           withTable(tblName) {
             createTable(tblName, colType, path)
-            spark.range(card).map { v =>
-              val str = v.toString
+            spark.range(card).map { _ =>
               if (hasSpaces) {
-                str + " " * length
+                "st" + " " * length
               } else {
-                str
+                "st"
               }
             }.write.insertInto(tblName)
           }
@@ -75,20 +74,19 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
   }
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val N = 100L * 1000 * 1000
+    val N = 200L * 1000 * 1000
     val range = Range(20, 101, 20)
 
-    // for char type, we may need padding or trimming before write
     runBenchmark("Char Varchar Write Side Perf w/o Tailing Spaces") {
-      for (len <- range) {
-        writeBenchmark(N * 2 / len, len, hasSpaces = false)
+      for (len <- Seq(5, 10) ++ range) {
+        writeBenchmark(N / len, len, hasSpaces = false)
       }
     }
 
     runBenchmark("Char Varchar Write Side Perf w/ Tailing Spaces") {
-      for (len <- range) {
+      for (len <- Seq(5, 10) ++ range) {
         // in write side length check, we only visit the last few spaces
-        writeBenchmark(N * 2 / len, len, hasSpaces = true)
+        writeBenchmark(N / len, len, hasSpaces = true)
       }
     }
   }
