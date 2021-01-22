@@ -41,7 +41,7 @@ object StringUtils extends Logging {
    * @param escapeChar the escape string contains one character.
    * @return the equivalent Java regular expression of the pattern
    */
-  def escapeLikeRegex(pattern: String, escapeChar: Char, supportStar: Boolean = false): String = {
+  def escapeLikeRegex(pattern: String, escapeChar: Char, filterPattern: Boolean = false): String = {
     val in = pattern.toIterator
     val out = new StringBuilder()
 
@@ -60,11 +60,16 @@ object StringUtils extends Logging {
         case c if c == escapeChar => fail("it is not allowed to end with the escape character")
         case '_' => out ++= "."
         case '%' => out ++= ".*"
-        case '*' if supportStar => out ++= ".*"
+        case '*' if filterPattern => out ++= ".*"
+        case '.' if filterPattern => out ++= "."
         case c => out ++= Pattern.quote(Character.toString(c))
       }
     }
-    out.result()
+    if (!filterPattern) {
+      "(s?)" + out.result() // (?s) enables dotall mode, causing "." to match new lines
+    } else {
+      out.result()
+    }
   }
 
   private[this] val trueStrings =
