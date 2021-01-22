@@ -110,6 +110,10 @@ object QueryExecutionErrors {
     new SparkException(s"Unsupported data type $dt")
   }
 
+  def dataTypeUnsupportedError(asString: String, failure: String): Throwable = {
+    new IllegalArgumentException(s"Unsupported dataType: $asString, $failure")
+  }
+
   def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
       outputType: String, e: Throwable): Throwable = {
     new SparkException(
