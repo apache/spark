@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.{Encoder, Row}
+import org.apache.spark.sql.{Encoder, Encoders, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -585,3 +585,29 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer
+
+object PipeElements {
+  def apply[T : Encoder](
+      command: String,
+      child: LogicalPlan): LogicalPlan = {
+    val deserialized = CatalystSerde.deserialize[T](child)
+    implicit val encoder = Encoders.STRING
+    val piped = PipeElements(
+      implicitly[Encoder[T]].clsTag.runtimeClass,
+      implicitly[Encoder[T]].schema,
+      CatalystSerde.generateObjAttr[String],
+      command,
+      deserialized)
+    CatalystSerde.serialize[String](piped)
+  }
+}
+
+/**
+ * A relation produced by piping elements to a forked external process.
+ */
+case class PipeElements[T](
+    argumentClass: Class[_],
+    argumentSchema: StructType,
+    outputObjAttr: Attribute,
+    command: String,
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer

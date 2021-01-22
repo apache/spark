@@ -1264,6 +1264,20 @@ class StreamSuite extends StreamTest {
       }
     }
   }
+
+  test("Pipe Streaming Dataset") {
+    assume(TestUtils.testCommandAvailable("cat"))
+
+    val inputData = MemoryStream[Int]
+    val piped = inputData.toDS()
+      .pipe("cat").toDF
+
+    testStream(piped)(
+      AddData(inputData, 1, 2, 3),
+      CheckAnswer(Row("1"), Row("2"), Row("3")),
+      AddData(inputData, 4),
+      CheckAnswer(Row("1"), Row("2"), Row("3"), Row("4")))
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {

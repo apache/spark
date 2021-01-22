@@ -25,7 +25,7 @@ import scala.language.existentials
 import org.apache.spark.api.java.function.MapFunction
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PipedRDD, RDD}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -623,4 +623,33 @@ case class CoGroupExec(
       }
     }
   }
+}
+
+/**
+ * Piping elements to a forked external process.
+ * The output of its child must be a single-field row containing the input object.
+ */
+case class PipeElementsExec(
+    outputObjAttr: Attribute,
+    command: String,
+    child: SparkPlan)
+  extends ObjectConsumerExec with ObjectProducerExec {
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val getObject = ObjectOperator.unwrapObjectFromRow(child.output.head.dataType)
+    val printRDDElement: (InternalRow, String => Unit) => Unit = (row, printFunc) => {
+      printFunc(getObject(row).toString)
+    }
+
+    child.execute()
+      .pipe(command = PipedRDD.tokenize(command), printRDDElement = printRDDElement)
+      .mapPartitionsInternal { iter =>
+        val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
+        iter.map(ele => outputObject(ele))
+      }
+  }
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }

@@ -666,6 +666,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
         execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
+      case logical.PipeElements(_, _, objAttr, command, child) =>
+        execution.PipeElementsExec(objAttr, command, planLater(child)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>
         execution.AppendColumnsExec(f, in, out, planLater(child)) :: Nil
       case logical.AppendColumnsWithObject(f, childSer, newSer, child) =>

@@ -2890,6 +2890,24 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Return a new Dataset of string created by piping elements to a forked external process.
+   * The resulting Dataset is computed by executing the given process once per partition.
+   * All elements of each input partition are written to a process's stdin as lines of input
+   * separated by a newline. The resulting partition consists of the process's stdout output, with
+   * each line of stdout resulting in one element of the output partition. A process is invoked
+   * even for empty partitions.
+   *
+   * @param command command to run in forked process.
+   *
+   * @group typedrel
+   * @since 3.2.0
+   */
+  def pipe(command: String): Dataset[String] = {
+    implicit val stringEncoder = Encoders.STRING
+    withTypedPlan[String](PipeElements[T](command, logicalPlan))
+  }
+
+  /**
    * Applies a function `f` to all rows.
    *
    * @group action

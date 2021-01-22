@@ -230,7 +230,7 @@ private[spark] class PipedRDD[T: ClassTag](
   }
 }
 
-private object PipedRDD {
+object PipedRDD {
   // Split a string into words using a standard StringTokenizer
   def tokenize(command: String): Seq[String] = {
     val buf = new ArrayBuffer[String]

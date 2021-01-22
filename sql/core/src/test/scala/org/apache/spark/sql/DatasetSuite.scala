@@ -24,7 +24,7 @@ import org.scalatest.Assertions._
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
@@ -2006,6 +2006,20 @@ class DatasetSuite extends QueryTest
         StructField("c2", StructType(StructField("a", IntegerType, false) :: Nil)) :: Nil))
 
     checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
+  }
+
+  test("Pipe Dataset") {
+    assume(TestUtils.testCommandAvailable("cat"))
+
+    val nums = spark.range(4)
+    val piped = nums.pipe("cat").toDF
+
+    checkAnswer(piped, Row("0") :: Row("1") :: Row("2") :: Row("3") :: Nil)
+
+    val piped2 = nums.pipe("wc -l").toDF.collect()
+    assert(piped2.size == 2)
+    assert(piped2(0).getString(0).trim == "2")
+    assert(piped2(1).getString(0).trim == "2")
   }
 }
 
