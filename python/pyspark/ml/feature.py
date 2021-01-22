@@ -4688,7 +4688,7 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
-    [('b', 0.015859870240092278), ('c', -0.5680795907974243)]
+    [('b', 0.015859...), ('c', -0.568079...)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
