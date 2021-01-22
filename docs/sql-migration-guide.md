@@ -40,6 +40,10 @@ license: |
   - In Spark 3.2, script transform default FIELD DELIMIT is `\u0001` for no serde mode, serde property `field.delim` is `\t` for Hive serde mode when user specifies serde. In Spark 3.1 or earlier, the default FIELD DELIMIT is `\t`, serde property `field.delim` is `\u0001` for Hive serde mode when user specifies serde.
 
   - In Spark 3.2, the auto-generated `Cast` (such as those added by type coercion rules) will be stripped when generating column alias names. E.g., `sql("SELECT floor(1)").columns` will be `FLOOR(1)` instead of `FLOOR(CAST(1 AS DOUBLE))`.
+  
+  - In Spark 3.2, unify the output schema of `SHOW TABLES` and `SHOW TABLE EXTENDED LIKE ..`.
+    * Unify the `database` output of `SHOW TABLES` into `namespace` output of the `SHOW TABLE EXTENDED LIKE ..`.
+    * The `isTemporary` contained in the output of `SHOW TABLES` is added to the output of `SHOW TABLE EXTENDED LIKE ..`.
 
   - In Spark 3.2, table refreshing clears cached data of the table as well as of all its dependents such as views while keeping the dependents cached. The following commands perform table refreshing:
     * `ALTER TABLE .. ADD PARTITION`
