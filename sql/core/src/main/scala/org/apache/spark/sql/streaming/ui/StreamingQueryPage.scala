@@ -212,9 +212,12 @@ private[ui] case class StructuredStreamingRow(
     avgProcess: Double,
     streamingUIData: StreamingQueryUIData)
 
-private[ui]
-class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: String, desc: Boolean,
-    pageSize: Int, isActive: Boolean) extends PagedDataSource[StructuredStreamingRow](pageSize) {
+private[ui] class StreamingQueryDataSource(
+    uiData: Seq[StreamingQueryUIData],
+    sortColumn: String,
+    desc: Boolean,
+    pageSize: Int,
+    isActive: Boolean) extends PagedDataSource[StructuredStreamingRow](pageSize) {
 
   // convert StreamingQueryUIData to StreamingRow to provide required data for sorting and sort it
   private val data = uiData.map(streamingRow).sorted(ordering(sortColumn, desc))
