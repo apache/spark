@@ -645,7 +645,7 @@ case class PipeElementsExec(
       .pipe(command = PipedRDD.tokenize(command), printRDDElement = printRDDElement)
       .mapPartitionsInternal { iter =>
         val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
-        iter.map(ele => outputObject(ele))
+        iter.map(e => outputObject(e))
       }
   }
 
