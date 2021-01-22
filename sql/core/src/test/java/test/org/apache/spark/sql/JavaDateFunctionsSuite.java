@@ -41,7 +41,8 @@ public class JavaDateFunctionsSuite {
     StructType schema = createStructType(Arrays.asList(
       createStructField("some_date", DateType, false),
       createStructField("expected", DateType, false)));
-    Dataset<Row> df = spark.createDataFrame(rows, schema).withColumn("plus_two_years", col("some_date").plus(twoYears));
+    Dataset<Row> df = spark.createDataFrame(rows, schema)
+            .withColumn("plus_two_years", col("some_date").plus(twoYears));
     Assert.assertTrue(Arrays.equals(
       (Row[]) df.select(df.col("plus_two_years")).collect(),
       (Row[]) df.select(df.col("expected")).collect()));
