@@ -1763,6 +1763,18 @@ class Analyzer(override val catalogManager: CatalogManager)
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
+          // SPECIAL CASE: We want to block count(table.*) because in spark, count(table.*) will
+          // be expanded while count(*) will be converted to count(1). They will produce different
+          // results and confuse users if there is any null values.
+          FunctionRegistry.builtin.lookupFunction(f1.name).foreach { functionInfo =>
+            if (functionInfo.getClassName == classOf[Count].getCanonicalName) {
+              f1.arguments.foreach {
+                case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
+                  throw QueryCompilationErrors
+                    .tableStarInCountNotAllowedError(u.target.get.mkString("."))
+              }
+            }
+          }
           f1.copy(arguments = f1.arguments.flatMap {
             case s: Star => s.expand(child, resolver)
             case o => o :: Nil
