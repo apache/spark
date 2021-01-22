@@ -2008,7 +2008,7 @@ class DatasetSuite extends QueryTest
     checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
   }
 
-  test("Pipe Dataset") {
+  test("SPARK-34205: Pipe Dataset") {
     assume(TestUtils.testCommandAvailable("cat"))
 
     val nums = spark.range(4)
@@ -2020,6 +2020,14 @@ class DatasetSuite extends QueryTest
     assert(piped2.size == 2)
     assert(piped2(0).getString(0).trim == "2")
     assert(piped2(1).getString(0).trim == "2")
+  }
+
+  test("SPARK-34205: pipe Dataset with empty partition") {
+    val data = Seq(123, 4567).toDF("num").repartition(8, $"num")
+    val piped = data.pipe("wc -l")
+    assert(piped.count == 8)
+    val lineCounts = piped.map(_.trim.toInt).collect().toSet
+    assert(Set(0, 1, 1) == lineCounts)
   }
 }
 

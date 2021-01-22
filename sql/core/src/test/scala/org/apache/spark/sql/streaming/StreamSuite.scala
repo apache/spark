@@ -1265,7 +1265,7 @@ class StreamSuite extends StreamTest {
     }
   }
 
-  test("Pipe Streaming Dataset") {
+  test("SPARK-34205: Pipe Streaming Dataset") {
     assume(TestUtils.testCommandAvailable("cat"))
 
     val inputData = MemoryStream[Int]
