@@ -159,12 +159,12 @@ private[scheduler] class HealthTracker (
     allocationClient match {
       case Some(a) =>
         logInfo(msg)
-        if (!decommission) {
-          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
-            force = true)
-        } else {
+        if (decommission) {
           a.decommissionExecutor(exec, ExecutorDecommissionInfo(msg),
             adjustTargetNumExecutors = false)
+        } else {
+          a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
+            force = true)
         }
       case None =>
         logInfo(s"Not attempting to kill excluded executor id $exec " +
@@ -191,13 +191,13 @@ private[scheduler] class HealthTracker (
         case Some(a) =>
           logInfo(s"Killing all executors on excluded host $node " +
             s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
-          if (!decommission) {
-            if (a.killExecutorsOnHost(node) == false) {
-              logError(s"Killing executors on node $node failed.")
-            }
-          } else {
+          if (decommission) {
             if (a.decommissionExecutorsOnHost(node) == false) {
               logError(s"Decommissioning executors on $node failed.")
+            }
+          } else {
+            if (a.killExecutorsOnHost(node) == false) {
+              logError(s"Killing executors on node $node failed.")
             }
           }
         case None =>

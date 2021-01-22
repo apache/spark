@@ -562,6 +562,8 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     conf.set(config.EXCLUDE_ON_FAILURE_KILL_ENABLED, true)
     conf.set(config.DECOMMISSION_ENABLED.key, "true")
     conf.set(config.EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED.key, "true")
+    conf.set(config.MAX_FAILURES_PER_EXEC.key, "1")
+    conf.set(config.MAX_FAILED_EXEC_PER_NODE.key, "2")
     healthTracker = new HealthTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // Fail 4 tasks in one task set on executor 1, so that executor gets excluded for the whole

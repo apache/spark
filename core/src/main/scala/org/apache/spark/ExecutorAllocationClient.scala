@@ -129,7 +129,6 @@ private[spark] trait ExecutorAllocationClient {
     decommissionedExecutors.nonEmpty && decommissionedExecutors(0).equals(executorId)
   }
 
-
   /**
    * Request that the cluster manager decommission every executor on the specified host.
    *

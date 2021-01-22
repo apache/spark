@@ -120,7 +120,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
     }
 
-
   class DriverEndpoint extends IsolatedRpcEndpoint with Logging {
 
     override val rpcEnv: RpcEnv = CoarseGrainedSchedulerBackend.this.rpcEnv
@@ -522,19 +521,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map {
-      cleanup_interval =>
+    conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map { cleanupInterval =>
       val cleanupTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
           val stragglers = executorsToDecommission.filter(executorsPendingDecommission.contains(_))
-          if (!stragglers.isEmpty) {
-            logError(
-              s"${stragglers.toList} failed to decommission in ${cleanup_interval}, killing.")
+          if (stragglers.nonEmpty) {
+            logInfo(
+              s"${stragglers.toList} failed to decommission in ${cleanupInterval}, killing.")
             killExecutors(stragglers, false, false, true)
           }
         }
       }
-      cleanupService.map(_.schedule(cleanupTask, cleanup_interval, TimeUnit.SECONDS))
+      cleanupService.map(_.schedule(cleanupTask, cleanupInterval, TimeUnit.SECONDS))
     }
 
     executorsToDecommission
@@ -871,7 +869,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         Future.successful (if (killSuccessful) executorsToKill else Seq.empty[String])
       )(ThreadUtils.sameThread)
     }
-
     defaultAskTimeout.awaitResult(response)
   }
 
@@ -883,13 +880,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     Future.successful(false)
 
   /**
-   * Request that the cluster manager decommission all executors on a given host.
+   * Request that the cluster manager decommissions all executors on a given host.
    * @return whether the decommission request is acknowledged.
    */
   final override def decommissionExecutorsOnHost(host: String): Boolean = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
     // A potential race exists if a new executor attempts to register on a host
-    // that is on the exclude list and is no no longer valid. To avoid this race,
+    // that is on the exclude list and is no longer valid. To avoid this race,
     // all executor registration and decommissioning happens in the event loop. This way, either
     // an executor will fail to register, or will be decommed when all executors on a host
     // are decommed.
@@ -905,7 +902,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   final override def killExecutorsOnHost(host: String): Boolean = {
     logInfo(s"Requesting to kill any and all executors on host ${host}")
     // A potential race exists if a new executor attempts to register on a host
-    // that is on the exclude list and is no no longer valid. To avoid this race,
+    // that is on the exclude list and is no longer valid. To avoid this race,
     // all executor registration and killing happens in the event loop. This way, either
     // an executor will fail to register, or will be killed when all executors on a host
     // are killed.

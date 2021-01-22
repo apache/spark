@@ -1940,7 +1940,7 @@ package object config {
   private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
     ConfigBuilder("spark.executor.decommission.killInterval")
       .doc("Duration after which a decommissioned executor will be killed forcefully " +
-        " *by an outside* (e.g. non-spark) service. " +
+        "*by an outside* (e.g. non-spark) service. " +
         "This config is useful for cloud environments where we know in advance when " +
         "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
         "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
