@@ -877,6 +877,19 @@ class SessionCatalog(
     isTemporaryTable(nameParts.asTableIdentifier)
   }
 
+  private def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
+    val table = formatTableName(name.table)
+    val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
+
+    if (name.database.isEmpty) {
+      tempViews.get(table)
+    } else if (dbName == globalTempViewManager.database) {
+      globalTempViewManager.get(table)
+    } else {
+      None
+    }
+  }
+
   /**
    * Return whether a table with the specified name is a temporary view.
    *
@@ -884,14 +897,7 @@ class SessionCatalog(
    * explicitly specified.
    */
   def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
-    val table = formatTableName(name.table)
-    if (name.database.isEmpty) {
-      tempViews.contains(table)
-    } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(table).isDefined
-    } else {
-      false
-    }
+    lookupTempView(name).isDefined
   }
 
   def isView(nameParts: Seq[String]): Boolean = {
@@ -988,20 +994,9 @@ class SessionCatalog(
    * Refresh the cache entry for a metastore table, if any.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
-    val tableName = formatTableName(name.table)
-
-    // Go through temporary views and invalidate them.
-    // If the database is defined, this may be a global temporary view.
-    // If the database is not defined, there is a good chance this is a temp view.
-    val isTempView = if (name.database.isEmpty) {
-      tempViews.get(tableName).map(_.refresh()).isDefined
-    } else if (dbName == globalTempViewManager.database) {
-      globalTempViewManager.get(tableName).map(_.refresh()).isDefined
-    } else false
-
-    if (!isTempView) {
-      // Also invalidate the table relation cache.
+    lookupTempView(name).map(_.refresh).getOrElse {
+      val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
+      val tableName = formatTableName(name.table)
       val qualifiedTableName = QualifiedTableName(dbName, tableName)
       tableRelationCache.invalidate(qualifiedTableName)
     }
