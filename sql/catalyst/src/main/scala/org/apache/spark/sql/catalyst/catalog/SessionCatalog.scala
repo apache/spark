@@ -878,13 +878,11 @@ class SessionCatalog(
   }
 
   private def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
-    val table = formatTableName(name.table)
-    val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
-
+    val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {
-      tempViews.get(table)
-    } else if (dbName == globalTempViewManager.database) {
-      globalTempViewManager.get(table)
+      tempViews.get(tableName)
+    } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
+      globalTempViewManager.get(tableName)
     } else {
       None
     }
