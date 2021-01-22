@@ -155,16 +155,14 @@ object CharVarcharUtils extends Logging {
           classOf[CharVarcharCodegenUtils],
           StringType,
           "charTypeWriteSideCheck",
-          expr :: Literal(length) :: Nil,
-          propagateNull = false)
+          expr :: Literal(length) :: Nil)
 
       case VarcharType(length) =>
         StaticInvoke(
           classOf[CharVarcharCodegenUtils],
           StringType,
           "varcharTypeWriteSideCheck",
-          expr :: Literal(length) :: Nil,
-          propagateNull = false)
+          expr :: Literal(length) :: Nil)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>

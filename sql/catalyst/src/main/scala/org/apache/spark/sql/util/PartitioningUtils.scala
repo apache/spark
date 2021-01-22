@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.util
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.types.{CharType, StructType}
 
 object PartitioningUtils {
   /**
@@ -30,14 +33,20 @@ object PartitioningUtils {
    */
   def normalizePartitionSpec[T](
       partitionSpec: Map[String, T],
-      partColNames: Seq[String],
+      partCols: StructType,
       tblName: String,
       resolver: Resolver): Map[String, T] = {
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
+      val normalizedFiled = partCols.find(f => resolver(f.name, key)).getOrElse {
         throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
       }
-      normalizedKey -> value
+
+      val normalizedVal = normalizedFiled.dataType match {
+        case CharType(len) if value != null =>
+          StringUtils.rightPad(value.toString, len).asInstanceOf[T]
+        case _ => value
+      }
+      normalizedFiled.name -> normalizedVal
     }
 
     SchemaUtils.checkColumnNameDuplication(

@@ -22,43 +22,34 @@ import org.apache.spark.unsafe.types.UTF8String;
 public class CharVarcharCodegenUtils {
   private static final UTF8String SPACE = UTF8String.fromString(" ");
 
-  public static UTF8String charTypeWriteSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr == null) {
-      return null;
+  private static UTF8String trimTrailingSpaces(
+      UTF8String inputStr, int numChars, int limit) {
+    int numTailSpacesToTrim = numChars - limit;
+    UTF8String trimmed = inputStr.trimTrailingSpaces(numTailSpacesToTrim);
+    if (trimmed.numChars() > limit) {
+      throw new RuntimeException("Exceeds char/varchar type length limitation: " + limit);
     } else {
-      int numChars = inputStr.numChars();
-      if (numChars == limit) {
-        return inputStr;
-      } else if (numChars <= limit) {
-        return inputStr.rpad(limit, SPACE);
-      } else {
-        int maxAllowedNumTailSpaces = numChars - limit;
-        UTF8String trimmed = inputStr.trimTrailingSpaces(maxAllowedNumTailSpaces);
-        if (trimmed.numChars() > limit) {
-          throw new RuntimeException("Exceeds char type length limitation: " + limit);
-        } else {
-          return trimmed;
-        }
-      }
+      return trimmed;
+    }
+  }
+
+  public static UTF8String charTypeWriteSideCheck(UTF8String inputStr, int limit) {
+    int numChars = inputStr.numChars();
+    if (numChars == limit) {
+      return inputStr;
+    } else if (numChars < limit) {
+      return inputStr.rpad(limit, SPACE);
+    } else {
+      return trimTrailingSpaces(inputStr, numChars, limit);
     }
   }
 
   public static UTF8String varcharTypeWriteSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr == null) {
-      return null;
+    int numChars = inputStr.numChars();
+    if (numChars <= limit) {
+      return inputStr;
     } else {
-      int numChars = inputStr.numChars();
-      if (numChars <= limit) {
-        return inputStr;
-      } else {
-        int maxAllowedNumTailSpaces = numChars - limit;
-        UTF8String trimmed = inputStr.trimTrailingSpaces(maxAllowedNumTailSpaces);
-        if (trimmed.numChars() > limit) {
-          throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
-        } else {
-          return trimmed;
-        }
-      }
+      return trimTrailingSpaces(inputStr, numChars, limit);
     }
   }
 }

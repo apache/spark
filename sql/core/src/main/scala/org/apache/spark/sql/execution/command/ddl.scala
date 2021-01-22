@@ -465,13 +465,13 @@ case class AlterTableAddPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         spec,
-        table.partitionColumnNames,
+        table.partitionSchema,
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
@@ -521,19 +521,19 @@ case class AlterTableRenamePartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
 
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
       oldPartition,
-      table.partitionColumnNames,
+      table.partitionSchema,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver)
 
     val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
       newPartition,
-      table.partitionColumnNames,
+      table.partitionSchema,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver)
 
@@ -569,14 +569,14 @@ case class AlterTableDropPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = catalog.getTableRawMetadata(tableName)
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
     val normalizedSpecs = specs.map { spec =>
       PartitioningUtils.normalizePartitionSpec(
         spec,
-        table.partitionColumnNames,
+        table.partitionSchema,
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
     }
