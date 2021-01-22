@@ -44,7 +44,6 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
-import org.apache.spark.sql.types.IntegerType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
