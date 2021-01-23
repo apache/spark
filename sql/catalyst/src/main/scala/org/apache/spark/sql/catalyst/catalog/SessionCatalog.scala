@@ -877,11 +877,13 @@ class SessionCatalog(
     }
   }
 
-  // TODO: merge it with `isTemporaryTable`.
+  /**
+   * Return whether the given name parts belong to a temporary or global temporary view.
+   */
   def isTempView(nameParts: Seq[String]): Boolean = {
     if (nameParts.length > 2) return false
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    isTemporaryTable(nameParts.asTableIdentifier)
+    isTempView(nameParts.asTableIdentifier)
   }
 
   /**
@@ -890,7 +892,7 @@ class SessionCatalog(
    * Note: The temporary view cache is checked only when database is not
    * explicitly specified.
    */
-  def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
+  def isTempView(name: TableIdentifier): Boolean = synchronized {
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.contains(table)
