@@ -438,15 +438,24 @@ jobs:
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v2
-      - name: Checkout TPC-DS 1G repository
+      - name: Checkout tpcds-kit repository
         uses: actions/checkout@v2
         with:
-          repository: wangyum/tpcds1g
-          path: ./tpcds1g
+          repository: databricks/tpcds-kit
+          path: ./tpcds-kit
+      - name: Checkout spark-sql-perf repository
+        uses: actions/checkout@v2
+        with:
+          repository: wangyum/spark-sql-perf
+          path: ./spark-sql-perf
       - name: Install Java 8
         uses: actions/setup-java@v1
         with:
           java-version: 8
+      - name: Build tpcds-kit
+        run: cd tpcds-kit/tools && make OS=LINUX
+      - name: Gen TPCDS Data
+        run: cd spark-sql-perf && build/sbt "test:runMain com.databricks.spark.sql.GenTPCDSData `pwd`/../tpcds-kit/tools 1 `pwd`/../tpcds1g parquet"
       - name: Run TPCDSQueryBenchmark
         run: |
           SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark --data-location `pwd`/tpcds1g --cbo"
