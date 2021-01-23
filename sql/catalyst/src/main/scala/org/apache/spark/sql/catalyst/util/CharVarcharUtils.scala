@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 
 object CharVarcharUtils extends Logging {
 
-  private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+  private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a
@@ -41,7 +41,7 @@ object CharVarcharUtils extends Logging {
     StructType(st.map { field =>
       if (hasCharVarchar(field.dataType)) {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
-          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.sql).build()
+          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
         field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
       } else {
         field
