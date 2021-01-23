@@ -177,6 +177,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
   }
 
+  test("bitwiseGet") {
+    val df = Seq(
+      (11L, 3),
+      (11L, 2),
+      (11L, 1),
+      (11L, 0),
+      (11L, 63)
+    ).toDF("a", "b")
+    checkAnswer(df.select(bitwiseGet($"a", $"b")),
+      Seq(Row(1.toByte), Row(0.toByte), Row(1.toByte), Row(1.toByte), Row(0.toByte)))
+
+    val df2 = Seq((11L, 64)).toDF("a", "b")
+    val msg = intercept[Exception] {
+      df2.select(bitwiseGet($"a", $"b")).collect
+    }.getMessage
+    assert(msg.contains("Invalid bit position: 64 exceeds the bit upper limit"))
+
+    val df3 = Seq((11L, -1)).toDF("a", "b")
+    val msg2 = intercept[Exception] {
+      df3.select(bitwiseGet($"a", $"b")).collect
+    }.getMessage
+    assert(msg2.contains("Invalid bit position: -1 is less than zero"))
+  }
+
   test("bin") {
     val df = Seq[(Integer, Integer)]((12, null)).toDF("a", "b")
     checkAnswer(

@@ -39,11 +39,11 @@ import scala.util.Try
 
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -87,7 +87,7 @@ object Literal {
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
-      throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+      throw QueryExecutionErrors.literalTypeUnsupportedError(v)
   }
 
   /**
@@ -130,7 +130,7 @@ object Literal {
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
-    case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
+    case _ => throw QueryCompilationErrors.arrayComponentTypeUnsupportedError(clz)
   }
 
   /**
@@ -176,7 +176,7 @@ object Literal {
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
-      throw new RuntimeException(s"no default for type $dataType")
+      throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
   }
 
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
