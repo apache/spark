@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -477,7 +478,7 @@ class CodegenContext extends Logging {
       case NewFunctionSpec(functionName, Some(_), Some(innerClassInstance)) =>
         innerClassInstance + "." + functionName
       case _ =>
-        throw new IllegalArgumentException(s"$funcName is not matched at addNewFunction")
+        throw QueryExecutionErrors.addNewFunctionMismatchedWithFunctionError(funcName)
     }
   }
 
@@ -614,8 +615,8 @@ class CodegenContext extends Logging {
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case NullType => "false"
     case _ =>
-      throw new IllegalArgumentException(
-        "cannot generate equality code for un-comparable type: " + dataType.catalogString)
+      throw QueryExecutionErrors.cannotGenerateCodeForUncomparableTypeError(
+        "equality", dataType)
   }
 
   /**
@@ -705,8 +706,7 @@ class CodegenContext extends Logging {
     case other if other.isInstanceOf[AtomicType] => s"$c1.compare($c2)"
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
-      throw new IllegalArgumentException(
-        "cannot generate compare code for un-comparable type: " + dataType.catalogString)
+      throw QueryExecutionErrors.cannotGenerateCodeForUncomparableTypeError("compare", dataType)
   }
 
   /**
@@ -1107,13 +1107,10 @@ class CodegenContext extends Logging {
           s"$returnType $value = ${addNewFunction(fnName, fn)}($inputVariables);"
         }
       } else {
-        val errMsg = "Failed to split subexpression code into small functions because the " +
-          "parameter length of at least one split function went over the JVM limit: " +
-          MAX_JVM_METHOD_PARAMS_LENGTH
         if (Utils.isTesting) {
-          throw new IllegalStateException(errMsg)
+          throw QueryExecutionErrors.failedSplitSubExpressionError(MAX_JVM_METHOD_PARAMS_LENGTH)
         } else {
-          logInfo(errMsg)
+          logInfo(QueryExecutionErrors.failedSplitSubExpressionMsg(MAX_JVM_METHOD_PARAMS_LENGTH))
           nonSplitExprCode
         }
       }
@@ -1389,7 +1386,8 @@ object CodeGenerator extends Logging {
       classOf[Expression].getName,
       classOf[TaskContext].getName,
       classOf[TaskKilledException].getName,
-      classOf[InputMetrics].getName
+      classOf[InputMetrics].getName,
+      QueryExecutionErrors.getClass.getName.stripSuffix("$")
     )
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
@@ -1404,15 +1402,15 @@ object CodeGenerator extends Logging {
       updateAndGetCompilationStats(evaluator)
     } catch {
       case e: InternalCompilerException =>
-        val msg = s"failed to compile: $e"
+        val msg = QueryExecutionErrors.failedToCompileMsg(e)
         logError(msg, e)
         logGeneratedCode(code)
-        throw new InternalCompilerException(msg, e)
+        throw QueryExecutionErrors.internalCompilerError(e)
       case e: CompileException =>
-        val msg = s"failed to compile: $e"
+        val msg = QueryExecutionErrors.failedToCompileMsg(e)
         logError(msg, e)
         logGeneratedCode(code)
-        throw new CompileException(msg, e.getLocation)
+        throw QueryExecutionErrors.compilerError(e)
     }
 
     (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
@@ -1674,7 +1672,7 @@ object CodeGenerator extends Logging {
       case CalendarIntervalType => s"$vector.putInterval($rowId, $value);"
       case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+        throw QueryExecutionErrors.cannotGenerateCodeForUnsupportedTypeError(dataType)
     }
   }
 

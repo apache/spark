@@ -47,19 +47,23 @@ public class CharVarcharCodegenUtils {
   }
 
   public static UTF8String varcharTypeWriteSideCheck(UTF8String inputStr, int limit) {
-    if (inputStr != null && inputStr.numChars() <= limit) {
-      return inputStr;
-    } else if (inputStr != null) {
-      // Trailing spaces do not count in the length check. We need to retain the trailing spaces
-      // (truncate to length N), as there is no read-time padding for varchar type.
-      // TODO: create a special TrimRight function that can trim to a certain length.
-      UTF8String trimmed = inputStr.trimRight();
-      if (trimmed.numChars() > limit) {
-        throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
-      }
-      return inputStr.substring(0, limit);
-    } else {
+    if (inputStr == null) {
       return null;
+    } else {
+      int numChars = inputStr.numChars();
+      if (numChars <= limit) {
+        return inputStr;
+      } else {
+        // Trailing spaces do not count in the length check. We need to retain the trailing spaces
+        // (truncate to length N), as there is no read-time padding for varchar type.
+        int maxAllowedNumTailSpaces = numChars - limit;
+        UTF8String trimmed = inputStr.trimTrailingSpaces(maxAllowedNumTailSpaces);
+        if (trimmed.numChars() > limit) {
+          throw new RuntimeException("Exceeds varchar type length limitation: " + limit);
+        } else {
+          return trimmed;
+        }
+      }
     }
   }
 

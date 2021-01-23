@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, EmptyBlock, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -157,7 +158,7 @@ case class CheckOverflowInSum(
   override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     if (value == null) {
-      if (nullOnOverflow) null else throw new ArithmeticException("Overflow in sum of decimals.")
+      if (nullOnOverflow) null else throw QueryExecutionErrors.overflowInSumOfDecimalError
     } else {
       value.asInstanceOf[Decimal].toPrecision(
         dataType.precision,
@@ -172,9 +173,7 @@ case class CheckOverflowInSum(
     val nullHandling = if (nullOnOverflow) {
       ""
     } else {
-      s"""
-         |throw new ArithmeticException("Overflow in sum of decimals.");
-         |""".stripMargin
+      s"throw QueryExecutionErrors.overflowInSumOfDecimalError();"
     }
     val code = code"""
        |${childGen.code}

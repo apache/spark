@@ -60,7 +60,7 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
       }.write.parquet(path)
 
       val benchmark =
-        new Benchmark(s"Read with length $length, hasSpaces: $hasSpaces", card, output = output)
+        new Benchmark(s"Read with length $length", card, output = output)
       Seq("string", "char", "varchar").foreach { typ =>
         val tblName = s"${typ}_${length}_$card"
         val colType = if (typ == "string") typ else s"$typ($length)"
@@ -80,7 +80,7 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       val benchmark =
-        new Benchmark(s"Write with length $length, hasSpaces: $hasSpaces", card, output = output)
+        new Benchmark(s"Write with length $length", card, output = output)
       Seq("string", "char", "varchar").foreach { typ =>
         val colType = if (typ == "string") typ else s"$typ($length)"
         val tblName = s"${typ}_${length}_$card"
@@ -106,15 +106,28 @@ object CharVarcharBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val N = 100L * 1000 * 1000
     val range = Range(20, 101, 20)
-    runBenchmark("Char Varchar Read Side Perf") {
+    runBenchmark("Char Varchar Read Side Perf w/o Tailing Spaces") {
       for (len <- range) {
-        readBenchmark(N, len, len >= 80)
+        readBenchmark(N, len, hasSpaces = false)
       }
     }
 
-    runBenchmark("Char Varchar Write Side Perf") {
+    runBenchmark("Char Varchar Read Side Perf w/ Tailing Spaces") {
       for (len <- range) {
-        writeBenchmark(N / 10, len, len >= 80)
+        readBenchmark(N, len, hasSpaces = true)
+      }
+    }
+
+    runBenchmark("Char Varchar Write Side Perf w/o Tailing Spaces") {
+      for (len <- range) {
+        writeBenchmark(N * 2 / len, len, hasSpaces = false)
+      }
+    }
+
+    runBenchmark("Char Varchar Write Side Perf w/ Tailing Spaces") {
+      for (len <- range) {
+        // in write side length check, we only visit the last few spaces
+        writeBenchmark(N * 2 / len, len, hasSpaces = true)
       }
     }
   }

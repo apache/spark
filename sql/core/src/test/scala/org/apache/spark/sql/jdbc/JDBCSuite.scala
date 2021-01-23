@@ -74,6 +74,8 @@ class JDBCSuite extends QueryTest
     }
   }
 
+  val defaultMetadata = new MetadataBuilder().putLong("scale", 0).build()
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     Utils.classForName("org.h2.Driver")
@@ -1252,8 +1254,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-16848: jdbc API throws an exception for user specified schema") {
-    val schema = StructType(Seq(
-      StructField("name", StringType, false), StructField("theid", IntegerType, false)))
+    val schema = StructType(Seq(StructField("name", StringType, false, defaultMetadata),
+      StructField("theid", IntegerType, false, defaultMetadata)))
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
@@ -1273,7 +1275,9 @@ class JDBCSuite extends QueryTest
     props.put("customSchema", customSchema)
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
-    assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+    val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema).map(
+      f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
+    assert(df.schema === expectedSchema)
     assert(df.count() === 3)
   }
 
@@ -1289,7 +1293,9 @@ class JDBCSuite extends QueryTest
         """.stripMargin.replaceAll("\n", " "))
       val df = sql("select * from people_view")
       assert(df.schema.length === 2)
-      assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+      val expectedSchema = new StructType(CatalystSqlParser.parseTableSchema(customSchema)
+        .map(f => StructField(f.name, f.dataType, f.nullable, defaultMetadata)).toArray)
+      assert(df.schema === expectedSchema)
       assert(df.count() === 3)
     }
   }
@@ -1404,8 +1410,8 @@ class JDBCSuite extends QueryTest
     }
 
   test("jdbc data source shouldn't have unnecessary metadata in its schema") {
-    val schema = StructType(Seq(
-      StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
+    val schema = StructType(Seq(StructField("NAME", StringType, true, defaultMetadata),
+      StructField("THEID", IntegerType, true, defaultMetadata)))
 
     val df = spark.read.format("jdbc")
       .option("Url", urlWithUserAndPass)

@@ -123,6 +123,40 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       }
     }
   }
+
+  test("SPARK-34138: keep dependents cached after table altering") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      cacheRelation(t)
+      checkCachedRelation(t, Seq(Row(0, 0)))
+
+      withView("v0") {
+        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        cacheRelation("v0")
+        val part1Loc = copyPartition(t, "part=0", "part=1")
+        sql(s"ALTER TABLE $t ADD PARTITION (part=1) LOCATION '$part1Loc'")
+        checkCachedRelation("v0", Seq(Row(0, 0), Row(0, 1)))
+      }
+
+      withTempView("v1") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        cacheRelation("v1")
+        val part2Loc = copyPartition(t, "part=0", "part=2")
+        sql(s"ALTER TABLE $t ADD PARTITION (part=2) LOCATION '$part2Loc'")
+        checkCachedRelation("v1", Seq(Row(0, 0), Row(0, 1), Row(0, 2)))
+      }
+
+      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      withGlobalTempView(v2) {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        cacheRelation(v2)
+        val part3Loc = copyPartition(t, "part=0", "part=3")
+        sql(s"ALTER TABLE $t ADD PARTITION (part=3) LOCATION '$part3Loc'")
+        checkCachedRelation(v2, Seq(Row(0, 0), Row(0, 1), Row(0, 2), Row(0, 3)))
+      }
+    }
+  }
 }
 
 /**
