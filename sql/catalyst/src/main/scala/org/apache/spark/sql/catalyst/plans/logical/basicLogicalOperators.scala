@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -955,8 +954,6 @@ case class SubqueryAlias(
 }
 
 object SubqueryAlias {
-  val SUBQUERY_TYPE_TAG = TreeNodeTag[String]("subQueryType")
-
   def apply(
       identifier: String,
       child: LogicalPlan): SubqueryAlias = {

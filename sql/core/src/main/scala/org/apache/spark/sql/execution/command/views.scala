@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, PythonUDF, ScalaUDF, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
-import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias.SUBQUERY_TYPE_TAG
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
@@ -123,18 +122,18 @@ case class CreateViewCommand(
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
+      val catalogTable = prepareTemporaryView(
+        name,
+        sparkSession,
+        analyzedPlan,
+        aliasedPlan.schema,
+        originalText,
+        child)
       // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(
-          prepareTemporaryView(
-            name,
-            sparkSession,
-            analyzedPlan,
-            aliasedPlan.schema,
-            originalText,
-            child))
+        TemporaryViewRelation(catalogTable)
       } else {
-        aliasedPlan
+        View(catalogTable, isTemporary, catalogTable.schema.toAttributes, child)
       }
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
@@ -147,17 +146,17 @@ case class CreateViewCommand(
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
+      val catalogTable = prepareTemporaryView(
+        viewIdent,
+        sparkSession,
+        analyzedPlan,
+        aliasedPlan.schema,
+        originalText,
+        child)
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(
-          prepareTemporaryView(
-            viewIdent,
-            sparkSession,
-            analyzedPlan,
-            aliasedPlan.schema,
-            originalText,
-            child))
+        TemporaryViewRelation(catalogTable)
       } else {
-        aliasedPlan
+        View(catalogTable, isTemporary, catalogTable.schema.toAttributes, child)
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -561,8 +560,6 @@ object ViewHelper {
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
       child.collect {
         case s @ SubqueryAlias(_, view: View) if view.isTempView =>
-          Seq(s.identifier.qualifier :+ s.identifier.name)
-        case s: SubqueryAlias if s.getTagValue(SUBQUERY_TYPE_TAG).exists(_ == "tempView") =>
           Seq(s.identifier.qualifier :+ s.identifier.name)
         case plan if plan.resolved => plan.expressions.flatMap(_.collect {
           case e: SubqueryExpression => collectTempViews(e.plan)

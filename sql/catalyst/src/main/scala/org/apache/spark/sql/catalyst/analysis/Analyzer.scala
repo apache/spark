@@ -1086,7 +1086,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
-        p.makeCopy(Array(p.identifier, resolveViews(view)))
+        p.copy(child = resolveViews(view))
       case _ => plan
     }
 
@@ -1099,6 +1099,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
 
         EliminateSubqueryAliases(relation) match {
+          case v: View if v.isTempView && v.child.isInstanceOf[LeafNode] =>
+            // Inserting into a file-based temporary view is allowed.
+            // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
+            // The check on the rdd-based relation is done in PreWriteCheck.
+            i.copy(table = v.child)
           case v: View =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)

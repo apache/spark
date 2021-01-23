@@ -1548,7 +1548,7 @@ class DataFrameSuite extends QueryTest
         val e2 = intercept[AnalysisException] {
           insertion.write.insertInto("indirect_ds")
         }
-        assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
+        assert(e2.getMessage.contains("Inserting into a view is not allowed. View: `indirect_ds`"))
 
         // error case: insert into an OneRowRelation
         Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
