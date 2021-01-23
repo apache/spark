@@ -21,7 +21,6 @@ import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
-import java.util.regex.Pattern
 
 import scala.util.Try
 
@@ -38,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.NonClosableMutableURLClassLoader
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{MutableURLClassLoader, Utils}
+import org.apache.spark.util.{MutableURLClassLoader, Utils, VersionUtils}
 
 /** Factory for `IsolatedClientLoader` with specific versions of hive. */
 private[hive] object IsolatedClientLoader extends Logging {
@@ -90,7 +89,7 @@ private[hive] object IsolatedClientLoader extends Logging {
   }
 
   def hiveVersion(version: String): HiveVersion = {
-    getVersionParts(version).flatMap {
+    VersionUtils.majorMinorPatchVersion(version).flatMap {
       case (12, _, _) | (0, 12, _) => Some(hive.v12)
       case (13, _, _) | (0, 13, _) => Some(hive.v13)
       case (14, _, _) | (0, 14, _) => Some(hive.v14)
@@ -111,40 +110,9 @@ private[hive] object IsolatedClientLoader extends Logging {
   }
 
   def supportHadoopShadedClient(hadoopVersion: String): Boolean = {
-    getVersionParts(hadoopVersion).exists {
+    VersionUtils.majorMinorPatchVersion(hadoopVersion).exists {
       case (3, 2, v) if v >= 2 => true
       case _ => false
-    }
-  }
-
-  /**
-   * Retrieves the major, minor and patch parts from the input `version`. Returns `None` if the
-   * input is not of a valid format.
-   *
-   * Examples of valid version:
-   *  - 1
-   *  - 2.4
-   *  - 3.2.2
-   *  - 3.2.2.4
-   *  - 3.3.1-SNAPSHOT
-   *  - 3.2.2.4SNAPSHOT (we only retrieve the first 3 components)
-   *
-   * Examples of invalid version:
-   *  - ABC
-   *  - 1X
-   *  - 2.4XYZ
-   *  - 2.4-SNAPSHOT
-   *  - 3.4.5ABC
-   */
-  def getVersionParts(version: String): Option[(Int, Int, Int)] = {
-    val matcher = VERSION_PATTERN.matcher(version)
-    if (matcher.matches() && matcher.groupCount() == 3) {
-      val major = matcher.group(1).toInt
-      val minor = if (matcher.group(2) == null) 0 else matcher.group(2).toInt
-      val patch = if (matcher.group(3) == null) 0 else matcher.group(3).toInt
-      Some((major, minor, patch))
-    } else {
-      None
     }
   }
 
@@ -181,10 +149,6 @@ private[hive] object IsolatedClientLoader extends Logging {
     logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
     tempDir.listFiles().map(_.toURI.toURL)
   }
-
-  // A regex pattern to match Maven version numbers
-  private lazy val VERSION_PATTERN =
-    Pattern.compile("(\\d+)(?:\\.(\\d+)(?:\\.(\\d+)(?:[.-].*)?)?)?")
 
   // A map from a given pair of HiveVersion and Hadoop version to jar files.
   // It is only used by forVersion.

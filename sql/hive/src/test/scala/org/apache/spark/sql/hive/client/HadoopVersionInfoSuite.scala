@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URLClassLoader
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -69,23 +70,6 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-33212: test getVersionParts()") {
-    assert(IsolatedClientLoader.getVersionParts("3.2.2").contains((3, 2, 2)))
-    assert(IsolatedClientLoader.getVersionParts("3.2.2.4").contains((3, 2, 2)))
-    assert(IsolatedClientLoader.getVersionParts("3.2.2-SNAPSHOT").contains((3, 2, 2)))
-    assert(IsolatedClientLoader.getVersionParts("3.2.2.4XXX").contains((3, 2, 2)))
-    assert(IsolatedClientLoader.getVersionParts("3.2").contains((3, 2, 0)))
-    assert(IsolatedClientLoader.getVersionParts("3").contains((3, 0, 0)))
-
-    // illegal cases
-    assert(IsolatedClientLoader.getVersionParts("ABC").isEmpty)
-    assert(IsolatedClientLoader.getVersionParts("3X").isEmpty)
-    assert(IsolatedClientLoader.getVersionParts("3.2-SNAPSHOT").isEmpty)
-    assert(IsolatedClientLoader.getVersionParts("3.2ABC").isEmpty)
-    assert(IsolatedClientLoader.getVersionParts("3-ABC").isEmpty)
-    assert(IsolatedClientLoader.getVersionParts("3.2.4XYZ").isEmpty)
-  }
-
   test("SPARK-32212: test supportHadoopShadedClient()") {
     assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2"))
     assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.3"))
@@ -98,5 +82,9 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
     assert(!IsolatedClientLoader.supportHadoopShadedClient("3.2"))
     assert(!IsolatedClientLoader.supportHadoopShadedClient("3.2.1"))
     assert(!IsolatedClientLoader.supportHadoopShadedClient("4"))
+  }
+
+  test("SPARK-32212: built-in Hadoop version should support shaded client") {
+    assert(IsolatedClientLoader.supportHadoopShadedClient(VersionInfo.getVersion))
   }
 }

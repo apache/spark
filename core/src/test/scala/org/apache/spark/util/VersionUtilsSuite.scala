@@ -98,4 +98,21 @@ class VersionUtilsSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("SPARK-33212: retrieve major/minor/patch version parts") {
+    assert(VersionUtils.majorMinorPatchVersion("3.2.2").contains((3, 2, 2)))
+    assert(VersionUtils.majorMinorPatchVersion("3.2.2.4").contains((3, 2, 2)))
+    assert(VersionUtils.majorMinorPatchVersion("3.2.2-SNAPSHOT").contains((3, 2, 2)))
+    assert(VersionUtils.majorMinorPatchVersion("3.2.2.4XXX").contains((3, 2, 2)))
+    assert(VersionUtils.majorMinorPatchVersion("3.2").contains((3, 2, 0)))
+    assert(VersionUtils.majorMinorPatchVersion("3").contains((3, 0, 0)))
+
+    // illegal cases
+    assert(VersionUtils.majorMinorPatchVersion("ABC").isEmpty)
+    assert(VersionUtils.majorMinorPatchVersion("3X").isEmpty)
+    assert(VersionUtils.majorMinorPatchVersion("3.2-SNAPSHOT").isEmpty)
+    assert(VersionUtils.majorMinorPatchVersion("3.2ABC").isEmpty)
+    assert(VersionUtils.majorMinorPatchVersion("3-ABC").isEmpty)
+    assert(VersionUtils.majorMinorPatchVersion("3.2.4XYZ").isEmpty)
+  }
 }
