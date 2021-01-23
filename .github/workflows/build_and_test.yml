@@ -449,7 +449,7 @@ jobs:
           java-version: 8
       - name: Run TPCDSQueryBenchmark
         run: |
-          SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark --data-location `pwd`/tpcds1g --query-filter --cbo"
+          SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark --data-location `pwd`/tpcds1g --cbo"
       - name: Upload benchmark result to report
         if: always()
         uses: actions/upload-artifact@v2
