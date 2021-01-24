@@ -561,16 +561,9 @@ case class TruncateTableCommand(
         }
       }
     }
-    // After deleting the data, invalidate the table to make sure we don't keep around a stale
-    // file relation in the metastore cache.
-    spark.sessionState.refreshTable(tableName.unquotedString)
-    // Also try to drop the contents of the table from the columnar cache
-    try {
-      spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier), cascade = true)
-    } catch {
-      case NonFatal(e) =>
-        log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
-    }
+    // After deleting the data, refresh the table to make sure we don't keep around a stale
+    // file relation in the metastore cache and cached table data in the cache manager.
+    spark.catalog.refreshTable(tableIdentWithDB)
 
     if (table.stats.nonEmpty) {
       // empty table after truncation
