@@ -28,7 +28,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.{FETCHED_DATA_CACHE_EVICTOR_THREAD_RUN_INTERVAL, FETCHED_DATA_CACHE_TIMEOUT}
-import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{CacheKey, UNKNOWN_OFFSET}
+import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer.{AvailableOffsetRange, CacheKey, UNKNOWN_OFFSET}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -170,8 +170,6 @@ private[consumer] object FetchedDataPool {
   }
 
   private object CachedFetchedData {
-    import KafkaDataConsumer.AvailableOffsetRange
-
     def empty(): CachedFetchedData = {
       val emptyData = FetchedData(
         ju.Collections.emptyListIterator[ConsumerRecord[Array[Byte], Array[Byte]]],
