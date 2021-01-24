@@ -34,7 +34,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                     BroadcastExchange #4
                       WholeStageCodegen (5)
                         Project [r_reason_sk]
-                          Filter [r_reason_desc,r_reason_sk]
+                          Filter [r_reason_sk,r_reason_desc]
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet default.reason [r_reason_sk,r_reason_desc]

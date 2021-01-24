@@ -50,7 +50,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                                 BroadcastExchange #5
                                                                   WholeStageCodegen (3)
                                                                     Project [i_item_sk]
-                                                                      Filter [i_category,i_class,i_item_sk]
+                                                                      Filter [i_item_sk,i_category,i_class]
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet default.item [i_item_sk,i_class,i_category]

@@ -66,7 +66,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                           BroadcastExchange #7
                                             WholeStageCodegen (7)
                                               Project [i_item_sk]
-                                                Filter [i_current_price,i_item_sk]
+                                                Filter [i_item_sk,i_current_price]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.item [i_item_sk,i_current_price]
@@ -74,7 +74,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                       BroadcastExchange #8
                                         WholeStageCodegen (8)
                                           Project [p_promo_sk]
-                                            Filter [p_channel_tv,p_promo_sk]
+                                            Filter [p_promo_sk,p_channel_tv]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.promotion [p_promo_sk,p_channel_tv]

@@ -29,7 +29,7 @@ TakeOrderedAndProject [w_warehouse_name,i_item_id,inv_before,inv_after]
                           BroadcastExchange #4
                             WholeStageCodegen (2)
                               Project [i_item_sk,i_item_id]
-                                Filter [i_current_price,i_item_sk]
+                                Filter [i_item_sk,i_current_price]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.item [i_item_sk,i_item_id,i_current_price]

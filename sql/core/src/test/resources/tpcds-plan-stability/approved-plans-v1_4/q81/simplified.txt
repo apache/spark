@@ -74,7 +74,7 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,ca_st
         InputAdapter
           BroadcastExchange #8
             WholeStageCodegen (10)
-              Filter [ca_state,ca_address_sk]
+              Filter [ca_address_sk,ca_state]
                 ColumnarToRow
                   InputAdapter
                     Scan parquet default.customer_address [ca_address_sk,ca_street_number,ca_street_name,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset,ca_location_type]

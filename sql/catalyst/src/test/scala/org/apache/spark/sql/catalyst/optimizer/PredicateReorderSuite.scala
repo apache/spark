@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimat
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf.CBO_ENABLED
+import org.apache.spark.sql.types.{DoubleType, IntegerType}
 
 class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with PredicateHelper
   with Matchers {
@@ -94,14 +95,9 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
       nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4
     Seq(true, false).foreach { cboEnabled =>
       withSQLConf(CBO_ENABLED.key -> cboEnabled.toString) {
-        if (cboEnabled) {
-          assertPredicatesOrder(
-            originalCondition,
-            nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4 &&
-              nameToAttr("t1.v-1-10") > 2 && nameToAttr("t1.v-1-10") > 1)
-        } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
-        }
+        assertPredicatesOrder(originalCondition,
+          nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4 &&
+            nameToAttr("t1.v-1-10") > 2 && nameToAttr("t1.v-1-10") > 1)
       }
     }
   }
@@ -111,14 +107,10 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
       nameToAttr("t1.v-1-10").isNotNull && nameToAttr("t1.v-1-10") > 5
     Seq(true, false).foreach { cboEnabled =>
       withSQLConf(CBO_ENABLED.key -> cboEnabled.toString) {
-        if (cboEnabled) {
-          assertPredicatesOrder(
-            originalCondition,
-            nameToAttr("t1.k-1-2") === 1 && nameToAttr("t1.v-1-10") > 5 &&
-              nameToAttr("t1.k-1-2").isNotNull && nameToAttr("t1.v-1-10").isNotNull)
-        } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
-        }
+        assertPredicatesOrder(
+          originalCondition,
+          nameToAttr("t1.k-1-2") === 1 && nameToAttr("t1.v-1-10") > 5 &&
+            nameToAttr("t1.k-1-2").isNotNull && nameToAttr("t1.v-1-10").isNotNull)
       }
     }
   }
@@ -134,18 +126,44 @@ class PredicateReorderSuite extends PlanTest with StatsEstimationTestBase with P
   }
 
   test("Reorder disjunctive predicates") {
-    val originalCondition = (nameToAttr("t1.v-1-10") > 1 && nameToAttr("t1.v-1-10") > 2) ||
-      (nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4)
+    val originalCondition = (nameToAttr("t1.v-1-10") > 1 || nameToAttr("t1.v-1-10") > 2) ||
+      (nameToAttr("t1.v-1-10") > 8 || nameToAttr("t1.v-1-10") > 4)
     Seq(true, false).foreach { cboEnabled =>
       withSQLConf(CBO_ENABLED.key -> cboEnabled.toString) {
-        if (cboEnabled) {
-          assertPredicatesOrder(
-            originalCondition,
-            (nameToAttr("t1.v-1-10") > 2 && nameToAttr("t1.v-1-10") > 1) ||
-              (nameToAttr("t1.v-1-10") > 8 && nameToAttr("t1.v-1-10") > 4))
-        } else {
-          assertPredicatesOrder(originalCondition, originalCondition)
-        }
+        assertPredicatesOrder(
+          originalCondition,
+          (nameToAttr("t1.v-1-10") > 1 || nameToAttr("t1.v-1-10") > 2) ||
+            nameToAttr("t1.v-1-10") > 4 || nameToAttr("t1.v-1-10") > 8)
+      }
+    }
+  }
+
+  test("Reorder predicates by cost") {
+    val originalCondition = nameToAttr("t1.v-1-10") > 2 &&
+      nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4 &&
+      nameToAttr("t1.v-1-10") > 6
+    Seq(true, false).foreach { cboEnabled =>
+      withSQLConf(CBO_ENABLED.key -> cboEnabled.toString) {
+        assertPredicatesOrder(
+          originalCondition,
+          nameToAttr("t1.v-1-10") > 6 &&
+            nameToAttr("t1.v-1-10") > 2 &&
+            nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4)
+      }
+    }
+  }
+
+  test("Reorder disjunctive predicates by cost and selectivity") {
+    val originalCondition = nameToAttr("t1.v-1-10") > 6 ||
+      nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4 ||
+      nameToAttr("t1.v-1-10") > 2
+    Seq(true, false).foreach { cboEnabled =>
+      withSQLConf(CBO_ENABLED.key -> cboEnabled.toString) {
+        assertPredicatesOrder(
+          originalCondition,
+          nameToAttr("t1.v-1-10") > 2 ||
+            nameToAttr("t1.v-1-10") > 6 ||
+            nameToAttr("t1.v-1-10").cast(DoubleType).cast(IntegerType) === 4)
       }
     }
   }

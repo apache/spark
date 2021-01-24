@@ -27,19 +27,25 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object PredicateReorder extends Rule[LogicalPlan] with PredicateHelper {
 
+  // Return 1.0D - 1.0D / Int.MaxValue if the expression is not supported calculate
+  // filter selectivity to avoid rankingAnd always return 0.0D.
   private def selectivity(exp: Expression, filterEstimation: FilterEstimation): Double = {
     filterEstimation.calculateFilterSelectivity(exp, false)
       .getOrElse(1.0D - 1.0D / Int.MaxValue)
   }
 
+  // Formula: (selectivity - 1.0D) / expression cost
   private def rankingAnd(exp: Expression, filterEstimation: FilterEstimation): Double = {
     (selectivity(exp, filterEstimation) - 1.0D) / expressionCost(exp)
   }
 
+  // Formula: (-selectivity) / expression cost
   private def rankingOr(exp: Expression, filterEstimation: FilterEstimation): Double = {
     -selectivity(exp, filterEstimation) / expressionCost(exp)
   }
 
+  // The cost of a call expression e is computed as:
+  //   cost(exp) = typeSize + functionCost + cost(children).
   private def expressionCost(exp: Expression): Double = exp match {
       case e: Expression if e.children.isEmpty =>
         e.dataType.defaultSize
@@ -63,12 +69,11 @@ object PredicateReorder extends Rule[LogicalPlan] with PredicateHelper {
         e.dataType.defaultSize + 2.0D * e.patterns.size
       case e: Cast =>
         8.0D + e.dataType.defaultSize + e.children.map(expressionCost).sum
-      case e: UserDefinedExpression =>
-        16.0D + e.dataType.defaultSize + e.children.map(expressionCost).sum
       case e =>
         32.0D + e.children.map(expressionCost).sum
     }
 
+  // We do not recursively sort all expressions for performance.
   private def reorderPredicates(exp: Expression, filterEstimation: FilterEstimation): Expression = {
     exp match {
       case _: Or =>
