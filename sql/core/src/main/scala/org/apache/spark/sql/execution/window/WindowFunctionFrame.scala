@@ -97,13 +97,15 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Index of the input row currently used for output. */
   protected var inputIndex = 0
 
+  /** Attributes of the input row currently used for output. */
+  protected val inputAttrs = inputSchema.map(_.withNullability(true))
+
   /**
    * Create the projection used when the offset row exists.
    * Please note that this project always respect null input values (like PostgreSQL).
    */
   protected val projection = {
     // Collect the expressions and bind them.
-    val inputAttrs = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ bindReferences(
       expressions.toSeq.map(_.input), inputAttrs)
 
@@ -114,7 +116,6 @@ abstract class OffsetWindowFunctionFrameBase(
   /** Create the projection used when the offset row DOES NOT exists. */
   protected val fillDefaultValue = {
     // Collect the expressions and bind them.
-    val inputAttrs: AttributeSeq = inputSchema.map(_.withNullability(true))
     val boundExpressions = Seq.fill(ordinal)(NoOp) ++ expressions.toSeq.map { e =>
       if (e.default == null || e.default.foldable && e.default.eval() == null) {
         // The default value is null.
@@ -127,6 +128,31 @@ abstract class OffsetWindowFunctionFrameBase(
 
     // Create the projection.
     newMutableProjection(boundExpressions, Nil).target(target)
+  }
+
+  /** Holder the UnsafeRow where the input operator by function is not null. */
+  protected var nextSelectedRow = EmptyRow
+
+  // The number of rows skipped to get the next UnsafeRow where the input operator by function
+  // is not null.
+  protected var skippedNonNullCount = 0
+
+  /** Create the projection to determine whether input is null. */
+  protected val project = UnsafeProjection.create(Seq(IsNull(expressions.head.input)), inputSchema)
+
+  /** Check if the output value of the first index is null. */
+  protected def nullCheck(row: InternalRow): Boolean = project(row).getBoolean(0)
+
+  /** find the offset row whose input is not null */
+  protected def findNextRowWithNonNullInput(): Unit = {
+    while (skippedNonNullCount < offset && inputIndex < input.length) {
+      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+      if (!nullCheck(r)) {
+        nextSelectedRow = r
+        skippedNonNullCount += 1
+      }
+      inputIndex += 1
+    }
   }
 
   override def currentLowerBound(): Int = throw new UnsupportedOperationException()
@@ -147,7 +173,8 @@ class FrameLessOffsetWindowFunctionFrame(
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int)
+    offset: Int,
+    ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
 
@@ -156,22 +183,97 @@ class FrameLessOffsetWindowFunctionFrame(
     inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than zero
     inputIndex = 0
-    while (inputIndex < offset) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
+    if (ignoreNulls) {
+      findNextRowWithNonNullInput()
+    } else {
+      while (inputIndex < offset) {
+        if (inputIterator.hasNext) inputIterator.next()
+        inputIndex += 1
+      }
+      inputIndex = offset
     }
-    inputIndex = offset
+  }
+
+  private val doWrite = if (ignoreNulls && offset > 0) {
+    // For illustration, here is one example: the input data contains nine rows,
+    // and the input values of each row are: null, x, null, null, y, null, z, v, null.
+    // We use lead(input, 2) with IGNORE NULLS and the process is as follows:
+    // 1. current row -> null, next selected row -> y, output: y;
+    // 2. current row -> x, next selected row -> z, output: z;
+    // 3. current row -> null, next selected row -> z, output: z;
+    // 4. current row -> null, next selected row -> z, output: z;
+    // 5. current row -> y, next selected row -> v, output: v;
+    // 6. current row -> null, next selected row -> v, output: v;
+    // 7. current row -> z, next selected row -> empty, output: null;
+    // ... next selected row is empty, all following return null.
+    (current: InternalRow) =>
+      if (nextSelectedRow == EmptyRow) {
+        // Use default values since the offset row whose input value is not null does not exist.
+        fillDefaultValue(current)
+      } else {
+        if (nullCheck(current)) {
+          projection(nextSelectedRow)
+        } else {
+          skippedNonNullCount -= 1
+          findNextRowWithNonNullInput()
+          if (skippedNonNullCount == offset) {
+            projection(nextSelectedRow)
+          } else {
+            // Use default values since the offset row whose input value is not null does not exist.
+            fillDefaultValue(current)
+            nextSelectedRow = EmptyRow
+          }
+        }
+      }
+  } else if (ignoreNulls && offset < 0) {
+    // For illustration, here is one example: the input data contains nine rows,
+    // and the input values of each row are: null, x, null, null, y, null, z, v, null.
+    // We use lag(input, 1) with IGNORE NULLS and the process is as follows:
+    // 1. current row -> null, next selected row -> empty, output: null;
+    // 2. current row -> x, next selected row -> empty, output: null;
+    // 3. current row -> null, next selected row -> x, output: x;
+    // 4. current row -> null, next selected row -> x, output: x;
+    // 5. current row -> y, next selected row -> x, output: x;
+    // 6. current row -> null, next selected row -> y, output: y;
+    // 7. current row -> z, next selected row -> y, output: y;
+    // 8. current row -> v, next selected row -> z, output: z;
+    // 9. current row -> null, next selected row -> v, output: v;
+    val absOffset = Math.abs(offset)
+    (current: InternalRow) =>
+      if (skippedNonNullCount == absOffset) {
+        nextSelectedRow = EmptyRow
+        skippedNonNullCount -= 1
+        while (nextSelectedRow == EmptyRow && inputIndex < input.length) {
+          val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+          if (!nullCheck(r)) {
+            nextSelectedRow = r
+          }
+          inputIndex += 1
+        }
+      }
+      if (nextSelectedRow == EmptyRow) {
+        // Use default values since the offset row whose input value is not null does not exist.
+        fillDefaultValue(current)
+      } else {
+        projection(nextSelectedRow)
+      }
+      if (!nullCheck(current)) {
+        skippedNonNullCount += 1
+      }
+  } else {
+    (current: InternalRow) =>
+      if (inputIndex >= 0 && inputIndex < input.length) {
+        val r = WindowFunctionFrame.getNextOrNull(inputIterator)
+        projection(r)
+      } else {
+        // Use default values since the offset row does not exist.
+        fillDefaultValue(current)
+      }
+      inputIndex += 1
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (inputIndex >= 0 && inputIndex < input.length) {
-      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-      projection(r)
-    } else {
-      // Use default values since the offset row does not exist.
-      fillDefaultValue(current)
-    }
-    inputIndex += 1
+    doWrite(current)
   }
 }
 
@@ -190,7 +292,8 @@ class UnboundedOffsetWindowFunctionFrame(
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int)
+    offset: Int,
+    ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
   assert(offset > 0)
@@ -203,12 +306,22 @@ class UnboundedOffsetWindowFunctionFrame(
       inputIterator = input.generateIterator()
       // drain the first few rows if offset is larger than one
       inputIndex = 0
-      while (inputIndex < offset - 1) {
-        if (inputIterator.hasNext) inputIterator.next()
-        inputIndex += 1
+      if (ignoreNulls) {
+        findNextRowWithNonNullInput()
+        if (nextSelectedRow == EmptyRow) {
+          // Use default values since the offset row whose input value is not null does not exist.
+          fillDefaultValue(EmptyRow)
+        } else {
+          projection(nextSelectedRow)
+        }
+      } else {
+        var selectedRow: UnsafeRow = null
+        while (inputIndex < offset) {
+          selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+          inputIndex += 1
+        }
+        projection(selectedRow)
       }
-      val r = WindowFunctionFrame.getNextOrNull(inputIterator)
-      projection(r)
     }
   }
 
@@ -234,7 +347,8 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
     expressions: Array[OffsetWindowFunction],
     inputSchema: Seq[Attribute],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    offset: Int)
+    offset: Int,
+    ignoreNulls: Boolean = false)
   extends OffsetWindowFunctionFrameBase(
     target, ordinal, expressions, inputSchema, newMutableProjection, offset) {
   assert(offset > 0)
@@ -246,17 +360,19 @@ class UnboundedPrecedingOffsetWindowFunctionFrame(
     inputIterator = input.generateIterator()
     // drain the first few rows if offset is larger than one
     inputIndex = 0
-    while (inputIndex < offset - 1) {
-      if (inputIterator.hasNext) inputIterator.next()
-      inputIndex += 1
-    }
-    if (inputIndex < input.length) {
-      selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+    if (ignoreNulls) {
+      findNextRowWithNonNullInput()
+      selectedRow = nextSelectedRow.asInstanceOf[UnsafeRow]
+    } else {
+      while (inputIndex < offset) {
+        selectedRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+        inputIndex += 1
+      }
     }
   }
 
   override def write(index: Int, current: InternalRow): Unit = {
-    if (index >= inputIndex && selectedRow != null) {
+    if (index >= inputIndex - 1 && selectedRow != null) {
       projection(selectedRow)
     } else {
       fillDefaultValue(EmptyRow)

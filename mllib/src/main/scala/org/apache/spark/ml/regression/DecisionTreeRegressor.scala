@@ -294,7 +294,8 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(nodeData).write.parquet(dataPath)
+      val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
+      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
     }
   }
 

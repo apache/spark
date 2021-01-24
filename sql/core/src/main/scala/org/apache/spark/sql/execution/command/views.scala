@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
@@ -113,12 +114,8 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
 
     if (viewType == LocalTempView) {
-      val shouldUncache = replace && catalog.getTempView(name.table).exists {
-        // Uncache View logical plan without checking the same result check, since it's unresolved.
-        case _: View => true
-        case other => !other.sameResult(child)
-      }
-      if (shouldUncache) {
+      if (replace && catalog.getRawTempView(name.table).isDefined &&
+          !catalog.getRawTempView(name.table).get.sameResult(child)) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
@@ -141,12 +138,8 @@ case class CreateViewCommand(
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
-      val shouldUncache = replace && catalog.getGlobalTempView(name.table).exists {
-        // Uncache View logical plan without checking the same result check, since it's unresolved.
-        case _: View => true
-        case other => !other.sameResult(child)
-      }
-      if (shouldUncache) {
+      if (replace && catalog.getRawGlobalTempView(name.table).isDefined &&
+          !catalog.getRawGlobalTempView(name.table).get.sameResult(child)) {
         logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
@@ -227,7 +220,8 @@ case class CreateViewCommand(
       throw new AnalysisException(
         "It is not allowed to create a persisted view from the Dataset API")
     }
-    val aliasedSchema = aliasPlan(session, analyzedPlan).schema
+    val aliasedSchema = CharVarcharUtils.getRawSchema(
+      aliasPlan(session, analyzedPlan).schema)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan, aliasedSchema.fieldNames)
 
@@ -271,7 +265,7 @@ case class AlterViewAsCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    if (session.sessionState.catalog.isTemporaryTable(name)) {
+    if (session.sessionState.catalog.isTempView(name)) {
       alterTemporaryView(session, analyzedPlan)
     } else {
       alterPermanentView(session, analyzedPlan)
@@ -293,9 +287,6 @@ case class AlterViewAsCommand(
 
   private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
     val viewMeta = session.sessionState.catalog.getTableMetadata(name)
-    if (viewMeta.tableType != CatalogTableType.VIEW) {
-      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
-    }
 
     // Detect cyclic view reference on ALTER VIEW.
     val viewIdent = viewMeta.identifier
@@ -304,8 +295,9 @@ case class AlterViewAsCommand(
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 
+    val newSchema = CharVarcharUtils.getRawSchema(analyzedPlan.schema)
     val updatedViewMeta = viewMeta.copy(
-      schema = analyzedPlan.schema,
+      schema = newSchema,
       properties = newProperties,
       viewOriginalText = Some(originalText),
       viewText = Some(originalText))
@@ -341,7 +333,7 @@ case class ShowViewsCommand(
     views.map { tableIdent =>
       val namespace = tableIdent.database.toArray.quoted
       val tableName = tableIdent.table
-      val isTemp = catalog.isTemporaryTable(tableIdent)
+      val isTemp = catalog.isTempView(tableIdent)
 
       Row(namespace, tableName, isTemp)
     }

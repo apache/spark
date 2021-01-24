@@ -130,7 +130,9 @@ package object dsl {
       if (expr.resolved && expr.dataType.sameType(to)) {
         expr
       } else {
-        Cast(expr, to)
+        val cast = Cast(expr, to)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
       }
     }
 
@@ -247,6 +249,9 @@ package object dsl {
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
+    }
+    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
+      def s: String = attr.name
     }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
@@ -456,6 +461,16 @@ package object dsl {
 
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): LogicalPlan = {
+        Sample(lowerBound, upperBound, withReplacement, seed, logicalPlan)
+      }
+
+      def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
     }
   }
 }

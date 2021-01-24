@@ -174,6 +174,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
+    withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
+      statsWithHgms.foreach { case (k, v) =>
+        val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
@@ -542,7 +551,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val errMsg1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg1.contains("Table or view not found for 'ANALYZE TABLE ... FOR COLUMNS ...': " +
+      assert(errMsg1.contains("Table or view not found: " +
         s"$globalTempDB.gTempView"))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
@@ -668,6 +677,38 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           }.getMessage
           assert(errorMsg.contains("Found duplicate column(s)"))
         }
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }

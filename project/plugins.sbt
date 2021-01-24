@@ -34,7 +34,7 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.8.0")
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.4.3")
 
 addSbtPlugin("com.cavorite" % "sbt-avro" % "2.1.1")
-libraryDependencies += "org.apache.avro" % "avro-compiler" % "1.8.2"
+libraryDependencies += "org.apache.avro" % "avro-compiler" % "1.10.1"
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 

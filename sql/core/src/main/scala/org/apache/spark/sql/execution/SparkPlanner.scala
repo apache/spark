@@ -43,6 +43,7 @@ class SparkPlanner(val session: SparkSession, val experimentalMethods: Experimen
       Window ::
       JoinSelection ::
       InMemoryScans ::
+      SparkScripts ::
       BasicOperators :: Nil)
 
   /**

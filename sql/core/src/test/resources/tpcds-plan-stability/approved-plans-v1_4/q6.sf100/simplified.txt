@@ -17,14 +17,16 @@ TakeOrderedAndProject [cnt,state]
                                 WholeStageCodegen (5)
                                   Project [ss_customer_sk]
                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                      Project [ss_sold_date_sk,ss_customer_sk]
+                                      Project [ss_customer_sk,ss_sold_date_sk]
                                         BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                          Filter [ss_customer_sk,ss_sold_date_sk,ss_item_sk]
+                                          Filter [ss_customer_sk,ss_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk]
+                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_sold_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    ReusedExchange [d_date_sk] #3
                                           InputAdapter
-                                            BroadcastExchange #3
+                                            BroadcastExchange #4
                                               WholeStageCodegen (3)
                                                 Project [i_item_sk]
                                                   Filter [i_current_price,avg(i_current_price)]
@@ -34,11 +36,11 @@ TakeOrderedAndProject [cnt,state]
                                                           InputAdapter
                                                             Scan parquet default.item [i_item_sk,i_current_price,i_category]
                                                       InputAdapter
-                                                        BroadcastExchange #4
+                                                        BroadcastExchange #5
                                                           WholeStageCodegen (2)
                                                             HashAggregate [i_category,sum,count] [avg(UnscaledValue(i_current_price)),avg(i_current_price),i_category,sum,count]
                                                               InputAdapter
-                                                                Exchange [i_category] #5
+                                                                Exchange [i_category] #6
                                                                   WholeStageCodegen (1)
                                                                     HashAggregate [i_category,i_current_price] [sum,count,sum,count]
                                                                       Filter [i_category]
@@ -46,11 +48,11 @@ TakeOrderedAndProject [cnt,state]
                                                                           InputAdapter
                                                                             Scan parquet default.item [i_current_price,i_category]
                                       InputAdapter
-                                        BroadcastExchange #6
+                                        BroadcastExchange #3
                                           WholeStageCodegen (4)
                                             Project [d_date_sk]
                                               Filter [d_month_seq,d_date_sk]
-                                                Subquery #1
+                                                Subquery #2
                                                   WholeStageCodegen (2)
                                                     HashAggregate [d_month_seq]
                                                       InputAdapter

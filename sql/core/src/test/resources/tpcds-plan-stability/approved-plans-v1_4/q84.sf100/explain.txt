@@ -1,7 +1,7 @@
 == Physical Plan ==
-TakeOrderedAndProject (36)
-+- * Project (35)
-   +- * BroadcastHashJoin Inner BuildLeft (34)
+TakeOrderedAndProject (37)
++- * Project (36)
+   +- * BroadcastHashJoin Inner BuildLeft (35)
       :- BroadcastExchange (30)
       :  +- * Project (29)
       :     +- * BroadcastHashJoin Inner BuildLeft (28)
@@ -32,9 +32,10 @@ TakeOrderedAndProject (36)
       :        +- * Filter (27)
       :           +- * ColumnarToRow (26)
       :              +- Scan parquet default.customer_demographics (25)
-      +- * Filter (33)
-         +- * ColumnarToRow (32)
-            +- Scan parquet default.store_returns (31)
+      +- * Project (34)
+         +- * Filter (33)
+            +- * ColumnarToRow (32)
+               +- Scan parquet default.store_returns (31)
 
 
 (1) Scan parquet default.customer
@@ -172,29 +173,33 @@ Input [4]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18]
 Arguments: HashedRelationBroadcastMode(List(cast(input[3, int, true] as bigint)),false), [id=#19]
 
 (31) Scan parquet default.store_returns
-Output [1]: [sr_cdemo_sk#20]
+Output [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store_returns]
 PushedFilters: [IsNotNull(sr_cdemo_sk)]
 ReadSchema: struct<sr_cdemo_sk:bigint>
 
 (32) ColumnarToRow
-Input [1]: [sr_cdemo_sk#20]
+Input [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
 
 (33) Filter
-Input [1]: [sr_cdemo_sk#20]
+Input [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
 Condition : isnotnull(sr_cdemo_sk#20)
 
-(34) BroadcastHashJoin [codegen id : 6]
+(34) Project
+Output [1]: [sr_cdemo_sk#20]
+Input [2]: [sr_cdemo_sk#20, sr_returned_date_sk#21]
+
+(35) BroadcastHashJoin [codegen id : 6]
 Left keys [1]: [cast(cd_demo_sk#18 as bigint)]
 Right keys [1]: [sr_cdemo_sk#20]
 Join condition: None
 
-(35) Project [codegen id : 6]
-Output [3]: [c_customer_id#1 AS customer_id#21, concat(c_last_name#6, , , c_first_name#5) AS customername#22, c_customer_id#1]
+(36) Project [codegen id : 6]
+Output [3]: [c_customer_id#1 AS customer_id#22, concat(c_last_name#6, , , c_first_name#5) AS customername#23, c_customer_id#1]
 Input [5]: [c_customer_id#1, c_first_name#5, c_last_name#6, cd_demo_sk#18, sr_cdemo_sk#20]
 
-(36) TakeOrderedAndProject
-Input [3]: [customer_id#21, customername#22, c_customer_id#1]
-Arguments: 100, [c_customer_id#1 ASC NULLS FIRST], [customer_id#21, customername#22]
+(37) TakeOrderedAndProject
+Input [3]: [customer_id#22, customername#23, c_customer_id#1]
+Arguments: 100, [c_customer_id#1 ASC NULLS FIRST], [customer_id#22, customername#23]
 

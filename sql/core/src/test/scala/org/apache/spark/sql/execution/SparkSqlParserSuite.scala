@@ -339,16 +339,6 @@ class SparkSqlParserSuite extends AnalysisTest {
       "LINES TERMINATED BY only supports newline '\\n' right now")
   }
 
-  test("UNCACHE TABLE") {
-    assertEqual(
-      "UNCACHE TABLE a.b.c",
-      UncacheTableCommand(Seq("a", "b", "c"), ifExists = false))
-
-    assertEqual(
-      "UNCACHE TABLE IF EXISTS a.b.c",
-      UncacheTableCommand(Seq("a", "b", "c"), ifExists = true))
-  }
-
   test("CLEAR CACHE") {
     assertEqual("CLEAR CACHE", ClearCacheCommand)
   }

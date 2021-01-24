@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -136,7 +137,8 @@ case class UserDefinedGenerator(
        1	2
        3	NULL
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Stack(children: Seq[Expression]) extends Generator {
 
@@ -259,10 +261,10 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
  */
 case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
   final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def elementSchema: StructType = child.elementSchema
 
@@ -362,7 +364,8 @@ abstract class ExplodeBase extends UnaryExpression with CollectionGenerator with
        10
        20
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit
 case class Explode(child: Expression) extends ExplodeBase {
   override val position: Boolean = false
@@ -386,7 +389,8 @@ case class Explode(child: Expression) extends ExplodeBase {
        0	10
        1	20
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class PosExplode(child: Expression) extends ExplodeBase {
   override val position = true
@@ -404,7 +408,8 @@ case class PosExplode(child: Expression) extends ExplodeBase {
        1	a
        2	b
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "generator_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class Inline(child: Expression) extends UnaryExpression with CollectionGenerator {
   override val inline: Boolean = true

@@ -385,8 +385,6 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
  */
 object StateStore extends Logging {
 
-  val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
-  val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
   val PARTITION_ID_TO_CHECK_SCHEMA = 0
 
   @GuardedBy("loadedProviders")
@@ -471,7 +469,7 @@ object StateStore extends Logging {
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     loadedProviders.synchronized {
-      startMaintenanceIfNeeded()
+      startMaintenanceIfNeeded(storeConf)
 
       if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
         val result = schemaValidated.getOrElseUpdate(storeProviderId, {
@@ -496,7 +494,9 @@ object StateStore extends Logging {
         StateStoreProvider.createAndInit(
           storeProviderId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
       )
-      reportActiveStoreInstance(storeProviderId)
+      val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
+      val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+      providerIdsToUnload.foreach(unload(_))
       provider
     }
   }
@@ -534,19 +534,17 @@ object StateStore extends Logging {
   }
 
   /** Start the periodic maintenance task if not already started and if Spark active */
-  private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
-    val env = SparkEnv.get
-    if (env != null && !isMaintenanceRunning) {
-      val periodMs = env.conf.getTimeAsMs(
-        MAINTENANCE_INTERVAL_CONFIG, s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
-      maintenanceTask = new MaintenanceTask(
-        periodMs,
-        task = { doMaintenance() },
-        onError = { loadedProviders.synchronized { loadedProviders.clear() } }
-      )
-      logInfo("State Store maintenance task started")
+  private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit =
+    loadedProviders.synchronized {
+      if (SparkEnv.get != null && !isMaintenanceRunning) {
+        maintenanceTask = new MaintenanceTask(
+          storeConf.maintenanceInterval,
+          task = { doMaintenance() },
+          onError = { loadedProviders.synchronized { loadedProviders.clear() } }
+        )
+        logInfo("State Store maintenance task started")
+      }
     }
-  }
 
   /**
    * Execute background maintenance task in all the loaded store providers if they are still
@@ -573,12 +571,20 @@ object StateStore extends Logging {
     }
   }
 
-  private def reportActiveStoreInstance(storeProviderId: StateStoreProviderId): Unit = {
+  private def reportActiveStoreInstance(
+      storeProviderId: StateStoreProviderId,
+      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      coordinatorRef.foreach(_.reportActiveInstance(storeProviderId, host, executorId))
+      val providerIdsToUnload = coordinatorRef
+        .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
+        .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(s"Reported that the loaded instance $storeProviderId is active")
+      logDebug(s"The loaded instances are going to unload: ${providerIdsToUnload.mkString(", ")}")
+      providerIdsToUnload
+    } else {
+      Seq.empty[StateStoreProviderId]
     }
   }
 

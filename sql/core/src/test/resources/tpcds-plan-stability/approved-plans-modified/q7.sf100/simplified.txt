@@ -1,6 +1,6 @@
 TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
   WholeStageCodegen (6)
-    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cast(ss_quantity as bigint)),avg(UnscaledValue(ss_list_price)),avg(UnscaledValue(ss_coupon_amt)),avg(UnscaledValue(ss_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(ss_quantity),avg(UnscaledValue(ss_list_price)),avg(UnscaledValue(ss_coupon_amt)),avg(UnscaledValue(ss_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [i_item_id] #1
           WholeStageCodegen (5)
@@ -13,10 +13,12 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                         BroadcastHashJoin [ss_promo_sk,p_promo_sk]
                           Project [ss_item_sk,ss_cdemo_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
                             BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                              Filter [ss_sold_date_sk,ss_cdemo_sk,ss_item_sk,ss_promo_sk]
+                              Filter [ss_cdemo_sk,ss_item_sk,ss_promo_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_cdemo_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt]
+                                    Scan parquet default.store_sales [ss_item_sk,ss_cdemo_sk,ss_promo_sk,ss_quantity,ss_list_price,ss_sales_price,ss_coupon_amt,ss_sold_date_sk]
+                                      SubqueryBroadcast [d_date_sk] #1
+                                        ReusedExchange [d_date_sk] #2
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
