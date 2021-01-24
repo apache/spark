@@ -24,8 +24,7 @@ from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams, JavaTransformer, _jvm
 from pyspark.ml.common import inherit_doc
 
-__all__ = ['ANOVASelector', 'ANOVASelectorModel',
-           'Binarizer',
+__all__ = ['Binarizer',
            'BucketedRandomProjectionLSH', 'BucketedRandomProjectionLSHModel',
            'Bucketizer',
            'ChiSqSelector', 'ChiSqSelectorModel',
@@ -33,7 +32,6 @@ __all__ = ['ANOVASelector', 'ANOVASelectorModel',
            'DCT',
            'ElementwiseProduct',
            'FeatureHasher',
-           'FValueSelector', 'FValueSelectorModel',
            'HashingTF',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
@@ -56,6 +54,7 @@ __all__ = ['ANOVASelector', 'ANOVASelectorModel',
            'StopWordsRemover',
            'StringIndexer', 'StringIndexerModel',
            'Tokenizer',
+           'UnivariateFeatureSelector', 'UnivariateFeatureSelectorModel',
            'VarianceThresholdSelector', 'VarianceThresholdSelectorModel',
            'VectorAssembler',
            'VectorIndexer', 'VectorIndexerModel',
@@ -5413,106 +5412,6 @@ class _SelectorModel(JavaModel, _SelectorParams):
 
 
 @inherit_doc
-class ANOVASelector(_Selector, JavaMLReadable, JavaMLWritable):
-    """
-    ANOVA F-value Classification selector, which selects continuous features to use for predicting
-    a categorical label.
-    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
-    `fdr`, `fwe`.
-
-    - `numTopFeatures` chooses a fixed number of top features according to a F value
-      classification test.
-    - `percentile` is similar but chooses a fraction of all features
-      instead of a fixed number.
-    - `fpr` chooses all features whose p-values are below a threshold,
-      thus controlling the false positive rate of selection.
-    - `fdr` uses the `Benjamini-Hochberg procedure \
-      <https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
-      to choose all features whose false discovery rate is below a threshold.
-    - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
-      1 / `numFeatures`, thus controlling the family-wise error rate of selection.
-
-    By default, the selection method is `numTopFeatures`, with the default number of top features
-    set to 50.
-
-    .. versionadded:: 3.1.0
-
-    Examples
-    --------
-    >>> from pyspark.ml.linalg import Vectors
-    >>> df = spark.createDataFrame(
-    ...    [(Vectors.dense([1.7, 4.4, 7.6, 5.8, 9.6, 2.3]), 3.0),
-    ...     (Vectors.dense([8.8, 7.3, 5.7, 7.3, 2.2, 4.1]), 2.0),
-    ...     (Vectors.dense([1.2, 9.5, 2.5, 3.1, 8.7, 2.5]), 1.0),
-    ...     (Vectors.dense([3.7, 9.2, 6.1, 4.1, 7.5, 3.8]), 2.0),
-    ...     (Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0),
-    ...     (Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0)],
-    ...    ["features", "label"])
-    >>> selector = ANOVASelector(numTopFeatures=1, outputCol="selectedFeatures")
-    >>> model = selector.fit(df)
-    >>> model.getFeaturesCol()
-    'features'
-    >>> model.setFeaturesCol("features")
-    ANOVASelectorModel...
-    >>> model.transform(df).head().selectedFeatures
-    DenseVector([7.6])
-    >>> model.selectedFeatures
-    [2]
-    >>> anovaSelectorPath = temp_path + "/anova-selector"
-    >>> selector.save(anovaSelectorPath)
-    >>> loadedSelector = ANOVASelector.load(anovaSelectorPath)
-    >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
-    True
-    >>> modelPath = temp_path + "/anova-selector-model"
-    >>> model.save(modelPath)
-    >>> loadedModel = ANOVASelectorModel.load(modelPath)
-    >>> loadedModel.selectedFeatures == model.selectedFeatures
-    True
-    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
-    True
-    """
-
-    @keyword_only
-    def __init__(self, *, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                 fdr=0.05, fwe=0.05):
-        """
-        __init__(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
-                 fdr=0.05, fwe=0.05)
-        """
-        super(ANOVASelector, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.ANOVASelector", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
-
-    @keyword_only
-    @since("3.1.0")
-    def setParams(self, *, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                  fdr=0.05, fwe=0.05):
-        """
-        setParams(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
-                  fdr=0.05, fwe=0.05)
-        Sets params for this ANOVASelector.
-        """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
-
-    def _create_model(self, java_model):
-        return ANOVASelectorModel(java_model)
-
-
-class ANOVASelectorModel(_SelectorModel, JavaMLReadable, JavaMLWritable):
-    """
-    Model fitted by :py:class:`ANOVASelector`.
-
-    .. versionadded:: 3.1.0
-    """
-
-
-@inherit_doc
 class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
     """
     Chi-Squared feature selection, which selects categorical features to use for predicting a
@@ -5537,6 +5436,9 @@ class ChiSqSelector(_Selector, JavaMLReadable, JavaMLWritable):
 
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
+
+    .. deprecated:: 3.1.0
+        Use UnivariateFeatureSelector
 
     .. versionadded:: 2.0.0
 
@@ -5609,110 +5511,6 @@ class ChiSqSelectorModel(_SelectorModel, JavaMLReadable, JavaMLWritable):
     Model fitted by :py:class:`ChiSqSelector`.
 
     .. versionadded:: 2.0.0
-    """
-
-
-@inherit_doc
-class FValueSelector(_Selector, JavaMLReadable, JavaMLWritable):
-    """
-    F Value Regression feature selector, which selects continuous features to use for predicting a
-    continuous label.
-    The selector supports different selection methods: `numTopFeatures`, `percentile`, `fpr`,
-    `fdr`, `fwe`.
-
-     * `numTopFeatures` chooses a fixed number of top features according to a F value
-        regression test.
-
-     * `percentile` is similar but chooses a fraction of all features
-       instead of a fixed number.
-
-     * `fpr` chooses all features whose p-values are below a threshold,
-       thus controlling the false positive rate of selection.
-
-     * `fdr` uses the `Benjamini-Hochberg procedure <https://en.wikipedia.org/wiki/
-       False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
-       to choose all features whose false discovery rate is below a threshold.
-
-     * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
-       1/numFeatures, thus controlling the family-wise error rate of selection.
-
-    By default, the selection method is `numTopFeatures`, with the default number of top features
-    set to 50.
-
-    .. versionadded:: 3.1.0
-
-    Examples
-    --------
-    >>> from pyspark.ml.linalg import Vectors
-    >>> df = spark.createDataFrame(
-    ...    [(Vectors.dense([6.0, 7.0, 0.0, 7.0, 6.0, 0.0]), 4.6),
-    ...     (Vectors.dense([0.0, 9.0, 6.0, 0.0, 5.0, 9.0]), 6.6),
-    ...     (Vectors.dense([0.0, 9.0, 3.0, 0.0, 5.0, 5.0]), 5.1),
-    ...     (Vectors.dense([0.0, 9.0, 8.0, 5.0, 6.0, 4.0]), 7.6),
-    ...     (Vectors.dense([8.0, 9.0, 6.0, 5.0, 4.0, 4.0]), 9.0),
-    ...     (Vectors.dense([8.0, 9.0, 6.0, 4.0, 0.0, 0.0]), 9.0)],
-    ...    ["features", "label"])
-    >>> selector = FValueSelector(numTopFeatures=1, outputCol="selectedFeatures")
-    >>> model = selector.fit(df)
-    >>> model.getFeaturesCol()
-    'features'
-    >>> model.setFeaturesCol("features")
-    FValueSelectorModel...
-    >>> model.transform(df).head().selectedFeatures
-    DenseVector([0.0])
-    >>> model.selectedFeatures
-    [2]
-    >>> fvalueSelectorPath = temp_path + "/fvalue-selector"
-    >>> selector.save(fvalueSelectorPath)
-    >>> loadedSelector = FValueSelector.load(fvalueSelectorPath)
-    >>> loadedSelector.getNumTopFeatures() == selector.getNumTopFeatures()
-    True
-    >>> modelPath = temp_path + "/fvalue-selector-model"
-    >>> model.save(modelPath)
-    >>> loadedModel = FValueSelectorModel.load(modelPath)
-    >>> loadedModel.selectedFeatures == model.selectedFeatures
-    True
-    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
-    True
-    """
-
-    @keyword_only
-    def __init__(self, *, numTopFeatures=50, featuresCol="features", outputCol=None,
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                 fdr=0.05, fwe=0.05):
-        """
-        __init__(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                 labelCol="label", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
-                 fdr=0.05, fwe=0.05)
-        """
-        super(FValueSelector, self).__init__()
-        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FValueSelector", self.uid)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
-
-    @keyword_only
-    @since("3.1.0")
-    def setParams(self, *, numTopFeatures=50, featuresCol="features", outputCol=None,
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
-                  fdr=0.05, fwe=0.05):
-        """
-        setParams(self, \\*, numTopFeatures=50, featuresCol="features", outputCol=None, \
-                  labelCol="labels", selectorType="numTopFeatures", percentile=0.1, fpr=0.05, \
-                  fdr=0.05, fwe=0.05)
-        Sets params for this FValueSelector.
-        """
-        kwargs = self._input_kwargs
-        return self._set(**kwargs)
-
-    def _create_model(self, java_model):
-        return FValueSelectorModel(java_model)
-
-
-class FValueSelectorModel(_SelectorModel, JavaMLReadable, JavaMLWritable):
-    """
-    Model fitted by :py:class:`FValueSelector`.
-
-    .. versionadded:: 3.1.0
     """
 
 
@@ -5945,6 +5743,243 @@ class VarianceThresholdSelectorModel(JavaModel, _VarianceThresholdSelectorParams
 
     @property
     @since("3.1.0")
+    def selectedFeatures(self):
+        """
+        List of indices to select (filter).
+        """
+        return self._call_java("selectedFeatures")
+
+
+class _UnivariateFeatureSelectorParams(HasFeaturesCol, HasOutputCol, HasLabelCol):
+    """
+    Params for :py:class:`UnivariateFeatureSelector` and
+    :py:class:`UnivariateFeatureSelectorModel`.
+
+    .. versionadded:: 3.1.0
+    """
+
+    featureType = Param(Params._dummy(), "featureType",
+                        "The feature type. " +
+                        "Supported options: categorical, continuous.",
+                        typeConverter=TypeConverters.toString)
+
+    labelType = Param(Params._dummy(), "labelType",
+                      "The label type. " +
+                      "Supported options: categorical, continuous.",
+                      typeConverter=TypeConverters.toString)
+
+    selectionMode = Param(Params._dummy(), "selectionMode",
+                          "The selection mode. " +
+                          "Supported options: numTopFeatures (default), percentile, fpr, " +
+                          "fdr, fwe.",
+                          typeConverter=TypeConverters.toString)
+
+    selectionThreshold = Param(Params._dummy(), "selectionThreshold", "The upper bound of the " +
+                               "features that selector will select.",
+                               typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, *args):
+        super(_UnivariateFeatureSelectorParams, self).__init__(*args)
+        self._setDefault(selectionMode="numTopFeatures")
+
+    @since("3.1.1")
+    def getFeatureType(self):
+        """
+        Gets the value of featureType or its default value.
+        """
+        return self.getOrDefault(self.featureType)
+
+    @since("3.1.1")
+    def getLabelType(self):
+        """
+        Gets the value of labelType or its default value.
+        """
+        return self.getOrDefault(self.labelType)
+
+    @since("3.1.1")
+    def getSelectionMode(self):
+        """
+        Gets the value of selectionMode or its default value.
+        """
+        return self.getOrDefault(self.selectionMode)
+
+    @since("3.1.1")
+    def getSelectionThreshold(self):
+        """
+        Gets the value of selectionThreshold or its default value.
+        """
+        return self.getOrDefault(self.selectionThreshold)
+
+
+@inherit_doc
+class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams, JavaMLReadable,
+                                JavaMLWritable):
+    """
+    UnivariateFeatureSelector
+    The user can set `featureType` and `labelType`, and Spark will pick the score function based on
+    the specified `featureType` and `labelType`.
+
+    The following combination of `featureType` and `labelType` are supported:
+
+    - `featureType` `categorical` and `labelType` `categorical`, Spark uses chi2.
+    - `featureType` `continuous` and `labelType` `categorical`, Spark uses f_classif.
+    - `featureType` `continuous` and `labelType` `continuous`, Spark uses f_regression.
+
+    The `UnivariateFeatureSelector` supports different selection modes: `numTopFeatures`,
+    `percentile`, `fpr`, `fdr`, `fwe`.
+
+    - `numTopFeatures` chooses a fixed number of top features according to a according to a
+      hypothesis.
+    - `percentile` is similar but chooses a fraction of all features
+      instead of a fixed number.
+    - `fpr` chooses all features whose p-values are below a threshold,
+      thus controlling the false positive rate of selection.
+    - `fdr` uses the `Benjamini-Hochberg procedure \
+      <https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure>`_
+      to choose all features whose false discovery rate is below a threshold.
+    - `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by
+      1 / `numFeatures`, thus controlling the family-wise error rate of selection.
+
+    By default, the selection mode is `numTopFeatures`.
+
+    .. versionadded:: 3.1.1
+
+    Examples
+    --------
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame(
+    ...    [(Vectors.dense([1.7, 4.4, 7.6, 5.8, 9.6, 2.3]), 3.0),
+    ...     (Vectors.dense([8.8, 7.3, 5.7, 7.3, 2.2, 4.1]), 2.0),
+    ...     (Vectors.dense([1.2, 9.5, 2.5, 3.1, 8.7, 2.5]), 1.0),
+    ...     (Vectors.dense([3.7, 9.2, 6.1, 4.1, 7.5, 3.8]), 2.0),
+    ...     (Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0),
+    ...     (Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0)],
+    ...    ["features", "label"])
+    >>> selector = UnivariateFeatureSelector(outputCol="selectedFeatures")
+    >>> selector.setFeatureType("continuous").setLabelType("categorical").setSelectionThreshold(1)
+    UnivariateFeatureSelector...
+    >>> model = selector.fit(df)
+    >>> model.getFeaturesCol()
+    'features'
+    >>> model.setFeaturesCol("features")
+    UnivariateFeatureSelectorModel...
+    >>> model.transform(df).head().selectedFeatures
+    DenseVector([7.6])
+    >>> model.selectedFeatures
+    [2]
+    >>> selectorPath = temp_path + "/selector"
+    >>> selector.save(selectorPath)
+    >>> loadedSelector = UnivariateFeatureSelector.load(selectorPath)
+    >>> loadedSelector.getSelectionThreshold() == selector.getSelectionThreshold()
+    True
+    >>> modelPath = temp_path + "/selector-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = UnivariateFeatureSelectorModel.load(modelPath)
+    >>> loadedModel.selectedFeatures == model.selectedFeatures
+    True
+    >>> loadedModel.transform(df).take(1) == model.transform(df).take(1)
+    True
+    """
+
+    @keyword_only
+    def __init__(self, *, featuresCol="features", outputCol=None,
+                 labelCol="label", selectionMode="numTopFeatures"):
+        """
+        __init__(self, \\*, featuresCol="features", outputCol=None, \
+                 labelCol="label", selectionMode="numTopFeatures")
+        """
+        super(UnivariateFeatureSelector, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.UnivariateFeatureSelector",
+                                            self.uid)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("3.1.1")
+    def setParams(self, *, featuresCol="features", outputCol=None,
+                  labelCol="labels", selectionMode="numTopFeatures"):
+        """
+        setParams(self, \\*, featuresCol="features", outputCol=None, \
+                  labelCol="labels", selectionMode="numTopFeatures")
+        Sets params for this UnivariateFeatureSelector.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("3.1.1")
+    def setFeatureType(self, value):
+        """
+        Sets the value of :py:attr:`featureType`.
+        """
+        return self._set(featureType=value)
+
+    @since("3.1.1")
+    def setLabelType(self, value):
+        """
+        Sets the value of :py:attr:`labelType`.
+        """
+        return self._set(labelType=value)
+
+    @since("3.1.1")
+    def setSelectionMode(self, value):
+        """
+        Sets the value of :py:attr:`selectionMode`.
+        """
+        return self._set(selectionMode=value)
+
+    @since("3.1.1")
+    def setSelectionThreshold(self, value):
+        """
+        Sets the value of :py:attr:`selectionThreshold`.
+        """
+        return self._set(selectionThreshold=value)
+
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    def setLabelCol(self, value):
+        """
+        Sets the value of :py:attr:`labelCol`.
+        """
+        return self._set(labelCol=value)
+
+    def _create_model(self, java_model):
+        return UnivariateFeatureSelectorModel(java_model)
+
+
+class UnivariateFeatureSelectorModel(JavaModel, _UnivariateFeatureSelectorParams, JavaMLReadable,
+                                     JavaMLWritable):
+    """
+    Model fitted by :py:class:`UnivariateFeatureSelector`.
+
+    .. versionadded:: 3.1.1
+    """
+
+    @since("3.1.1")
+    def setFeaturesCol(self, value):
+        """
+        Sets the value of :py:attr:`featuresCol`.
+        """
+        return self._set(featuresCol=value)
+
+    @since("3.1.1")
+    def setOutputCol(self, value):
+        """
+        Sets the value of :py:attr:`outputCol`.
+        """
+        return self._set(outputCol=value)
+
+    @property
+    @since("3.1.1")
     def selectedFeatures(self):
         """
         List of indices to select (filter).

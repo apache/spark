@@ -14,10 +14,12 @@ TakeOrderedAndProject [c_customer_id]
                           HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
                             Project [sr_customer_sk,sr_store_sk,sr_return_amt]
                               BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                Filter [sr_returned_date_sk,sr_store_sk,sr_customer_sk]
+                                Filter [sr_store_sk,sr_customer_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.store_returns [sr_returned_date_sk,sr_customer_sk,sr_store_sk,sr_return_amt]
+                                      Scan parquet default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]
+                                        SubqueryBroadcast [d_date_sk] #1
+                                          ReusedExchange [d_date_sk] #2
                                 InputAdapter
                                   BroadcastExchange #2
                                     WholeStageCodegen (1)
@@ -42,10 +44,11 @@ TakeOrderedAndProject [c_customer_id]
                                           HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
                                             Project [sr_customer_sk,sr_store_sk,sr_return_amt]
                                               BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                                Filter [sr_returned_date_sk,sr_store_sk]
+                                                Filter [sr_store_sk]
                                                   ColumnarToRow
                                                     InputAdapter
-                                                      Scan parquet default.store_returns [sr_returned_date_sk,sr_customer_sk,sr_store_sk,sr_return_amt]
+                                                      Scan parquet default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]
+                                                        ReusedSubquery [d_date_sk] #1
                                                 InputAdapter
                                                   ReusedExchange [d_date_sk] #2
             InputAdapter

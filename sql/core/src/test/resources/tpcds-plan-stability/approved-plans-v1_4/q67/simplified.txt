@@ -20,10 +20,12 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                       BroadcastHashJoin [ss_store_sk,s_store_sk]
                                         Project [ss_item_sk,ss_store_sk,ss_quantity,ss_sales_price,d_year,d_moy,d_qoy]
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                            Filter [ss_sold_date_sk,ss_store_sk,ss_item_sk]
+                                            Filter [ss_store_sk,ss_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
-                                                  Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_quantity,ss_sales_price]
+                                                  Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                                                    SubqueryBroadcast [d_date_sk] #1
+                                                      ReusedExchange [d_date_sk,d_year,d_moy,d_qoy] #3
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)

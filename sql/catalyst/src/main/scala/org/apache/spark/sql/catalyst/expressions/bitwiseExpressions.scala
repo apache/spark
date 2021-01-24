@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types._
 
@@ -203,4 +204,62 @@ case class BitwiseCount(child: Expression)
     case IntegerType => java.lang.Long.bitCount(input.asInstanceOf[Int])
     case LongType => java.lang.Long.bitCount(input.asInstanceOf[Long])
   }
+}
+
+object BitwiseGetUtil {
+  def checkPosition(pos: Int, size: Int): Unit = {
+    if (pos < 0) {
+      throw new IllegalArgumentException(s"Invalid bit position: $pos is less than zero")
+    } else if (size <= pos) {
+      throw new IllegalArgumentException(s"Invalid bit position: $pos exceeds the bit upper limit")
+    }
+  }
+}
+
+@ExpressionDescription(
+  usage = """
+            |_FUNC_(expr, pos) - Returns the value of the bit (0 or 1) at the specified position.
+            |  The positions are numbered from right to left, starting at zero.
+            |  The position argument cannot be negative.
+          """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(11, 0);
+       1
+      > SELECT _FUNC_(11, 2);
+       0
+  """,
+  since = "3.2.0",
+  group = "bitwise_funcs")
+case class BitwiseGet(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(IntegralType, IntegerType)
+
+  override def dataType: DataType = ByteType
+
+  lazy val bitSize = left.dataType match {
+    case ByteType => java.lang.Byte.SIZE
+    case ShortType => java.lang.Short.SIZE
+    case IntegerType => java.lang.Integer.SIZE
+    case LongType => java.lang.Long.SIZE
+  }
+
+  override def nullSafeEval(target: Any, pos: Any): Any = {
+    val posInt = pos.asInstanceOf[Int]
+    BitwiseGetUtil.checkPosition(posInt, bitSize)
+    ((target.asInstanceOf[Number].longValue() >> posInt) & 1).toByte
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (target, pos) => {
+      s"""
+         |org.apache.spark.sql.catalyst.expressions.BitwiseGetUtil.checkPosition($pos, $bitSize);
+         |${ev.value} = (byte) ((((long) $target) >> $pos) & 1);
+       """.stripMargin
+    })
+  }
+
+  override def prettyName: String =
+    getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("bit_get")
 }

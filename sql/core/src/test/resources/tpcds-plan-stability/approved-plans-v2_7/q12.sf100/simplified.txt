@@ -23,10 +23,12 @@ TakeOrderedAndProject [i_category,i_class,i_item_id,i_item_desc,revenueratio,i_c
                                             WholeStageCodegen (2)
                                               Project [ws_item_sk,ws_ext_sales_price]
                                                 BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                  Filter [ws_item_sk,ws_sold_date_sk]
+                                                  Filter [ws_item_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_ext_sales_price]
+                                                        Scan parquet default.web_sales [ws_item_sk,ws_ext_sales_price,ws_sold_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #1
+                                                            ReusedExchange [d_date_sk] #4
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)

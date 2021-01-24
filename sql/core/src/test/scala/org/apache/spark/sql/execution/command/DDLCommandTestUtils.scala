@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.test.SQLTestUtils
@@ -101,11 +101,29 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     if (stats.isEmpty) {
       throw new IllegalArgumentException(s"The table $tableName does not have stats")
     }
-    val tableSizeInStats = ".*(\\d) bytes.*".r
+    val tableSizeInStats = "^(\\d+) bytes.*$".r
     val size = stats.first().getString(0) match {
       case tableSizeInStats(s) => s.toInt
       case _ => throw new IllegalArgumentException("Not found table size in stats")
     }
     size
+  }
+
+  def partSpecToString(spec: Map[String, Any]): String = {
+    spec.map {
+      case (k, v: String) => s"$k = '$v'"
+      case (k, v) => s"$k = $v"
+    }.mkString("PARTITION (", ", ", ")")
+  }
+
+  def cacheRelation(name: String): Unit = {
+    assert(!spark.catalog.isCached(name))
+    sql(s"CACHE TABLE $name")
+    assert(spark.catalog.isCached(name))
+  }
+
+  def checkCachedRelation(name: String, expected: Seq[Row]): Unit = {
+    assert(spark.catalog.isCached(name))
+    QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
   }
 }

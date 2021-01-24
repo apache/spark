@@ -476,7 +476,7 @@ def toDegrees(col):
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
     """
-    warnings.warn("Deprecated in 2.1, use degrees instead.", DeprecationWarning)
+    warnings.warn("Deprecated in 2.1, use degrees instead.", FutureWarning)
     return degrees(col)
 
 
@@ -486,7 +486,7 @@ def toRadians(col):
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
     """
-    warnings.warn("Deprecated in 2.1, use radians instead.", DeprecationWarning)
+    warnings.warn("Deprecated in 2.1, use radians instead.", FutureWarning)
     return radians(col)
 
 
@@ -795,7 +795,7 @@ def approxCountDistinct(col, rsd=None):
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
     """
-    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
+    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
 
 

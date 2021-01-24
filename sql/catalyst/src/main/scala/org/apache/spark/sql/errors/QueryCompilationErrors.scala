@@ -22,10 +22,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -661,5 +661,69 @@ object QueryCompilationErrors {
 
   def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
     new AnalysisException(s"Cannot read table property '$key' as it's corrupted.$details")
+  }
+
+  def invalidSchemaStringError(exp: Expression): Throwable = {
+    new AnalysisException(s"The expression '${exp.sql}' is not a valid schema string.")
+  }
+
+  def schemaNotFoldableError(exp: Expression): Throwable = {
+    new AnalysisException(
+      "Schema should be specified in DDL format as a string literal or output of " +
+        s"the schema_of_json/schema_of_csv functions instead of ${exp.sql}")
+  }
+
+  def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(s"Schema should be struct type but got ${dataType.sql}.")
+  }
+
+  def keyValueInMapNotStringError(m: CreateMap): Throwable = {
+    new AnalysisException(
+      s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
+  }
+
+  def nonMapFunctionNotAllowedError(): Throwable = {
+    new AnalysisException("Must use a map() function for options")
+  }
+
+  def invalidFieldTypeForCorruptRecordError(): Throwable = {
+    new AnalysisException("The field for corrupt records must be string type and nullable")
+  }
+
+  def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {
+    new AnalysisException(s"DataType '$x' is not supported by $className.")
+  }
+
+  def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
+    new AnalysisException(s"$funcName() doesn't support the ${mode.name} mode. " +
+      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+  }
+
+  def unfoldableFieldUnsupportedError(): Throwable = {
+    new AnalysisException("The field parameter needs to be a foldable string value.")
+  }
+
+  def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
+    new AnalysisException(s"Literals of type '$field' are currently not supported " +
+      s"for the ${source.dataType.catalogString} type.")
+  }
+
+  def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {
+    new AnalysisException(s"Unsupported component type $clz in arrays")
+  }
+
+  def secondArgumentNotDoubleLiteralError(): Throwable = {
+    new AnalysisException("The second argument should be a double literal.")
+  }
+
+  def dataTypeUnsupportedByExtractValueError(
+      dataType: DataType, extraction: Expression, child: Expression): Throwable = {
+    val errorMsg = dataType match {
+      case StructType(_) =>
+        s"Field name should be String Literal, but it's $extraction"
+      case other =>
+        s"Can't extract value from $child: need struct type but got ${other.catalogString}"
+    }
+    new AnalysisException(errorMsg)
   }
 }

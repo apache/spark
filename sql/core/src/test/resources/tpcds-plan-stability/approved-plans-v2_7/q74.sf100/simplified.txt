@@ -31,10 +31,12 @@ TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
                                                             WholeStageCodegen (2)
                                                               Project [ss_customer_sk,ss_net_paid,d_year]
                                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                  Filter [ss_customer_sk,ss_sold_date_sk]
+                                                                  Filter [ss_customer_sk]
                                                                     ColumnarToRow
                                                                       InputAdapter
-                                                                        Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_net_paid]
+                                                                        Scan parquet default.store_sales [ss_customer_sk,ss_net_paid,ss_sold_date_sk]
+                                                                          SubqueryBroadcast [d_date_sk] #1
+                                                                            ReusedExchange [d_date_sk,d_year] #4
                                                                   InputAdapter
                                                                     BroadcastExchange #4
                                                                       WholeStageCodegen (1)
@@ -73,10 +75,12 @@ TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
                                                           WholeStageCodegen (10)
                                                             Project [ss_customer_sk,ss_net_paid,d_year]
                                                               BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                Filter [ss_customer_sk,ss_sold_date_sk]
+                                                                Filter [ss_customer_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
-                                                                      Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk,ss_net_paid]
+                                                                      Scan parquet default.store_sales [ss_customer_sk,ss_net_paid,ss_sold_date_sk]
+                                                                        SubqueryBroadcast [d_date_sk] #2
+                                                                          ReusedExchange [d_date_sk,d_year] #9
                                                                 InputAdapter
                                                                   BroadcastExchange #9
                                                                     WholeStageCodegen (9)
@@ -112,10 +116,11 @@ TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
                                                         WholeStageCodegen (19)
                                                           Project [ws_bill_customer_sk,ws_net_paid,d_year]
                                                             BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                              Filter [ws_bill_customer_sk,ws_sold_date_sk]
+                                                              Filter [ws_bill_customer_sk]
                                                                 ColumnarToRow
                                                                   InputAdapter
-                                                                    Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_customer_sk,ws_net_paid]
+                                                                    Scan parquet default.web_sales [ws_bill_customer_sk,ws_net_paid,ws_sold_date_sk]
+                                                                      ReusedSubquery [d_date_sk] #1
                                                               InputAdapter
                                                                 ReusedExchange [d_date_sk,d_year] #4
                                               InputAdapter
@@ -144,10 +149,11 @@ TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
                                             WholeStageCodegen (28)
                                               Project [ws_bill_customer_sk,ws_net_paid,d_year]
                                                 BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                                  Filter [ws_bill_customer_sk,ws_sold_date_sk]
+                                                  Filter [ws_bill_customer_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_customer_sk,ws_net_paid]
+                                                        Scan parquet default.web_sales [ws_bill_customer_sk,ws_net_paid,ws_sold_date_sk]
+                                                          ReusedSubquery [d_date_sk] #2
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk,d_year] #9
                                   InputAdapter
