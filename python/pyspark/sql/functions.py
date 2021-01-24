@@ -2756,9 +2756,19 @@ def split(str, pattern, limit=-1):
 def regexp_extract(str, pattern, idx):
     r"""Extract the first match of the given group in a regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
-    Java-style regex syntax is expected.
 
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    str : :class:`Column` or str
+        a string expression to extract from
+    pattern : str
+        a string representing a regular expression. The regex string should be a Java regular
+        expression.
+    idx : int
+        the regex group from which to extract a potential match. 0 stands for the entire regex, and
+        only non-negative numbers are allowed.
 
     Examples
     --------
@@ -2780,9 +2790,19 @@ def regexp_extract(str, pattern, idx):
 def regexp_extract_all(str, pattern, idx):
     r"""Extract all matches of the given group in a regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty array is returned.
-    Java-style regex syntax is expected.
 
     .. versionadded:: 3.1.0
+
+    Parameters
+    ----------
+    str : :class:`Column` or str
+        a string expression to extract from
+    pattern : str
+        a string representing a regular expression. The regex string should be a Java regular
+        expression.
+    idx : int
+        the regex group from which to extract all matches. 0 stands for the entire regex, and only
+        non-negative numbers are allowed.
 
     Examples
     --------
