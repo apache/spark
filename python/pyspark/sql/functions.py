@@ -2754,8 +2754,9 @@ def split(str, pattern, limit=-1):
 
 
 def regexp_extract(str, pattern, idx):
-    r"""Extract the first match of a specific group in a Java regex, from the specified string column.
+    r"""Extract the first match of the given group in a regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
+    Java-style regex syntax is expected.
 
     .. versionadded:: 1.5.0
 
@@ -2777,8 +2778,9 @@ def regexp_extract(str, pattern, idx):
 
 
 def regexp_extract_all(str, pattern, idx):
-    r"""Extract all matches of a specific group in a Java regex, from the specified string column.
+    r"""Extract all matches of the given group in a regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty array is returned.
+    Java-style regex syntax is expected.
 
     .. versionadded:: 3.1.0
 
