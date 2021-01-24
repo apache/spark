@@ -779,8 +779,9 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
         checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
+        val oldView = spark.table(view)
         sql(s"DROP TABLE $t")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
       }
     }
   }
@@ -795,8 +796,9 @@ class DataSourceV2SQLSuite
           checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
           checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
+          val oldView = spark.table(view)
           sql(s"REPLACE TABLE $t (a bigint) USING foo")
-          assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
         }
       }
     }

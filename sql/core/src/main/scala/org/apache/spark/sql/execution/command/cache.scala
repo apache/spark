@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.util.Locale
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.LocalTempView
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{IgnoreCachedData, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -29,6 +31,7 @@ import org.apache.spark.storage.StorageLevel
 case class CacheTableCommand(
     multipartIdentifier: Seq[String],
     plan: Option[LogicalPlan],
+    originalText: Option[String],
     isLazy: Boolean,
     options: Map[String, String]) extends RunnableCommand {
   require(plan.isEmpty || multipartIdentifier.length == 1,
@@ -39,7 +42,19 @@ case class CacheTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val tableName = multipartIdentifier.quoted
     plan.foreach { logicalPlan =>
-      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableName)
+      Dataset.ofRows(sparkSession,
+        CreateViewCommand(
+          name = TableIdentifier(tableName),
+          userSpecifiedColumns = Nil,
+          comment = None,
+          properties = Map.empty,
+          originalText = originalText,
+          child = logicalPlan,
+          allowExisting = false,
+          replace = false,
+          viewType = LocalTempView
+        )
+      )
     }
 
     val storageLevelKey = "storagelevel"
