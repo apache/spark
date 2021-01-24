@@ -45,6 +45,9 @@ license: |
     * `ALTER TABLE .. ADD PARTITION`
     * `ALTER TABLE .. RENAME PARTITION`
     * `ALTER TABLE .. DROP PARTITION`
+    * `ALTER TABLE .. RECOVER PARTITIONS`
+    * `MSCK REPAIR TABLE`
+    * `LOAD DATA`
     * `REFRESH TABLE`
     * and the method `spark.catalog.refreshTable`
   In Spark 3.1 and earlier, table refreshing leaves dependents uncached.
