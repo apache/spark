@@ -21,9 +21,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
-import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils.charTypeWriteSideCheck
+import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.types.{CharType, StructType}
+import org.apache.spark.sql.types.{CharType, StructType, VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object PartitioningUtils {
@@ -47,14 +47,19 @@ object PartitioningUtils {
 
       val normalizedVal = normalizedFiled.dataType match {
         case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
-          val newVal = value match {
-            case Some(v) =>
-              Some(charTypeWriteSideCheck(UTF8String.fromString(v.toString), len).toString)
+          val v = value match {
+            case Some(v) => Some(charTypeWriteSideCheck(v.toString, len))
             case None => None
-            case other =>
-              charTypeWriteSideCheck(UTF8String.fromString(other.toString), len).toString
+            case other => charTypeWriteSideCheck(other.toString, len)
           }
-          newVal.asInstanceOf[T]
+          v.asInstanceOf[T]
+        case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+          val v = value match {
+            case Some(v) => Some(varcharTypeWriteSideCheck(v.toString, len))
+            case None => None
+            case other => varcharTypeWriteSideCheck(other.toString, len)
+          }
+          v.asInstanceOf[T]
         case _ => value
       }
       normalizedFiled.name -> normalizedVal
@@ -64,6 +69,16 @@ object PartitioningUtils {
       normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
+  }
+
+  private def charTypeWriteSideCheck(inputStr: String, limit: Int): String = {
+    val toUtf8 = UTF8String.fromString(inputStr)
+    CharVarcharCodegenUtils.charTypeWriteSideCheck(toUtf8, limit).toString
+  }
+
+  private def varcharTypeWriteSideCheck(inputStr: String, limit: Int): String = {
+    val toUtf8 = UTF8String.fromString(inputStr)
+    CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUtf8, limit).toString
   }
 
   /**

@@ -65,6 +65,21 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       }
     }
   }
+
+  test("SPARK-34192: Know issue of hive for tailing spaces") {
+    // https://issues.apache.org/jira/browse/HIVE-13618
+    // Trailing spaces in partition column will be treated differently
+    // This is because Mysql and Derby(used in tests) considers 'a' = 'a '
+    // whereas others like (Postgres, Oracle) doesn't exhibit this problem.
+    Seq("string", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
+        sql(s"INSERT INTO t VALUES ('1', 'a ')")
+        val e = intercept[AnalysisException](sql(s"INSERT INTO t VALUES ('1', 'a  ')"))
+        assert(e.getMessage.contains("Expecting a partition with name c=a  ,"))
+      }
+    }
+  }
 }
 
 class HiveCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with TestHiveSingleton {
