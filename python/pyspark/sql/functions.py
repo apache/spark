@@ -2754,7 +2754,7 @@ def split(str, pattern, limit=-1):
 
 
 def regexp_extract(str, pattern, idx):
-    r"""Extract a specific group matched by a Java regex, from the specified string column.
+    r"""Extract the first match of a specific group in a Java regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty string is returned.
 
     .. versionadded:: 1.5.0
@@ -2773,6 +2773,29 @@ def regexp_extract(str, pattern, idx):
     """
     sc = SparkContext._active_spark_context
     jc = sc._jvm.functions.regexp_extract(_to_java_column(str), pattern, idx)
+    return Column(jc)
+
+
+def regexp_extract_all(str, pattern, idx):
+    r"""Extract all matches of a specific group in a Java regex, from the specified string column.
+    If the regex did not match, or the specified group did not match, an empty array is returned.
+
+    .. versionadded:: 3.1.0
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([('100-200, 300-400',)], ['str'])
+    >>> df.select(regexp_extract_all('str', r'(\d+)-(\d+)', 1).alias('d')).collect()
+    [Row(d=['100', '300'])]
+    >>> df = spark.createDataFrame([('foo',)], ['str'])
+    >>> df.select(regexp_extract_all('str', r'(\d+)', 1).alias('d')).collect()
+    [Row(d=[])]
+    >>> df = spark.createDataFrame([('aaaac',)], ['str'])
+    >>> df.select(regexp_extract_all('str', '(a+)(b)?(c)', 2).alias('d')).collect()
+    [Row(d=[''])]
+    """
+    sc = SparkContext._active_spark_context
+    jc = sc._jvm.functions.regexp_extract_all(_to_java_column(str), pattern, idx)
     return Column(jc)
 
 
