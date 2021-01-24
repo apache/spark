@@ -17,10 +17,10 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)
-                            Filter [ss_sold_date_sk,ss_store_sk]
+                            Filter [ss_store_sk]
                               ColumnarToRow
                                 InputAdapter
-                                  Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_sales_price]
+                                  Scan parquet default.store_sales [ss_store_sk,ss_sales_price,ss_sold_date_sk]
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)

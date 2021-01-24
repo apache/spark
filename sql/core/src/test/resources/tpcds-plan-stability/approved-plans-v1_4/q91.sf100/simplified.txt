@@ -23,10 +23,12 @@ WholeStageCodegen (9)
                                             WholeStageCodegen (2)
                                               Project [cr_returning_customer_sk,cr_call_center_sk,cr_net_loss]
                                                 BroadcastHashJoin [cr_returned_date_sk,d_date_sk]
-                                                  Filter [cr_call_center_sk,cr_returned_date_sk,cr_returning_customer_sk]
+                                                  Filter [cr_call_center_sk,cr_returning_customer_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.catalog_returns [cr_returned_date_sk,cr_returning_customer_sk,cr_call_center_sk,cr_net_loss]
+                                                        Scan parquet default.catalog_returns [cr_returning_customer_sk,cr_call_center_sk,cr_net_loss,cr_returned_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #1
+                                                            ReusedExchange [d_date_sk] #4
                                                   InputAdapter
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)
