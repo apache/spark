@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, Or, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.FilterEstimation
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -26,28 +26,65 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * A rule that reorder predicate expressions to get better performance.
  */
 object PredicateReorder extends Rule[LogicalPlan] with PredicateHelper {
-  // Get priority from a Expression. Expressions with higher priority are executed in preference
-  // to expressions with lower priority.
-  private def getPriority(exp: Expression, filterEstimation: FilterEstimation) = {
-    filterEstimation.calculateFilterSelectivity(exp, false).map(1.0 - _).getOrElse(0.0)
+
+  private def selectivity(exp: Expression, filterEstimation: FilterEstimation): Double = {
+    filterEstimation.calculateFilterSelectivity(exp, false)
+      .getOrElse(1.0D - 1.0D / Int.MaxValue)
   }
+
+  private def rankingAnd(exp: Expression, filterEstimation: FilterEstimation): Double = {
+    (selectivity(exp, filterEstimation) - 1.0D) / expressionCost(exp)
+  }
+
+  private def rankingOr(exp: Expression, filterEstimation: FilterEstimation): Double = {
+    -selectivity(exp, filterEstimation) / expressionCost(exp)
+  }
+
+  private def expressionCost(exp: Expression): Double = exp match {
+      case e: Expression if e.children.isEmpty =>
+        e.dataType.defaultSize
+      case e: IsNull =>
+        e.dataType.defaultSize + 1.0D + e.children.map(expressionCost).sum
+      case e: IsNotNull =>
+        e.dataType.defaultSize + 1.0D + e.children.map(expressionCost).sum
+      case e: IsNaN =>
+        e.dataType.defaultSize + 1.0D + e.children.map(expressionCost).sum
+      case e: Not =>
+        e.dataType.defaultSize + 1.0D + e.children.map(expressionCost).sum
+      case e: BinaryOperator =>
+        e.dataType.defaultSize + 1.0D + e.children.map(expressionCost).sum
+      case e: StringRegexExpression =>
+        e.dataType.defaultSize + 2.0D + e.children.map(expressionCost).sum
+      case e @ In(_, list) =>
+        e.dataType.defaultSize + 2.0D * (list.size - 1)
+      case e @ InSet(_, set) =>
+        e.dataType.defaultSize + 2.0D * (set.size - 1)
+      case e: MultiLikeBase =>
+        e.dataType.defaultSize + 2.0D * e.patterns.size
+      case e: Cast =>
+        8.0D + e.dataType.defaultSize + e.children.map(expressionCost).sum
+      case e: UserDefinedExpression =>
+        16.0D + e.dataType.defaultSize + e.children.map(expressionCost).sum
+      case e =>
+        32.0D + e.children.map(expressionCost).sum
+    }
 
   private def reorderPredicates(exp: Expression, filterEstimation: FilterEstimation): Expression = {
     exp match {
       case _: Or =>
         splitDisjunctivePredicates(exp)
-          .map(reorderPredicates(_, filterEstimation))
+          .map(e => (e, rankingOr(e, filterEstimation))).sortWith(_._2 < _._2).map(_._1)
           .reduceLeft(Or)
       case _: And =>
         splitConjunctivePredicates(exp)
-          .map(e => (e, getPriority(e, filterEstimation))).sortWith(_._2 > _._2).map(_._1)
+          .map(e => (e, rankingAnd(e, filterEstimation))).sortWith(_._2 < _._2).map(_._1)
           .reduceLeft(And)
       case _ => exp
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.cboEnabled && conf.predicateReorder) {
+    if (conf.predicateReorder) {
       plan transform {
         case f @ Filter(cond, _) => f.copy(condition = reorderPredicates(cond, FilterEstimation(f)))
       }
