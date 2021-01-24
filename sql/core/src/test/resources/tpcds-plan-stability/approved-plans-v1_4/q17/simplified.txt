@@ -46,7 +46,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_state,store_sales_quantitycount,s
                                     BroadcastExchange #2
                                       WholeStageCodegen (3)
                                         Project [d_date_sk]
-                                          Filter [d_date_sk,d_quarter_name]
+                                          Filter [d_quarter_name,d_date_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.date_dim [d_date_sk,d_quarter_name]

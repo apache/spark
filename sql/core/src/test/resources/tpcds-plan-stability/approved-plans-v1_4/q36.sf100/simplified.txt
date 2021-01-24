@@ -20,7 +20,7 @@ TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i
                                       BroadcastHashJoin [ss_store_sk,s_store_sk]
                                         Project [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit]
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                            Filter [ss_item_sk,ss_store_sk]
+                                            Filter [ss_store_sk,ss_item_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]

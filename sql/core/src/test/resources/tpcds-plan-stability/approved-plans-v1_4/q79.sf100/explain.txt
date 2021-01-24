@@ -43,7 +43,7 @@ Output [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_ti
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#8), dynamicpruningexpression(ss_sold_date_sk#8 IN dynamicpruning#9)]
-PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_hdemo_sk), IsNotNull(ss_customer_sk)]
+PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_customer_sk:int,ss_hdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_coupon_amt:decimal(7,2),ss_net_profit:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 4]
@@ -51,13 +51,13 @@ Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 
 (3) Filter [codegen id : 4]
 Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_ticket_number#5, ss_coupon_amt#6, ss_net_profit#7, ss_sold_date_sk#8]
-Condition : ((isnotnull(ss_store_sk#4) AND isnotnull(ss_hdemo_sk#2)) AND isnotnull(ss_customer_sk#1))
+Condition : ((isnotnull(ss_hdemo_sk#2) AND isnotnull(ss_customer_sk#1)) AND isnotnull(ss_store_sk#4))
 
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#10, d_year#11, d_dow#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_dow), EqualTo(d_dow,1), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
+PushedFilters: [In(d_year, [1999,2000,2001]), EqualTo(d_dow,1), IsNotNull(d_dow), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dow:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -65,7 +65,7 @@ Input [3]: [d_date_sk#10, d_year#11, d_dow#12]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#10, d_year#11, d_dow#12]
-Condition : (((isnotnull(d_dow#12) AND (d_dow#12 = 1)) AND d_year#11 IN (1999,2000,2001)) AND isnotnull(d_date_sk#10))
+Condition : (((d_year#11 IN (1999,2000,2001) AND (d_dow#12 = 1)) AND isnotnull(d_dow#12)) AND isnotnull(d_date_sk#10))
 
 (7) Project [codegen id : 1]
 Output [1]: [d_date_sk#10]
@@ -119,7 +119,7 @@ Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_number_employees), GreaterThanOrEqual(s_number_employees,200), LessThanOrEqual(s_number_employees,295), IsNotNull(s_store_sk)]
+PushedFilters: [LessThanOrEqual(s_number_employees,295), IsNotNull(s_number_employees), GreaterThanOrEqual(s_number_employees,200), IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_number_employees:int,s_city:string>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -127,7 +127,7 @@ Input [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
 
 (20) Filter [codegen id : 3]
 Input [3]: [s_store_sk#18, s_number_employees#19, s_city#20]
-Condition : (((isnotnull(s_number_employees#19) AND (s_number_employees#19 >= 200)) AND (s_number_employees#19 <= 295)) AND isnotnull(s_store_sk#18))
+Condition : ((((s_number_employees#19 <= 295) AND isnotnull(s_number_employees#19)) AND (s_number_employees#19 >= 200)) AND isnotnull(s_store_sk#18))
 
 (21) Project [codegen id : 3]
 Output [2]: [s_store_sk#18, s_city#20]

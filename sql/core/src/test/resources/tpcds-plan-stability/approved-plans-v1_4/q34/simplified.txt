@@ -27,7 +27,7 @@ WholeStageCodegen (7)
                                         BroadcastExchange #3
                                           WholeStageCodegen (1)
                                             Project [d_date_sk]
-                                              Filter [d_year,d_date_sk,d_dom]
+                                              Filter [d_dom,d_year,d_date_sk]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date_sk,d_year,d_dom]
@@ -35,7 +35,7 @@ WholeStageCodegen (7)
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
                                         Project [s_store_sk]
-                                          Filter [s_store_sk,s_county]
+                                          Filter [s_county,s_store_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.store [s_store_sk,s_county]
@@ -43,7 +43,7 @@ WholeStageCodegen (7)
                                 BroadcastExchange #5
                                   WholeStageCodegen (3)
                                     Project [hd_demo_sk]
-                                      Filter [hd_vehicle_count,hd_dep_count,hd_demo_sk,hd_buy_potential]
+                                      Filter [hd_vehicle_count,hd_dep_count,hd_buy_potential,hd_demo_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.household_demographics [hd_demo_sk,hd_buy_potential,hd_dep_count,hd_vehicle_count]

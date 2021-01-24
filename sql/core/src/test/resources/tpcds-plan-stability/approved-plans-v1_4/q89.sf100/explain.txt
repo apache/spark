@@ -55,7 +55,7 @@ Output [4]: [ss_item_sk#6, ss_store_sk#7, ss_sales_price#8, ss_sold_date_sk#9]
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#9), dynamicpruningexpression(ss_sold_date_sk#9 IN dynamicpruning#10)]
-PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
 (6) ColumnarToRow
@@ -63,7 +63,7 @@ Input [4]: [ss_item_sk#6, ss_store_sk#7, ss_sales_price#8, ss_sold_date_sk#9]
 
 (7) Filter
 Input [4]: [ss_item_sk#6, ss_store_sk#7, ss_sales_price#8, ss_sold_date_sk#9]
-Condition : (isnotnull(ss_item_sk#6) AND isnotnull(ss_store_sk#7))
+Condition : (isnotnull(ss_store_sk#7) AND isnotnull(ss_item_sk#6))
 
 (8) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [i_item_sk#1]
@@ -78,7 +78,7 @@ Input [8]: [i_item_sk#1, i_brand#2, i_class#3, i_category#4, ss_item_sk#6, ss_st
 Output [3]: [d_date_sk#11, d_year#12, d_moy#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,1999), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,1999), IsNotNull(d_year), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (11) ColumnarToRow [codegen id : 2]
@@ -86,7 +86,7 @@ Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
 
 (12) Filter [codegen id : 2]
 Input [3]: [d_date_sk#11, d_year#12, d_moy#13]
-Condition : ((isnotnull(d_year#12) AND (d_year#12 = 1999)) AND isnotnull(d_date_sk#11))
+Condition : (((d_year#12 = 1999) AND isnotnull(d_year#12)) AND isnotnull(d_date_sk#11))
 
 (13) Project [codegen id : 2]
 Output [2]: [d_date_sk#11, d_moy#13]

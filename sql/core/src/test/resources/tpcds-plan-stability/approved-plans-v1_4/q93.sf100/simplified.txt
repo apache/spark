@@ -16,7 +16,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                               Project [sr_item_sk,sr_ticket_number,sr_return_quantity]
                                 BroadcastHashJoin [sr_reason_sk,r_reason_sk]
                                   Project [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity]
-                                    Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
+                                    Filter [sr_reason_sk,sr_item_sk,sr_ticket_number]
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]

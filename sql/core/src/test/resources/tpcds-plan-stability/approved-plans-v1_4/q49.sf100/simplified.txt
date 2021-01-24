@@ -37,7 +37,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                         Project [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid]
                                                                           BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                                                                             Project [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_sold_date_sk]
-                                                                              Filter [ws_net_profit,ws_net_paid,ws_quantity,ws_order_number,ws_item_sk]
+                                                                              Filter [ws_net_profit,ws_quantity,ws_net_paid,ws_order_number,ws_item_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.web_sales [ws_item_sk,ws_order_number,ws_quantity,ws_net_paid,ws_net_profit,ws_sold_date_sk]
@@ -92,7 +92,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                         Project [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid]
                                                                           BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                                                                             Project [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_sold_date_sk]
-                                                                              Filter [cs_net_profit,cs_net_paid,cs_quantity,cs_order_number,cs_item_sk]
+                                                                              Filter [cs_net_profit,cs_quantity,cs_net_paid,cs_order_number,cs_item_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.catalog_sales [cs_item_sk,cs_order_number,cs_quantity,cs_net_paid,cs_net_profit,cs_sold_date_sk]
@@ -140,7 +140,7 @@ TakeOrderedAndProject [channel,return_rank,currency_rank,item,return_ratio]
                                                                         Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid]
                                                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
                                                                             Project [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_sold_date_sk]
-                                                                              Filter [ss_net_profit,ss_net_paid,ss_quantity,ss_ticket_number,ss_item_sk]
+                                                                              Filter [ss_net_profit,ss_quantity,ss_net_paid,ss_ticket_number,ss_item_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.store_sales [ss_item_sk,ss_ticket_number,ss_quantity,ss_net_paid,ss_net_profit,ss_sold_date_sk]

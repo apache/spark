@@ -25,7 +25,7 @@ TakeOrderedAndProject [s_store_name,s_store_id,sun_sales,mon_sales,tue_sales,wed
                     BroadcastExchange #3
                       WholeStageCodegen (2)
                         Project [s_store_sk,s_store_id,s_store_name]
-                          Filter [s_store_sk,s_gmt_offset]
+                          Filter [s_gmt_offset,s_store_sk]
                             ColumnarToRow
                               InputAdapter
                                 Scan parquet default.store [s_store_sk,s_store_id,s_store_name,s_gmt_offset]

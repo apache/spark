@@ -37,7 +37,7 @@ Output [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#4), (ss_sold_date_sk#4 >= 2451545), (ss_sold_date_sk#4 <= 2451910), dynamicpruningexpression(ss_sold_date_sk#4 IN dynamicpruning#5)]
-PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 4]
@@ -45,13 +45,13 @@ Input [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
 
 (3) Filter [codegen id : 4]
 Input [4]: [ss_item_sk#1, ss_store_sk#2, ss_sales_price#3, ss_sold_date_sk#4]
-Condition : (isnotnull(ss_item_sk#1) AND isnotnull(ss_store_sk#2))
+Condition : (isnotnull(ss_store_sk#2) AND isnotnull(ss_item_sk#1))
 
 (4) Scan parquet default.date_dim
 Output [3]: [d_date_sk#6, d_year#7, d_moy#8]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), GreaterThanOrEqual(d_date_sk,2451545), LessThanOrEqual(d_date_sk,2451910), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,2000), GreaterThanOrEqual(d_date_sk,2451545), LessThanOrEqual(d_date_sk,2451910), IsNotNull(d_year), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -59,7 +59,7 @@ Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
 
 (6) Filter [codegen id : 1]
 Input [3]: [d_date_sk#6, d_year#7, d_moy#8]
-Condition : ((((isnotnull(d_year#7) AND (d_year#7 = 2000)) AND (d_date_sk#6 >= 2451545)) AND (d_date_sk#6 <= 2451910)) AND isnotnull(d_date_sk#6))
+Condition : (((((d_year#7 = 2000) AND (d_date_sk#6 >= 2451545)) AND (d_date_sk#6 <= 2451910)) AND isnotnull(d_year#7)) AND isnotnull(d_date_sk#6))
 
 (7) Project [codegen id : 1]
 Output [2]: [d_date_sk#6, d_moy#8]

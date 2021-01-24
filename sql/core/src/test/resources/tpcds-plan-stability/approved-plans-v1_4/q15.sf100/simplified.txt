@@ -25,7 +25,7 @@ TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
                                     BroadcastExchange #3
                                       WholeStageCodegen (1)
                                         Project [d_date_sk]
-                                          Filter [d_qoy,d_year,d_date_sk]
+                                          Filter [d_year,d_qoy,d_date_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]

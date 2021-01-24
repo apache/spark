@@ -78,7 +78,7 @@ Arguments: [c_current_addr_sk#2 ASC NULLS FIRST], false, 0
 Output [2]: [ca_address_sk#6, ca_city#7]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_address_sk), IsNotNull(ca_city)]
+PushedFilters: [IsNotNull(ca_city), IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_city:string>
 
 (7) ColumnarToRow [codegen id : 3]
@@ -86,7 +86,7 @@ Input [2]: [ca_address_sk#6, ca_city#7]
 
 (8) Filter [codegen id : 3]
 Input [2]: [ca_address_sk#6, ca_city#7]
-Condition : (isnotnull(ca_address_sk#6) AND isnotnull(ca_city#7))
+Condition : (isnotnull(ca_city#7) AND isnotnull(ca_address_sk#6))
 
 (9) Exchange
 Input [2]: [ca_address_sk#6, ca_city#7]
@@ -118,7 +118,7 @@ Output [8]: [ss_customer_sk#10, ss_hdemo_sk#11, ss_addr_sk#12, ss_store_sk#13, s
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#17), dynamicpruningexpression(ss_sold_date_sk#17 IN dynamicpruning#18)]
-PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_hdemo_sk), IsNotNull(ss_addr_sk), IsNotNull(ss_customer_sk)]
+PushedFilters: [IsNotNull(ss_hdemo_sk), IsNotNull(ss_addr_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk)]
 ReadSchema: struct<ss_customer_sk:int,ss_hdemo_sk:int,ss_addr_sk:int,ss_store_sk:int,ss_ticket_number:int,ss_coupon_amt:decimal(7,2),ss_net_profit:decimal(7,2)>
 
 (16) ColumnarToRow [codegen id : 10]
@@ -126,7 +126,7 @@ Input [8]: [ss_customer_sk#10, ss_hdemo_sk#11, ss_addr_sk#12, ss_store_sk#13, ss
 
 (17) Filter [codegen id : 10]
 Input [8]: [ss_customer_sk#10, ss_hdemo_sk#11, ss_addr_sk#12, ss_store_sk#13, ss_ticket_number#14, ss_coupon_amt#15, ss_net_profit#16, ss_sold_date_sk#17]
-Condition : (((isnotnull(ss_store_sk#13) AND isnotnull(ss_hdemo_sk#11)) AND isnotnull(ss_addr_sk#12)) AND isnotnull(ss_customer_sk#10))
+Condition : (((isnotnull(ss_hdemo_sk#11) AND isnotnull(ss_addr_sk#12)) AND isnotnull(ss_customer_sk#10)) AND isnotnull(ss_store_sk#13))
 
 (18) Scan parquet default.date_dim
 Output [3]: [d_date_sk#19, d_year#20, d_dow#21]

@@ -30,7 +30,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                           InputAdapter
                                                             Exchange [ss_item_sk,ss_ticket_number] #3
                                                               WholeStageCodegen (1)
-                                                                Filter [ss_store_sk,ss_item_sk,ss_promo_sk]
+                                                                Filter [ss_promo_sk,ss_store_sk,ss_item_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
@@ -100,7 +100,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                           InputAdapter
                                                             Exchange [cs_item_sk,cs_order_number] #10
                                                               WholeStageCodegen (11)
-                                                                Filter [cs_catalog_page_sk,cs_item_sk,cs_promo_sk]
+                                                                Filter [cs_promo_sk,cs_catalog_page_sk,cs_item_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.catalog_sales [cs_catalog_page_sk,cs_item_sk,cs_promo_sk,cs_order_number,cs_ext_sales_price,cs_net_profit,cs_sold_date_sk]
@@ -151,7 +151,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                           InputAdapter
                                                             Exchange [ws_item_sk,ws_order_number] #14
                                                               WholeStageCodegen (21)
-                                                                Filter [ws_web_site_sk,ws_item_sk,ws_promo_sk]
+                                                                Filter [ws_promo_sk,ws_web_site_sk,ws_item_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.web_sales [ws_item_sk,ws_web_site_sk,ws_promo_sk,ws_order_number,ws_ext_sales_price,ws_net_profit,ws_sold_date_sk]

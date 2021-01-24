@@ -86,7 +86,7 @@ WholeStageCodegen (88)
                                                                                                                                                                           InputAdapter
                                                                                                                                                                             Exchange [ss_item_sk,ss_ticket_number] #9
                                                                                                                                                                               WholeStageCodegen (1)
-                                                                                                                                                                                Filter [ss_item_sk,ss_ticket_number,ss_store_sk,ss_customer_sk,ss_cdemo_sk,ss_promo_sk,ss_hdemo_sk,ss_addr_sk]
+                                                                                                                                                                                Filter [ss_hdemo_sk,ss_addr_sk,ss_cdemo_sk,ss_promo_sk,ss_customer_sk,ss_store_sk,ss_item_sk,ss_ticket_number]
                                                                                                                                                                                   ColumnarToRow
                                                                                                                                                                                     InputAdapter
                                                                                                                                                                                       Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]
@@ -147,7 +147,7 @@ WholeStageCodegen (88)
                                                                                                                                                         InputAdapter
                                                                                                                                                           BroadcastExchange #16
                                                                                                                                                             WholeStageCodegen (12)
-                                                                                                                                                              Filter [s_store_sk,s_store_name,s_zip]
+                                                                                                                                                              Filter [s_zip,s_store_name,s_store_sk]
                                                                                                                                                                 ColumnarToRow
                                                                                                                                                                   InputAdapter
                                                                                                                                                                     Scan parquet default.store [s_store_sk,s_store_name,s_zip]
@@ -157,7 +157,7 @@ WholeStageCodegen (88)
                                                                                                                                               InputAdapter
                                                                                                                                                 Exchange [c_customer_sk] #17
                                                                                                                                                   WholeStageCodegen (15)
-                                                                                                                                                    Filter [c_customer_sk,c_first_sales_date_sk,c_first_shipto_date_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk]
+                                                                                                                                                    Filter [c_first_shipto_date_sk,c_first_sales_date_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_customer_sk,c_current_addr_sk]
                                                                                                                                                       ColumnarToRow
                                                                                                                                                         InputAdapter
                                                                                                                                                           Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk,c_first_shipto_date_sk,c_first_sales_date_sk]
@@ -229,7 +229,7 @@ WholeStageCodegen (88)
                                           BroadcastExchange #24
                                             WholeStageCodegen (40)
                                               Project [i_item_sk,i_product_name]
-                                                Filter [i_current_price,i_color,i_item_sk]
+                                                Filter [i_color,i_current_price,i_item_sk]
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.item [i_item_sk,i_current_price,i_color,i_product_name]
@@ -314,7 +314,7 @@ WholeStageCodegen (88)
                                                                                                                                                                           InputAdapter
                                                                                                                                                                             Exchange [ss_item_sk,ss_ticket_number] #32
                                                                                                                                                                               WholeStageCodegen (44)
-                                                                                                                                                                                Filter [ss_item_sk,ss_ticket_number,ss_store_sk,ss_customer_sk,ss_cdemo_sk,ss_promo_sk,ss_hdemo_sk,ss_addr_sk]
+                                                                                                                                                                                Filter [ss_hdemo_sk,ss_addr_sk,ss_cdemo_sk,ss_promo_sk,ss_customer_sk,ss_store_sk,ss_item_sk,ss_ticket_number]
                                                                                                                                                                                   ColumnarToRow
                                                                                                                                                                                     InputAdapter
                                                                                                                                                                                       Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_promo_sk,ss_ticket_number,ss_wholesale_cost,ss_list_price,ss_coupon_amt,ss_sold_date_sk]

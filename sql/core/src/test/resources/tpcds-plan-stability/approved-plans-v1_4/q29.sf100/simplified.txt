@@ -33,7 +33,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
                                                                   Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_quantity]
                                                                     BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                      Filter [ss_customer_sk,ss_item_sk,ss_ticket_number,ss_store_sk]
+                                                                      Filter [ss_customer_sk,ss_store_sk,ss_item_sk,ss_ticket_number]
                                                                         ColumnarToRow
                                                                           InputAdapter
                                                                             Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_quantity,ss_sold_date_sk]
@@ -43,7 +43,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                                         BroadcastExchange #5
                                                                           WholeStageCodegen (1)
                                                                             Project [d_date_sk]
-                                                                              Filter [d_moy,d_year,d_date_sk]
+                                                                              Filter [d_year,d_moy,d_date_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
@@ -82,7 +82,7 @@ TakeOrderedAndProject [i_item_id,i_item_desc,s_store_id,s_store_name,store_sales
                                                     BroadcastExchange #9
                                                       WholeStageCodegen (9)
                                                         Project [d_date_sk]
-                                                          Filter [d_moy,d_year,d_date_sk]
+                                                          Filter [d_year,d_moy,d_date_sk]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.date_dim [d_date_sk,d_year,d_moy]

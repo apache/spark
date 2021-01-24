@@ -19,7 +19,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                     WholeStageCodegen (2)
                                       Project [ca_address_sk]
                                         BroadcastHashJoin [ca_county,ca_state,s_county,s_state]
-                                          Filter [ca_address_sk,ca_county,ca_state]
+                                          Filter [ca_state,ca_county,ca_address_sk]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.customer_address [ca_address_sk,ca_county,ca_state]
@@ -48,7 +48,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                               Union
                                                                 WholeStageCodegen (3)
                                                                   Project [cs_sold_date_sk,cs_bill_customer_sk,cs_item_sk]
-                                                                    Filter [cs_item_sk,cs_bill_customer_sk]
+                                                                    Filter [cs_bill_customer_sk,cs_item_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_sold_date_sk]
@@ -56,7 +56,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                                               ReusedExchange [d_date_sk] #5
                                                                 WholeStageCodegen (4)
                                                                   Project [ws_sold_date_sk,ws_bill_customer_sk,ws_item_sk]
-                                                                    Filter [ws_item_sk,ws_bill_customer_sk]
+                                                                    Filter [ws_bill_customer_sk,ws_item_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_sold_date_sk]
@@ -65,7 +65,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                               BroadcastExchange #5
                                                                 WholeStageCodegen (5)
                                                                   Project [d_date_sk]
-                                                                    Filter [d_moy,d_year,d_date_sk]
+                                                                    Filter [d_year,d_moy,d_date_sk]
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
@@ -73,7 +73,7 @@ TakeOrderedAndProject [segment,num_customers,segment_base]
                                                           BroadcastExchange #6
                                                             WholeStageCodegen (6)
                                                               Project [i_item_sk]
-                                                                Filter [i_category,i_class,i_item_sk]
+                                                                Filter [i_class,i_category,i_item_sk]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.item [i_item_sk,i_class,i_category]

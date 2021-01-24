@@ -23,7 +23,7 @@ WholeStageCodegen (10)
                                             BroadcastHashJoin [ss_store_sk,s_store_sk]
                                               Project [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number]
                                                 BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                  Filter [ss_store_sk,ss_hdemo_sk,ss_customer_sk]
+                                                  Filter [ss_hdemo_sk,ss_customer_sk,ss_store_sk]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.store_sales [ss_customer_sk,ss_hdemo_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
@@ -33,7 +33,7 @@ WholeStageCodegen (10)
                                                     BroadcastExchange #4
                                                       WholeStageCodegen (1)
                                                         Project [d_date_sk]
-                                                          Filter [d_dom,d_year,d_date_sk]
+                                                          Filter [d_year,d_date_sk,d_dom]
                                                             ColumnarToRow
                                                               InputAdapter
                                                                 Scan parquet default.date_dim [d_date_sk,d_year,d_dom]
@@ -49,7 +49,7 @@ WholeStageCodegen (10)
                                             BroadcastExchange #6
                                               WholeStageCodegen (3)
                                                 Project [hd_demo_sk]
-                                                  Filter [hd_vehicle_count,hd_dep_count,hd_buy_potential,hd_demo_sk]
+                                                  Filter [hd_vehicle_count,hd_buy_potential,hd_dep_count,hd_demo_sk]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.household_demographics [hd_demo_sk,hd_buy_potential,hd_dep_count,hd_vehicle_count]

@@ -61,7 +61,7 @@ TakeOrderedAndProject [cnt,state]
                             Project [i_item_sk]
                               Filter [i_current_price,avg(i_current_price)]
                                 BroadcastHashJoin [i_category,i_category]
-                                  Filter [i_item_sk,i_current_price]
+                                  Filter [i_current_price,i_item_sk]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.item [i_item_sk,i_current_price,i_category]

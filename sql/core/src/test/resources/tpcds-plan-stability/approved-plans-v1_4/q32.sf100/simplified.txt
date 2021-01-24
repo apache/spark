@@ -39,7 +39,7 @@ CollectLimit
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date_sk,d_date]
-            Filter [cs_item_sk,cs_ext_discount_amt]
+            Filter [cs_ext_discount_amt,cs_item_sk]
               ColumnarToRow
                 InputAdapter
                   Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]

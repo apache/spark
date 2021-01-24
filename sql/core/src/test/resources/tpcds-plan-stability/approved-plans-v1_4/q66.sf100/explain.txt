@@ -61,7 +61,7 @@ Output [7]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_warehouse_sk#3, ws_quantit
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#7), dynamicpruningexpression(ws_sold_date_sk#7 IN dynamicpruning#8)]
-PushedFilters: [IsNotNull(ws_warehouse_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_ship_mode_sk)]
+PushedFilters: [IsNotNull(ws_sold_time_sk), IsNotNull(ws_ship_mode_sk), IsNotNull(ws_warehouse_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_mode_sk:int,ws_warehouse_sk:int,ws_quantity:int,ws_ext_sales_price:decimal(7,2),ws_net_paid:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 5]
@@ -69,7 +69,7 @@ Input [7]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_warehouse_sk#3, ws_quantity
 
 (3) Filter [codegen id : 5]
 Input [7]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_warehouse_sk#3, ws_quantity#4, ws_ext_sales_price#5, ws_net_paid#6, ws_sold_date_sk#7]
-Condition : ((isnotnull(ws_warehouse_sk#3) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_ship_mode_sk#2))
+Condition : ((isnotnull(ws_sold_time_sk#1) AND isnotnull(ws_ship_mode_sk#2)) AND isnotnull(ws_warehouse_sk#3))
 
 (4) Scan parquet default.ship_mode
 Output [2]: [sm_ship_mode_sk#9, sm_carrier#10]
@@ -106,7 +106,7 @@ Input [8]: [ws_sold_time_sk#1, ws_ship_mode_sk#2, ws_warehouse_sk#3, ws_quantity
 Output [2]: [t_time_sk#12, t_time#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_time), GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time_sk)]
+PushedFilters: [GreaterThanOrEqual(t_time,30838), LessThanOrEqual(t_time,59638), IsNotNull(t_time), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_time:int>
 
 (12) ColumnarToRow [codegen id : 2]
@@ -114,7 +114,7 @@ Input [2]: [t_time_sk#12, t_time#13]
 
 (13) Filter [codegen id : 2]
 Input [2]: [t_time_sk#12, t_time#13]
-Condition : (((isnotnull(t_time#13) AND (t_time#13 >= 30838)) AND (t_time#13 <= 59638)) AND isnotnull(t_time_sk#12))
+Condition : ((((t_time#13 >= 30838) AND (t_time#13 <= 59638)) AND isnotnull(t_time#13)) AND isnotnull(t_time_sk#12))
 
 (14) Project [codegen id : 2]
 Output [1]: [t_time_sk#12]
@@ -137,7 +137,7 @@ Input [7]: [ws_sold_time_sk#1, ws_warehouse_sk#3, ws_quantity#4, ws_ext_sales_pr
 Output [3]: [d_date_sk#15, d_year#16, d_moy#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_year,2001), IsNotNull(d_year), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (19) ColumnarToRow [codegen id : 3]
@@ -145,7 +145,7 @@ Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
 
 (20) Filter [codegen id : 3]
 Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
-Condition : ((isnotnull(d_year#16) AND (d_year#16 = 2001)) AND isnotnull(d_date_sk#15))
+Condition : (((d_year#16 = 2001) AND isnotnull(d_year#16)) AND isnotnull(d_date_sk#15))
 
 (21) BroadcastExchange
 Input [3]: [d_date_sk#15, d_year#16, d_moy#17]
@@ -210,7 +210,7 @@ Output [7]: [cs_sold_time_sk#174, cs_ship_mode_sk#175, cs_warehouse_sk#176, cs_q
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#180), dynamicpruningexpression(cs_sold_date_sk#180 IN dynamicpruning#8)]
-PushedFilters: [IsNotNull(cs_warehouse_sk), IsNotNull(cs_sold_time_sk), IsNotNull(cs_ship_mode_sk)]
+PushedFilters: [IsNotNull(cs_sold_time_sk), IsNotNull(cs_ship_mode_sk), IsNotNull(cs_warehouse_sk)]
 ReadSchema: struct<cs_sold_time_sk:int,cs_ship_mode_sk:int,cs_warehouse_sk:int,cs_quantity:int,cs_sales_price:decimal(7,2),cs_net_paid_inc_tax:decimal(7,2)>
 
 (34) ColumnarToRow [codegen id : 11]
@@ -218,7 +218,7 @@ Input [7]: [cs_sold_time_sk#174, cs_ship_mode_sk#175, cs_warehouse_sk#176, cs_qu
 
 (35) Filter [codegen id : 11]
 Input [7]: [cs_sold_time_sk#174, cs_ship_mode_sk#175, cs_warehouse_sk#176, cs_quantity#177, cs_sales_price#178, cs_net_paid_inc_tax#179, cs_sold_date_sk#180]
-Condition : ((isnotnull(cs_warehouse_sk#176) AND isnotnull(cs_sold_time_sk#174)) AND isnotnull(cs_ship_mode_sk#175))
+Condition : ((isnotnull(cs_sold_time_sk#174) AND isnotnull(cs_ship_mode_sk#175)) AND isnotnull(cs_warehouse_sk#176))
 
 (36) ReusedExchange [Reuses operator id: 8]
 Output [1]: [sm_ship_mode_sk#181]

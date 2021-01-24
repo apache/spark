@@ -44,7 +44,7 @@ WholeStageCodegen (7)
                                                           ColumnarToRow
                                                             InputAdapter
                                                               Scan parquet default.date_dim [d_date_sk,d_date]
-                      Filter [ws_item_sk,ws_ext_discount_amt]
+                      Filter [ws_ext_discount_amt,ws_item_sk]
                         ColumnarToRow
                           InputAdapter
                             Scan parquet default.web_sales [ws_item_sk,ws_ext_discount_amt,ws_sold_date_sk]

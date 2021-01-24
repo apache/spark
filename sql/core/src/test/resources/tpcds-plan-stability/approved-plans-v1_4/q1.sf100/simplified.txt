@@ -20,7 +20,7 @@ TakeOrderedAndProject [c_customer_id]
                                       HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
                                         Project [sr_customer_sk,sr_store_sk,sr_return_amt]
                                           BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                            Filter [sr_store_sk,sr_customer_sk]
+                                            Filter [sr_customer_sk,sr_store_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]

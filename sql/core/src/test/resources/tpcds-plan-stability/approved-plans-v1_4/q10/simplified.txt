@@ -62,7 +62,7 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                         BroadcastExchange #6
                           WholeStageCodegen (7)
                             Project [ca_address_sk]
-                              Filter [ca_address_sk,ca_county]
+                              Filter [ca_county,ca_address_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.customer_address [ca_address_sk,ca_county]

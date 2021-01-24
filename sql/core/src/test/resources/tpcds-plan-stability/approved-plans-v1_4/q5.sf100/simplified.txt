@@ -124,7 +124,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                           Exchange [ws_item_sk,ws_order_number] #9
                                                             WholeStageCodegen (16)
                                                               Project [ws_item_sk,ws_web_site_sk,ws_order_number]
-                                                                Filter [ws_item_sk,ws_order_number,ws_web_site_sk]
+                                                                Filter [ws_web_site_sk,ws_item_sk,ws_order_number]
                                                                   ColumnarToRow
                                                                     InputAdapter
                                                                       Scan parquet default.web_sales [ws_item_sk,ws_web_site_sk,ws_order_number,ws_sold_date_sk]

@@ -30,7 +30,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                               BroadcastExchange #4
                                                 WholeStageCodegen (1)
                                                   Project [cd_demo_sk,cd_dep_count]
-                                                    Filter [cd_gender,cd_education_status,cd_demo_sk]
+                                                    Filter [cd_education_status,cd_gender,cd_demo_sk]
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_education_status,cd_dep_count]
@@ -66,7 +66,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                 Project [c_customer_sk,c_current_cdemo_sk,c_birth_year,ca_county,ca_state,ca_country]
                                                   BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
                                                     Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_year]
-                                                      Filter [c_birth_month,c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                                                      Filter [c_birth_month,c_current_cdemo_sk,c_customer_sk,c_current_addr_sk]
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
@@ -117,7 +117,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                 Project [c_customer_sk,c_current_cdemo_sk,c_birth_year,ca_state,ca_country]
                                                   BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
                                                     Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_year]
-                                                      Filter [c_birth_month,c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                                                      Filter [c_birth_month,c_current_cdemo_sk,c_customer_sk,c_current_addr_sk]
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
@@ -163,7 +163,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                                 Project [c_customer_sk,c_current_cdemo_sk,c_birth_year,ca_country]
                                                   BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
                                                     Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_year]
-                                                      Filter [c_birth_month,c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                                                      Filter [c_birth_month,c_current_cdemo_sk,c_customer_sk,c_current_addr_sk]
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]
@@ -214,7 +214,7 @@ TakeOrderedAndProject [ca_country,ca_state,ca_county,i_item_id,agg1,agg2,agg3,ag
                                         Project [c_customer_sk,c_current_cdemo_sk,c_birth_year]
                                           BroadcastHashJoin [c_current_addr_sk,ca_address_sk]
                                             Project [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_year]
-                                              Filter [c_birth_month,c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
+                                              Filter [c_birth_month,c_current_cdemo_sk,c_customer_sk,c_current_addr_sk]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk,c_birth_month,c_birth_year]

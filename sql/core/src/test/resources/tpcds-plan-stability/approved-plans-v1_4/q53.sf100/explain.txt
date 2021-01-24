@@ -60,7 +60,7 @@ Output [4]: [ss_item_sk#11, ss_store_sk#12, ss_sales_price#13, ss_sold_date_sk#1
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#14), dynamicpruningexpression(ss_sold_date_sk#14 IN dynamicpruning#15)]
-PushedFilters: [IsNotNull(ss_item_sk), IsNotNull(ss_store_sk)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
 ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_sales_price:decimal(7,2)>
 
 (7) ColumnarToRow
@@ -68,7 +68,7 @@ Input [4]: [ss_item_sk#11, ss_store_sk#12, ss_sales_price#13, ss_sold_date_sk#14
 
 (8) Filter
 Input [4]: [ss_item_sk#11, ss_store_sk#12, ss_sales_price#13, ss_sold_date_sk#14]
-Condition : (isnotnull(ss_item_sk#11) AND isnotnull(ss_store_sk#12))
+Condition : (isnotnull(ss_store_sk#12) AND isnotnull(ss_item_sk#11))
 
 (9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [i_item_sk#1]

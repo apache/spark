@@ -52,7 +52,7 @@ TakeOrderedAndProject [ext_price,brand,brand_id,i_manufact_id,i_manufact]
                   InputAdapter
                     BroadcastExchange #6
                       WholeStageCodegen (5)
-                        Filter [s_store_sk,s_zip]
+                        Filter [s_zip,s_store_sk]
                           ColumnarToRow
                             InputAdapter
                               Scan parquet default.store [s_store_sk,s_zip]

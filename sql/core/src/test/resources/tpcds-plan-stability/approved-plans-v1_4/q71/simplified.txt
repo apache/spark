@@ -63,7 +63,7 @@ WholeStageCodegen (11)
                           BroadcastExchange #5
                             WholeStageCodegen (8)
                               Project [t_time_sk,t_hour,t_minute]
-                                Filter [t_time_sk,t_meal_time]
+                                Filter [t_meal_time,t_time_sk]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.time_dim [t_time_sk,t_hour,t_minute,t_meal_time]

@@ -23,7 +23,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,s_city,profit,substr(s_city, 1, 
                                 BroadcastExchange #2
                                   WholeStageCodegen (1)
                                     Project [d_date_sk]
-                                      Filter [d_year,d_dow,d_date_sk]
+                                      Filter [d_dow,d_year,d_date_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.date_dim [d_date_sk,d_year,d_dow]
@@ -39,7 +39,7 @@ TakeOrderedAndProject [c_last_name,c_first_name,s_city,profit,substr(s_city, 1, 
                         BroadcastExchange #4
                           WholeStageCodegen (3)
                             Project [hd_demo_sk]
-                              Filter [hd_demo_sk,hd_dep_count,hd_vehicle_count]
+                              Filter [hd_dep_count,hd_vehicle_count,hd_demo_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count,hd_vehicle_count]
