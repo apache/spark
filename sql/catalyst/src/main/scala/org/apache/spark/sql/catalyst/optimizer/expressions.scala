@@ -352,10 +352,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         val lhs = splitDisjunctivePredicates(left)
         val rhs = splitDisjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.isEmpty) {
-          // No common factors, return the original predicate
-          and
-        } else {
+        if (!common.isEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -365,6 +362,16 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             // (a || b || c || ...) && (a || b || d || ...) =>
             // ((c || ...) && (d || ...)) || a || b
             (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+          }
+        } else {
+          // No common factors from disjunctive predicates, reduce common factor from conjunction
+          val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
+          val distinct = all.distinct
+          if (all.length == distinct.length) {
+            // No common factors, return the original predicate
+            and
+          } else {
+            distinct.reduce(And)
           }
         }
 
@@ -378,10 +385,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         val lhs = splitConjunctivePredicates(left)
         val rhs = splitConjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (common.isEmpty) {
-          // No common factors, return the original predicate
-          or
-        } else {
+        if (!common.isEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -391,6 +395,16 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             // (a && b && c && ...) || (a && b && d && ...) =>
             // ((c && ...) || (d && ...)) && a && b
             (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+          }
+        } else {
+          // No common factors in conjunctive predicates, reduce common factor from disjunction
+          val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
+          val distinct = all.distinct
+          if (all.size == distinct.size) {
+            // No common factors, return the original predicate
+            or
+          } else {
+            distinct.reduce(Or)
           }
         }
 
