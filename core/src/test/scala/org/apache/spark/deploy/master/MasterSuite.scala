@@ -334,10 +334,8 @@ class MasterSuite extends SparkFunSuite
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
           val JString(workerWebUi) = workerSummaryJson \ "webuiaddress"
-          val workerResponse = Utils
-            .tryWithResource(Source.fromURL(s"$workerWebUi/json")) { source =>
-              parse(source.getLines().mkString("\n"))
-            }
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(s"$workerWebUi/json"))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
         }
 
@@ -376,9 +374,8 @@ class MasterSuite extends SparkFunSuite
           // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
           val url = s"$masterUrl/proxy/${workerId}/json"
-          val workerResponse = Utils.tryWithResource(Source.fromURL(url)) { source =>
-            parse(source.getLines().mkString("\n"))
-          }
+          val workerResponse = parse(
+            Utils.tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
         }
 
@@ -415,9 +412,8 @@ class MasterSuite extends SparkFunSuite
           // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
           val url = s"$masterUrl/proxy/${workerId}/json"
-          val workerResponse = Utils.tryWithResource(Source.fromURL(url)) { source =>
-            parse(source.getLines().mkString("\n"))
-          }
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
           (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
         }
