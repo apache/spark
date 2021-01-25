@@ -680,13 +680,13 @@ class PlanResolutionSuite extends AnalysisTest {
     val tableIdent2 = Identifier.of(Array.empty, "tab")
 
     parseResolveCompare(s"DROP TABLE $tableName1",
-      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = false, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName1",
-      DropTable(ResolvedTable(testCat, tableIdent1, table), ifExists = true, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent1, table), ifExists = true, purge = false))
     parseResolveCompare(s"DROP TABLE $tableName2",
-      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = false, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = false, purge = false))
     parseResolveCompare(s"DROP TABLE IF EXISTS $tableName2",
-      DropTable(ResolvedTable(testCat, tableIdent2, table), ifExists = true, purge = false))
+      DropTable(ResolvedTable.create(testCat, tableIdent2, table), ifExists = true, purge = false))
   }
 
   test("drop view") {
@@ -721,16 +721,16 @@ class PlanResolutionSuite extends AnalysisTest {
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
   // ALTER VIEW view_name UNSET TBLPROPERTIES [IF EXISTS] ('comment', 'key');
   test("alter view: alter view properties") {
-    val sql1_view = "ALTER VIEW table_name SET TBLPROPERTIES ('test' = 'test', " +
+    val sql1_view = "ALTER VIEW view SET TBLPROPERTIES ('test' = 'test', " +
         "'comment' = 'new_comment')"
-    val sql2_view = "ALTER VIEW table_name UNSET TBLPROPERTIES ('comment', 'test')"
-    val sql3_view = "ALTER VIEW table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val sql2_view = "ALTER VIEW view UNSET TBLPROPERTIES ('comment', 'test')"
+    val sql3_view = "ALTER VIEW view UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
 
     val parsed1_view = parseAndResolve(sql1_view)
     val parsed2_view = parseAndResolve(sql2_view)
     val parsed3_view = parseAndResolve(sql3_view)
 
-    val tableIdent = TableIdentifier("table_name", Some("default"))
+    val tableIdent = TableIdentifier("view", Some("default"))
     val expected1_view = AlterTableSetPropertiesCommand(
       tableIdent, Map("test" -> "test", "comment" -> "new_comment"), isView = true)
     val expected2_view = AlterTableUnsetPropertiesCommand(
@@ -1199,7 +1199,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _) =>
           assert(r.catalog.exists(_ == catalogIdent))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _) =>

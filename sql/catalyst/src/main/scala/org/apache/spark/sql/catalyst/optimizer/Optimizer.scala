@@ -88,6 +88,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
+        OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
         ConstantPropagation,
@@ -99,9 +100,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
+        PushFoldableIntoBranches,
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
+        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
@@ -112,7 +115,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveNoopOperators,
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
-        OptimizeJsonExprs,
+        OptimizeCsvJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -154,6 +157,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
+      RemoveNoopOperators,
       CombineUnions) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
@@ -185,9 +189,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
-    // This batch rewrites data source plans and should be run after the operator
-    // optimization batch and before any batches that depend on stats.
-    Batch("Data Source Rewrite Rules", Once, dataSourceRewriteRules: _*) :+
+    // This batch rewrites plans after the operator optimization and
+    // before any batches that depend on stats.
+    Batch("Pre CBO Rules", Once, preCBORules: _*) :+
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
@@ -293,10 +297,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
-   * Override to provide additional rules for rewriting data source plans. Such rules will be
-   * applied after operator optimization rules and before any rules that depend on stats.
+   * Override to provide additional rules for rewriting plans after operator optimization rules and
+   * before any cost-based optimization rules that depend on stats.
    */
-  def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] = Nil
+  def preCBORules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
@@ -488,7 +492,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Eliminate no-op Projects
     case p @ Project(_, child) if child.sameOutput(p) => child
 
@@ -812,6 +816,19 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
+  }
+}
+
+/**
+ * Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
+ * and user not specify.
+ */
+object OptimizeRepartition extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
+      if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
+        numPartitions.isEmpty =>
+      r.copy(optNumPartitions = Some(1))
   }
 }
 

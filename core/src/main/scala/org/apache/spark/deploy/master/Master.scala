@@ -143,7 +143,7 @@ private[deploy] class Master(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     webUi = new MasterWebUI(this, webUiPort)
     webUi.bind()
-    masterWebUiUrl = s"${webUi.scheme}$masterPublicAddress:${webUi.boundPort}"
+    masterWebUiUrl = webUi.webUrl
     if (reverseProxy) {
       val uiReverseProxyUrl = conf.get(UI_REVERSE_PROXY_URL).map(_.stripSuffix("/"))
       if (uiReverseProxyUrl.nonEmpty) {

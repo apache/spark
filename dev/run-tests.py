@@ -521,10 +521,13 @@ def post_python_tests_results():
         # 6. Commit current HTMLs.
         run_cmd([
             "git",
+            "-c",
+            "user.name='Apache Spark Test Account'",
+            "-c",
+            "user.email='sparktestacc@gmail.com'",
             "commit",
             "-am",
-            "Coverage report at latest commit in Apache Spark",
-            '--author="Apache Spark Test Account <sparktestacc@gmail.com>"'])
+            "Coverage report at latest commit in Apache Spark"])
         # 7. Delete the old branch.
         run_cmd(["git", "branch", "-D", "gh-pages"])
         # 8. Rename the temporary branch to master.

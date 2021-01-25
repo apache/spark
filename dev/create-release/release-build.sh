@@ -426,7 +426,7 @@ if [[ "$1" == "publish-release" ]]; then
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
     $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+      $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   pushd $tmp_repo/org/apache/spark

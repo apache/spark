@@ -18,15 +18,17 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
-import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedSparkSession
 
+/**
+ * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1
+ * table catalogs. The tests that cannot run for all V1 catalogs are located in more
+ * specific test suites:
+ *
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.ShowPartitionsSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.ShowPartitionsSuite`
+ */
 trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
-  override def version: String = "V1"
-  override def catalog: String = CatalogManager.SESSION_CATALOG_NAME
-  override def defaultUsing: String = "USING parquet"
-
   test("show everything in the default database") {
     val table = "dateTable"
     withTable(table) {
@@ -67,9 +69,24 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       assert(errMsg.contains("'SHOW PARTITIONS' expects a table"))
     }
   }
+
+  test("SPARK-33591: null as a partition value") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(sql(s"SHOW PARTITIONS $t"), Row("p1=__HIVE_DEFAULT_PARTITION__"))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (p1 = null)"),
+        Row("p1=__HIVE_DEFAULT_PARTITION__"))
+    }
+  }
 }
 
-class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSession {
+/**
+ * The class contains tests for the `SHOW PARTITIONS` command to check V1 In-Memory table catalog.
+ */
+class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase {
   // The test is placed here because it fails with `USING HIVE`:
   // org.apache.spark.sql.AnalysisException:
   //   Hive data source can only be used with tables, you can't use it with CREATE TEMP VIEW USING
@@ -97,6 +114,16 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with SharedSparkSessio
         .saveAsTable("part_datasrc")
 
       assert(sql("SHOW PARTITIONS part_datasrc").count() == 3)
+    }
+  }
+
+  test("SPARK-33904: null and empty string as partition values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      createNullPartTable(t, "parquet")
+      runShowPartitionsSql(
+        s"SHOW PARTITIONS $t",
+        Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
+      checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
     }
   }
 }

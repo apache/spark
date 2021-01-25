@@ -32,7 +32,7 @@ case class ExecutorDecommissionInfo(message: String, workerHost: Option[String] 
  * from the info message above but it is kept distinct to allow the state to evolve independently
  * from the message.
  */
-case class ExecutorDecommissionState(
+private[scheduler] case class ExecutorDecommissionState(
     // Timestamp the decommissioning commenced as per the Driver's clock,
     // to estimate when the executor might eventually be lost if EXECUTOR_DECOMMISSION_KILL_INTERVAL
     // is configured.

@@ -18,16 +18,14 @@ WholeStageCodegen (13)
                                   Union
                                     WholeStageCodegen (1)
                                       Project [ws_sold_date_sk,ws_ext_sales_price]
-                                        Filter [ws_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.web_sales [ws_sold_date_sk,ws_ext_sales_price]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.web_sales [ws_ext_sales_price,ws_sold_date_sk]
                                     WholeStageCodegen (2)
                                       Project [cs_sold_date_sk,cs_ext_sales_price]
-                                        Filter [cs_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.catalog_sales [cs_sold_date_sk,cs_ext_sales_price]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.catalog_sales [cs_ext_sales_price,cs_sold_date_sk]
                                 InputAdapter
                                   BroadcastExchange #3
                                     WholeStageCodegen (3)
