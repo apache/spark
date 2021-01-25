@@ -171,15 +171,13 @@ private[sql] class AvroDeserializer(
 
       case (FIXED, _: DecimalType) => (updater, ordinal, value) =>
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
-        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType,
-          LogicalTypes.decimal(d.getPrecision, d.getScale))
+        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType, d)
         val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
         updater.setDecimal(ordinal, decimal)
 
       case (BYTES, _: DecimalType) => (updater, ordinal, value) =>
         val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
-        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType,
-          LogicalTypes.decimal(d.getPrecision, d.getScale))
+        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)
         val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
         updater.setDecimal(ordinal, decimal)
 
