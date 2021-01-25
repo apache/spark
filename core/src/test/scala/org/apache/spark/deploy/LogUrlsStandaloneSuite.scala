@@ -18,8 +18,10 @@
 package org.apache.spark.deploy
 
 import java.net.URL
+
 import scala.collection.mutable
 import scala.io.Source
+
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -41,8 +43,8 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
       assert(info.logUrlMap.nonEmpty)
       // Browse to each URL to check that it's valid
       info.logUrlMap.foreach { case (logType, logUrl) =>
-        val html = Utils.tryWithResource(Source.fromURL(logUrl)) { data =>
-          data.mkString
+        val html = Utils.tryWithResource(Source.fromURL(logUrl)) { source =>
+          source.mkString
         }
         assert(html.contains(s"$logType log page"))
       }

@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.Utils
 
 /**
  * Simple test for reading and writing to a distributed
@@ -46,7 +47,10 @@ object DFSReadWriteTest {
   private val NPARAMS = 2
 
   private def readFile(filename: String): List[String] = {
-    val lineIter: Iterator[String] = fromFile(filename).getLines()
+    val lineIter: Iterator[String] =
+      Utils.tryWithResource(fromFile(filename)) { source =>
+        source.getLines()
+      }
     val lineList: List[String] = lineIter.toList
     lineList
   }

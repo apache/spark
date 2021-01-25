@@ -37,8 +37,8 @@ class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
   def checkDumpedPlans(path: String, expected: Int): Unit = {
-    Utils.tryWithResource(Source.fromFile(path)) { data =>
-      assert(data.getLines.toList
+    Utils.tryWithResource(Source.fromFile(path)) { source =>
+      assert(source.getLines.toList
         .takeWhile(_ != "== Whole Stage Codegen ==") == List(
         "== Parsed Logical Plan ==",
         s"Range (0, $expected, step=1, splits=Some(2))",

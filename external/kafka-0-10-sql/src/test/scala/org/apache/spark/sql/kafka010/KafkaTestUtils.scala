@@ -167,8 +167,8 @@ class KafkaTestUtils(
    * In this method we rewrite krb5.conf to make kdc and client use the same enctypes
    */
   private def rewriteKrb5Conf(): Unit = {
-    val krb5Conf = Utils.tryWithResource(Source.fromFile(kdc.getKrb5conf, "UTF-8")) { data =>
-      data.getLines()
+    val krb5Conf = Utils.tryWithResource(Source.fromFile(kdc.getKrb5conf, "UTF-8")) { source =>
+      source.getLines()
     }
     var rewritten = false
     val addedConfig =

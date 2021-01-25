@@ -243,8 +243,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   val testingVersions: Seq[String] = {
     import scala.io.Source
     val versions: Seq[String] = try {
-      Utils.tryWithResource(Source.fromURL(s"$releaseMirror/spark")) { bufferedSource =>
-        bufferedSource.mkString
+      Utils.tryWithResource(Source.fromURL(s"$releaseMirror/spark")) { source =>
+        source.mkString
           .split("\n")
           .filter(_.contains("""<a href="spark-"""))
           .filterNot(_.contains("preview"))

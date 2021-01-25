@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
+import scala.io.Source
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -376,8 +377,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
         sc.parallelize(Seq(0)).map { _ =>
-          Utils.tryWithResource(scala.io.Source.fromFile(SparkFiles.get("file"))) { data =>
-            data.mkString
+          Utils.tryWithResource(Source.fromFile(SparkFiles.get("file"))) { source =>
+            source.mkString
           }
         }.first()
       }

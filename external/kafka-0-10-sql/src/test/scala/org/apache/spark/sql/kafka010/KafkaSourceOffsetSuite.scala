@@ -18,6 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.io.File
+
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.OffsetSuite
 import org.apache.spark.sql.test.SharedSparkSession
@@ -99,8 +100,8 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSparkSession {
   private def readFromResource(file: String): SerializedOffset = {
     import scala.io.Source
     val input = getClass.getResource(s"/$file").toURI
-    Utils.tryWithResource(Source.fromFile(input)) { data =>
-      val str = data.mkString
+    Utils.tryWithResource(Source.fromFile(input)) { source =>
+      val str = source.mkString
       SerializedOffset(str)
     }
   }
