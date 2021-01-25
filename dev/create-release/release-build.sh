@@ -374,7 +374,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
-  # Generate random point for Zinc
+  # Generate random port for Zinc
   export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
@@ -411,7 +411,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
-  # Generate random point for Zinc
+  # Generate random port for Zinc
   export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
