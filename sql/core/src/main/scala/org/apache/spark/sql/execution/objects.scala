@@ -632,13 +632,15 @@ case class CoGroupExec(
 case class PipeElementsExec(
     outputObjAttr: Attribute,
     command: String,
+    printElement: (Any, String => Unit) => Unit,
     child: SparkPlan)
   extends ObjectConsumerExec with ObjectProducerExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
     val getObject = ObjectOperator.unwrapObjectFromRow(child.output.head.dataType)
     val printRDDElement: (InternalRow, String => Unit) => Unit = (row, printFunc) => {
-      printFunc(getObject(row).toString)
+      val obj = getObject(row)
+      printElement(obj, printFunc)
     }
 
     child.execute()

@@ -2012,19 +2012,45 @@ class DatasetSuite extends QueryTest
     assume(TestUtils.testCommandAvailable("cat"))
 
     val nums = spark.range(4)
-    val piped = nums.pipe("cat").toDF
+    val piped = nums.pipe("cat", (l, printFunc) => printFunc(l.toString)).toDF
 
     checkAnswer(piped, Row("0") :: Row("1") :: Row("2") :: Row("3") :: Nil)
 
-    val piped2 = nums.pipe("wc -l").toDF.collect()
+    val piped2 = nums.pipe("wc -l", (l, printFunc) => printFunc(l.toString)).toDF.collect()
     assert(piped2.size == 2)
     assert(piped2(0).getString(0).trim == "2")
     assert(piped2(1).getString(0).trim == "2")
   }
 
+  test("SPARK-34205: Pipe DataFrame") {
+    assume(TestUtils.testCommandAvailable("cat"))
+
+    val data = Seq((123, "first"), (4567, "second")).toDF("num", "word")
+
+    def printElement(row: Row, printFunc: (String) => Unit): Unit = {
+      val line = s"num: ${row.getInt(0)}, word: ${row.getString(1)}"
+      printFunc.apply(line)
+    }
+    val piped = data.pipe("cat", printElement).toDF
+    checkAnswer(piped, Row("num: 123, word: first") :: Row("num: 4567, word: second") :: Nil)
+  }
+
+  test("SPARK-34205: Pipe complex type Dataset") {
+    assume(TestUtils.testCommandAvailable("cat"))
+
+    val data = Seq(DoubleData(123, "first"), DoubleData(4567, "second")).toDS
+
+    def printElement(data: DoubleData, printFunc: (String) => Unit): Unit = {
+      val line = s"num: ${data.id}, word: ${data.val1}"
+      printFunc.apply(line)
+    }
+    val piped = data.pipe("cat", printElement).toDF
+    checkAnswer(piped, Row("num: 123, word: first") :: Row("num: 4567, word: second") :: Nil)
+  }
+
   test("SPARK-34205: pipe Dataset with empty partition") {
     val data = Seq(123, 4567).toDF("num").repartition(8, $"num")
-    val piped = data.pipe("wc -l")
+    val piped = data.pipe("wc -l", (row, printFunc) => printFunc(row.getInt(0).toString))
     assert(piped.count == 8)
     val lineCounts = piped.map(_.trim.toInt).collect().toSet
     assert(Set(0, 1, 1) == lineCounts)

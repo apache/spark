@@ -589,6 +589,7 @@ case class CoGroup(
 object PipeElements {
   def apply[T : Encoder](
       command: String,
+      printElement: (Any, String => Unit) => Unit,
       child: LogicalPlan): LogicalPlan = {
     val deserialized = CatalystSerde.deserialize[T](child)
     implicit val encoder = Encoders.STRING
@@ -597,6 +598,7 @@ object PipeElements {
       implicitly[Encoder[T]].schema,
       CatalystSerde.generateObjAttr[String],
       command,
+      printElement,
       deserialized)
     CatalystSerde.serialize[String](piped)
   }
@@ -610,4 +612,5 @@ case class PipeElements[T](
     argumentSchema: StructType,
     outputObjAttr: Attribute,
     command: String,
+    printElement: (Any, String => Unit) => Unit,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer

@@ -1270,7 +1270,7 @@ class StreamSuite extends StreamTest {
 
     val inputData = MemoryStream[Int]
     val piped = inputData.toDS()
-      .pipe("cat").toDF
+      .pipe("cat", (n, printFunc) => printFunc(n.toString)).toDF
 
     testStream(piped)(
       AddData(inputData, 1, 2, 3),

@@ -2897,14 +2897,22 @@ class Dataset[T] private[sql](
    * each line of stdout resulting in one element of the output partition. A process is invoked
    * even for empty partitions.
    *
-   * @param command command to run in forked process.
+   * Note that for micro-batch streaming Dataset, the effect of pipe is only per micro-batch, not
+   * cross entire stream.
    *
+   * @param command command to run in forked process.
+   * @param printElement Use this function to customize how to pipe elements. This function
+   *                     will be called with each Dataset element as the 1st parameter, and the
+   *                     print line function (like out.println()) as the 2nd parameter.
    * @group typedrel
    * @since 3.2.0
    */
-  def pipe(command: String): Dataset[String] = {
+  def pipe(command: String, printElement: (T, String => Unit) => Unit): Dataset[String] = {
     implicit val stringEncoder = Encoders.STRING
-    withTypedPlan[String](PipeElements[T](command, logicalPlan))
+    withTypedPlan[String](PipeElements[T](
+      command,
+      printElement.asInstanceOf[(Any, String => Unit) => Unit],
+      logicalPlan))
   }
 
   /**
