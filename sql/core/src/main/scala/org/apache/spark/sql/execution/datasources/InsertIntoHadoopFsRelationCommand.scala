@@ -227,7 +227,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
         staticPartitions.get(p.name) match {
-          case Some(value) => getPartitionPathString(p.name, value)
+          case Some(value) => Some(getPartitionPathString(p.name, value))
           case None => None
         }
       }.mkString("/")
