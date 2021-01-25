@@ -89,6 +89,8 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
       |   in comma separated format. Support both local or remote paths.
       | 4. A classpath in the standard format for both Hive and Hadoop.
+      | Note that when use mode 3 or 4, we should keep hive version consistence
+      |   between ${HIVE_METASTORE_VERSION} and involved jars.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
