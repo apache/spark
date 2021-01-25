@@ -49,7 +49,7 @@ class WriteDistributionAndOrderingSuite
 
   after {
     spark.sessionState.catalogManager.reset()
-    spark.sessionState.conf.clear()
+    spark.sessionState.conf.unsetConf("spark.sql.catalog.testcat")
   }
 
   private val namespace = Array("ns1")
@@ -380,50 +380,6 @@ class WriteDistributionAndOrderingSuite
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.sortWithinPartitions("data", "id"),
-      writeCommand = command)
-  }
-
-  ignore("ordered distribution and sort with manual repartition: append") {
-    checkOrderedDistributionAndSortWithManualRepartition("append")
-  }
-
-  ignore("ordered distribution and sort with manual repartition: overwrite") {
-    checkOrderedDistributionAndSortWithManualRepartition("overwrite")
-  }
-
-  ignore("ordered distribution and sort with manual repartition: overwriteDynamic") {
-    checkOrderedDistributionAndSortWithManualRepartition("overwriteDynamic")
-  }
-
-  private def checkOrderedDistributionAndSortWithManualRepartition(command: String): Unit = {
-    val tableOrdering = Array[SortOrder](
-      sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
-      sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
-    )
-    val tableDistribution = Distributions.ordered(tableOrdering)
-
-    val writeOrdering = Seq(
-      catalyst.expressions.SortOrder(
-        attr("data"),
-        catalyst.expressions.Ascending,
-        catalyst.expressions.NullsFirst,
-        Seq.empty
-      ),
-      catalyst.expressions.SortOrder(
-        attr("id"),
-        catalyst.expressions.Ascending,
-        catalyst.expressions.NullsFirst,
-        Seq.empty
-      )
-    )
-    val writePartitioning = RangePartitioning(writeOrdering, conf.numShufflePartitions)
-
-    checkWriteRequirements(
-      tableDistribution,
-      tableOrdering,
-      expectedWritePartitioning = writePartitioning,
-      expectedWriteOrdering = writeOrdering,
-      writeTransform = df => df.repartitionByRange(df("data"), df("id")),
       writeCommand = command)
   }
 
