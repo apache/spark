@@ -827,7 +827,7 @@ object CollapseRepartition extends Rule[LogicalPlan] {
  * 3. Reduce RepartitionOperation num partitions to its child max row.
  */
 object OptimizeRepartition extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDown {
     case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
       if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
         numPartitions.isEmpty =>
