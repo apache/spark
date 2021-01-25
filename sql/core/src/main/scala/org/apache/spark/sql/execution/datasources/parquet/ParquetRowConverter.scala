@@ -269,7 +269,6 @@ private[parquet] class ParquetRowConverter(
 
       // For INT32 backed decimals
       case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
-        // SPARK-34212 Interpret the Parquet long value with the corresponding Parquet's file type.
         val metadata = parquetType.asPrimitiveType().getDecimalMetadata
         val precision = metadata.getPrecision()
         val scale = metadata.getScale()
@@ -277,7 +276,6 @@ private[parquet] class ParquetRowConverter(
 
       // For INT64 backed decimals
       case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
-        // SPARK-34212 Interpret the Parquet long value with the corresponding Parquet's file type.
         val metadata = parquetType.asPrimitiveType().getDecimalMetadata
         val precision = metadata.getPrecision()
         val scale = metadata.getScale()
