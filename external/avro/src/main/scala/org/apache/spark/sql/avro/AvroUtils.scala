@@ -18,6 +18,8 @@ package org.apache.spark.sql.avro
 
 import java.io.{FileNotFoundException, IOException}
 
+import scala.collection.JavaConverters._
+
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}
 import org.apache.avro.file.DataFileConstants.{BZIP2_CODEC, DEFLATE_CODEC, SNAPPY_CODEC, XZ_CODEC}
@@ -199,6 +201,35 @@ private[sql] object AvroUtils extends Logging {
       returnRow.getOrElse {
         throw new NoSuchElementException("next on empty iterator")
       }
+    }
+  }
+
+  /**
+   * Extract a single field from `avroSchema` which has the desired field name,
+   * performing the matching with proper case sensitivity according to [[SQLConf.resolver]].
+   *
+   * @param avroSchema The schema in which to search for the field. Must be of type RECORD.
+   * @param name The name of the field to search for.
+   * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
+   * @throws IncompatibleSchemaException if `avroSchema` is not a RECORD or contains multiple
+   *                                     fields matching `name` (i.e., case-insensitive matching
+   *                                     is used and `avroSchema` has two or more fields that have
+   *                                     the same name with difference case).
+   */
+  private[avro] def getAvroFieldByName(
+      avroSchema: Schema,
+      name: String): Option[Schema.Field] = {
+    if (avroSchema.getType != Schema.Type.RECORD) {
+      throw new IncompatibleSchemaException(
+        s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
+    }
+    avroSchema.getFields.asScala.filter(f => SQLConf.get.resolver(f.name(), name)).toSeq match {
+      case Seq(avroField) => Some(avroField)
+      case Seq() => None
+      case matches => throw new IncompatibleSchemaException(
+        s"Searching for '$name' in Avro schema gave ${matches.size} matches. Candidates: " +
+            matches.map(_.name()).mkString("[", ", ", "]")
+      )
     }
   }
 }

@@ -330,27 +330,29 @@ private[sql] class AvroDeserializer(
     var i = 0
     while (i < length) {
       val sqlField = sqlType.fields(i)
-      val avroField = avroType.getField(sqlField.name)
-      if (avroField != null) {
-        validFieldIndexes += avroField.pos()
+      AvroUtils.getAvroFieldByName(avroType, sqlField.name) match {
+        case Some(avroField) =>
+          validFieldIndexes += avroField.pos()
 
-        val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
-        val ordinal = i
-        val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
-          if (value == null) {
-            fieldUpdater.setNullAt(ordinal)
-          } else {
-            baseWriter(fieldUpdater, ordinal, value)
+          val baseWriter = newWriter(avroField.schema(), sqlField.dataType, path :+ sqlField.name)
+          val ordinal = i
+          val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {
+            if (value == null) {
+              fieldUpdater.setNullAt(ordinal)
+            } else {
+              baseWriter(fieldUpdater, ordinal, value)
+            }
           }
-        }
-        fieldWriters += fieldWriter
-      } else if (!sqlField.nullable) {
-        throw new IncompatibleSchemaException(
-          s"""
-             |Cannot find non-nullable field ${path.mkString(".")}.${sqlField.name} in Avro schema.
-             |Source Avro schema: $rootAvroType.
-             |Target Catalyst type: $rootCatalystType.
+          fieldWriters += fieldWriter
+        case None if !sqlField.nullable =>
+          val fieldStr = s"${path.mkString(".")}.${sqlField.name}"
+          throw new IncompatibleSchemaException(
+            s"""
+               |Cannot find non-nullable field $fieldStr in Avro schema.
+               |Source Avro schema: $rootAvroType.
+               |Target Catalyst type: $rootCatalystType.
            """.stripMargin)
+        case _ => // nothing to do
       }
       i += 1
     }
