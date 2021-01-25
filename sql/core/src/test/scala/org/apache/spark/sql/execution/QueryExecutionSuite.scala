@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution
 
 import scala.io.Source
+
 import org.apache.spark.sql.{AnalysisException, FastOperator}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
@@ -101,8 +102,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
-      Utils.tryWithResource(Source.fromFile(path)) { data =>
-        assert(data.getLines.toList
+      Utils.tryWithResource(Source.fromFile(path)) { source =>
+        assert(source.getLines.toList
           .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
           "== Physical Plan ==",
           s"* Range (1)",
@@ -139,8 +140,8 @@ class QueryExecutionSuite extends SharedSparkSession {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
       ds.queryExecution.debug.toFile(path)
-      val localRelations = Utils.tryWithResource(Source.fromFile(path)) { data =>
-        data.getLines().filter(_.contains("LocalRelation"))
+      val localRelations = Utils.tryWithResource(Source.fromFile(path)) { source =>
+        source.getLines().filter(_.contains("LocalRelation"))
       }
 
       assert(!localRelations.exists(_.contains("more fields")))
