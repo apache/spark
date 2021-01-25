@@ -126,7 +126,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
   }
 
-  test("(((a && b) && a && (a && c))) => a && b && c") {
+  test("SPARK-34222: (((a && b) && a && (a && c))) => a && b && c") {
 
     checkCondition((('a > 1 && 'b > 2) && 'a > 1 &&('a > 1 && 'c > 3)),
       ('a > 1 && ('b > 2 && 'c > 3)))
@@ -151,7 +151,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       , ('a > 1 && 'b > 3))
   }
 
-  test("(((a || b) || a || (a || c))) => a || b || c") {
+  test("SPARK-34222: (((a || b) || a || (a || c))) => a || b || c") {
 
     checkCondition((('a > 1 || 'b > 2) || 'a > 1 ||('a > 1 || 'c > 3)),
       ('a > 1 || 'b > 2 || 'c > 3))
