@@ -16,8 +16,8 @@
     under the License.
 
 
-MLlib
-=====
+MLlib (RDD-based)
+=================
 
 Classification
 --------------

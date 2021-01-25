@@ -37,6 +37,7 @@ import org.apache.spark.util.random.RandomSampler
  * at the top of the logical query plan.
  */
 case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 
@@ -216,7 +217,7 @@ object Union {
 }
 
 /**
- * Logical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ * Logical plan for unioning multiple plans, without a distinct. This is UNION ALL in SQL.
  *
  * @param byName          Whether resolves columns in the children by column names.
  * @param allowMissingCol Allows missing columns in children query plans. If it is true,
@@ -325,6 +326,25 @@ case class Join(
     condition: Option[Expression],
     hint: JoinHint)
   extends BinaryNode with PredicateHelper {
+
+  override def maxRows: Option[Long] = {
+    joinType match {
+      case Inner | Cross | FullOuter | LeftOuter | RightOuter
+        if left.maxRows.isDefined && right.maxRows.isDefined =>
+        val maxRows = BigInt(left.maxRows.get) * BigInt(right.maxRows.get)
+        if (maxRows.isValidLong) {
+          Some(maxRows.toLong)
+        } else {
+          None
+        }
+
+      case LeftSemi | LeftAnti =>
+        left.maxRows
+
+      case _ =>
+        None
+    }
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -574,8 +594,16 @@ case class Range(
     s"Range ($start, $end, step=$step, splits=$numSlices)"
   }
 
+  override def maxRows: Option[Long] = {
+    if (numElements.isValidLong) {
+      Some(numElements.toLong)
+    } else {
+      None
+    }
+  }
+
   override def computeStats(): Statistics = {
-    Statistics(sizeInBytes = LongType.defaultSize * numElements)
+    Statistics(sizeInBytes = LongType.defaultSize * numElements, rowCount = Some(numElements))
   }
 
   override def outputOrdering: Seq[SortOrder] = {
@@ -635,7 +663,7 @@ case class Window(
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
     child: LogicalPlan) extends UnaryNode {
-
+  override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] =
     child.output ++ windowExpressions.map(_.toAttribute)
 
@@ -948,6 +976,7 @@ case class Sample(
       s"Sampling fraction ($fraction) must be on interval [0, 1] without replacement")
   }
 
+  override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 
@@ -965,6 +994,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
 abstract class RepartitionOperation extends UnaryNode {
   def shuffle: Boolean
   def numPartitions: Int
+  override final def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 
@@ -991,16 +1021,7 @@ case class RepartitionByExpression(
     child: LogicalPlan,
     optNumPartitions: Option[Int]) extends RepartitionOperation {
 
-  val numPartitions = if (optNumPartitions.nonEmpty) {
-    optNumPartitions.get
-  } else {
-    if (partitionExpressions.forall(_.foldable)) {
-      1
-    } else {
-      SQLConf.get.numShufflePartitions
-    }
-  }
-
+  val numPartitions = optNumPartitions.getOrElse(SQLConf.get.numShufflePartitions)
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
 
   val partitioning: Partitioning = {
@@ -1024,7 +1045,6 @@ case class RepartitionByExpression(
     }
   }
 
-  override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
 }
 
@@ -1057,7 +1077,7 @@ case class OneRowRelation() extends LeafNode {
 case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
-
+  override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = child.output
 }
 

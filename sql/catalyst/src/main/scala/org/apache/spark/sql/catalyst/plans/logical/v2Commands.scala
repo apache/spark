@@ -348,7 +348,7 @@ case class DescribeRelation(
  */
 case class DescribeColumn(
     relation: LogicalPlan,
-    colNameParts: Seq[String],
+    column: Expression,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
   override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
@@ -694,9 +694,11 @@ case class AlterTableDropPartition(
 case class AlterTableRenamePartition(
     child: LogicalPlan,
     from: PartitionSpec,
-    to: TablePartitionSpec) extends Command {
+    to: PartitionSpec) extends Command {
   override lazy val resolved: Boolean =
-    childrenResolved && from.isInstanceOf[ResolvedPartitionSpec]
+    childrenResolved &&
+      from.isInstanceOf[ResolvedPartitionSpec] &&
+      to.isInstanceOf[ResolvedPartitionSpec]
 
   override def children: Seq[LogicalPlan] = child :: Nil
 }
@@ -831,6 +833,7 @@ case class CacheTable(
 case class CacheTableAsSelect(
     tempViewName: String,
     plan: LogicalPlan,
+    originalText: String,
     isLazy: Boolean,
     options: Map[String, String]) extends Command
 

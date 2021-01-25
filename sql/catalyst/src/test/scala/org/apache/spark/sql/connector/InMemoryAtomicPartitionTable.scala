@@ -42,6 +42,7 @@ class InMemoryAtomicPartitionTable (
     if (memoryTablePartitions.containsKey(ident)) {
       throw new PartitionAlreadyExistsException(name, ident, partitionSchema)
     } else {
+      createPartitionKey(ident.toSeq(schema))
       memoryTablePartitions.put(ident, properties)
     }
   }
@@ -49,6 +50,7 @@ class InMemoryAtomicPartitionTable (
   override def dropPartition(ident: InternalRow): Boolean = {
     if (memoryTablePartitions.containsKey(ident)) {
       memoryTablePartitions.remove(ident)
+      removePartitionKey(ident.toSeq(schema))
       true
     } else {
       false

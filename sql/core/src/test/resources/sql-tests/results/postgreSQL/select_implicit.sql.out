@@ -239,7 +239,7 @@ struct<a:int,a:int>
 SELECT a/2, a/2 FROM test_missing_target
 	ORDER BY a/2
 -- !query schema
-struct<(CAST(a AS DOUBLE) / CAST(2 AS DOUBLE)):double,(CAST(a AS DOUBLE) / CAST(2 AS DOUBLE)):double>
+struct<(a / 2):double,(a / 2):double>
 -- !query output
 0.0	0.0
 0.5	0.5
@@ -257,7 +257,7 @@ struct<(CAST(a AS DOUBLE) / CAST(2 AS DOUBLE)):double,(CAST(a AS DOUBLE) / CAST(
 SELECT a/2, a/2 FROM test_missing_target
 	GROUP BY a/2 ORDER BY a/2
 -- !query schema
-struct<(CAST(a AS DOUBLE) / CAST(2 AS DOUBLE)):double,(CAST(a AS DOUBLE) / CAST(2 AS DOUBLE)):double>
+struct<(a / 2):double,(a / 2):double>
 -- !query output
 0.0	0.0
 0.5	0.5
@@ -398,7 +398,7 @@ SELECT x.b/2, count(x.b) FROM test_missing_target x, test_missing_target y
 	WHERE x.a = y.a
 	GROUP BY x.b/2 ORDER BY x.b/2
 -- !query schema
-struct<(CAST(b AS DOUBLE) / CAST(2 AS DOUBLE)):double,count(b):bigint>
+struct<(b / 2):double,count(b):bigint>
 -- !query output
 0.5	1
 1.0	2

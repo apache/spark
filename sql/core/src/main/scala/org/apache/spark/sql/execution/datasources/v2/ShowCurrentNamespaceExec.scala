@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 
@@ -31,11 +30,6 @@ case class ShowCurrentNamespaceExec(
     catalogManager: CatalogManager)
   extends V2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
-    val result = new GenericRowWithSchema(Array[Any](
-      catalogManager.currentCatalog.name,
-      catalogManager.currentNamespace.quoted),
-      schema)
-    Seq(toRow(result).copy())
+    Seq(toCatalystRow(catalogManager.currentCatalog.name, catalogManager.currentNamespace.quoted))
   }
 }

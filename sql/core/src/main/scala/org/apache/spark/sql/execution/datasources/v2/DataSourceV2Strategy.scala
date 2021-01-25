@@ -21,12 +21,14 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.{And, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{FilterExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -58,25 +60,28 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     session.sharedState.cacheManager.recacheByPlan(session, r)
   }
 
+  private def recacheTable(r: ResolvedTable)(): Unit = {
+    val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
+    session.sharedState.cacheManager.recacheByPlan(session, v2Relation)
+  }
+
   // Invalidates the cache associated with the given table. If the invalidated cache matches the
   // given table, the cache's storage level is returned.
-  private def invalidateCache(
-      r: ResolvedTable,
-      recacheTable: Boolean = false)(): Option[StorageLevel] = {
+  private def invalidateTableCache(r: ResolvedTable)(): Option[StorageLevel] = {
     val v2Relation = DataSourceV2Relation.create(r.table, Some(r.catalog), Some(r.identifier))
     val cache = session.sharedState.cacheManager.lookupCachedData(v2Relation)
     session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
     if (cache.isDefined) {
       val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-      if (recacheTable) {
-        val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
-        // recache with the same name and cache level.
-        session.sharedState.cacheManager.cacheQuery(session, v2Relation, cacheName, cacheLevel)
-      }
       Some(cacheLevel)
     } else {
       None
     }
+  }
+
+  private def invalidateCache(catalog: TableCatalog, table: Table, ident: Identifier): Unit = {
+    val v2Relation = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
+    session.sharedState.cacheManager.uncacheQuery(session, v2Relation, cascade = true)
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -155,17 +160,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case RefreshTable(r: ResolvedTable) =>
-      RefreshTableExec(r.catalog, r.identifier, invalidateCache(r, recacheTable = true)) :: Nil
+      RefreshTableExec(r.catalog, r.identifier, recacheTable(r)) :: Nil
 
     case ReplaceTable(catalog, ident, schema, parts, props, orCreate) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(
-            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
+            staging, ident, schema, parts, propsWithOwner, orCreate = orCreate,
+            invalidateCache) :: Nil
         case _ =>
           ReplaceTableExec(
-            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate) :: Nil
+            catalog, ident, schema, parts, propsWithOwner, orCreate = orCreate,
+            invalidateCache) :: Nil
       }
 
     case ReplaceTableAsSelect(catalog, ident, parts, query, props, options, orCreate) =>
@@ -174,7 +181,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableAsSelectExec(
-            session,
             staging,
             ident,
             parts,
@@ -182,10 +188,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             planLater(query),
             propsWithOwner,
             writeOptions,
-            orCreate = orCreate) :: Nil
+            orCreate = orCreate,
+            invalidateCache) :: Nil
         case _ =>
           ReplaceTableAsSelectExec(
-            session,
             catalog,
             ident,
             parts,
@@ -193,7 +199,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             planLater(query),
             propsWithOwner,
             writeOptions,
-            orCreate = orCreate) :: Nil
+            orCreate = orCreate,
+            invalidateCache) :: Nil
       }
 
     case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), query, writeOptions,
@@ -272,11 +279,17 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       DescribeTableExec(desc.output, r.table, isExtended) :: Nil
 
-    case DescribeColumn(_: ResolvedTable, _, _) =>
-      throw new AnalysisException("Describing columns is not supported for v2 tables.")
+    case desc @ DescribeColumn(_: ResolvedTable, column, isExtended) =>
+      column match {
+        case c: Attribute =>
+          DescribeColumnExec(desc.output, c, isExtended) :: Nil
+        case nested =>
+          throw QueryCompilationErrors.commandNotSupportNestedColumnError(
+            "DESC TABLE COLUMN", toPrettySQL(nested))
+      }
 
     case DropTable(r: ResolvedTable, ifExists, purge) =>
-      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateCache(r)) :: Nil
+      DropTableExec(r.catalog, r.identifier, ifExists, purge, invalidateTableCache(r)) :: Nil
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
@@ -284,7 +297,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case AlterTable(catalog, ident, _, changes) =>
       AlterTableExec(catalog, ident, changes) :: Nil
 
-    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _), newIdent, isView) =>
+    case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (isView) {
         throw new AnalysisException(
           "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
@@ -293,7 +306,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         catalog,
         oldIdent,
         newIdent.asIdentifier,
-        invalidateCache(r),
+        invalidateTableCache(r),
         session.sharedState.cacheManager.cacheQuery) :: Nil
 
     case AlterNamespaceSetProperties(ResolvedNamespace(catalog, ns), properties) =>
@@ -311,7 +324,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CommentOnTable(ResolvedTable(catalog, identifier, _), comment) =>
+    case CommentOnTable(ResolvedTable(catalog, identifier, _, _), comment) =>
       val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
       AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
 
@@ -343,18 +356,32 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
 
     case AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfExists) =>
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
       AlterTableAddPartitionExec(
-        table, parts.asResolvedPartitionSpecs, ignoreIfExists) :: Nil
+        table,
+        parts.asResolvedPartitionSpecs,
+        ignoreIfExists,
+        recacheTable(r)) :: Nil
 
     case AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), parts, ignoreIfNotExists, _) =>
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _),
+        parts,
+        ignoreIfNotExists,
+        purge) =>
       AlterTableDropPartitionExec(
-        table, parts.asResolvedPartitionSpecs, ignoreIfNotExists) :: Nil
+        table,
+        parts.asResolvedPartitionSpecs,
+        ignoreIfNotExists,
+        purge,
+        recacheTable(r)) :: Nil
 
-    case AlterTableRenamePartition(_: ResolvedTable, _: ResolvedPartitionSpec, _) =>
-      throw new AnalysisException(
-        "ALTER TABLE ... RENAME TO PARTITION is not supported for v2 tables.")
+    case AlterTableRenamePartition(
+        r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
+      AlterTableRenamePartitionExec(
+        table,
+        Seq(from).asResolvedPartitionSpecs.head,
+        Seq(to).asResolvedPartitionSpecs.head,
+        recacheTable(r)) :: Nil
 
     case AlterTableRecoverPartitions(_: ResolvedTable) =>
       throw new AnalysisException(
@@ -377,7 +404,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       throw new AnalysisException("SHOW COLUMNS is not supported for v2 tables.")
 
     case r @ ShowPartitions(
-        ResolvedTable(catalog, _, table: SupportsPartitionManagement),
+        ResolvedTable(catalog, _, table: SupportsPartitionManagement, _),
         pattern @ (None | Some(_: ResolvedPartitionSpec))) =>
       ShowPartitionsExec(
         r.output,
@@ -392,7 +419,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       CacheTableExec(r.table, r.multipartIdentifier, r.isLazy, r.options) :: Nil
 
     case r: CacheTableAsSelect =>
-      CacheTableAsSelectExec(r.tempViewName, r.plan, r.isLazy, r.options) :: Nil
+      CacheTableAsSelectExec(r.tempViewName, r.plan, r.originalText, r.isLazy, r.options) :: Nil
 
     case r: UncacheTable =>
       UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil

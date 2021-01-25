@@ -1002,8 +1002,7 @@ class DataFrameAggregateSuite extends QueryTest
   Seq(true, false).foreach { value =>
     test(s"SPARK-31620: agg with subquery (whole-stage-codegen = $value)") {
       withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString,
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> value.toString) {
         withTempView("t1", "t2") {
           sql("create temporary view t1 as select * from values (1, 2) as t1(a, b)")
           sql("create temporary view t2 as select * from values (3, 4) as t2(c, d)")
@@ -1026,14 +1025,13 @@ class DataFrameAggregateSuite extends QueryTest
 
           // test SortAggregateExec
           var df = sql("select max(if(c > (select a from t1), 'str1', 'str2')) as csum from t2")
-          assert(df.queryExecution.executedPlan
-            .find { case _: SortAggregateExec => true }.isDefined)
+          assert(find(df.queryExecution.executedPlan)(_.isInstanceOf[SortAggregateExec]).isDefined)
           checkAnswer(df, Row("str1") :: Nil)
 
           // test ObjectHashAggregateExec
           df = sql("select collect_list(d), sum(if(c > (select a from t1), d, 0)) as csum from t2")
-          assert(df.queryExecution.executedPlan
-            .find { case _: ObjectHashAggregateExec => true }.isDefined)
+          assert(
+            find(df.queryExecution.executedPlan)(_.isInstanceOf[ObjectHashAggregateExec]).isDefined)
           checkAnswer(df, Row(Array(4), 4) :: Nil)
         }
       }
@@ -1078,6 +1076,20 @@ class DataFrameAggregateSuite extends QueryTest
     assert(aggs.length == 2)
     assert(aggs.head.output.map(_.dataType.simpleString).head ===
       aggs.last.output.map(_.dataType.simpleString).head)
+  }
+
+  test("SPARK-33726: Aggregation on a table where a column name is reused") {
+    val query =
+      """|with T as (
+         |select id as a, -id as x from range(3)),
+         |U as (
+         |select id as b, cast(id as string) as x from range(3))
+         |select T.x, U.x, min(a) as ma, min(b) as mb
+         |from T join U on a=b
+         |group by U.x, T.x
+      """.stripMargin
+    val df = spark.sql(query)
+    checkAnswer(df, Row(0, "0", 0, 0) :: Row(-1, "1", 1, 1) :: Row(-2, "2", 2, 2) :: Nil)
   }
 }
 

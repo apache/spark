@@ -25,7 +25,7 @@ import scala.collection.Map
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 import org.apache.spark.TaskEndReason
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -126,6 +126,7 @@ case class SparkListenerExecutorBlacklisted(
   extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerExecutorExcluded(
     time: Long,
     executorId: String,
@@ -144,6 +145,7 @@ case class SparkListenerExecutorBlacklistedForStage(
 
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerExecutorExcludedForStage(
     time: Long,
     executorId: String,
@@ -164,6 +166,7 @@ case class SparkListenerNodeBlacklistedForStage(
 
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerNodeExcludedForStage(
     time: Long,
     hostId: String,
@@ -192,6 +195,7 @@ case class SparkListenerNodeBlacklisted(
 
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerNodeExcluded(
     time: Long,
     hostId: String,
@@ -204,15 +208,18 @@ case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerNodeUnexcluded(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerUnschedulableTaskSetAdded(
   stageId: Int,
   stageAttemptId: Int) extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerUnschedulableTaskSetRemoved(
   stageId: Int,
   stageAttemptId: Int) extends SparkListenerEvent
@@ -225,6 +232,8 @@ case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends
  * @param execId executor id
  * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
  * @param executorUpdates executor level per-stage metrics updates
+ *
+ * @since 3.1.0
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
@@ -269,6 +278,7 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerResourceProfileAdded(resourceProfile: ResourceProfile)
   extends SparkListenerEvent
 

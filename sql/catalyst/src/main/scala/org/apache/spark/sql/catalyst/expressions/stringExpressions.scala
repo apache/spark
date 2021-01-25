@@ -26,12 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -289,8 +289,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw new ArrayIndexOutOfBoundsException(
-            s"Invalid index: $index, numElements: ${inputExprs.length}")
+          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -344,8 +343,7 @@ case class Elt(
     val indexOutOfBoundBranch = if (failOnError) {
       s"""
          |if (!$indexMatched) {
-         |  throw new ArrayIndexOutOfBoundsException(
-         |    "Invalid index: " + ${index.value} + ", numElements: " + ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
     } else {
@@ -633,17 +631,29 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
-    : JMap[Character, Character] = {
+    : JMap[String, String] = {
     val matching = matchingString.toString()
     val replace = replaceString.toString()
-    val dict = new HashMap[Character, Character]()
+    val dict = new HashMap[String, String]()
     var i = 0
-    while (i < matching.length()) {
-      val rep = if (i < replace.length()) replace.charAt(i) else '\u0000'
-      if (null == dict.get(matching.charAt(i))) {
-        dict.put(matching.charAt(i), rep)
+    var j = 0
+
+    while (i < matching.length) {
+      val rep = if (j < replace.length) {
+        val repCharCount = Character.charCount(replace.codePointAt(j))
+        val repStr = replace.substring(j, j + repCharCount)
+        j += repCharCount
+        repStr
+      } else {
+        "\u0000"
       }
-      i += 1
+
+      val matchCharCount = Character.charCount(matching.codePointAt(i))
+      val matchStr = matching.substring(i, i + matchCharCount)
+      if (null == dict.get(matchStr)) {
+        dict.put(matchStr, rep)
+      }
+      i += matchCharCount
     }
     dict
   }
@@ -671,7 +681,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
-  @transient private var dict: JMap[Character, Character] = _
+  @transient private var dict: JMap[String, String] = _
 
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
@@ -764,6 +774,55 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
 
+  protected def doEval(srcString: UTF8String): UTF8String
+  protected def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String
+
+  override def eval(input: InternalRow): Any = {
+    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
+    if (srcString == null) {
+      null
+    } else if (trimStr.isDefined) {
+      doEval(srcString, trimStr.get.eval(input).asInstanceOf[UTF8String])
+    } else {
+      doEval(srcString)
+    }
+  }
+
+  protected val trimMethod: String
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evals = children.map(_.genCode(ctx))
+    val srcString = evals(0)
+
+    if (evals.length == 1) {
+      ev.copy(code = code"""
+         |${srcString.code}
+         |boolean ${ev.isNull} = false;
+         |UTF8String ${ev.value} = null;
+         |if (${srcString.isNull}) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${ev.value} = ${srcString.value}.$trimMethod();
+         |}""".stripMargin)
+    } else {
+      val trimString = evals(1)
+      ev.copy(code = code"""
+         |${srcString.code}
+         |boolean ${ev.isNull} = false;
+         |UTF8String ${ev.value} = null;
+         |if (${srcString.isNull}) {
+         |  ${ev.isNull} = true;
+         |} else {
+         |  ${trimString.code}
+         |  if (${trimString.isNull}) {
+         |    ${ev.isNull} = true;
+         |  } else {
+         |    ${ev.value} = ${srcString.value}.$trimMethod(${trimString.value});
+         |  }
+         |}""".stripMargin)
+    }
+  }
+
   override def sql: String = if (trimStr.isDefined) {
     s"TRIM($direction ${trimStr.get.sql} FROM ${srcStr.sql})"
   } else {
@@ -840,9 +899,7 @@ object StringTrim {
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class StringTrim(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -853,51 +910,12 @@ case class StringTrim(
 
   override protected def direction: String = "BOTH"
 
-  override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else {
-      if (trimStr.isDefined) {
-        srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
-      } else {
-        srcString.trim()
-      }
-    }
-  }
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trim()
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
+    srcString.trim(trimString)
 
-    if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trim();
-        }""")
-    } else {
-      val trimString = evals(1)
-      val getTrimFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trim(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimFunction
-        }""")
-    }
-  }
+  override val trimMethod: String = "trim"
 }
 
 object StringTrimLeft {
@@ -934,9 +952,7 @@ object StringTrimLeft {
   """,
   since = "1.5.0",
   group = "string_funcs")
-case class StringTrimLeft(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrimLeft(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -947,51 +963,12 @@ case class StringTrimLeft(
 
   override protected def direction: String = "LEADING"
 
-  override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else {
-      if (trimStr.isDefined) {
-        srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
-      } else {
-        srcString.trimLeft()
-      }
-    }
-  }
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trimLeft()
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
+    srcString.trimLeft(trimString)
 
-    if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimLeft();
-        }""")
-    } else {
-      val trimString = evals(1)
-      val getTrimLeftFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimLeftFunction
-        }""")
-    }
-  }
+  override val trimMethod: String = "trimLeft"
 }
 
 object StringTrimRight {
@@ -1030,9 +1007,7 @@ object StringTrimRight {
   since = "1.5.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class StringTrimRight(
-    srcStr: Expression,
-    trimStr: Option[Expression] = None)
+case class StringTrimRight(srcStr: Expression, trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
   def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
@@ -1043,51 +1018,12 @@ case class StringTrimRight(
 
   override protected def direction: String = "TRAILING"
 
-  override def eval(input: InternalRow): Any = {
-    val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString == null) {
-      null
-    } else {
-      if (trimStr.isDefined) {
-        srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
-      } else {
-        srcString.trimRight()
-      }
-    }
-  }
+  override def doEval(srcString: UTF8String): UTF8String = srcString.trimRight()
 
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val evals = children.map(_.genCode(ctx))
-    val srcString = evals(0)
+  override def doEval(srcString: UTF8String, trimString: UTF8String): UTF8String =
+    srcString.trimRight(trimString)
 
-    if (evals.length == 1) {
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimRight();
-        }""")
-    } else {
-      val trimString = evals(1)
-      val getTrimRightFunction =
-        s"""
-        if (${trimString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
-        }"""
-      ev.copy(evals.map(_.code) :+ code"""
-        boolean ${ev.isNull} = false;
-        UTF8String ${ev.value} = null;
-        if (${srcString.isNull}) {
-          ${ev.isNull} = true;
-        } else {
-          $getTrimRightFunction
-        }""")
-    }
-  }
+  override val trimMethod: String = "trimRight"
 }
 
 /**
@@ -1424,7 +1360,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       new URI(url.toString)
     } catch {
       case e: URISyntaxException if failOnError =>
-        throw new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+        throw QueryExecutionErrors.invalidUrlError(url, e)
       case _: URISyntaxException => null
     }
   }
@@ -2120,8 +2056,7 @@ object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw new AnalysisException("Invalid number of arguments for function decode. " +
-          s"Expected: 2; Found: ${params.length}")
+        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head

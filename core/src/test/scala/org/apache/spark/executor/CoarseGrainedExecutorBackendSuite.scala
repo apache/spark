@@ -61,7 +61,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val testResourceArgs: JObject = ("" -> "")
       val ja = JArray(List(testResourceArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
-      var error = intercept[SparkException] {
+      val error = intercept[SparkException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -146,7 +146,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
-      var error = intercept[IllegalArgumentException] {
+      val error = intercept[IllegalArgumentException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -160,7 +160,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val ja = Extraction.decompose(Seq(fpga))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
-      var error = intercept[SparkException] {
+      val error = intercept[SparkException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -199,7 +199,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
-      var error = intercept[IllegalArgumentException] {
+      val error = intercept[IllegalArgumentException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 

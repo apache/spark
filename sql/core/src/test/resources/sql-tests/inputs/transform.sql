@@ -9,16 +9,6 @@ SELECT TRANSFORM(a)
 USING 'cat' AS (a)
 FROM t;
 
--- with non-exist command
-SELECT TRANSFORM(a)
-USING 'some_non_existent_command' AS (a)
-FROM t;
-
--- with non-exist file
-SELECT TRANSFORM(a)
-USING 'python some_non_existent_file' AS (a)
-FROM t;
-
 -- common supported data types between no serde and serde transform
 SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)

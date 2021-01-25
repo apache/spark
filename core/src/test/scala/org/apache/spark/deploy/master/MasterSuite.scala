@@ -58,7 +58,7 @@ class MockWorker(master: RpcEndpointRef, conf: SparkConf = new SparkConf) extend
   val id = seq.toString
   override val rpcEnv: RpcEnv = RpcEnv.create("worker", "localhost", seq,
     conf, new SecurityManager(conf))
-  var apps = new mutable.HashMap[String, String]()
+  val apps = new mutable.HashMap[String, String]()
   val driverIdToAppId = new mutable.HashMap[String, String]()
   def newDriver(driverId: String): RpcEndpointRef = {
     val name = s"driver_${drivers.size}"

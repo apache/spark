@@ -29,7 +29,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{FrameLessOffsetWindowFunction, _}
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -535,7 +535,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           // Only unique expressions are included in the group by expressions and is determined
           // based on their semantic equality. Example. grouping sets ((a * b), (b * a)) results
           // in grouping expression (a * b)
-          if (result.find(_.semanticEquals(currentExpr)).isDefined) {
+          if (result.exists(_.semanticEquals(currentExpr))) {
             result
           } else {
             result :+ currentExpr
@@ -928,12 +928,12 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case u @ UnresolvedTableOrView(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
-          .map(ResolvedTable(catalog.asTableCatalog, ident, _))
+          .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
 
       case i @ InsertIntoStatement(u @ UnresolvedRelation(_, _, false), _, _, _, _, _)
@@ -1105,7 +1105,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             case v1Table: V1Table if v1Table.v1Table.tableType == CatalogTableType.VIEW =>
               ResolvedView(ident, isTemp = false)
             case table =>
-              ResolvedTable(catalog.asTableCatalog, ident, table)
+              ResolvedTable.create(catalog.asTableCatalog, ident, table)
           }
         case _ => None
       }
@@ -1153,7 +1153,10 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
           val key = catalog.name +: ident.namespace :+ ident.name
           AnalysisContext.get.relationCache.get(key).map(_.transform {
-            case multi: MultiInstanceRelation => multi.newInstance()
+            case multi: MultiInstanceRelation =>
+              val newRelation = multi.newInstance()
+              newRelation.copyTagsFrom(multi)
+              newRelation
           }).orElse {
             loaded.foreach(AnalysisContext.get.relationCache.update(key, _))
             loaded
@@ -1303,6 +1306,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         case oldVersion: MultiInstanceRelation
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           val newVersion = oldVersion.newInstance()
+          newVersion.copyTagsFrom(oldVersion)
           Seq((oldVersion, newVersion))
 
         case oldVersion: SerializeFromObject
@@ -2025,29 +2029,74 @@ class Analyzer(override val catalogManager: CatalogManager)
                   name, other.getClass.getCanonicalName)
               }
             }
-          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter) =>
+          case u @ UnresolvedFunction(funcId, arguments, isDistinct, filter, ignoreNulls) =>
             withPosition(u) {
               v1SessionCatalog.lookupFunction(funcId, arguments) match {
                 // AggregateWindowFunctions are AggregateFunctions that can only be evaluated within
                 // the context of a Window clause. They do not need to be wrapped in an
                 // AggregateExpression.
                 case wf: AggregateWindowFunction =>
-                  if (isDistinct || filter.isDefined) {
-                    throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                      wf.prettyName)
+                  if (isDistinct) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      wf.prettyName, "DISTINCT")
+                  } else if (filter.isDefined) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      wf.prettyName, "FILTER clause")
+                  } else if (ignoreNulls) {
+                    wf match {
+                      case nthValue: NthValue =>
+                        nthValue.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          wf.prettyName, "IGNORE NULLS")
+                    }
                   } else {
                     wf
+                  }
+                case owf: FrameLessOffsetWindowFunction =>
+                  if (isDistinct) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      owf.prettyName, "DISTINCT")
+                  } else if (filter.isDefined) {
+                    throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                      owf.prettyName, "FILTER clause")
+                  } else if (ignoreNulls) {
+                    owf match {
+                      case lead: Lead =>
+                        lead.copy(ignoreNulls = ignoreNulls)
+                      case lag: Lag =>
+                        lag.copy(ignoreNulls = ignoreNulls)
+                    }
+                  } else {
+                    owf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
                 case agg: AggregateFunction =>
                   if (filter.isDefined && !filter.get.deterministic) {
                     throw QueryCompilationErrors.nonDeterministicFilterInAggregateError
                   }
-                  AggregateExpression(agg, Complete, isDistinct, filter)
+                  if (ignoreNulls) {
+                    val aggFunc = agg match {
+                      case first: First => first.copy(ignoreNulls = ignoreNulls)
+                      case last: Last => last.copy(ignoreNulls = ignoreNulls)
+                      case _ =>
+                        throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                          agg.prettyName, "IGNORE NULLS")
+                    }
+                    AggregateExpression(aggFunc, Complete, isDistinct, filter)
+                  } else {
+                    AggregateExpression(agg, Complete, isDistinct, filter)
+                  }
                 // This function is not an aggregate function, just return the resolved one.
-                case other if (isDistinct || filter.isDefined) =>
-                  throw QueryCompilationErrors.distinctOrFilterOnlyWithAggregateFunctionError(
-                    other.prettyName)
+                case other if isDistinct =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "DISTINCT")
+                case other if filter.isDefined =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "FILTER clause")
+                case other if ignoreNulls =>
+                  throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                    other.prettyName, "IGNORE NULLS")
                 case e: String2TrimExpression if arguments.size == 2 =>
                   if (trimWarningEnabled.get) {
                     log.warn("Two-parameter TRIM/LTRIM/RTRIM function signatures are deprecated." +
@@ -2248,13 +2297,16 @@ class Analyzer(override val catalogManager: CatalogManager)
           val unresolvedSortOrders = sortOrder.filter { s =>
             !s.resolved || !s.references.subsetOf(aggregate.outputSet) || containsAggregate(s)
           }
-          val aliasedOrdering =
-            unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
-          val aggregatedOrdering = aggregate.copy(aggregateExpressions = aliasedOrdering)
+          val aliasedOrdering = unresolvedSortOrders.map(o => Alias(o.child, "aggOrder")())
+
+          val aggregateWithExtraOrdering = aggregate.copy(
+            aggregateExpressions = aggregate.aggregateExpressions ++ aliasedOrdering)
+
           val resolvedAggregate: Aggregate =
-            executeSameContext(aggregatedOrdering).asInstanceOf[Aggregate]
-          val resolvedAliasedOrdering: Seq[Alias] =
-            resolvedAggregate.aggregateExpressions.asInstanceOf[Seq[Alias]]
+            executeSameContext(aggregateWithExtraOrdering).asInstanceOf[Aggregate]
+
+          val (reResolvedAggExprs, resolvedAliasedOrdering) =
+            resolvedAggregate.aggregateExpressions.splitAt(aggregate.aggregateExpressions.length)
 
           // If we pass the analysis check, then the ordering expressions should only reference to
           // aggregate expressions or grouping expressions, and it's safe to push them down to
@@ -2267,19 +2319,26 @@ class Analyzer(override val catalogManager: CatalogManager)
           // to push down this ordering expression and can reference the original aggregate
           // expression instead.
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
-            case (evaluated, order) =>
-              val index = originalAggExprs.indexWhere {
-                case Alias(child, _) => child semanticEquals evaluated.child
-                case other => other semanticEquals evaluated.child
-              }
+          val orderToAlias = unresolvedSortOrders.zip(aliasedOrdering)
+          val evaluatedOrderings =
+            resolvedAliasedOrdering.asInstanceOf[Seq[Alias]].zip(orderToAlias).map {
+              case (evaluated, (order, aliasOrder)) =>
+                val index = reResolvedAggExprs.indexWhere {
+                  case Alias(child, _) => child semanticEquals evaluated.child
+                  case other => other semanticEquals evaluated.child
+                }
 
-              if (index == -1) {
-                needsPushDown += evaluated
-                order.copy(child = evaluated.toAttribute)
-              } else {
-                order.copy(child = originalAggExprs(index).toAttribute)
-              }
+                if (index == -1) {
+                  if (hasCharVarchar(evaluated)) {
+                    needsPushDown += aliasOrder
+                    order.copy(child = aliasOrder)
+                  } else {
+                    needsPushDown += evaluated
+                    order.copy(child = evaluated.toAttribute)
+                  }
+                } else {
+                  order.copy(child = originalAggExprs(index).toAttribute)
+                }
           }
 
           val sortOrdersMap = unresolvedSortOrders
@@ -2302,6 +2361,13 @@ class Analyzer(override val catalogManager: CatalogManager)
           // just return the original plan.
           case ae: AnalysisException => sort
         }
+    }
+
+    def hasCharVarchar(expr: Alias): Boolean = {
+      expr.find {
+        case ne: NamedExpression => CharVarcharUtils.getRawType(ne.metadata).nonEmpty
+        case _ => false
+      }.nonEmpty
     }
 
     def containsAggregate(condition: Expression): Boolean = {
@@ -2912,8 +2978,8 @@ class Analyzer(override val catalogManager: CatalogManager)
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
-        case Uuid(None) => Uuid(Some(random.nextLong()))
-        case Shuffle(child, None) => Shuffle(child, Some(random.nextLong()))
+        case e: ExpressionWithRandomSeed if e.seedExpression == UnresolvedSeed =>
+          e.withNewSeed(random.nextLong())
       }
     }
   }

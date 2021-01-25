@@ -465,10 +465,10 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("1a2s3ae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '1',
-        'n', '2',
-        'l', '3',
-        't', '\0'
+        "r", "1",
+        "n", "2",
+        "l", "3",
+        "t", "\0"
       )));
     assertEquals(
       fromString("translate"),
@@ -476,16 +476,16 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(ImmutableMap.of(
-        'r', '\0',
-        'n', '\0',
-        'l', '\0',
-        't', '\0'
+        "r", "\0",
+        "n", "\0",
+        "l", "\0",
+        "t", "\0"
       )));
     assertEquals(
       fromString("aa世b"),
       fromString("花花世界").translate(ImmutableMap.of(
-        '花', 'a',
-        '界', 'b'
+        "花", "a",
+        "界", "b"
       )));
   }
 

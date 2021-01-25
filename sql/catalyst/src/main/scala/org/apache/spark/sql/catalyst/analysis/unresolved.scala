@@ -245,10 +245,10 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw QueryExecutionErrors.cannotEvaluateGeneratorError(this)
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForGeneratorError(this)
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def terminate(): TraversableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
@@ -258,7 +258,8 @@ case class UnresolvedFunction(
     name: FunctionIdentifier,
     arguments: Seq[Expression],
     isDistinct: Boolean,
-    filter: Option[Expression] = None)
+    filter: Option[Expression] = None,
+    ignoreNulls: Boolean = false)
   extends Expression with Unevaluable {
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq
@@ -560,4 +561,13 @@ case class UnresolvedHaving(
   extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output
+}
+
+/**
+ * A place holder expression used in random functions, will be replaced after analyze.
+ */
+case object UnresolvedSeed extends LeafExpression with Unevaluable {
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override lazy val resolved = false
 }

@@ -53,6 +53,7 @@ private[sql] object ArrowUtils {
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
+    case NullType => ArrowType.Null.INSTANCE
     case _ =>
       throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
   }
@@ -72,6 +73,7 @@ private[sql] object ArrowUtils {
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
     case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
+    case ArrowType.Null.INSTANCE => NullType
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
   }
 

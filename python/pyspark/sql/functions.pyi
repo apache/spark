@@ -237,13 +237,13 @@ def filter(col: ColumnOrName, f: Callable[[Column], Column]) -> Column: ...
 def filter(col: ColumnOrName, f: Callable[[Column, Column], Column]) -> Column: ...
 def aggregate(
     col: ColumnOrName,
-    zero: ColumnOrName,
+    initialValue: ColumnOrName,
     merge: Callable[[Column, Column], Column],
     finish: Optional[Callable[[Column], Column]] = ...,
 ) -> Column: ...
 def zip_with(
-    col1: ColumnOrName,
-    ColumnOrName: ColumnOrName,
+    left: ColumnOrName,
+    right: ColumnOrName,
     f: Callable[[Column, Column], Column],
 ) -> Column: ...
 def transform_keys(
@@ -350,4 +350,9 @@ def udf(
 @overload
 def udf(
     f: DataTypeOrString = ...,
+) -> Callable[[Callable[..., Any]], Callable[..., Column]]: ...
+@overload
+def udf(
+    *,
+    returnType: DataTypeOrString = ...,
 ) -> Callable[[Callable[..., Any]], Callable[..., Column]]: ...
