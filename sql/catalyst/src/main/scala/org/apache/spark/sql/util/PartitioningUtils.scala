@@ -49,14 +49,14 @@ object PartitioningUtils {
           val v = value match {
             case Some(v) => Some(charTypeWriteSideCheck(v.toString, len))
             case None => None
-            case other => charTypeWriteSideCheck(other.toString, len)
+            case other: String => charTypeWriteSideCheck(other, len)
           }
           v.asInstanceOf[T]
         case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
           val v = value match {
             case Some(v) => Some(varcharTypeWriteSideCheck(v.toString, len))
             case None => None
-            case other => varcharTypeWriteSideCheck(other.toString, len)
+            case other: String => varcharTypeWriteSideCheck(other, len)
           }
           v.asInstanceOf[T]
         case _ => value

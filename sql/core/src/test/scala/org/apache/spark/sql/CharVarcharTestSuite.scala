@@ -48,9 +48,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 
       sql("INSERT OVERWRITE t VALUES ('1', null)")
       checkAnswer(spark.table("t"), Row("1", null))
-
-      val e = intercept[SparkException](sql("INSERT OVERWRITE t VALUES ('1', 'abcdef')"))
-      assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
     }
   }
 
@@ -62,8 +59,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
         checkColType(spark.table("t").schema(1), CharType(5))
       }
-      val e1 = intercept[SparkException](sql("INSERT OVERWRITE t VALUES ('1', 'abcdef')"))
-      assert(e1.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
     }
 
     withTable("t") {
@@ -75,14 +70,50 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("t"), Nil)
       }
 
-      val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c='abcdef')"))
-      assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
-
-      val e3 = intercept[RuntimeException](sql("ALTER TABLE t ADD PARTITION(c='abcdef')"))
-      assert(e3.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
-
       sql("INSERT OVERWRITE t VALUES ('1', null)")
       checkAnswer(spark.table("t"), Row("1", null))
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
+      (0 to 5).map(n => "a" + " " * n).foreach { v =>
+        sql(s"INSERT INTO t VALUES ('1', '$v')")
+        sql(s"ALTER TABLE t DROP PARTITION(c='a')")
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("char type values should be padded or trimmed: static partitioned columns") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
+      (0 to 5).map(n => "a" + " " * n).foreach { v =>
+        sql(s"INSERT INTO t PARTITION (c ='$v') VALUES ('1')")
+        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
+        checkColType(spark.table("t").schema(1), CharType(5))
+        sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
+  test("oversize char/varchar values for alter table partition operations") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
+        Seq("ADD", "DROP").foreach { op =>
+          val e = intercept[RuntimeException](sql(s"ALTER TABLE t $op PARTITION(c='abcdef')"))
+          assert(e.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        }
+        val e1 = intercept[RuntimeException] {
+          sql(s"ALTER TABLE t PARTITION (c='abcdef') RENAME TO PARTITION (c='2')")
+        }
+        assert(e1.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+        val e2 = intercept[RuntimeException] {
+          sql(s"ALTER TABLE t PARTITION (c='1') RENAME TO PARTITION (c='abcdef')")
+        }
+        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+      }
     }
   }
 
@@ -95,12 +126,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("t"), Row("1", "a" + " " * math.min(n, 4)))
         checkColType(spark.table("t").schema(1), VarcharType(5))
       }
-    }
-
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c VARCHAR(5)) USING $format PARTITIONED BY (c)")
-      val e = intercept[SparkException](sql("INSERT OVERWRITE t VALUES ('1', 'abcdef')"))
-      assert(e.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
     }
 
     (0 to 5).foreach { n =>
@@ -135,7 +160,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
       val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE t VALUES ('1', 100000)"))
       assert(e1.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
 
-      val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c='100000')"))
+      val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
       assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
     }
   }

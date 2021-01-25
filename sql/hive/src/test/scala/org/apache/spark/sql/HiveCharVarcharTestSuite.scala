@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.execution.command.CharVarcharDDLTestBase
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.types.CharType
 
 class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSingleton {
 
@@ -49,35 +48,6 @@ class HiveCharVarcharTestSuite extends CharVarcharTestSuite with TestHiveSinglet
       val rest = sql("SHOW CREATE TABLE t AS SERDE").head().getString(0)
       assert(rest.contains("VARCHAR(3)"))
       assert(rest.contains("CHAR(5)"))
-    }
-  }
-
-  // TODO(SPARK-34203): Move this too super class when the ticket gets fixed
-  test("char type values should be padded or trimmed: static partitioned columns") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
-      (0 to 5).map(n => "a" + " " * n).foreach { v =>
-        sql(s"INSERT INTO t PARTITION (c ='$v') VALUES ('1')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-        checkColType(spark.table("t").schema(1), CharType(5))
-        sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
-        checkAnswer(spark.table("t"), Nil)
-      }
-    }
-  }
-
-  test("SPARK-34192: Know issue of hive for tailing spaces") {
-    // https://issues.apache.org/jira/browse/HIVE-13618
-    // Trailing spaces in partition column will be treated differently
-    // This is because Mysql and Derby(used in tests) considers 'a' = 'a '
-    // whereas others like (Postgres, Oracle) doesn't exhibit this problem.
-    Seq("string", "VARCHAR(5)").foreach { typ =>
-      withTable("t") {
-        sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
-        sql(s"INSERT INTO t VALUES ('1', 'a ')")
-        val e = intercept[AnalysisException](sql(s"INSERT INTO t VALUES ('1', 'a  ')"))
-        assert(e.getMessage.contains("Expecting a partition with name c=a  ,"))
-      }
     }
   }
 }
