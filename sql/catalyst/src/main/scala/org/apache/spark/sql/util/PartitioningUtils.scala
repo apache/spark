@@ -38,12 +38,11 @@ object PartitioningUtils {
       partCols: StructType,
       tblName: String,
       resolver: Resolver): Map[String, T] = {
+    val rawSchema = CharVarcharUtils.getRawSchema(partCols)
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedFiled = CharVarcharUtils.getRawSchema(partCols)
-        .find(f => resolver(f.name, key))
-        .getOrElse {
-          throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
-        }
+      val normalizedFiled = rawSchema.find(f => resolver(f.name, key)).getOrElse {
+        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+      }
 
       val normalizedVal = normalizedFiled.dataType match {
         case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
