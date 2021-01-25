@@ -30,7 +30,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.collect.Lists;
 import scala.Option;
 
 import static org.apache.parquet.filter2.compat.RowGroupFilter.filterRowGroups;
@@ -261,7 +260,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   private ParquetMetadata getFooterByRange(Configuration configuration,
       long start, long end) throws IOException {
     if (cachedFooter != null) {
-      List<BlockMetaData> filteredBlocks = Lists.newArrayList();
+      List<BlockMetaData> filteredBlocks = new ArrayList<>();
       List<BlockMetaData> blocks = cachedFooter.getBlocks();
       for (BlockMetaData block : blocks) {
         long offset = block.getStartingPos();
