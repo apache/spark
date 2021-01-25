@@ -853,7 +853,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
-    buildConf("spark.sql.fileMetaCache.ttl.sinceLastAccess")
+    buildConf("spark.sql.fileMetaCache.ttlSinceLastAccess")
       .version("3.2.0")
       .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
       .timeConf(TimeUnit.SECONDS)
