@@ -61,10 +61,6 @@ private[sql] trait LookupCatalog extends Logging {
 
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
-        if (ident.namespace.length != 1) {
-          throw new AnalysisException(
-            s"The namespace in session catalog must have exactly one name part: ${parts.quoted}")
-        }
         Some(catalog, ident)
       case _ => None
     }
