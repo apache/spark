@@ -243,7 +243,7 @@ class ResolveSessionCatalog(
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(child))
         case other =>
-          throw new AnalysisException(s"[BUG] unexpected column expression: $other")
+          throw QueryCompilationErrors.unexpectedColumnExpressionError(other)
       }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
@@ -706,12 +706,12 @@ class ResolveSessionCatalog(
     def unapply(resolved: ResolvedNamespace): Option[String] = resolved match {
       case ResolvedNamespace(catalog, _) if !isSessionCatalog(catalog) => None
       case ResolvedNamespace(_, Seq()) =>
-        throw new AnalysisException("Database from v1 session catalog is not specified")
+        throw QueryCompilationErrors.databaseFromV1SessionCatalogNotSpecifiedError()
       case ResolvedNamespace(_, Seq(dbName)) => Some(dbName)
       case _ =>
         assert(resolved.namespace.length > 1)
-        throw new AnalysisException("Nested databases are not supported by " +
-          s"v1 session catalog: ${resolved.namespace.map(quoteIfNeeded).mkString(".")}")
+        throw QueryCompilationErrors.nestedDatabaseUnsupportedByV1SessionCatalogError(
+          resolved.namespace.map(quoteIfNeeded).mkString("."))
     }
   }
 }

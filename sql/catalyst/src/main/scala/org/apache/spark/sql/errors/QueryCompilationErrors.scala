@@ -726,4 +726,16 @@ private[spark] object QueryCompilationErrors {
     }
     new AnalysisException(errorMsg)
   }
+
+  def unexpectedColumnExpressionError(column: Expression): Throwable = {
+    new AnalysisException(s"[BUG] unexpected column expression: $column")
+  }
+
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
 }

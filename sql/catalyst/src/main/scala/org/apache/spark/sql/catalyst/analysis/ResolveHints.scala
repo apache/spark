@@ -20,12 +20,11 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -187,10 +186,9 @@ object ResolveHints {
       def createRepartitionByExpression(
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
-        if (sortOrders.nonEmpty) throw new IllegalArgumentException(
-          s"""Invalid partitionExprs specified: $sortOrders
-             |For range partitioning use REPARTITION_BY_RANGE instead.
-           """.stripMargin)
+        if (sortOrders.nonEmpty) {
+          throw QueryExecutionErrors.invalidPartitionExpressionsError(sortOrders)
+        }
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
           throw QueryCompilationErrors.invalidHintParameterError(hintName, invalidParams)

@@ -24,11 +24,10 @@ import java.time.DateTimeException
 import org.apache.hadoop.fs.Path
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -327,5 +326,10 @@ object QueryExecutionErrors {
 
   def compilerError(e: CompileException): Throwable = {
     new CompileException(failedToCompileMsg(e), e.getLocation)
+  }
+
+  def invalidPartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new IllegalArgumentException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
   }
 }
