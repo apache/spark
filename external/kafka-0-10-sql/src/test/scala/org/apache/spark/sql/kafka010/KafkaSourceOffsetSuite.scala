@@ -100,8 +100,6 @@ class KafkaSourceOffsetSuite extends OffsetSuite with SharedSparkSession {
   private def readFromResource(file: String): SerializedOffset = {
     import scala.io.Source
     val input = getClass.getResource(s"/$file").toURI
-    Utils.tryWithResource(Source.fromFile(input)) { source =>
-      SerializedOffset(source.mkString)
-    }
+    SerializedOffset(Utils.tryWithResource(Source.fromFile(input))(_.mkString))
   }
 }
