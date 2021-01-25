@@ -711,9 +711,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
         val stage0 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=0&attempt=0&expandDagViz=true")) { source =>
-          source.mkString
-        }
+          "/stages/stage/?id=0&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
           "label=&quot;Stage 0&quot;;\n    subgraph "))
         assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
@@ -724,9 +722,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           "2 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [2]"))
 
         val stage1 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=1&attempt=0&expandDagViz=true")) { source =>
-          source.mkString
-        }
+          "/stages/stage/?id=1&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
           "label=&quot;Stage 1&quot;;\n    subgraph "))
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
@@ -737,9 +733,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
           "5 [labelType=&quot;html&quot; label=&quot;MapPartitionsRDD [5]"))
 
         val stage2 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=2&attempt=0&expandDagViz=true")) { source =>
-          source.mkString
-        }
+          "/stages/stage/?id=2&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
           "label=&quot;Stage 2&quot;;\n    subgraph "))
         assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +

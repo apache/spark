@@ -1534,8 +1534,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     import scala.io.Source
     Utils.tryWithResource(
       Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI)) { source =>
-      val str = source.mkString
-      SerializedOffset(str.trim)
+      SerializedOffset(source.mkString.trim)
     }
   }
 

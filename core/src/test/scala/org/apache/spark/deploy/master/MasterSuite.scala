@@ -347,9 +347,8 @@ class MasterSuite extends SparkFunSuite
         val workerLinks = (WORKER_LINK_RE findAllMatchIn html).toList
         workerLinks.size should be (2)
         workerLinks foreach { case WORKER_LINK_RE(workerUrl, workerId) =>
-          val workerHtml = Utils.tryWithResource(Source.fromURL(workerUrl)) { source =>
-            source.getLines().mkString("\n")
-          }
+          val workerHtml = Utils
+            .tryWithResource(Source.fromURL(workerUrl))(_.getLines().mkString("\n"))
           workerHtml should include ("Spark Worker at")
           workerHtml should include ("Running Executors (0)")
         }
@@ -407,9 +406,8 @@ class MasterSuite extends SparkFunSuite
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Utils.tryWithResource( Source.fromURL(s"$masterUrl/json")) { source =>
-          source.getLines().mkString("\n")
-        }
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>

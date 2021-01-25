@@ -45,9 +45,7 @@ object RawTextSender extends Logging {
     val Array(IntParam(port), file, IntParam(blockSize), IntParam(bytesPerSec)) = args
 
     // Repeat the input data multiple times to fill in a buffer
-    val lines = Utils.tryWithResource(Source.fromFile(file)) { source =>
-      source.getLines().toArray
-    }
+    val lines = Utils.tryWithResource(Source.fromFile(file))(_.getLines().toArray)
     val bufferStream = new ByteArrayOutputStream(blockSize + 1000)
     val ser = new KryoSerializer(new SparkConf()).newInstance()
     val serStream = ser.serializeStream(bufferStream)

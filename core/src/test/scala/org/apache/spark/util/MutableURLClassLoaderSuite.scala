@@ -113,9 +113,7 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     assert(res1.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
     res1.map { res =>
-      Utils.tryWithResource(scala.io.Source.fromURL(res)) { source =>
-        source.mkString
-      }
+      Utils.tryWithResource(scala.io.Source.fromURL(res))(_.mkString)
     } should contain inOrderOnly("resource1Contents-child", "resource1Contents-parent")
     classLoader.close()
     parentLoader.close()
