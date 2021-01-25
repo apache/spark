@@ -47,16 +47,16 @@ object PartitioningUtils {
       val normalizedVal = normalizedFiled.dataType match {
         case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
           val v = value match {
-            case Some(v) => Some(charTypeWriteSideCheck(v.toString, len))
-            case None => None
-            case other: String => charTypeWriteSideCheck(other, len)
+            case Some(str: String) => Some(charTypeWriteSideCheck(str, len))
+            case str: String => charTypeWriteSideCheck(str, len)
+            case other => other
           }
           v.asInstanceOf[T]
         case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
           val v = value match {
-            case Some(v) => Some(varcharTypeWriteSideCheck(v.toString, len))
-            case None => None
-            case other: String => varcharTypeWriteSideCheck(other, len)
+            case Some(str: String) => Some(varcharTypeWriteSideCheck(str, len))
+            case str: String => varcharTypeWriteSideCheck(str, len)
+            case other => other
           }
           v.asInstanceOf[T]
         case _ => value

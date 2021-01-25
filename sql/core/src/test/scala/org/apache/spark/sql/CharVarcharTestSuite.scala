@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.{InMemoryPartitionTableCatalog, SchemaRequiredDataSource}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -37,60 +38,88 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     assert(CharVarcharUtils.getRawType(f.metadata) == Some(dt))
   }
 
-  test("char type values should be padded or trimmed: top-level columns") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format")
-      (0 to 5).map(n => "a" + " " * n).foreach { v =>
-        sql(s"INSERT OVERWRITE t VALUES ('1', '$v')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-        checkColType(spark.table("t").schema(1), CharType(5))
-      }
+  def checkPlainResult(df: DataFrame, dt: String, insertVal: String): Unit = {
+    val dataType = CatalystSqlParser.parseDataType(dt)
+    checkColType(df.schema(1), dataType)
+    dataType match {
+      case CharType(len) =>
+        // char value will be padded if (<= len) or trimmed if (> len)
+        val fixLenStr = if (insertVal != null) {
+          insertVal.take(len).padTo(len, " ").mkString
+        } else null
+        checkAnswer(df, Row("1", fixLenStr))
+      case VarcharType(len) =>
+        // varchar value will be remained if (<= len) or trimmed if (> len)
+        val varLenStrWithUpperBound = if (insertVal != null) {
+          insertVal.take(len)
+        } else null
+        checkAnswer(df, Row("1", varLenStrWithUpperBound))
+    }
+  }
 
-      sql("INSERT OVERWRITE t VALUES ('1', null)")
-      checkAnswer(spark.table("t"), Row("1", null))
+  test("apply char padding/trimming and varchar trimming: top-level columns") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i STRING, c $typ) USING $format")
+        (0 to 5).map(n => "a" + " " * n).foreach { v =>
+          sql(s"INSERT OVERWRITE t VALUES ('1', '$v')")
+          checkPlainResult(spark.table("t"), typ, v)
+        }
+        sql("INSERT OVERWRITE t VALUES ('1', null)")
+        checkPlainResult(spark.table("t"), typ, null)
+      }
     }
   }
 
   test("char type values should be padded or trimmed: partitioned columns") {
+    // via dynamic partitioned columns
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
       (0 to 5).map(n => "a" + " " * n).foreach { v =>
         sql(s"INSERT OVERWRITE t VALUES ('1', '$v')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-        checkColType(spark.table("t").schema(1), CharType(5))
+        checkPlainResult(spark.table("t"), "CHAR(5)", v)
       }
     }
 
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
       (0 to 5).map(n => "a" + " " * n).foreach { v =>
+        // via dynamic partitioned columns with drop partition command
         sql(s"INSERT INTO t VALUES ('1', '$v')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-        sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
+        checkPlainResult(spark.table("t"), "CHAR(5)", v)
+        sql(s"ALTER TABLE t DROP PARTITION(c='a')")
         checkAnswer(spark.table("t"), Nil)
-      }
 
-      sql("INSERT OVERWRITE t VALUES ('1', null)")
-      checkAnswer(spark.table("t"), Row("1", null))
-    }
-
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
-      (0 to 5).map(n => "a" + " " * n).foreach { v =>
-        sql(s"INSERT INTO t VALUES ('1', '$v')")
+        // via static partitioned columns with drop partition command
+        sql(s"INSERT INTO t PARTITION (c ='$v') VALUES ('1')")
+        checkPlainResult(spark.table("t"), "CHAR(5)", v)
         sql(s"ALTER TABLE t DROP PARTITION(c='a')")
         checkAnswer(spark.table("t"), Nil)
       }
     }
   }
 
-  test("char type values should be padded or trimmed: static partitioned columns") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
-      (0 to 5).map(n => "a" + " " * n).foreach { v =>
-        sql(s"INSERT INTO t PARTITION (c ='$v') VALUES ('1')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * 4))
-        checkColType(spark.table("t").schema(1), CharType(5))
+  test("varchar type values length check and trim: partitioned columns") {
+    (0 to 5).foreach { n =>
+      // SPARK-34192: we need to create a a new table for each round of test because of
+      // trailing spaces in partition column will be treated differently.
+      // This is because Mysql and Derby(used in tests) considers 'a' = 'a '
+      // whereas others like (Postgres, Oracle) doesn't exhibit this problem.
+      // see more at:
+      // https://issues.apache.org/jira/browse/HIVE-13618
+      // https://issues.apache.org/jira/browse/SPARK-34192
+      withTable("t") {
+        sql(s"CREATE TABLE t(i STRING, c VARCHAR(5)) USING $format PARTITIONED BY (c)")
+        val v = "a" + " " * n
+        // via dynamic partitioned columns
+        sql(s"INSERT INTO t VALUES ('1', '$v')")
+        checkPlainResult(spark.table("t"), "VARCHAR(5)", v)
+        sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
+        checkAnswer(spark.table("t"), Nil)
+
+        // via static partitioned columns
+        sql(s"INSERT INTO t PARTITION (c='$v') VALUES ('1')")
+        checkPlainResult(spark.table("t"), "VARCHAR(5)", v)
         sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
         checkAnswer(spark.table("t"), Nil)
       }
@@ -117,51 +146,23 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("varchar type values length check: partitioned columns dynamic") {
-    (0 to 5).foreach { n =>
+  test("char/varchar type values length check: partitioned columns of other types") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
-        sql(s"CREATE TABLE t(i STRING, c VARCHAR(5)) USING $format PARTITIONED BY (c)")
-        val v = "a" + " " * n
-        sql(s"INSERT INTO t VALUES ('1', '$v')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * math.min(n, 4)))
-        checkColType(spark.table("t").schema(1), VarcharType(5))
+        sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
+        Seq(1, 10, 100, 1000, 10000).foreach { v =>
+          sql(s"INSERT OVERWRITE t VALUES ('1', $v)")
+          checkPlainResult(spark.table("t"), typ, v.toString)
+          sql(s"ALTER TABLE t DROP PARTITION(c=$v)")
+          checkAnswer(spark.table("t"), Nil)
+        }
+
+        val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE t VALUES ('1', 100000)"))
+        assert(e1.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
+
+        val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
+        assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
       }
-    }
-
-    (0 to 5).foreach { n =>
-      withTable("t") {
-        sql(s"CREATE TABLE t(i STRING, c VARCHAR(5)) USING $format PARTITIONED BY (c)")
-        val v = "a" + " " * n
-        sql(s"INSERT INTO t VALUES ('1', '$v')")
-        checkAnswer(spark.table("t"), Row("1", "a" + " " * math.min(n, 4)))
-        sql(s"ALTER TABLE t DROP PARTITION(c='$v')")
-        checkAnswer(spark.table("t"), Nil)
-      }
-    }
-
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c VARCHAR(5)) USING $format PARTITIONED BY (c)")
-      val e = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c='abcdef')"))
-      assert(e.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
-      sql("INSERT OVERWRITE t VALUES ('1', null)")
-      checkAnswer(spark.table("t"), Row("1", null))
-    }
-  }
-
-  test("varchar type values length check: partitioned columns of other types") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c VARCHAR(5)) USING $format PARTITIONED BY (c)")
-      Seq(1, 10, 100, 1000, 10000).foreach { v =>
-        sql(s"INSERT OVERWRITE t VALUES ('1', $v)")
-        sql(s"ALTER TABLE t DROP PARTITION(c=$v)")
-        checkAnswer(spark.table("t"), Nil)
-      }
-
-      val e1 = intercept[SparkException](sql(s"INSERT OVERWRITE t VALUES ('1', 100000)"))
-      assert(e1.getCause.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
-
-      val e2 = intercept[RuntimeException](sql("ALTER TABLE t DROP PARTITION(c=100000)"))
-      assert(e2.getMessage.contains("Exceeds char/varchar type length limitation: 5"))
     }
   }
 

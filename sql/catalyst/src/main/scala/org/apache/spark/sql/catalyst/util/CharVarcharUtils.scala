@@ -29,7 +29,9 @@ import org.apache.spark.sql.types._
 
 object CharVarcharUtils extends Logging {
 
-  private[sql] val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+  private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
+
+  def getRawTypeString: String = CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
 
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a

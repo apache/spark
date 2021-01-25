@@ -989,11 +989,11 @@ private[hive] class HiveClientImpl(
 private[hive] object HiveClientImpl extends Logging {
   /** Converts the native StructField to Hive's FieldSchema. */
   def toHiveColumn(c: StructField): FieldSchema = {
-    val typeString = if (c.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
+    val typeString = if (c.metadata.contains(getRawTypeString)) {
       // For Hive Serde, we still need to to restore the raw type for char and varchar type.
       // When reading data in parquet, orc, or avro file format with string type for char,
       // the tailing spaces may lost if we are not going to pad it.
-      c.metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)
+      c.metadata.getString(getRawTypeString)
     } else {
       // replace NullType to HiveVoidType since Hive parse void not null.
       HiveVoidType.replaceVoidType(c.dataType).catalogString
