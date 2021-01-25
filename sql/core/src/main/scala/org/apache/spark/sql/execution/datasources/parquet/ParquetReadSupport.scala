@@ -88,7 +88,7 @@ class ParquetReadSupport(
       SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.defaultValue.get)
     val parquetFileSchema = context.getFileSchema
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
-      catalystRequestedSchema, caseSensitive)
+      catalystRequestedSchema, caseSensitive, enableVectorizedReader)
 
     // We pass two schema to ParquetRecordMaterializer:
     // - parquetRequestedSchema: the schema of the file data we want to read
@@ -153,9 +153,10 @@ object ParquetReadSupport {
   def clipParquetSchema(
       parquetSchema: MessageType,
       catalystSchema: StructType,
-      caseSensitive: Boolean = true): MessageType = {
+      caseSensitive: Boolean = true,
+      enableVectorizedReader: Boolean = true): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(
-      parquetSchema.asGroupType(), catalystSchema, caseSensitive)
+      parquetSchema.asGroupType(), catalystSchema, caseSensitive, enableVectorizedReader)
     if (clippedParquetFields.isEmpty) {
       ParquetSchemaConverter.EMPTY_MESSAGE
     } else {
@@ -167,20 +168,33 @@ object ParquetReadSupport {
   }
 
   private def clipParquetType(
-      parquetType: Type, catalystType: DataType, caseSensitive: Boolean): Type = {
+      parquetType: Type,
+      catalystType: DataType,
+      caseSensitive: Boolean,
+      enableVectorizedReader: Boolean): Type = {
     catalystType match {
       case t: ArrayType if !isPrimitiveCatalystType(t.elementType) =>
         // Only clips array types with nested type as element type.
-        clipParquetListType(parquetType.asGroupType(), t.elementType, caseSensitive)
+        clipParquetListType(
+          parquetType.asGroupType(), t.elementType, caseSensitive, enableVectorizedReader)
 
       case t: MapType
         if !isPrimitiveCatalystType(t.keyType) ||
            !isPrimitiveCatalystType(t.valueType) =>
         // Only clips map types with nested key type or value type
-        clipParquetMapType(parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive)
+        clipParquetMapType(
+          parquetType.asGroupType(), t.keyType, t.valueType, caseSensitive, enableVectorizedReader)
 
       case t: StructType =>
-        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive)
+        clipParquetGroup(parquetType.asGroupType(), t, caseSensitive, enableVectorizedReader)
+
+      case t: DecimalType if enableVectorizedReader =>
+        val p = parquetType.asPrimitiveType().getDecimalMetadata()
+        if (t.precision == p.getPrecision && t.scale == p.getScale) {
+          parquetType
+        } else {
+          throw new UnsupportedOperationException("Schema evolution not supported.")
+        }
 
       case _ =>
         // UDTs and primitive types are not clipped.  For UDTs, a clipped version might not be able
@@ -207,14 +221,17 @@ object ParquetReadSupport {
    * [[StructType]].
    */
   private def clipParquetListType(
-      parquetList: GroupType, elementType: DataType, caseSensitive: Boolean): Type = {
+      parquetList: GroupType,
+      elementType: DataType,
+      caseSensitive: Boolean,
+      enableVectorizedReader: Boolean): Type = {
     // Precondition of this method, should only be called for lists with nested element types.
     assert(!isPrimitiveCatalystType(elementType))
 
     // Unannotated repeated group should be interpreted as required list of required element, so
     // list element type is just the group itself.  Clip it.
     if (parquetList.getOriginalType == null && parquetList.isRepetition(Repetition.REPEATED)) {
-      clipParquetType(parquetList, elementType, caseSensitive)
+      clipParquetType(parquetList, elementType, caseSensitive, enableVectorizedReader)
     } else {
       assert(
         parquetList.getOriginalType == OriginalType.LIST,
@@ -246,7 +263,8 @@ object ParquetReadSupport {
         Types
           .buildGroup(parquetList.getRepetition)
           .as(OriginalType.LIST)
-          .addField(clipParquetType(repeatedGroup, elementType, caseSensitive))
+          .addField(
+            clipParquetType(repeatedGroup, elementType, caseSensitive, enableVectorizedReader))
           .named(parquetList.getName)
       } else {
         // Otherwise, the repeated field's type is the element type with the repeated field's
@@ -257,7 +275,8 @@ object ParquetReadSupport {
           .addField(
             Types
               .repeatedGroup()
-              .addField(clipParquetType(repeatedGroup.getType(0), elementType, caseSensitive))
+              .addField(clipParquetType(
+                repeatedGroup.getType(0), elementType, caseSensitive, enableVectorizedReader))
               .named(repeatedGroup.getName))
           .named(parquetList.getName)
       }
@@ -273,7 +292,8 @@ object ParquetReadSupport {
       parquetMap: GroupType,
       keyType: DataType,
       valueType: DataType,
-      caseSensitive: Boolean): GroupType = {
+      caseSensitive: Boolean,
+      enableVectorizedReader: Boolean): GroupType = {
     // Precondition of this method, only handles maps with nested key types or value types.
     assert(!isPrimitiveCatalystType(keyType) || !isPrimitiveCatalystType(valueType))
 
@@ -285,8 +305,10 @@ object ParquetReadSupport {
       Types
         .repeatedGroup()
         .as(repeatedGroup.getOriginalType)
-        .addField(clipParquetType(parquetKeyType, keyType, caseSensitive))
-        .addField(clipParquetType(parquetValueType, valueType, caseSensitive))
+        .addField(
+          clipParquetType(parquetKeyType, keyType, caseSensitive, enableVectorizedReader))
+        .addField(
+          clipParquetType(parquetValueType, valueType, caseSensitive, enableVectorizedReader))
         .named(repeatedGroup.getName)
 
     Types
@@ -305,8 +327,12 @@ object ParquetReadSupport {
    *       pruning.
    */
   private def clipParquetGroup(
-      parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): GroupType = {
-    val clippedParquetFields = clipParquetGroupFields(parquetRecord, structType, caseSensitive)
+      parquetRecord: GroupType,
+      structType: StructType,
+      caseSensitive: Boolean,
+      enableVectorizedReader: Boolean): GroupType = {
+    val clippedParquetFields =
+      clipParquetGroupFields(parquetRecord, structType, caseSensitive, enableVectorizedReader)
     Types
       .buildGroup(parquetRecord.getRepetition)
       .as(parquetRecord.getOriginalType)
@@ -320,7 +346,10 @@ object ParquetReadSupport {
    * @return A list of clipped [[GroupType]] fields, which can be empty.
    */
   private def clipParquetGroupFields(
-      parquetRecord: GroupType, structType: StructType, caseSensitive: Boolean): Seq[Type] = {
+      parquetRecord: GroupType,
+      structType: StructType,
+      caseSensitive: Boolean,
+      enableVectorizedReader: Boolean): Seq[Type] = {
     val toParquet = new SparkToParquetSchemaConverter(writeLegacyParquetFormat = false)
     if (caseSensitive) {
       val caseSensitiveParquetFieldMap =
@@ -328,7 +357,7 @@ object ParquetReadSupport {
       structType.map { f =>
         caseSensitiveParquetFieldMap
           .get(f.name)
-          .map(clipParquetType(_, f.dataType, caseSensitive))
+          .map(clipParquetType(_, f.dataType, caseSensitive, enableVectorizedReader))
           .getOrElse(toParquet.convertField(f))
       }
     } else {
@@ -345,7 +374,7 @@ object ParquetReadSupport {
               throw new RuntimeException(s"""Found duplicate field(s) "${f.name}": """ +
                 s"$parquetTypesString in case-insensitive mode")
             } else {
-              clipParquetType(parquetTypes.head, f.dataType, caseSensitive)
+              clipParquetType(parquetTypes.head, f.dataType, caseSensitive, enableVectorizedReader)
             }
           }.getOrElse(toParquet.convertField(f))
       }

@@ -268,18 +268,29 @@ private[parquet] class ParquetRowConverter(
         }
 
       // For INT32 backed decimals
-      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
-        new ParquetIntDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+      case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+        // SPARK-34212 Interpret the Parquet long value with the corresponding Parquet's file type.
+        val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+        val precision = metadata.getPrecision()
+        val scale = metadata.getScale()
+        new ParquetIntDictionaryAwareDecimalConverter(precision, scale, updater)
 
       // For INT64 backed decimals
-      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
-        new ParquetLongDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+      case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
+        // SPARK-34212 Interpret the Parquet long value with the corresponding Parquet's file type.
+        val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+        val precision = metadata.getPrecision()
+        val scale = metadata.getScale()
+        new ParquetLongDictionaryAwareDecimalConverter(precision, scale, updater)
 
       // For BINARY and FIXED_LEN_BYTE_ARRAY backed decimals
-      case t: DecimalType
+      case _: DecimalType
         if parquetType.asPrimitiveType().getPrimitiveTypeName == FIXED_LEN_BYTE_ARRAY ||
            parquetType.asPrimitiveType().getPrimitiveTypeName == BINARY =>
-        new ParquetBinaryDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+        val precision = metadata.getPrecision()
+        val scale = metadata.getScale()
+        new ParquetBinaryDictionaryAwareDecimalConverter(precision, scale, updater)
 
       case t: DecimalType =>
         throw new RuntimeException(
