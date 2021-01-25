@@ -3780,6 +3780,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
       sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
       checkAnswer(sql(s"SELECT * FROM $t"), Row(0, null))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkAnswer(sql(s"SELECT * FROM $t"), Nil)
     }
   }
 }

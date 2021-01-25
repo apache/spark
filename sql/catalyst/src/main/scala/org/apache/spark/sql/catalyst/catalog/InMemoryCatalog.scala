@@ -94,6 +94,15 @@ class InMemoryCatalog(
     }
   }
 
+  private def toCatalogPartitionSpec = ExternalCatalogUtils.convertNullPartitionValues(_)
+  private def toCatalogPartitionSpecs(specs: Seq[TablePartitionSpec]): Seq[TablePartitionSpec] = {
+    specs.map(toCatalogPartitionSpec)
+  }
+  private def toCatalogPartitionSpec(
+      parts: Seq[CatalogTablePartition]): Seq[CatalogTablePartition] = {
+    parts.map(part => part.copy(spec = toCatalogPartitionSpec(part.spec)))
+  }
+
   // --------------------------------------------------------------------------
   // Databases
   // --------------------------------------------------------------------------
@@ -389,10 +398,11 @@ class InMemoryCatalog(
   override def createPartitions(
       db: String,
       table: String,
-      parts: Seq[CatalogTablePartition],
+      newParts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
+    val parts = toCatalogPartitionSpec(newParts)
     if (!ignoreIfExists) {
       val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
       if (dupSpecs.nonEmpty) {
@@ -428,12 +438,13 @@ class InMemoryCatalog(
   override def dropPartitions(
       db: String,
       table: String,
-      partSpecs: Seq[TablePartitionSpec],
+      parts: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
       purge: Boolean,
       retainData: Boolean): Unit = synchronized {
     requireTableExists(db, table)
     val existingParts = catalog(db).tables(table).partitions
+    val partSpecs = toCatalogPartitionSpecs(parts)
     if (!ignoreIfNotExists) {
       val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
       if (missingSpecs.nonEmpty) {
@@ -467,8 +478,10 @@ class InMemoryCatalog(
   override def renamePartitions(
       db: String,
       table: String,
-      specs: Seq[TablePartitionSpec],
-      newSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
+      fromSpecs: Seq[TablePartitionSpec],
+      toSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
+    val specs = toCatalogPartitionSpecs(fromSpecs)
+    val newSpecs = toCatalogPartitionSpecs(toSpecs)
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     requirePartitionsExist(db, table, specs)
     requirePartitionsNotExist(db, table, newSpecs)
@@ -507,7 +520,8 @@ class InMemoryCatalog(
   override def alterPartitions(
       db: String,
       table: String,
-      parts: Seq[CatalogTablePartition]): Unit = synchronized {
+      alterParts: Seq[CatalogTablePartition]): Unit = synchronized {
+    val parts = toCatalogPartitionSpec(alterParts)
     requirePartitionsExist(db, table, parts.map(p => p.spec))
     parts.foreach { p =>
       catalog(db).tables(table).partitions.put(p.spec, p)
@@ -517,7 +531,8 @@ class InMemoryCatalog(
   override def getPartition(
       db: String,
       table: String,
-      spec: TablePartitionSpec): CatalogTablePartition = synchronized {
+      partSpec: TablePartitionSpec): CatalogTablePartition = synchronized {
+    val spec = toCatalogPartitionSpec(partSpec)
     requirePartitionsExist(db, table, Seq(spec))
     catalog(db).tables(table).partitions(spec)
   }
@@ -525,7 +540,8 @@ class InMemoryCatalog(
   override def getPartitionOption(
       db: String,
       table: String,
-      spec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
+      partSpec: TablePartitionSpec): Option[CatalogTablePartition] = synchronized {
+    val spec = toCatalogPartitionSpec(partSpec)
     if (!partitionExists(db, table, spec)) {
       None
     } else {
@@ -536,9 +552,9 @@ class InMemoryCatalog(
   override def listPartitionNames(
       db: String,
       table: String,
-      partialSpec: Option[TablePartitionSpec] = None): Seq[String] = synchronized {
+      partSpec: Option[TablePartitionSpec] = None): Seq[String] = synchronized {
     val partitionColumnNames = getTable(db, table).partitionColumnNames
-
+    val partialSpec = partSpec.map(toCatalogPartitionSpec)
     listPartitions(db, table, partialSpec).map { partition =>
       partitionColumnNames.map { name =>
         val partValue = if (partition.spec(name) == null) {
@@ -557,7 +573,7 @@ class InMemoryCatalog(
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
 
-    partialSpec match {
+    partialSpec.map(toCatalogPartitionSpec) match {
       case None => catalog(db).tables(table).partitions.values.toSeq
       case Some(partial) =>
         catalog(db).tables(table).partitions.toSeq.collect {
