@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseE
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -3137,6 +3138,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql(sqlCmd)
       }.getMessage
       assert(errMsg.contains(expectedError))
+    }
+  }
+
+  test("SPARK-33591, SPARK-34203: insert and drop partitions with null values") {
+    def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
+      val partitions = sql(s"SHOW PARTITIONS $t")
+        .collect()
+        .toSet
+        .map((row: Row) => row.getString(0))
+        .map(PartitioningUtils.parsePathFragment)
+      assert(partitions === expected.toSet)
+    }
+    val defaultUsing = "USING " + (if (isUsingHiveMetastore) "hive" else "parquet")
+    def insertAndDropNullPart(t: String, insertCmd: String): Unit = {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(insertCmd)
+      checkPartitions(t, Map("p1" -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
+    }
+
+    withTable("tbl") {
+      insertAndDropNullPart("tbl", "INSERT INTO TABLE tbl PARTITION (p1 = null) SELECT 0")
+    }
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("tbl") {
+        insertAndDropNullPart("tbl", "INSERT OVERWRITE TABLE tbl VALUES (0, null)")
+      }
     }
   }
 }
