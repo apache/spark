@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, CacheStats, RemovalListener, RemovalNotification}
+import com.google.common.cache.{CacheBuilder, CacheLoader, CacheStats}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -29,15 +29,8 @@ import org.apache.spark.sql.internal.SQLConf
 
 private[sql] object FileMetaCacheManager extends Logging {
 
-  private lazy val removalListener = new RemovalListener[FileMetaKey, FileMeta]() {
-    override def onRemoval(n: RemovalNotification[FileMetaKey, FileMeta]): Unit = {
-      logDebug(s"Evicting Data File Meta ${n.getKey.path}")
-    }
-  }
-
   private lazy val cacheLoader = new CacheLoader[FileMetaKey, FileMeta]() {
-    override def load(entry: FileMetaKey)
-    : FileMeta = {
+    override def load(entry: FileMetaKey): FileMeta = {
       logDebug(s"Loading Data File Meta ${entry.path}")
       entry.getFileMeta
     }
@@ -51,13 +44,18 @@ private[sql] object FileMetaCacheManager extends Logging {
       .newBuilder()
       .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
       .recordStats()
-      .removalListener(removalListener)
       .build[FileMetaKey, FileMeta](cacheLoader)
 
   def get(dataFile: FileMetaKey): FileMeta = cache.get(dataFile)
 
+  /**
+   * This is visible for testing.
+   */
   def cacheStats: CacheStats = cache.stats()
 
+  /**
+   * This is visible for testing.
+   */
   def cleanUp(): Unit = cache.cleanUp()
 }
 
