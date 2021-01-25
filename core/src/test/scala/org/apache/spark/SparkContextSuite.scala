@@ -376,7 +376,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
         sc.parallelize(Seq(0)).map { _ =>
-          scala.io.Source.fromFile(SparkFiles.get("file")).mkString
+          Utils.tryWithResource(scala.io.Source.fromFile(SparkFiles.get("file"))) { data =>
+            data.mkString
+          }
         }.first()
       }
       assert(getAddedFileContents() === "old")
