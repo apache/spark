@@ -2791,7 +2791,7 @@ def regexp_extract_all(str, pattern, idx):
     r"""Extract all matches of the given group in a regex, from the specified string column.
     If the regex did not match, or the specified group did not match, an empty array is returned.
 
-    .. versionadded:: 3.1.0
+    .. versionadded:: 3.2.0
 
     Parameters
     ----------
