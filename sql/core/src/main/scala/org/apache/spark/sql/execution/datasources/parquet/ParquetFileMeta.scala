@@ -30,9 +30,9 @@ private[sql] case class ParquetFileMetaKey(path: Path, configuration: Configurat
   override def getFileMeta: ParquetFileMeta = ParquetFileMeta(path, configuration)
 }
 
-class ParquetFileMeta(val footer: ParquetMetadata) extends FileMeta
+private[sql] class ParquetFileMeta(val footer: ParquetMetadata) extends FileMeta
 
-object ParquetFileMeta {
+private[sql] object ParquetFileMeta {
   def apply(path: Path, conf: Configuration): ParquetFileMeta = {
     new ParquetFileMeta(ParquetFileReader.readFooter(conf, path, NO_FILTER))
   }

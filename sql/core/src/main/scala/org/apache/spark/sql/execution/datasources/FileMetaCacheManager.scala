@@ -27,6 +27,16 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * A singleton Cache Manager to caching file meta. We cache these file metas in order to speed up
+ * iterated queries over the same dataset. Otherwise, each query would have to hit remote storage
+ * in order to fetch file meta before read files.
+ *
+ * We should implement the corresponding `FileMetaKey` for a specific file format, for example
+ * `ParquetFileMetaKey` or `OrcFileMetaKey`. By default, the file path is used as the identification
+ * of the `FileMetaKey` and the `getFileMeta` method of `FileMetaKey` is used to return the file
+ * meta of the corresponding file format.
+ */
 private[sql] object FileMetaCacheManager extends Logging {
 
   private lazy val cacheLoader = new CacheLoader[FileMetaKey, FileMeta]() {
@@ -39,12 +49,11 @@ private[sql] object FileMetaCacheManager extends Logging {
   private lazy val ttlTime =
     SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS)
 
-  private lazy val cache =
-    CacheBuilder
-      .newBuilder()
-      .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
-      .recordStats()
-      .build[FileMetaKey, FileMeta](cacheLoader)
+  private lazy val cache = CacheBuilder
+    .newBuilder()
+    .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
+    .recordStats()
+    .build[FileMetaKey, FileMeta](cacheLoader)
 
   def get(dataFile: FileMetaKey): FileMeta = cache.get(dataFile)
 
@@ -59,7 +68,7 @@ private[sql] object FileMetaCacheManager extends Logging {
   def cleanUp(): Unit = cache.cleanUp()
 }
 
-abstract class FileMetaKey {
+private[sql] abstract class FileMetaKey {
   def path: Path
   def configuration: Configuration
   def getFileMeta: FileMeta
@@ -70,4 +79,4 @@ abstract class FileMetaKey {
   }
 }
 
-trait FileMeta
+private[sql] trait FileMeta

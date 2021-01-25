@@ -30,9 +30,9 @@ private[sql] case class OrcFileMetaKey(path: Path, configuration: Configuration)
   override def getFileMeta: OrcFileMeta = OrcFileMeta(path, configuration)
 }
 
-case class OrcFileMeta(tail: OrcTail) extends FileMeta
+private[sql] case class OrcFileMeta(tail: OrcTail) extends FileMeta
 
-object OrcFileMeta {
+private[sql] object OrcFileMeta {
   def apply(path: Path, conf: Configuration): OrcFileMeta = {
     val fs = path.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
@@ -42,7 +42,7 @@ object OrcFileMeta {
   }
 }
 
-class ForTailCacheReader(path: Path, options: OrcFile.ReaderOptions)
+private[sql] class ForTailCacheReader(path: Path, options: OrcFile.ReaderOptions)
   extends ReaderImpl(path, options) {
   def getOrcTail: OrcTail = tail
 }
