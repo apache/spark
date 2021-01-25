@@ -35,7 +35,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * resolved.
  */
 class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String)
-  extends TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
+  extends TreeNodeException(
+    tree, QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError(function), null)
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.

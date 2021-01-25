@@ -738,4 +738,8 @@ private[spark] object QueryCompilationErrors {
   def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
     new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
   }
+
+  def invalidCallFunctionOnUnresolvedObjectError(function: String): String = {
+    s"Invalid call to $function on unresolved object"
+  }
 }
