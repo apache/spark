@@ -43,9 +43,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
       assert(info.logUrlMap.nonEmpty)
       // Browse to each URL to check that it's valid
       info.logUrlMap.foreach { case (logType, logUrl) =>
-        val html = Utils.tryWithResource(Source.fromURL(logUrl)) { source =>
-          source.mkString
-        }
+        val html = Utils.tryWithResource(Source.fromURL(logUrl))(_.mkString)
         assert(html.contains(s"$logType log page"))
       }
     }
