@@ -219,7 +219,7 @@ case class DropTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val isTempView = catalog.isTemporaryTable(tableName)
+    val isTempView = catalog.isTempView(tableName)
 
     if (!isTempView && catalog.tableExists(tableName)) {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
@@ -471,7 +471,7 @@ case class AlterTableAddPartitionCommand(
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         spec,
-        table.partitionColumnNames,
+        table.partitionSchema,
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
       // inherit table storage format (possibly except for location)
@@ -527,13 +527,13 @@ case class AlterTableRenamePartitionCommand(
 
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
       oldPartition,
-      table.partitionColumnNames,
+      table.partitionSchema,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver)
 
     val normalizedNewPartition = PartitioningUtils.normalizePartitionSpec(
       newPartition,
-      table.partitionColumnNames,
+      table.partitionSchema,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver)
 
@@ -576,7 +576,7 @@ case class AlterTableDropPartitionCommand(
     val normalizedSpecs = specs.map { spec =>
       PartitioningUtils.normalizePartitionSpec(
         spec,
-        table.partitionColumnNames,
+        table.partitionSchema,
         table.identifier.quotedString,
         sparkSession.sessionState.conf.resolver)
     }
@@ -897,7 +897,7 @@ object DDLUtils {
       catalog: SessionCatalog,
       tableMetadata: CatalogTable,
       isView: Boolean): Unit = {
-    if (!catalog.isTemporaryTable(tableMetadata.identifier)) {
+    if (!catalog.isTempView(tableMetadata.identifier)) {
       tableMetadata.tableType match {
         case CatalogTableType.VIEW if !isView =>
           throw new AnalysisException(
