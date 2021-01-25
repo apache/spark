@@ -31,8 +31,6 @@ object CharVarcharUtils extends Logging {
 
   private val CHAR_VARCHAR_TYPE_STRING_METADATA_KEY = "__CHAR_VARCHAR_TYPE_STRING"
 
-  def getRawTypeString: String = CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
-
   /**
    * Replaces CharType/VarcharType with StringType recursively in the given struct type. If a
    * top-level StructField's data type is CharType/VarcharType or has nested CharType/VarcharType,
@@ -116,17 +114,20 @@ object CharVarcharUtils extends Logging {
     attr.withMetadata(cleaned)
   }
 
+  def getRawTypeString(metadata: Metadata): Option[String] = {
+    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
+      Some(metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
   /**
    * Re-construct the original data type from the type string in the given metadata.
    * This is needed when dealing with char/varchar columns/fields.
    */
   def getRawType(metadata: Metadata): Option[DataType] = {
-    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
-      Some(CatalystSqlParser.parseDataType(
-        metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
-    } else {
-      None
-    }
+    getRawTypeString(metadata).map(CatalystSqlParser.parseDataType)
   }
 
   /**
