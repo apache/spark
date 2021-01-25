@@ -74,7 +74,7 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
-  private val parquetMetaCacheEnabled = sqlConf.parquetMetaCacheEnabled
+  private val parquetMetaCacheEnabled = sqlConf.fileMetaCacheParquetEnabled
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -230,7 +230,6 @@ case class ParquetPartitionReaderFactory(
   private def createVectorizedReader(file: PartitionedFile): VectorizedParquetRecordReader = {
     val vectorizedReader = buildReaderBase(file, createParquetVectorizedReader)
       .asInstanceOf[VectorizedParquetRecordReader]
-
     vectorizedReader.initBatch(partitionSchema, file.partitionValues)
     vectorizedReader
   }

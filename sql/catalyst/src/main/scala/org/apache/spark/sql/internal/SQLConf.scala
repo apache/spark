@@ -785,13 +785,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val PARQUET_META_CACHE_ENABLED = buildConf("spark.sql.parquet.metadataCache.enabled")
-    .doc("To indicate if enable parquet file meta cache, it is recommended to enabled " +
-      "this config in long-running process mode, such as Thrift Server, default is false")
-    .version("3.2.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
@@ -845,19 +838,26 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val ORC_META_CACHE_ENABLED = buildConf("spark.sql.orc.metadataCache.enabled")
+  val FILE_META_CACHE_PARQUET_ENABLED = buildConf("spark.sql.fileMetaCache.parquet.enabled")
+    .doc("To indicate if enable parquet file meta cache, it is recommended to enabled " +
+      "this config when multiple queries are performed on the same dataset, default is false.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val FILE_META_CACHE_ORC_ENABLED = buildConf("spark.sql.fileMetaCache.orc.enabled")
     .doc("To indicate if enable orc file meta cache, it is recommended to enabled " +
-      "this config in long-running process mode, such as Thrift Server, default is false")
+      "this config when multiple queries are performed on the same dataset, default is false.")
     .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
 
   val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
-    buildConf("spark.sql.metadataCache.ttl.sinceLastAccess")
+    buildConf("spark.sql.fileMetaCache.ttl.sinceLastAccess")
       .version("3.2.0")
       .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
       .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(1000L)
+      .createWithDefault(3600L)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
@@ -3272,13 +3272,15 @@ class SQLConf extends Serializable with Logging {
 
   def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
 
-  def orcMetaCacheEnabled: Boolean = getConf(ORC_META_CACHE_ENABLED)
-
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
+  def fileMetaCacheParquetEnabled: Boolean = getConf(FILE_META_CACHE_PARQUET_ENABLED)
+
+  def fileMetaCacheOrcEnabled: Boolean = getConf(FILE_META_CACHE_ORC_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
@@ -3462,8 +3464,6 @@ class SQLConf extends Serializable with Logging {
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
-
-  def parquetMetaCacheEnabled: Boolean = getConf(PARQUET_META_CACHE_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 

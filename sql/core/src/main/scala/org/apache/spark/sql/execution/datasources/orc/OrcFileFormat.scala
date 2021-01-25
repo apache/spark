@@ -171,7 +171,7 @@ class OrcFileFormat
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
       val metaCacheEnabled =
-        conf.getBoolean(SQLConf.ORC_META_CACHE_ENABLED.key, false)
+        conf.getBoolean(SQLConf.FILE_META_CACHE_ORC_ENABLED.key, false)
 
       val filePath = new Path(new URI(file.filePath))
 

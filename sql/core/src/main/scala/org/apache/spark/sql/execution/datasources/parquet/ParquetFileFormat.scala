@@ -228,8 +228,8 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
     hadoopConf.setBoolean(
-      SQLConf.PARQUET_META_CACHE_ENABLED.key,
-      sparkSession.sessionState.conf.parquetMetaCacheEnabled)
+      SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key,
+      sparkSession.sessionState.conf.fileMetaCacheParquetEnabled)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -271,7 +271,7 @@ class ParquetFileFormat
 
       val sharedConf = broadcastedHadoopConf.value.value
       val metaCacheEnabled =
-        sharedConf.getBoolean(SQLConf.PARQUET_META_CACHE_ENABLED.key, false)
+        sharedConf.getBoolean(SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key, false)
 
       lazy val footerFileMetaData = if (metaCacheEnabled) {
         FileMetaCacheManager.get(ParquetFileMetaKey(filePath, sharedConf))
