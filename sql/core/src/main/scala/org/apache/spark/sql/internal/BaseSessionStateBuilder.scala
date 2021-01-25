@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.internal
 
-import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -53,7 +52,6 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * state will clone the parent sessions state's `conf`, `functionRegistry`, `experimentalMethods`
  * and `catalog` fields. Note that the state is cloned when `build` is called, and not before.
  */
-@Unstable
 abstract class BaseSessionStateBuilder(
     val session: SparkSession,
     val parentState: Option[SessionState],
