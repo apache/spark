@@ -820,8 +820,11 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 }
 
 /**
- * Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
- * and user not specify.
+ * Optimize Repartition:
+ * 1. Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
+ *    and user not specify.
+ * 2. Eliminate RepartitionOperation if its child max row is 0.
+ * 3. Reduce RepartitionOperation num partitions to its child max row.
  */
 object OptimizeRepartition extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
@@ -829,6 +832,15 @@ object OptimizeRepartition extends Rule[LogicalPlan] {
       if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
         numPartitions.isEmpty =>
       r.copy(optNumPartitions = Some(1))
+
+    case r: RepartitionOperation if r.child.maxRows.exists(_ == 0) =>
+      r.child
+
+    case r @ Repartition(numPartitions, _, child) if child.maxRows.exists(_ < numPartitions) =>
+      r.copy(numPartitions = child.maxRows.get.toInt)
+    case r @ RepartitionByExpression(_, child, optNumPartitions) if optNumPartitions.isDefined &&
+      child.maxRows.isDefined && child.maxRows.get < optNumPartitions.get =>
+      r.copy(optNumPartitions = child.maxRows.map(_.toInt))
   }
 }
 
