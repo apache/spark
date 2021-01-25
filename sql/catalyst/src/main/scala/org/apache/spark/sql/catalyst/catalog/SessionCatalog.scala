@@ -852,7 +852,7 @@ class SessionCatalog(
         parser.parsePlan(viewText)
       }
     View(
-      desc = metadata,
+      desc = Some(metadata),
       isTempView = isTempView,
       output = metadata.schema.toAttributes,
       child = viewPlan)

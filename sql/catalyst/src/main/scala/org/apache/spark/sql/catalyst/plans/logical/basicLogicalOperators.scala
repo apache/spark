@@ -456,10 +456,11 @@ case class InsertIntoDir(
  *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
  */
 case class View(
-    desc: CatalogTable,
+    desc: Option[CatalogTable],
     isTempView: Boolean,
     output: Seq[Attribute],
     child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+  require(desc.isDefined || isTempView)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -470,7 +471,8 @@ case class View(
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
   override def simpleString(maxFields: Int): String = {
-    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
+    val viewIdent = desc.map{ d => s"${d.identifier}, "}.getOrElse("")
+    s"View ($viewIdent${output.mkString("[", ",", "]")})"
   }
 
   override def doCanonicalize(): LogicalPlan = {

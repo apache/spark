@@ -122,18 +122,19 @@ case class CreateViewCommand(
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      val catalogTable = prepareTemporaryView(
-        name,
-        sparkSession,
-        analyzedPlan,
-        aliasedPlan.schema,
-        originalText,
-        child)
       // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(catalogTable)
+        TemporaryViewRelation(
+          prepareTemporaryView(
+            name,
+            sparkSession,
+            analyzedPlan,
+            aliasedPlan.schema,
+            originalText,
+            child))
       } else {
-        View(catalogTable, isTemporary, catalogTable.schema.toAttributes, child)
+        assert(isTemporary)
+        View(None, isTemporary, aliasedPlan.output, aliasedPlan)
       }
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
@@ -146,17 +147,18 @@ case class CreateViewCommand(
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
       }
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      val catalogTable = prepareTemporaryView(
-        viewIdent,
-        sparkSession,
-        analyzedPlan,
-        aliasedPlan.schema,
-        originalText,
-        child)
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(catalogTable)
+        TemporaryViewRelation(
+          prepareTemporaryView(
+            viewIdent,
+            sparkSession,
+            analyzedPlan,
+            aliasedPlan.schema,
+            originalText,
+            child))
       } else {
-        View(catalogTable, isTemporary, catalogTable.schema.toAttributes, child)
+        assert(isTemporary)
+        View(None, isTemporary, aliasedPlan.output, aliasedPlan)
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -495,8 +497,8 @@ object ViewHelper {
       path: Seq[TableIdentifier],
       viewIdent: TableIdentifier): Unit = {
     plan match {
-      case v: View =>
-        val ident = v.desc.identifier
+      case v @ View(Some(desc), _, _, _) =>
+        val ident = desc.identifier
         val newPath = path :+ ident
         // If the table identifier equals to the `viewIdent`, current view node is the same with
         // the altered view. We detect a view reference cycle, should throw an AnalysisException.

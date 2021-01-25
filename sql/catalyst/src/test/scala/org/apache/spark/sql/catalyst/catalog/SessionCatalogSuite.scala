@@ -646,7 +646,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Look up a view.
       catalog.setCurrentDatabase("default")
-      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
+      val view = View(
+        desc = Some(metadata),
+        isTempView = false,
+        output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
@@ -666,7 +669,10 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(metadata.viewText.isDefined)
       assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
 
-      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
+      val view = View(
+        desc = Some(metadata),
+        isTempView = false,
+        output = metadata.schema.toAttributes,
         child = CatalystSqlParser.parsePlan(metadata.viewText.get))
       comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))

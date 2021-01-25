@@ -660,11 +660,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       val batches = Batch("View", Once, EliminateView) :: Nil
     }
     val relation = LocalRelation(Symbol("a").int.notNull, Symbol("b").string)
-    val view = View(CatalogTable(
+    val view = View(Some(CatalogTable(
         identifier = TableIdentifier("v1"),
         tableType = CatalogTableType.VIEW,
         storage = CatalogStorageFormat.empty,
-        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
+        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType))))),
       isTempView = false,
       output = Seq(Symbol("a").int, Symbol("b").string),
       child = relation)

@@ -884,10 +884,14 @@ class Analyzer(override val catalogManager: CatalogManager)
       case write: V2WriteCommand =>
         write.table match {
           case UnresolvedRelation(ident, _, false) =>
-            lookupTempView(ident).map(EliminateSubqueryAliases(_)).map {
-              case r: DataSourceV2Relation => write.withNewTable(r)
-              case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
-            }.getOrElse(write)
+            lookupTempView(ident)
+              .map(EliminateSubqueryAliases(_))
+              .map(EliminateDataFrameTempViews(_))
+              .map {
+                case r: DataSourceV2Relation => write.withNewTable(r)
+                case _ =>
+                  throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
+              }.getOrElse(write)
           case _ => write
         }
       case u @ UnresolvedTable(ident, cmd) =>
@@ -1071,7 +1075,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, isTempView, _, child) if !child.resolved =>
+      case view @ View(Some(desc), isTempView, _, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
@@ -1085,6 +1089,10 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
         }
         view.copy(child = newChild)
+      // If view.desc is None, view must be storing a dataframe temp view.
+      case view @ View(None, isTempView, _, child) =>
+        assert(isTempView && child.resolved)
+        view
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
       case _ => plan
@@ -1104,8 +1112,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
             // The check on the rdd-based relation is done in PreWriteCheck.
             i.copy(table = v.child)
-          case v: View =>
-            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
+          case v: View if v.desc.isDefined =>
+            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.get.identifier, table)
           case other => i.copy(table = other)
         }
 
@@ -1130,8 +1138,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             lookupRelation(u.multipartIdentifier, u.options, false)
               .map(EliminateSubqueryAliases(_))
               .map {
-                case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                  v.desc.identifier, write)
+                case v: View if v.desc.isDefined =>
+                  throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+                    v.desc.get.identifier, write)
                 case u: UnresolvedCatalogRelation =>
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
@@ -3668,6 +3677,15 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
     plan transformUp {
       case SubqueryAlias(_, child) => child
     }
+  }
+}
+
+/**
+ * Removes [[View]] operators from the plan if they are temp views created by DataFrame API.
+ */
+object EliminateDataFrameTempViews extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case v: View if v.desc.isEmpty => v.child
   }
 }
 
