@@ -25,6 +25,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -59,7 +60,6 @@ case class InsertIntoHadoopFsRelationCommand(
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
   extends DataWritingCommand {
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
@@ -227,10 +227,8 @@ case class InsertIntoHadoopFsRelationCommand(
     val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
         staticPartitions.get(p.name) match {
-          case Some(value) =>
-            Some(escapePathName(p.name) + "=" + escapePathName(value))
-          case None =>
-            None
+          case Some(value) => getPartitionPathString(p.name, value)
+          case None => None
         }
       }.mkString("/")
     } else {
