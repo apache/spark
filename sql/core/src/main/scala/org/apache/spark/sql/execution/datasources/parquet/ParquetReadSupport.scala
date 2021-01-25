@@ -193,7 +193,9 @@ object ParquetReadSupport {
         if (t.precision == p.getPrecision && t.scale == p.getScale) {
           parquetType
         } else {
-          throw new UnsupportedOperationException("Schema evolution not supported.")
+          throw new UnsupportedOperationException(
+            "Parquet vectorized reader doesn't support schema evolution on decimal types." +
+            s"You may try to use ${SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key}=false")
         }
 
       case _ =>

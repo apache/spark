@@ -3892,7 +3892,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         val m1 = intercept[SparkException] {
           checkAnswer(spark.read.schema(schema3).parquet(path.toString), df.select("a", "b"))
         }.getCause.getMessage
-        assert(m1.contains("Schema evolution not supported"))
+        assert(m1.contains("Parquet vectorized reader doesn't support schema evolution on decimal"))
 
         // 4. Spark raised SparkException due to SchemaColumnConvertNotSupportedException
         //    because 19 > Decimal.MAX_LONG_DIGITS (18). Now, it raises SparkException
@@ -3901,7 +3901,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         val m2 = intercept[SparkException] {
           checkAnswer(spark.read.schema(schema4).parquet(path.toString), df.select("b"))
         }.getCause.getMessage
-        assert(m2.contains("Schema evolution not supported"))
+        assert(m2.contains("Parquet vectorized reader doesn't support schema evolution on decimal"))
       }
     }
   }
