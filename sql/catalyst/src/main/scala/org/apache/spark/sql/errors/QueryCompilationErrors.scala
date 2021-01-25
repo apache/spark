@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
  * Currently it includes all AnalysisExcpetions created and thrown directly in
  * org.apache.spark.sql.catalyst.analysis.Analyzer.
  */
-object QueryCompilationErrors {
+private[spark] object QueryCompilationErrors {
+
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
       s"Columns of grouping_id (${groupingID.groupByExprs.mkString(",")}) " +
