@@ -28,7 +28,7 @@ import org.codehaus.janino.InternalCompilerException
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.array.ByteArrayMethods
