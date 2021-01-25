@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -285,7 +286,7 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   override def simpleStringWithNodeId(): String = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+    throw QueryExecutionErrors.simpleStringWithNodeIdUnsupportedError(nodeName)
   }
 }
 
@@ -301,10 +302,10 @@ trait Unevaluable extends Expression {
   final override def foldable: Boolean = false
 
   final override def eval(input: InternalRow = null): Any =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 
@@ -351,19 +352,24 @@ trait UnevaluableAggregate extends DeclarativeAggregate {
   override def nullable: Boolean = true
 
   override lazy val aggBufferAttributes =
-    throw new UnsupportedOperationException(s"Cannot evaluate aggBufferAttributes: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "aggBufferAttributes", this)
 
   override lazy val initialValues: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate initialValues: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "initialValues", this)
 
   override lazy val updateExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate updateExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "updateExpressions", this)
 
   override lazy val mergeExpressions: Seq[Expression] =
-    throw new UnsupportedOperationException(s"Cannot evaluate mergeExpressions: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "mergeExpressions", this)
 
   override lazy val evaluateExpression: Expression =
-    throw new UnsupportedOperationException(s"Cannot evaluate evaluateExpression: $this")
+    throw QueryExecutionErrors.evaluateUnevaluableAggregateUnsupportedError(
+      "evaluateExpression", this)
 }
 
 /**

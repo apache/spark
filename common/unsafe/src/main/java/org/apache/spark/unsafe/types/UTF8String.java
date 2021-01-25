@@ -684,6 +684,16 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
+   * Trims at most `numSpaces` space characters (ASCII 32) from the end of this string.
+   */
+  public UTF8String trimTrailingSpaces(int numSpaces) {
+    int endIdx = numBytes - 1;
+    int trimTo = numBytes - numSpaces;
+    while (endIdx >= trimTo && getByte(endIdx) == 0x20) endIdx--;
+    return copyUTF8String(0, endIdx);
+  }
+
+  /**
    * Trims instances of the given trim string from the end of this string.
    *
    * @param trimString the trim character string
@@ -1065,16 +1075,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return buf.build();
   }
 
-  // TODO: Need to use `Code Point` here instead of Char in case the character longer than 2 bytes
-  public UTF8String translate(Map<Character, Character> dict) {
+  public UTF8String translate(Map<String, String> dict) {
     String srcStr = this.toString();
 
     StringBuilder sb = new StringBuilder();
-    for(int k = 0; k< srcStr.length(); k++) {
-      if (null == dict.get(srcStr.charAt(k))) {
-        sb.append(srcStr.charAt(k));
-      } else if ('\0' != dict.get(srcStr.charAt(k))){
-        sb.append(dict.get(srcStr.charAt(k)));
+    int charCount = 0;
+    for (int k = 0; k < srcStr.length(); k += charCount) {
+      int codePoint = srcStr.codePointAt(k);
+      charCount = Character.charCount(codePoint);
+      String subStr = srcStr.substring(k, k + charCount);
+      String translated = dict.get(subStr);
+      if (null == translated) {
+        sb.append(subStr);
+      } else if (!"\0".equals(translated)) {
+        sb.append(translated);
       }
     }
     return fromString(sb.toString());
