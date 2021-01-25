@@ -882,8 +882,8 @@ $(document).ready(function () {
                                 if (typeof msg === 'undefined') {
                                     return "";
                                 } else {
-                                    var indexOfReason = msg.indexOf("Reason");
-                                    var formHead = indexOfReason > 0 ? msg.substring(0, indexOfReason) : 
+                                    var indexOfLineSperator = msg.indexOf("\n");
+                                    var formHead = indexOfLineSperator > 0 ? msg.substring(0, indexOfLineSperator) : 
                                     (msg.length > 100 ? msg.substring(0, 100) : msg)
                                     var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
                                     var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
