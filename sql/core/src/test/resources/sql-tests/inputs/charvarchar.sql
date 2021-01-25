@@ -60,3 +60,8 @@ desc formatted char_part;
 
 MSCK REPAIR TABLE char_part;
 desc formatted char_part;
+
+-- char_tbl has renamed to char_tbl1
+drop table char_tbl1;
+drop table char_tbl2;
+drop table char_tbl3;

@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.{defaultCompressThreshold, Stats}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -139,7 +140,7 @@ case class ApproximatePercentile(
         case TimestampType => value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case other: DataType =>
-          throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
+          throw QueryExecutionErrors.dataTypeUnexpectedError(other)
       }
       buffer.add(doubleValue)
     }
@@ -164,7 +165,7 @@ case class ApproximatePercentile(
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
       case other: DataType =>
-        throw new UnsupportedOperationException(s"Unexpected data type ${other.catalogString}")
+        throw QueryExecutionErrors.dataTypeUnexpectedError(other)
     }
     if (result.length == 0) {
       null

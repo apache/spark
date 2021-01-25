@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalog.{Catalog, Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.command.AlterTableRecoverPartitionsCommand
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
@@ -115,7 +115,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     } catch {
       case NonFatal(_) => None
     }
-    val isTemp = sessionCatalog.isTemporaryTable(tableIdent)
+    val isTemp = sessionCatalog.isTempView(tableIdent)
     new Table(
       name = tableIdent.table,
       database = metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull,
@@ -257,7 +257,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
     val tableIdent = TableIdentifier(tableName, Option(dbName))
-    sessionCatalog.isTemporaryTable(tableIdent) || sessionCatalog.tableExists(tableIdent)
+    sessionCatalog.isTempView(tableIdent) || sessionCatalog.tableExists(tableIdent)
   }
 
   /**
@@ -396,8 +396,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false)
+      uncacheView(viewDef)
       sessionCatalog.dropTempView(viewName)
     }
   }
@@ -412,9 +411,27 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def dropGlobalTempView(viewName: String): Boolean = {
     sparkSession.sessionState.catalog.getGlobalTempView(viewName).exists { viewDef =>
-      sparkSession.sharedState.cacheManager.uncacheQuery(
-        sparkSession, viewDef, cascade = false)
+      uncacheView(viewDef)
       sessionCatalog.dropGlobalTempView(viewName)
+    }
+  }
+
+  private def uncacheView(viewDef: LogicalPlan): Unit = {
+    try {
+      // If view text is defined, it means we are not storing analyzed logical plan for the view
+      // and instead its behavior follows that of a permanent view (see SPARK-33142 for more
+      // details). Therefore, when uncaching the view we should also do in a cascade fashion, the
+      // same way as how a permanent view is handled. This also avoids a potential issue where a
+      // dependent view becomes invalid because of the above while its data is still cached.
+      val viewText = viewDef match {
+        case v: View => v.desc.viewText
+        case _ => None
+      }
+      val plan = sparkSession.sessionState.executePlan(viewDef)
+      sparkSession.sharedState.cacheManager.uncacheQuery(
+        sparkSession, plan.analyzed, cascade = viewText.isDefined)
+    } catch {
+      case NonFatal(_) => // ignore
     }
   }
 
@@ -473,7 +490,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
+    val cascade = !sessionCatalog.isTempView(tableIdent)
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
   }
 
@@ -502,10 +519,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * For Hive metastore table, the metadata is refreshed. For data source tables, the schema will
    * not be inferred and refreshed.
    *
-   * If this table is cached as an InMemoryRelation, drop the original cached version and make the
-   * new version cached lazily.
+   * If this table is cached as an InMemoryRelation, re-cache the table and its dependents lazily.
    *
-   * In addition, refreshing a table also invalidate all caches that have reference to the table
+   * In addition, refreshing a table also clear all caches that have reference to the table
    * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
    *
    * @group cachemgmt
@@ -513,38 +529,26 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val tableMetadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
-    val table = sparkSession.table(tableIdent)
+    val relation = sparkSession.table(tableIdent).queryExecution.analyzed
 
-    if (tableMetadata.tableType == CatalogTableType.VIEW) {
-      // Temp or persistent views: refresh (or invalidate) any metadata/data cached
-      // in the plan recursively.
-      table.queryExecution.analyzed.refresh()
-    } else {
-      // Non-temp tables: refresh the metadata cache.
-      sessionCatalog.refreshTable(tableIdent)
+    relation.refresh()
+
+    // Temporary and global temporary views are not supposed to be put into the relation cache
+    // since they are tracked separately.
+    if (!sessionCatalog.isTempView(tableIdent)) {
+      sessionCatalog.invalidateCachedTable(tableIdent)
     }
 
-    // If this table is cached as an InMemoryRelation, drop the original
-    // cached version and make the new version cached lazily.
-    val cache = sparkSession.sharedState.cacheManager.lookupCachedData(table)
-
-    // uncache the logical plan.
-    // note this is a no-op for the table itself if it's not cached, but will invalidate all
-    // caches referencing this table.
-    sparkSession.sharedState.cacheManager.uncacheQuery(table, cascade = true)
-
-    if (cache.nonEmpty) {
-      // save the cache name and cache level for recreation
-      val cacheName = cache.get.cachedRepresentation.cacheBuilder.tableName
-      val cacheLevel = cache.get.cachedRepresentation.cacheBuilder.storageLevel
-
-      // creates a new logical plan since the old table refers to old relation which
-      // should be refreshed
-      val newTable = sparkSession.table(tableIdent)
-
-      // recache with the same name and cache level.
-      sparkSession.sharedState.cacheManager.cacheQuery(newTable, cacheName, cacheLevel)
+    // Re-caches the logical plan of the relation.
+    // Note this is a no-op for the relation itself if it's not cached, but will clear all
+    // caches referencing this relation. If this relation is cached as an InMemoryRelation,
+    // this will clear the relation cache and caches of all its dependants.
+    relation match {
+      case SubqueryAlias(_, relationPlan) =>
+        sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)
+      case _ =>
+        throw new AnalysisException(
+          s"Unexpected type ${relation.getClass.getCanonicalName} of the relation $tableName")
     }
   }
 

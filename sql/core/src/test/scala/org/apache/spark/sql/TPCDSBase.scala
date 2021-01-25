@@ -271,6 +271,24 @@ trait TPCDSBase extends SharedSparkSession {
       """.stripMargin
   )
 
+  // The partition column is consistent with the databricks/spark-sql-perf project.
+  private val tablePartitionColumns = Map(
+    "catalog_sales" -> Seq("`cs_sold_date_sk`"),
+    "catalog_returns" -> Seq("`cr_returned_date_sk`"),
+    "inventory" -> Seq("`inv_date_sk`"),
+    "store_sales" -> Seq("`ss_sold_date_sk`"),
+    "store_returns" -> Seq("`sr_returned_date_sk`"),
+    "web_sales" -> Seq("`ws_sold_date_sk`"),
+    "web_returns" -> Seq("`wr_returned_date_sk`")
+  )
+
+  private def partitionedByClause(tableName: String) = {
+    tablePartitionColumns.get(tableName) match {
+      case Some(cols) if cols.nonEmpty => s"PARTITIONED BY (${cols.mkString(", ")})"
+      case _ => ""
+    }
+  }
+
   val tableNames: Iterable[String] = tableColumns.keys
 
   def createTable(
@@ -282,6 +300,7 @@ trait TPCDSBase extends SharedSparkSession {
       s"""
          |CREATE TABLE `$tableName` (${tableColumns(tableName)})
          |USING $format
+         |${partitionedByClause(tableName)}
          |${options.mkString("\n")}
        """.stripMargin)
   }

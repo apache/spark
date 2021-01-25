@@ -3724,20 +3724,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
+    val hiveVersion = "2.3.8"
     // default transitive=false, only download specified jar
-    sql("ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:2.3.7")
+    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion")
     assert(sc.listJars()
-      .exists(_.contains("org.apache.hive.hcatalog_hive-hcatalog-core-2.3.7.jar")))
+      .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
 
     // test download ivy URL jar return multiple jars
     sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
     assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
     assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
-    sql("ADD JAR ivy://org.apache.hive:hive-contrib:2.3.7" +
+    sql(s"ADD JAR ivy://org.apache.hive:hive-contrib:$hiveVersion" +
       "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-contrib-2.3.7.jar")))
-    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-exec-2.3.7.jar")))
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-contrib-$hiveVersion.jar")))
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-exec-$hiveVersion.jar")))
     assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
   }
 
@@ -3762,6 +3763,30 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           .queryExecution.optimizedPlan
         val res = plan.collect {
           case r: RepartitionByExpression if r.numPartitions == 1 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("Fold RepartitionExpression num partition should check if partition expression is empty") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      val df = spark.range(1).hint("REPARTITION_BY_RANGE")
+      val plan = df.queryExecution.optimizedPlan
+      val res = plan.collect {
+        case r: RepartitionByExpression if r.numPartitions == 5 => true
+      }
+      assert(res.nonEmpty)
+    }
+  }
+
+  test("SPARK-34030: Fold RepartitionExpression num partition should at Optimizer") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.analyzed
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 2 => true
         }
         assert(res.nonEmpty)
       }
@@ -3842,6 +3867,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     assert(unions.size == 1)
+  }
+
+  test("SPARK-33591: null as a partition value") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, null))
+    }
   }
 }
 

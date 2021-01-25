@@ -476,7 +476,7 @@ def toDegrees(col):
     .. deprecated:: 2.1.0
         Use :func:`degrees` instead.
     """
-    warnings.warn("Deprecated in 2.1, use degrees instead.", DeprecationWarning)
+    warnings.warn("Deprecated in 2.1, use degrees instead.", FutureWarning)
     return degrees(col)
 
 
@@ -486,7 +486,7 @@ def toRadians(col):
     .. deprecated:: 2.1.0
         Use :func:`radians` instead.
     """
-    warnings.warn("Deprecated in 2.1, use radians instead.", DeprecationWarning)
+    warnings.warn("Deprecated in 2.1, use radians instead.", FutureWarning)
     return radians(col)
 
 
@@ -795,7 +795,7 @@ def approxCountDistinct(col, rsd=None):
     .. deprecated:: 2.1.0
         Use :func:`approx_count_distinct` instead.
     """
-    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", DeprecationWarning)
+    warnings.warn("Deprecated in 2.1, use approx_count_distinct instead.", FutureWarning)
     return approx_count_distinct(col, rsd)
 
 
@@ -4355,7 +4355,7 @@ def filter(col, f):
     return _invoke_higher_order_function("ArrayFilter", [col], [f])
 
 
-def aggregate(col, zero, merge, finish=None):
+def aggregate(col, initialValue, merge, finish=None):
     """
     Applies a binary operator to an initial state and all elements in the array,
     and reduces this to a single state. The final state is converted into the final result
@@ -4372,7 +4372,7 @@ def aggregate(col, zero, merge, finish=None):
     ----------
     col : :class:`Column` or str
         name of column or expression
-    zero : :class:`Column` or str
+    initialValue : :class:`Column` or str
         initial value. Name of column or expression
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
@@ -4416,19 +4416,19 @@ def aggregate(col, zero, merge, finish=None):
     if finish is not None:
         return _invoke_higher_order_function(
             "ArrayAggregate",
-            [col, zero],
+            [col, initialValue],
             [merge, finish]
         )
 
     else:
         return _invoke_higher_order_function(
             "ArrayAggregate",
-            [col, zero],
+            [col, initialValue],
             [merge]
         )
 
 
-def zip_with(col1, col2, f):
+def zip_with(left, right, f):
     """
     Merge two given arrays, element-wise, into a single array using a function.
     If one array is shorter, nulls are appended at the end to match the length of the longer
@@ -4438,9 +4438,9 @@ def zip_with(col1, col2, f):
 
     Parameters
     ----------
-    col1 : :class:`Column` or str
+    left : :class:`Column` or str
         name of the first column or expression
-    col2 : :class:`Column` or str
+    right : :class:`Column` or str
         name of the second column or expression
     f : function
         a binary function ``(x1: Column, x2: Column) -> Column...``
@@ -4471,7 +4471,7 @@ def zip_with(col1, col2, f):
     |[foo_1, bar_2, 3]|
     +-----------------+
     """
-    return _invoke_higher_order_function("ZipWith", [col1, col2], [f])
+    return _invoke_higher_order_function("ZipWith", [left, right], [f])
 
 
 def transform_keys(col, f):

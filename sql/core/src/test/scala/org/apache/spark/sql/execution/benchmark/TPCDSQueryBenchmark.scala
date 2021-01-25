@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import scala.util.Try
+
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.Logging
@@ -27,7 +29,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 /**
  * Benchmark to measure TPCDS query performance.
@@ -44,9 +45,6 @@ import org.apache.spark.util.Utils
  */
 object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
 
-  private lazy val warehousePath =
-    Utils.createTempDir(namePrefix = "spark-warehouse").getAbsolutePath
-
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
       .setMaster("local[1]")
@@ -57,7 +55,6 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
       .set("spark.executor.memory", "3g")
       .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
       .set("spark.sql.crossJoin.enabled", "true")
-      .set("spark.sql.warehouse.dir", warehousePath)
 
     SparkSession.builder.config(conf).getOrCreate()
   }
@@ -70,11 +67,17 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
 
   def setupTables(dataLocation: String, createTempView: Boolean): Map[String, Long] = {
     tables.map { tableName =>
-      val df = spark.read.parquet(s"$dataLocation/$tableName")
       if (createTempView) {
-        df.createOrReplaceTempView(tableName)
+        spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
       } else {
-        df.write.saveAsTable(tableName)
+        spark.sql(s"DROP TABLE IF EXISTS $tableName")
+        spark.catalog.createTable(tableName, s"$dataLocation/$tableName", "parquet")
+        // Recover partitions but don't fail if a table is not partitioned.
+        Try {
+          spark.sql(s"ALTER TABLE $tableName RECOVER PARTITIONS")
+        }.getOrElse {
+          logInfo(s"Recovering partitions of table $tableName failed")
+        }
       }
       tableName -> spark.table(tableName).count()
     }.toMap

@@ -759,6 +759,7 @@ private[spark] class AppStatusListener(
       exec.completedTasks += completedDelta
       exec.failedTasks += failedDelta
       exec.totalDuration += event.taskInfo.duration
+      exec.peakExecutorMetrics.compareAndUpdatePeakValues(event.taskExecutorMetrics)
 
       // Note: For resubmitted tasks, we continue to use the metrics that belong to the
       // first attempt of this task. This may not be 100% accurate because the first attempt

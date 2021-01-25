@@ -1268,7 +1268,7 @@ private[hive] object HiveClientImpl extends Logging {
   }
 }
 
-case object HiveVoidType extends DataType {
+private[hive] case object HiveVoidType extends DataType {
   override def defaultSize: Int = 1
   override def asNullable: DataType = HiveVoidType
   override def simpleString: String = "void"

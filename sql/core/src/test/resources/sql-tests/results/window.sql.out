@@ -163,7 +163,7 @@ NULL	b	NULL
 SELECT val_double, cate, sum(val_double) OVER(PARTITION BY cate ORDER BY val_double
 RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING) FROM testData ORDER BY cate, val_double
 -- !query schema
-struct<val_double:double,cate:string,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND CAST(2.5 AS DOUBLE) FOLLOWING):double>
+struct<val_double:double,cate:string,sum(val_double) OVER (PARTITION BY cate ORDER BY val_double ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 1.0	NULL	1.0
@@ -198,7 +198,7 @@ SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY v
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp
 -- !query schema
-struct<val_timestamp:timestamp,cate:string,avg(CAST(val_timestamp AS DOUBLE)) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 days 4 hours' FOLLOWING):double>
+struct<val_timestamp:timestamp,cate:string,avg(val_timestamp) OVER (PARTITION BY cate ORDER BY val_timestamp ASC NULLS FIRST RANGE BETWEEN CURRENT ROW AND INTERVAL '23 days 4 hours' FOLLOWING):double>
 -- !query output
 NULL	NULL	NULL
 2017-07-31 17:00:00	NULL	1.5015456E9
@@ -346,7 +346,7 @@ NULL	a	NULL	NULL	NULL	0	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	1	1	0.25	0.
 -- !query
 SELECT val, cate, avg(null) OVER(PARTITION BY cate ORDER BY val) FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,avg(CAST(NULL AS DOUBLE)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
+struct<val:int,cate:string,avg(NULL) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double>
 -- !query output
 NULL	NULL	NULL
 3	NULL	NULL
@@ -371,7 +371,7 @@ Window function row_number() requires window to be ordered, please add ORDER BY 
 -- !query
 SELECT val, cate, sum(val) OVER(), avg(val) OVER() FROM testData ORDER BY cate, val
 -- !query schema
-struct<val:int,cate:string,sum(CAST(val AS BIGINT)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,avg(CAST(val AS BIGINT)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+struct<val:int,cate:string,sum(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint,avg(val) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
 -- !query output
 NULL	NULL	13	1.8571428571428572
 3	NULL	13	1.8571428571428572
@@ -415,7 +415,7 @@ FROM testData
 WHERE val is not null
 WINDOW w AS (PARTITION BY cate ORDER BY val)
 -- !query schema
-struct<cate:string,sum(CAST(val AS BIGINT)) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
+struct<cate:string,sum(val) OVER (PARTITION BY cate ORDER BY val ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):bigint>
 -- !query output
 NULL	3
 a	2

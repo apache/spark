@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -656,7 +657,7 @@ case class UnresolvedMapObjects(
   override lazy val resolved = false
 
   override def dataType: DataType = customCollectionCls.map(ObjectType.apply).getOrElse {
-    throw new UnsupportedOperationException("not resolved")
+    throw QueryExecutionErrors.customCollectionClsNotResolvedError
   }
 }
 
@@ -797,8 +798,7 @@ case class MapObjects private(
       // array
       x => new GenericArrayData(executeFuncOnCollection(x).toArray)
     case Some(cls) =>
-      throw new RuntimeException(s"class `${cls.getName}` is not supported by `MapObjects` as " +
-        "resulting collection.")
+      throw QueryExecutionErrors.classUnsupportedByMapObjectsError(cls)
   }
 
   override def eval(input: InternalRow): Any = {
@@ -1287,7 +1287,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw new RuntimeException("Cannot use null as map key!")
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1309,7 +1309,7 @@ case class ExternalMapToCatalyst private(
             keys(i) = if (key != null) {
               keyConverter.eval(rowWrapper(key))
             } else {
-              throw new RuntimeException("Cannot use null as map key!")
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError
             }
             values(i) = if (value != null) {
               valueConverter.eval(rowWrapper(value))
@@ -1414,7 +1414,7 @@ case class ExternalMapToCatalyst private(
 
             ${genKeyConverter.code}
             if (${genKeyConverter.isNull}) {
-              throw new RuntimeException("Cannot use null as map key!");
+              throw QueryExecutionErrors.nullAsMapKeyNotAllowedError();
             } else {
               $convertedKeys[$index] = ($convertedKeyType) ${genKeyConverter.value};
             }
@@ -1574,8 +1574,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
           }
         }
         if (methods.isEmpty) {
-          throw new NoSuchMethodException(s"""A method named "$name" is not declared """ +
-            "in any enclosing class nor any supertype")
+          throw QueryExecutionErrors.methodNotDeclaredError(name)
         }
         methods.head -> expr
     }
@@ -1692,15 +1691,15 @@ case class GetExternalRowField(
 
   override def dataType: DataType = ObjectType(classOf[Object])
 
-  private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
+  private val errMsg = QueryExecutionErrors.fieldCannotBeNullMsg(index, fieldName)
 
   override def eval(input: InternalRow): Any = {
     val inputRow = child.eval(input).asInstanceOf[Row]
     if (inputRow == null) {
-      throw new RuntimeException("The input external row cannot be null.")
+      throw QueryExecutionErrors.inputExternalRowCannotBeNullError
     }
     if (inputRow.isNullAt(index)) {
-      throw new RuntimeException(errMsg)
+      throw QueryExecutionErrors.fieldCannotBeNullError(index, fieldName)
     }
     inputRow.get(index)
   }
@@ -1714,7 +1713,7 @@ case class GetExternalRowField(
       ${row.code}
 
       if (${row.isNull}) {
-        throw new RuntimeException("The input external row cannot be null.");
+        throw QueryExecutionErrors.inputExternalRowCannotBeNullError();
       }
 
       if (${row.value}.isNullAt($index)) {

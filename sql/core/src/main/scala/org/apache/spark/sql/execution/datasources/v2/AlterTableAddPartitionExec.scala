@@ -30,7 +30,8 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
 case class AlterTableAddPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
-    ignoreIfExists: Boolean) extends V2CommandExec {
+    ignoreIfExists: Boolean,
+    refreshCache: () => Unit) extends V2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
@@ -44,11 +45,12 @@ case class AlterTableAddPartitionExec(
         table.name(), existsParts.map(_.ident), table.partitionSchema())
     }
 
-    notExistsParts match {
-      case Seq() => // Nothing will be done
+    val isTableAltered = notExistsParts match {
+      case Seq() => false // Nothing will be done
       case Seq(partitionSpec) =>
         val partProp = partitionSpec.location.map(loc => "location" -> loc).toMap
         table.createPartition(partitionSpec.ident, partProp.asJava)
+        true
       case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
         val partIdents = notExistsParts.map(_.ident)
         val partProps = notExistsParts.map(_.location.map(loc => "location" -> loc).toMap)
@@ -56,10 +58,12 @@ case class AlterTableAddPartitionExec(
           .createPartitions(
             partIdents.toArray,
             partProps.map(_.asJava).toArray)
+        true
       case _ =>
         throw new UnsupportedOperationException(
           s"Nonatomic partition table ${table.name()} can not add multiple partitions.")
     }
+    if (isTableAltered) refreshCache()
     Seq.empty
   }
 }

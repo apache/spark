@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExcept
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -50,7 +51,7 @@ case class WindowSpecDefinition(
       frameSpecification.isInstanceOf[SpecifiedWindowFrame]
 
   override def nullable: Boolean = true
-  override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+  override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
 
   override def checkInputDataTypes(): TypeCheckResult = {
     frameSpecification match {
@@ -165,7 +166,7 @@ case object CurrentRow extends SpecialFrameBoundary {
  */
 sealed trait WindowFrame extends Expression with Unevaluable {
   override def children: Seq[Expression] = Nil
-  override def dataType: DataType = throw new UnsupportedOperationException("dataType")
+  override def dataType: DataType = throw QueryExecutionErrors.dataTypeOperationUnsupportedError
   override def nullable: Boolean = false
 }
 
@@ -514,7 +515,7 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
-    throw new UnsupportedOperationException("Window Functions do not support merging.")
+    throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
 }
 
 abstract class RowNumberLike extends AggregateWindowFunction {

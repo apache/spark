@@ -669,6 +669,41 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 2, null, null, null, null)))
   }
 
+  test("nth_value with ignoreNulls over offset window frame") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = false).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = false).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", "x", "y", null, null, null),
+        Row("a", 1, "x", "x", "y", "x", "x", null),
+        Row("a", 2, "x", "x", "y", "x", "x", "y"),
+        Row("a", 3, "x", "x", "y", "x", "x", "y"),
+        Row("a", 4, "x", "x", "y", "x", "x", "y"),
+        Row("b", 1, null, null, null, null, null, null),
+        Row("b", 2, null, null, null, null, null, null)))
+  }
+
   test("nth_value on descending ordered window") {
     val nullStr: String = null
     val df = Seq(
