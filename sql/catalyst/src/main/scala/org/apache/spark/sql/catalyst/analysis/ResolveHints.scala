@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import java.util.Locale
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, IntegerLiteral, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
