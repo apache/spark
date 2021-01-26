@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, SortOrder, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
@@ -46,7 +47,9 @@ class InMemoryTable(
     val name: String,
     val schema: StructType,
     override val partitioning: Array[Transform],
-    override val properties: util.Map[String, String])
+    override val properties: util.Map[String, String],
+    val distribution: Distribution = Distributions.unspecified(),
+    val ordering: Array[SortOrder] = Array.empty)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -284,7 +287,11 @@ class InMemoryTable(
         this
       }
 
-      override def build(): Write = new Write {
+      override def build(): Write = new Write with RequiresDistributionAndOrdering {
+        override def requiredDistribution: Distribution = distribution
+
+        override def requiredOrdering: Array[SortOrder] = ordering
+
         override def toBatch: BatchWrite = writer
 
         override def toStreaming: StreamingWrite = streamingWriter match {
