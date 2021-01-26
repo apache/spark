@@ -97,7 +97,7 @@ Condition : ((isnotnull(ss_cdemo_sk#2) AND isnotnull(ss_store_sk#3)) AND isnotnu
 Output [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_demographics]
-PushedFilters: [IsNotNull(cd_gender), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,D), EqualTo(cd_education_status,Primary), IsNotNull(cd_demo_sk)]
+PushedFilters: [IsNotNull(cd_gender), IsNotNull(cd_marital_status), IsNotNull(cd_education_status), EqualTo(cd_gender,F), EqualTo(cd_marital_status,D), EqualTo(cd_education_status,Primary             ), IsNotNull(cd_demo_sk)]
 ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_education_status:string>
 
 (5) ColumnarToRow [codegen id : 1]
@@ -105,7 +105,7 @@ Input [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_stat
 
 (6) Filter [codegen id : 1]
 Input [4]: [cd_demo_sk#10, cd_gender#11, cd_marital_status#12, cd_education_status#13]
-Condition : ((((((isnotnull(cd_gender#11) AND isnotnull(cd_marital_status#12)) AND isnotnull(cd_education_status#13)) AND (cd_gender#11 = F)) AND (cd_marital_status#12 = D)) AND (cd_education_status#13 = Primary)) AND isnotnull(cd_demo_sk#10))
+Condition : ((((((isnotnull(cd_gender#11) AND isnotnull(cd_marital_status#12)) AND isnotnull(cd_education_status#13)) AND (cd_gender#11 = F)) AND (cd_marital_status#12 = D)) AND (cd_education_status#13 = Primary             )) AND isnotnull(cd_demo_sk#10))
 
 (7) Project [codegen id : 1]
 Output [1]: [cd_demo_sk#10]
@@ -325,7 +325,7 @@ Input [9]: [i_item_id#22, sum#63, count#64, sum#65, count#66, sum#67, count#68, 
 Keys [1]: [i_item_id#22]
 Functions [4]: [avg(agg1#24), avg(UnscaledValue(agg2#25)), avg(UnscaledValue(agg3#26)), avg(UnscaledValue(agg4#27))]
 Aggregate Attributes [4]: [avg(agg1#24)#72, avg(UnscaledValue(agg2#25))#73, avg(UnscaledValue(agg3#26))#74, avg(UnscaledValue(agg4#27))#75]
-Results [7]: [i_item_id#22, null AS s_state#76, 1 AS g_state#77, avg(agg1#24)#72 AS agg1#78, cast((avg(UnscaledValue(agg2#25))#73 / 100.0) as decimal(11,6)) AS agg2#79, cast((avg(UnscaledValue(agg3#26))#74 / 100.0) as decimal(11,6)) AS agg3#80, cast((avg(UnscaledValue(agg4#27))#75 / 100.0) as decimal(11,6)) AS agg4#81]
+Results [7]: [i_item_id#22 AS i_item_id#76, null AS s_state#77, 1 AS g_state#78, avg(agg1#24)#72 AS agg1#79, cast((avg(UnscaledValue(agg2#25))#73 / 100.0) as decimal(11,6)) AS agg2#80, cast((avg(UnscaledValue(agg3#26))#74 / 100.0) as decimal(11,6)) AS agg3#81, cast((avg(UnscaledValue(agg4#27))#75 / 100.0) as decimal(11,6)) AS agg4#82]
 
 (55) Scan parquet default.store_sales
 Output [8]: [ss_item_sk#1, ss_cdemo_sk#2, ss_store_sk#3, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_coupon_amt#7, ss_sold_date_sk#8]
@@ -394,7 +394,7 @@ Condition : isnotnull(i_item_sk#21)
 
 (70) BroadcastExchange
 Input [1]: [i_item_sk#21]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#82]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#83]
 
 (71) BroadcastHashJoin [codegen id : 17]
 Left keys [1]: [ss_item_sk#1]
@@ -409,19 +409,19 @@ Input [6]: [ss_item_sk#1, ss_quantity#4, ss_list_price#5, ss_sales_price#6, ss_c
 Input [4]: [agg1#24, agg2#25, agg3#26, agg4#27]
 Keys: []
 Functions [4]: [partial_avg(agg1#24), partial_avg(UnscaledValue(agg2#25)), partial_avg(UnscaledValue(agg3#26)), partial_avg(UnscaledValue(agg4#27))]
-Aggregate Attributes [8]: [sum#83, count#84, sum#85, count#86, sum#87, count#88, sum#89, count#90]
-Results [8]: [sum#91, count#92, sum#93, count#94, sum#95, count#96, sum#97, count#98]
+Aggregate Attributes [8]: [sum#84, count#85, sum#86, count#87, sum#88, count#89, sum#90, count#91]
+Results [8]: [sum#92, count#93, sum#94, count#95, sum#96, count#97, sum#98, count#99]
 
 (74) Exchange
-Input [8]: [sum#91, count#92, sum#93, count#94, sum#95, count#96, sum#97, count#98]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#99]
+Input [8]: [sum#92, count#93, sum#94, count#95, sum#96, count#97, sum#98, count#99]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#100]
 
 (75) HashAggregate [codegen id : 18]
-Input [8]: [sum#91, count#92, sum#93, count#94, sum#95, count#96, sum#97, count#98]
+Input [8]: [sum#92, count#93, sum#94, count#95, sum#96, count#97, sum#98, count#99]
 Keys: []
 Functions [4]: [avg(agg1#24), avg(UnscaledValue(agg2#25)), avg(UnscaledValue(agg3#26)), avg(UnscaledValue(agg4#27))]
-Aggregate Attributes [4]: [avg(agg1#24)#100, avg(UnscaledValue(agg2#25))#101, avg(UnscaledValue(agg3#26))#102, avg(UnscaledValue(agg4#27))#103]
-Results [7]: [null AS i_item_id#104, null AS s_state#105, 1 AS g_state#106, avg(agg1#24)#100 AS agg1#107, cast((avg(UnscaledValue(agg2#25))#101 / 100.0) as decimal(11,6)) AS agg2#108, cast((avg(UnscaledValue(agg3#26))#102 / 100.0) as decimal(11,6)) AS agg3#109, cast((avg(UnscaledValue(agg4#27))#103 / 100.0) as decimal(11,6)) AS agg4#110]
+Aggregate Attributes [4]: [avg(agg1#24)#101, avg(UnscaledValue(agg2#25))#102, avg(UnscaledValue(agg3#26))#103, avg(UnscaledValue(agg4#27))#104]
+Results [7]: [null AS i_item_id#105, null AS s_state#106, 1 AS g_state#107, avg(agg1#24)#101 AS agg1#108, cast((avg(UnscaledValue(agg2#25))#102 / 100.0) as decimal(11,6)) AS agg2#109, cast((avg(UnscaledValue(agg3#26))#103 / 100.0) as decimal(11,6)) AS agg3#110, cast((avg(UnscaledValue(agg4#27))#104 / 100.0) as decimal(11,6)) AS agg4#111]
 
 (76) Union
 
