@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.api.metadata;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * :: Private ::
  *
@@ -32,6 +34,7 @@ package org.apache.spark.shuffle.api.metadata;
  * A singleton instance of this module is instantiated on the driver via
  * {@link ShuffleDriverComponents#shuffleOutputTracker()}.
  */
+@Private
 public interface ShuffleOutputTracker {
 
   /**

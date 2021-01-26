@@ -19,6 +19,8 @@ package org.apache.spark.shuffle.api.metadata;
 
 import java.io.Serializable;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * :: Private ::
  *
@@ -28,4 +30,5 @@ import java.io.Serializable;
  * All implementations must be serializable since this is sent from the executors to
  * the driver.
  */
+@Private
 public interface MapOutputMetadata extends Serializable {}
