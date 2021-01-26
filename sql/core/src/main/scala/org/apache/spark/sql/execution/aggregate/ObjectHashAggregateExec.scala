@@ -74,12 +74,17 @@ case class ObjectHashAggregateExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build")
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
+    "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
+    "fallBackToSortBasedAgg" -> SQLMetrics.createMetric(sparkContext,
+      "number of fallback to sort-based aggregation")
   )
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
     val aggTime = longMetric("aggTime")
+    val spillSize = longMetric("spillSize")
+    val fallbackToSortBasedAgg = longMetric("fallBackToSortBasedAgg")
     val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
 
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
@@ -104,7 +109,9 @@ case class ObjectHashAggregateExec(
             inputAttributes,
             iter,
             fallbackCountThreshold,
-            numOutputRows)
+            numOutputRows,
+            spillSize,
+            fallbackToSortBasedAgg)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
