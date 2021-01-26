@@ -2898,7 +2898,10 @@ class Dataset[T] private[sql](
    * even for empty partitions.
    *
    * Note that for micro-batch streaming Dataset, the effect of pipe is only per micro-batch, not
-   * cross entire stream.
+   * cross entire stream. If your external process does aggregation-like on inputs, e.g. `wc -l`,
+   * the aggregation is applied per a partition in micro-batch. You may want to aggregate these
+   * outputs after calling pipe to get global aggregation across partitions and also across
+   * micro-batches.
    *
    * @param command command to run in forked process.
    * @param printElement Use this function to customize how to pipe elements. This function

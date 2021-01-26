@@ -1276,7 +1276,7 @@ class StreamSuite extends StreamTest {
       AddData(inputData, 1, 2, 3),
       CheckAnswer(Row("1"), Row("2"), Row("3")),
       AddData(inputData, 4),
-      CheckAnswer(Row("1"), Row("2"), Row("3"), Row("4")))
+      CheckNewAnswer(Row("4")))
   }
 }
 
