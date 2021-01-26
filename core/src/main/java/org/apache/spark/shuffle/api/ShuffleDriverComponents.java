@@ -32,7 +32,7 @@ public interface ShuffleDriverComponents {
 
   /**
    * Provide additional configuration for the executors when their plugin system is initialized
-   * via {@link ShuffleDataIO#initializeShuffleExecutorComponents(String, String, Map)} ()}
+   * via {@link ShuffleDataIO#initializeShuffleExecutorComponents(String, String, Map)}
    *
    * @return additional SparkConf settings necessary for initializing the executor components.
    * This would include configurations that cannot be statically set on the application, like

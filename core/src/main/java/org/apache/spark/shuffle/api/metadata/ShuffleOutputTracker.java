@@ -32,7 +32,7 @@ import org.apache.spark.annotation.Private;
  * Implementations MUST be thread-safe. Spark will invoke methods in this module in parallel.
  * <p>
  * A singleton instance of this module is instantiated on the driver via
- * {@link ShuffleDriverComponents#shuffleOutputTracker()}.
+ * {@link org.apache.spark.shuffle.api.ShuffleDriverComponents#shuffleOutputTracker()}.
  */
 @Private
 public interface ShuffleOutputTracker {
