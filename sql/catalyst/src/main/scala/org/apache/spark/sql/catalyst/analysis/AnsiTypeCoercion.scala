@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
  * In Spark ANSI mode, the type coercion rules are based on the type precedence lists of the input
  * data types.
  * As per the section "Type precedence list determination" of "ISO/IEC 9075-2:2011
- * Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)",
+ * Information technology - Database languages - SQL - Part 2: Foundation (SQL/Foundation)",
  * the type precedence lists of primitive data types are as following:
  *   * Byte: Byte, Short, Int, Long, Decimal, Float, Double
  *   * Short: Short, Int, Long, Decimal, Float, Double
