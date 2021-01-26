@@ -36,5 +36,10 @@ SELECT count(DISTINCT a), count(DISTINCT 2), count(DISTINCT 2,3) FROM testData;
 SELECT count(DISTINCT a), count(DISTINCT 2), count(DISTINCT 3,2) FROM testData;
 SELECT count(distinct 0.8), percentile_approx(distinct a, 0.8) FROM testData;
 
+-- legacy behavior: allow calling function count without parameters
+set spark.sql.legacy.allowParameterlessCount=true;
+SELECT count() FROM testData;
+
 -- count without expressions
+set spark.sql.legacy.allowParameterlessCount=false;
 SELECT count() FROM testData;

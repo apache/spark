@@ -26,7 +26,6 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, A
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, TempTableAlreadyExistsException}
@@ -1184,89 +1183,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       "(('2008-08-08', 'us'), ('2009-09-09', 'uk')) STORED AS DIRECTORIES")
     assertUnsupported("ALTER TABLE dbx.tab1 NOT SKEWED")
     assertUnsupported("ALTER TABLE dbx.tab1 NOT STORED AS DIRECTORIES")
-  }
-
-  test("alter table: recover partitions (sequential)") {
-    val oldRddParallelListingThreshold = spark.sparkContext.conf.get(
-      RDD_PARALLEL_LISTING_THRESHOLD)
-    try {
-      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "10")
-      testRecoverPartitions()
-    } finally {
-      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, oldRddParallelListingThreshold)
-    }
-  }
-
-  test("alter table: recover partition (parallel)") {
-    val oldRddParallelListingThreshold = spark.sparkContext.conf.get(
-      RDD_PARALLEL_LISTING_THRESHOLD)
-    try {
-      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD.key, "0")
-      testRecoverPartitions()
-    } finally {
-      spark.sparkContext.conf.set(RDD_PARALLEL_LISTING_THRESHOLD, oldRddParallelListingThreshold)
-    }
-  }
-
-  protected def testRecoverPartitions(): Unit = {
-    val catalog = spark.sessionState.catalog
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
-    }
-
-    val tableIdent = TableIdentifier("tab1")
-    createTable(catalog, tableIdent, partitionCols = Seq("a", "b", "c"))
-    val part1 = Map("a" -> "1", "b" -> "5", "c" -> "19")
-    createTablePartition(catalog, part1, tableIdent)
-    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet == Set(part1))
-
-    val part2 = Map("a" -> "2", "b" -> "6", "c" -> "31")
-    val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
-    // valid
-    fs.mkdirs(new Path(new Path(new Path(root, "a=1"), "b=5"), "c=19"))
-    fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "a.csv"))  // file
-    fs.createNewFile(new Path(new Path(root, "a=1/b=5/c=19"), "_SUCCESS"))  // file
-
-    fs.mkdirs(new Path(new Path(new Path(root, "A=2"), "B=6"), "C=31"))
-    fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "b.csv"))  // file
-    fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), "c.csv"))  // file
-    fs.createNewFile(new Path(new Path(root, "A=2/B=6/C=31"), ".hiddenFile"))  // file
-    fs.mkdirs(new Path(new Path(root, "A=2/B=6/C=31"), "_temporary"))
-
-    val parts = (10 to 100).map { a =>
-      val part = Map("a" -> a.toString, "b" -> "5", "c" -> "42")
-      fs.mkdirs(new Path(new Path(new Path(root, s"a=$a"), "b=5"), "c=42"))
-      fs.createNewFile(new Path(new Path(root, s"a=$a/b=5/c=42"), "a.csv"))  // file
-      createTablePartition(catalog, part, tableIdent)
-      part
-    }
-
-    // invalid
-    fs.mkdirs(new Path(new Path(root, "a"), "b"))  // bad name
-    fs.mkdirs(new Path(new Path(root, "b=1"), "a=1"))  // wrong order
-    fs.mkdirs(new Path(root, "a=4")) // not enough columns
-    fs.createNewFile(new Path(new Path(root, "a=1"), "b=4"))  // file
-    fs.createNewFile(new Path(new Path(root, "a=1"), "_SUCCESS"))  // _SUCCESS
-    fs.mkdirs(new Path(new Path(root, "a=1"), "_temporary"))  // _temporary
-    fs.mkdirs(new Path(new Path(root, "a=1"), ".b=4"))  // start with .
-
-    try {
-      sql("ALTER TABLE tab1 RECOVER PARTITIONS")
-      assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-        Set(part1, part2) ++ parts)
-      if (!isUsingHiveMetastore) {
-        assert(catalog.getPartition(tableIdent, part1).parameters("numFiles") == "1")
-        assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
-      } else {
-        // After ALTER TABLE, the statistics of the first partition is removed by Hive megastore
-        assert(catalog.getPartition(tableIdent, part1).parameters.get("numFiles").isEmpty)
-        assert(catalog.getPartition(tableIdent, part2).parameters("numFiles") == "2")
-      }
-    } finally {
-      fs.delete(root, true)
-    }
   }
 
   test("alter table: add partition is not supported for views") {

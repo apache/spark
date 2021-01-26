@@ -64,7 +64,7 @@ class SQLContext(object):
     >>> df.createOrReplaceTempView("allTypes")
     >>> sqlContext.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
     ...            'from allTypes where b and i > 0').collect()
-    [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
+    [Row((i + 1)=2, (d + 1)=2.0, (NOT b)=False, list[1]=2, \
         dict[s]=0, time=datetime.datetime(2014, 8, 1, 14, 1, 5), a=1)]
     >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
     [(1, 'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
@@ -76,7 +76,8 @@ class SQLContext(object):
         if sparkSession is None:
             warnings.warn(
                 "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-                DeprecationWarning)
+                FutureWarning
+            )
 
         self._sc = sparkContext
         self._jsc = self._sc._jsc
@@ -123,7 +124,8 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
 
         if (cls._instantiatedContext is None
                 or SQLContext._instantiatedContext._sc._jsc is None):
@@ -229,7 +231,8 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         return self.sparkSession.udf.register(name, f, returnType)
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
@@ -243,7 +246,8 @@ class SQLContext(object):
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
@@ -597,7 +601,8 @@ class HiveContext(SQLContext):
         warnings.warn(
             "HiveContext is deprecated in Spark 2.0.0. Please use " +
             "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         if jhiveContext is None:
             sparkContext._conf.set("spark.sql.catalogImplementation", "hive")
             sparkSession = SparkSession.builder._sparkContext(sparkContext).getOrCreate()

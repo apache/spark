@@ -268,7 +268,7 @@ struct<54:string,timestamp:timestamp,year:int,month:int,day:int,hour:int,minute:
 -- !query
 SELECT make_timestamp(2014,12,28,6,30,45.887)
 -- !query schema
-struct<make_timestamp(2014, 12, 28, 6, 30, CAST(45.887 AS DECIMAL(8,6))):timestamp>
+struct<make_timestamp(2014, 12, 28, 6, 30, 45.887):timestamp>
 -- !query output
 2014-12-28 06:30:45.887
 

@@ -1551,6 +1551,14 @@ object SQLConf {
         "must be positive.")
       .createWithDefault(100)
 
+  val ALLOW_PARAMETERLESS_COUNT =
+    buildConf("spark.sql.legacy.allowParameterlessCount")
+      .internal()
+      .doc("When true, the SQL function 'count' is allowed to take no parameters.")
+      .version("3.1.1")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
     buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()
@@ -3036,6 +3044,13 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CLI_PRINT_HEADER =
+    buildConf("spark.sql.cli.print.header")
+     .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
+     .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3693,6 +3708,8 @@ class SQLConf extends Serializable with Logging {
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   /** ********************** SQLConf functionality methods ************ */
 

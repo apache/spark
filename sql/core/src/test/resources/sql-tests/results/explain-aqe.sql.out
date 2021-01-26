@@ -55,23 +55,23 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 sum(DISTINCT val): bigint
-Aggregate [sum(distinct cast(val#x as bigint)) AS sum(DISTINCT val)#xL]
+Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
 +- SubqueryAlias spark_catalog.default.explain_temp1
    +- Relation[key#x,val#x] parquet
 
 == Optimized Logical Plan ==
-Aggregate [sum(distinct cast(val#x as bigint)) AS sum(DISTINCT val)#xL]
+Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
 +- Project [val#x]
    +- Relation[key#x,val#x] parquet
 
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
-+- HashAggregate(keys=[], functions=[sum(distinct cast(val#x as bigint)#xL)], output=[sum(DISTINCT val)#xL])
++- HashAggregate(keys=[], functions=[sum(distinct val#x)], output=[sum(DISTINCT val)#xL])
    +- Exchange SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
-      +- HashAggregate(keys=[], functions=[partial_sum(distinct cast(val#x as bigint)#xL)], output=[sum#xL])
-         +- HashAggregate(keys=[cast(val#x as bigint)#xL], functions=[], output=[cast(val#x as bigint)#xL])
-            +- Exchange hashpartitioning(cast(val#x as bigint)#xL, 4), ENSURE_REQUIREMENTS, [id=#x]
-               +- HashAggregate(keys=[cast(val#x as bigint) AS cast(val#x as bigint)#xL], functions=[], output=[cast(val#x as bigint)#xL])
+      +- HashAggregate(keys=[], functions=[partial_sum(distinct val#x)], output=[sum#xL])
+         +- HashAggregate(keys=[val#x], functions=[], output=[val#x])
+            +- Exchange hashpartitioning(val#x, 4), ENSURE_REQUIREMENTS, [id=#x]
+               +- HashAggregate(keys=[val#x], functions=[], output=[val#x])
                   +- FileScan parquet default.explain_temp1[val#x] Batched: true, DataFilters: [], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/explain_temp1], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<val:int>
 
 
@@ -503,6 +503,7 @@ Results [1]: [max(key#x)#x AS max(key)#x]
 Output [1]: [max(key)#x]
 Arguments: isFinalPlan=false
 
+
 -- !query
 EXPLAIN FORMATTED
   SELECT * 
@@ -614,7 +615,7 @@ Input [2]: [key#x, val#x]
 (14) HashAggregate
 Input [1]: [key#x]
 Keys: []
-Functions [1]: [partial_avg(cast(key#x as bigint))]
+Functions [1]: [partial_avg(key#x)]
 Aggregate Attributes [2]: [sum#x, count#xL]
 Results [2]: [sum#x, count#xL]
 
@@ -625,13 +626,14 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
 (16) HashAggregate
 Input [2]: [sum#x, count#xL]
 Keys: []
-Functions [1]: [avg(cast(key#x as bigint))]
-Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
-Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+Functions [1]: [avg(key#x)]
+Aggregate Attributes [1]: [avg(key#x)#x]
+Results [1]: [avg(key#x)#x AS avg(key)#x]
 
 (17) AdaptiveSparkPlan
 Output [1]: [avg(key)#x]
 Arguments: isFinalPlan=false
+
 
 -- !query
 EXPLAIN FORMATTED
@@ -679,7 +681,7 @@ ReadSchema: struct<key:int>
 (5) HashAggregate
 Input [1]: [key#x]
 Keys: []
-Functions [1]: [partial_avg(cast(key#x as bigint))]
+Functions [1]: [partial_avg(key#x)]
 Aggregate Attributes [2]: [sum#x, count#xL]
 Results [2]: [sum#x, count#xL]
 
@@ -690,9 +692,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
 (7) HashAggregate
 Input [2]: [sum#x, count#xL]
 Keys: []
-Functions [1]: [avg(cast(key#x as bigint))]
-Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
-Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+Functions [1]: [avg(key#x)]
+Aggregate Attributes [1]: [avg(key#x)#x]
+Results [1]: [avg(key#x)#x AS avg(key)#x]
 
 (8) AdaptiveSparkPlan
 Output [1]: [avg(key)#x]
@@ -715,7 +717,7 @@ ReadSchema: struct<key:int>
 (10) HashAggregate
 Input [1]: [key#x]
 Keys: []
-Functions [1]: [partial_avg(cast(key#x as bigint))]
+Functions [1]: [partial_avg(key#x)]
 Aggregate Attributes [2]: [sum#x, count#xL]
 Results [2]: [sum#x, count#xL]
 
@@ -726,13 +728,14 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
 (12) HashAggregate
 Input [2]: [sum#x, count#xL]
 Keys: []
-Functions [1]: [avg(cast(key#x as bigint))]
-Aggregate Attributes [1]: [avg(cast(key#x as bigint))#x]
-Results [1]: [avg(cast(key#x as bigint))#x AS avg(key)#x]
+Functions [1]: [avg(key#x)]
+Aggregate Attributes [1]: [avg(key#x)#x]
+Results [1]: [avg(key#x)#x AS avg(key)#x]
 
 (13) AdaptiveSparkPlan
 Output [1]: [avg(key)#x]
 Arguments: isFinalPlan=false
+
 
 -- !query
 EXPLAIN FORMATTED
@@ -944,7 +947,7 @@ ReadSchema: struct<key:int,val:int>
 (2) HashAggregate
 Input [2]: [key#x, val#x]
 Keys: []
-Functions [3]: [partial_count(val#x), partial_sum(cast(key#x as bigint)), partial_count(key#x) FILTER (WHERE (val#x > 1))]
+Functions [3]: [partial_count(val#x), partial_sum(key#x), partial_count(key#x) FILTER (WHERE (val#x > 1))]
 Aggregate Attributes [3]: [count#xL, sum#xL, count#xL]
 Results [3]: [count#xL, sum#xL, count#xL]
 
@@ -955,9 +958,9 @@ Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#x]
 (4) HashAggregate
 Input [3]: [count#xL, sum#xL, count#xL]
 Keys: []
-Functions [3]: [count(val#x), sum(cast(key#x as bigint)), count(key#x)]
-Aggregate Attributes [3]: [count(val#x)#xL, sum(cast(key#x as bigint))#xL, count(key#x)#xL]
-Results [2]: [(count(val#x)#xL + sum(cast(key#x as bigint))#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
+Functions [3]: [count(val#x), sum(key#x), count(key#x)]
+Aggregate Attributes [3]: [count(val#x)#xL, sum(key#x)#xL, count(key#x)#xL]
+Results [2]: [(count(val#x)#xL + sum(key#x)#xL) AS TOTAL#xL, count(key#x)#xL AS count(key) FILTER (WHERE (val > 1))#xL]
 
 (5) AdaptiveSparkPlan
 Output [2]: [TOTAL#xL, count(key) FILTER (WHERE (val > 1))#xL]

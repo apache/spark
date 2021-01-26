@@ -81,7 +81,7 @@ struct<count(id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint
 -- !query
 SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")) FROM emp
 -- !query schema
-struct<count(id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-01-01 00:00:00))):bigint>
+struct<count(id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00))):bigint>
 -- !query output
 2
 
@@ -89,7 +89,7 @@ struct<count(id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-
 -- !query
 SELECT COUNT(id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") = "2001-01-01") FROM emp
 -- !query schema
-struct<count(id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd) = 2001-01-01)):bigint>
+struct<count(id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) = 2001-01-01)):bigint>
 -- !query output
 2
 
@@ -97,7 +97,7 @@ struct<count(id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM
 -- !query
 SELECT COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") = "2001-01-01 00:00:00") FROM emp
 -- !query schema
-struct<count(DISTINCT id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
+struct<count(DISTINCT id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
 -- !query output
 2
 
@@ -105,7 +105,7 @@ struct<count(DISTINCT id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP)
 -- !query
 SELECT COUNT(DISTINCT id), COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") = "2001-01-01 00:00:00") FROM emp
 -- !query schema
-struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
+struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
 -- !query output
 8	2
 
@@ -113,7 +113,7 @@ struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(C
 -- !query
 SELECT COUNT(DISTINCT id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")), COUNT(DISTINCT id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp
 -- !query schema
-struct<count(DISTINCT id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-01-01 00:00:00))):bigint,count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint>
+struct<count(DISTINCT id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00))):bigint,count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint>
 -- !query output
 2	2
 
@@ -274,7 +274,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_timestamp("2003-01-01 00:00:00")) FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(salary) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) > to_timestamp(2003-01-01 00:00:00))):double>
+struct<dept_id:int,sum(salary) FILTER (WHERE (hiredate > to_timestamp(2003-01-01 00:00:00))):double>
 -- !query output
 10	200.0
 100	400.0
@@ -287,7 +287,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") > "2003-01-01") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd) > 2003-01-01)):double>
+struct<dept_id:int,sum(salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) > 2003-01-01)):double>
 -- !query output
 10	200.0
 100	400.0
@@ -300,7 +300,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") > "2001-01-01 00:00:00") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
+struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
 -- !query output
 10	300.0
 100	400.0
@@ -313,7 +313,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(DISTINCT salary), SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") > "2001-01-01 00:00:00") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
+struct<dept_id:int,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
 -- !query output
 10	300.0	300.0
 100	400.0	400.0
@@ -326,7 +326,7 @@ NULL	400.0	NULL
 -- !query
 SELECT dept_id, SUM(DISTINCT salary) FILTER (WHERE hiredate > date "2001-01-01"), SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") > "2001-01-01 00:00:00") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (hiredate > DATE '2001-01-01')):double,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
+struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (hiredate > DATE '2001-01-01')):double,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
 -- !query output
 10	300.0	300.0
 100	400.0	400.0
@@ -339,7 +339,7 @@ NULL	NULL	NULL
 -- !query
 SELECT dept_id, COUNT(id), SUM(DISTINCT salary), SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") > "2001-01-01") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,count(id):bigint,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd) > 2001-01-01)):double>
+struct<dept_id:int,count(id):bigint,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) > 2001-01-01)):double>
 -- !query output
 10	3	300.0	300.0
 100	2	400.0	400.0
@@ -386,7 +386,7 @@ foo	1350.0
 -- !query
 SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_timestamp("2003-01-01")) FROM emp GROUP BY 1
 -- !query schema
-struct<foo:string,sum(salary) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) >= to_timestamp(2003-01-01))):double>
+struct<foo:string,sum(salary) FILTER (WHERE (hiredate >= to_timestamp(2003-01-01))):double>
 -- !query output
 foo	1350.0
 

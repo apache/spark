@@ -41,7 +41,7 @@ class HivePartitionFilteringSuite(version: String)
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
   // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
-  private val defaultPartition = if (version.toDouble >= 2) Some(DEFAULT_PARTITION_NAME) else None
+  private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
 
   private val dsValue = 20170101 to 20170103
   private val hValue = 0 to 4

@@ -351,3 +351,8 @@ def udf(
 def udf(
     f: DataTypeOrString = ...,
 ) -> Callable[[Callable[..., Any]], Callable[..., Column]]: ...
+@overload
+def udf(
+    *,
+    returnType: DataTypeOrString = ...,
+) -> Callable[[Callable[..., Any]], Callable[..., Column]]: ...

@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
+import scala.io.Source
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -376,7 +377,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
         sc.parallelize(Seq(0)).map { _ =>
-          scala.io.Source.fromFile(SparkFiles.get("file")).mkString
+          Utils.tryWithResource(Source.fromFile(SparkFiles.get("file")))(_.mkString)
         }.first()
       }
       assert(getAddedFileContents() === "old")
@@ -939,7 +940,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setAppName("test-cluster")
     conf.set(TASK_GPU_ID.amountConf, "1")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -954,7 +955,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "1")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -970,7 +971,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 

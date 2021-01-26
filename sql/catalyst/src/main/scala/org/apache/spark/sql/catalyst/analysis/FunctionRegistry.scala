@@ -550,6 +550,8 @@ object FunctionRegistry {
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),
     expression[BitXorAgg]("bit_xor"),
+    expression[BitwiseGet]("bit_get"),
+    expression[BitwiseGet]("getbit", true),
 
     // json
     expression[StructsToJson]("to_json"),

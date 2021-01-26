@@ -1916,7 +1916,9 @@ private[spark] class DAGScheduler(
             // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
             val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) " +
               "failed."
-            taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
+            val job = jobIdToActiveJob.get(failedStage.firstJobId)
+            val shouldInterrupt = job.exists(j => shouldInterruptTaskThread(j))
+            taskScheduler.killAllTaskAttempts(stageId, shouldInterrupt, reason)
           } catch {
             case e: UnsupportedOperationException =>
               // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.

@@ -23,7 +23,6 @@ import org.apache.spark.annotation.Private;
 
 /**
  * :: Private ::
- *
  * An opaque metadata tag for registering the result of committing the output of a
  * shuffle map task.
  * <p>

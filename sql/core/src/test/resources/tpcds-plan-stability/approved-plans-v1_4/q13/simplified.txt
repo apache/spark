@@ -1,5 +1,5 @@
 WholeStageCodegen (7)
-  HashAggregate [sum,count,sum,count,sum,count,sum] [avg(cast(ss_quantity as bigint)),avg(UnscaledValue(ss_ext_sales_price)),avg(UnscaledValue(ss_ext_wholesale_cost)),sum(UnscaledValue(ss_ext_wholesale_cost)),avg(ss_quantity),avg(ss_ext_sales_price),avg(ss_ext_wholesale_cost),sum(ss_ext_wholesale_cost),sum,count,sum,count,sum,count,sum]
+  HashAggregate [sum,count,sum,count,sum,count,sum] [avg(ss_quantity),avg(UnscaledValue(ss_ext_sales_price)),avg(UnscaledValue(ss_ext_wholesale_cost)),sum(UnscaledValue(ss_ext_wholesale_cost)),avg(ss_quantity),avg(ss_ext_sales_price),avg(ss_ext_wholesale_cost),sum(ss_ext_wholesale_cost),sum,count,sum,count,sum,count,sum]
     InputAdapter
       Exchange #1
         WholeStageCodegen (6)
@@ -10,23 +10,25 @@ WholeStageCodegen (7)
                   BroadcastHashJoin [ss_cdemo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ss_sales_price]
                     Project [ss_cdemo_sk,ss_hdemo_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost]
                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                        Project [ss_sold_date_sk,ss_cdemo_sk,ss_hdemo_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost]
+                        Project [ss_cdemo_sk,ss_hdemo_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_sold_date_sk]
                           BroadcastHashJoin [ss_addr_sk,ca_address_sk,ca_state,ss_net_profit]
-                            Project [ss_sold_date_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit]
+                            Project [ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,ss_sold_date_sk]
                               BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                Filter [ss_store_sk,ss_addr_sk,ss_sold_date_sk,ss_cdemo_sk,ss_hdemo_sk,ss_net_profit,ss_sales_price]
+                                Filter [ss_store_sk,ss_addr_sk,ss_cdemo_sk,ss_hdemo_sk,ss_net_profit,ss_sales_price]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.store_sales [ss_sold_date_sk,ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit]
+                                      Scan parquet default.store_sales [ss_cdemo_sk,ss_hdemo_sk,ss_addr_sk,ss_store_sk,ss_quantity,ss_sales_price,ss_ext_sales_price,ss_ext_wholesale_cost,ss_net_profit,ss_sold_date_sk]
+                                        SubqueryBroadcast [d_date_sk] #1
+                                          ReusedExchange [d_date_sk] #2
                                 InputAdapter
-                                  BroadcastExchange #2
+                                  BroadcastExchange #3
                                     WholeStageCodegen (1)
                                       Filter [s_store_sk]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.store [s_store_sk]
                             InputAdapter
-                              BroadcastExchange #3
+                              BroadcastExchange #4
                                 WholeStageCodegen (2)
                                   Project [ca_address_sk,ca_state]
                                     Filter [ca_country,ca_address_sk,ca_state]
@@ -34,7 +36,7 @@ WholeStageCodegen (7)
                                         InputAdapter
                                           Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
                         InputAdapter
-                          BroadcastExchange #4
+                          BroadcastExchange #2
                             WholeStageCodegen (3)
                               Project [d_date_sk]
                                 Filter [d_year,d_date_sk]
