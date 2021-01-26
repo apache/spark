@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1734,9 +1735,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     // null partition values
     createTablePartition(catalog, Map("a" -> null, "b" -> null), tableIdent)
-    val nullPartValue = if (isUsingHiveMetastore) "__HIVE_DEFAULT_PARTITION__" else null
     assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
-      Set(Map("a" -> nullPartValue, "b" -> nullPartValue)))
+      Set(Map("a" -> "__HIVE_DEFAULT_PARTITION__", "b" -> "__HIVE_DEFAULT_PARTITION__")))
     sql("ALTER TABLE tab1 DROP PARTITION (a = null, b = null)")
     assert(catalog.listPartitions(tableIdent).isEmpty)
   }
@@ -3089,6 +3089,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
       df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
       assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+    }
+  }
+
+  test("SPARK-33591, SPARK-34203: insert and drop partitions with null values") {
+    def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
+      val partitions = sql(s"SHOW PARTITIONS $t")
+        .collect()
+        .toSet
+        .map((row: Row) => row.getString(0))
+        .map(PartitioningUtils.parsePathFragment)
+      assert(partitions === expected.toSet)
+    }
+    val defaultUsing = "USING " + (if (isUsingHiveMetastore) "hive" else "parquet")
+    def insertAndDropNullPart(t: String, insertCmd: String): Unit = {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(insertCmd)
+      checkPartitions(t, Map("p1" -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
+    }
+
+    withTable("tbl") {
+      insertAndDropNullPart("tbl", s"INSERT INTO TABLE tbl PARTITION (p1 = null) SELECT 0")
+    }
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("tbl") {
+        insertAndDropNullPart("tbl", s"INSERT OVERWRITE TABLE tbl VALUES (0, null)")
+      }
     }
   }
 }
