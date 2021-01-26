@@ -37,24 +37,23 @@ case class QueryExecutionTestRecord(
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
-  def checkDumpedPlans(path: String, expected: Int): Unit = {
-    Utils.tryWithResource(Source.fromFile(path)) { source =>
-      assert(source.getLines.toList
-        .takeWhile(_ != "== Whole Stage Codegen ==") == List(
-        "== Parsed Logical Plan ==",
-        s"Range (0, $expected, step=1, splits=Some(2))",
-        "",
-        "== Analyzed Logical Plan ==",
-        "id: bigint",
-        s"Range (0, $expected, step=1, splits=Some(2))",
-        "",
-        "== Optimized Logical Plan ==",
-        s"Range (0, $expected, step=1, splits=Some(2))",
-        "",
-        "== Physical Plan ==",
-        s"*(1) Range (0, $expected, step=1, splits=2)",
-        ""))
-    }
+  def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
+    Source.fromFile(path)) { source =>
+    assert(source.getLines.toList
+      .takeWhile(_ != "== Whole Stage Codegen ==") == List(
+      "== Parsed Logical Plan ==",
+      s"Range (0, $expected, step=1, splits=Some(2))",
+      "",
+      "== Analyzed Logical Plan ==",
+      "id: bigint",
+      s"Range (0, $expected, step=1, splits=Some(2))",
+      "",
+      "== Optimized Logical Plan ==",
+      s"Range (0, $expected, step=1, splits=Some(2))",
+      "",
+      "== Physical Plan ==",
+      s"*(1) Range (0, $expected, step=1, splits=2)",
+      ""))
   }
 
   test("dumping query execution info to a file") {
@@ -102,19 +101,18 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
-      Utils.tryWithResource(Source.fromFile(path)) { source =>
-        assert(source.getLines.toList
-          .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
-          "== Physical Plan ==",
-          s"* Range (1)",
-          "",
-          "",
-          s"(1) Range [codegen id : 1]",
-          "Output [1]: [id#xL]",
-          s"Arguments: Range (0, 10, step=1, splits=Some(2))",
-          "",
-          ""))
-      }
+      val lines = Utils.tryWithResource(Source.fromFile(path))(_.getLines().toList)
+      assert(lines
+        .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
+        "== Physical Plan ==",
+        s"* Range (1)",
+        "",
+        "",
+        s"(1) Range [codegen id : 1]",
+        "Output [1]: [id#xL]",
+        s"Arguments: Range (0, 10, step=1, splits=Some(2))",
+        "",
+        ""))
     }
   }
 

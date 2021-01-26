@@ -167,31 +167,30 @@ class KafkaTestUtils(
    * In this method we rewrite krb5.conf to make kdc and client use the same enctypes
    */
   private def rewriteKrb5Conf(): Unit = {
-    Utils.tryWithResource(Source.fromFile(kdc.getKrb5conf, "UTF-8")) { source =>
-      val krb5Conf = source.getLines()
-      var rewritten = false
-      val addedConfig =
-        addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
-          addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
-      val rewriteKrb5Conf = krb5Conf.map(s =>
-        if (s.contains("libdefaults")) {
-          rewritten = true
-          s + addedConfig
-        } else {
-          s
-        }).filter(!_.trim.startsWith("#")).mkString(System.lineSeparator())
-
-      val krb5confStr = if (!rewritten) {
-        "[libdefaults]" + addedConfig + System.lineSeparator() +
-          System.lineSeparator() + rewriteKrb5Conf
+    val krb5Conf = Utils
+      .tryWithResource(Source.fromFile(kdc.getKrb5conf, "UTF-8"))(_.getLines().toList)
+    var rewritten = false
+    val addedConfig =
+      addedKrb5Config("default_tkt_enctypes", "aes128-cts-hmac-sha1-96") +
+        addedKrb5Config("default_tgs_enctypes", "aes128-cts-hmac-sha1-96")
+    val rewriteKrb5Conf = krb5Conf.map(s =>
+      if (s.contains("libdefaults")) {
+        rewritten = true
+        s + addedConfig
       } else {
-        rewriteKrb5Conf
-      }
+        s
+      }).filter(!_.trim.startsWith("#")).mkString(System.lineSeparator())
 
-      kdc.getKrb5conf.delete()
-      Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
-      logDebug(s"krb5.conf file content: $krb5confStr")
+    val krb5confStr = if (!rewritten) {
+      "[libdefaults]" + addedConfig + System.lineSeparator() +
+        System.lineSeparator() + rewriteKrb5Conf
+    } else {
+      rewriteKrb5Conf
     }
+
+    kdc.getKrb5conf.delete()
+    Files.write(krb5confStr, kdc.getKrb5conf, StandardCharsets.UTF_8)
+    logDebug(s"krb5.conf file content: $krb5confStr")
   }
 
   private def addedKrb5Config(key: String, value: String): String = {
