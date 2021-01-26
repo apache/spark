@@ -267,11 +267,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(fetched1.get.sizeInBytes > 0)
       assert(fetched1.get.colStats.size == 2)
 
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        sql(s"TRUNCATE TABLE $table")
+        val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+        assert(fetched2.get.sizeInBytes == 0)
+        assert(fetched2.get.colStats.isEmpty)
+      }
     }
   }
 
