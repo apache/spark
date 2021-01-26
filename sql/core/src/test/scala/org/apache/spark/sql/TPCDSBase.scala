@@ -354,7 +354,7 @@ trait TPCDSBase extends SharedSparkSession {
         |`wp_customer_sk` INT,
         |`wp_url` VARCHAR(100),
         |`wp_type` CHAR(50),
-        |`wp_CHAR_count` INT,
+        |`wp_char_count` INT,
         |`wp_link_count` INT,
         |`wp_image_count` INT,
         |`wp_max_ad_count` INT

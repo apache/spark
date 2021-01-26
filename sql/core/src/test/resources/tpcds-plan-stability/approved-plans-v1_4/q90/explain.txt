@@ -135,22 +135,22 @@ Output [1]: [ws_web_page_sk#3]
 Input [3]: [ws_sold_time_sk#1, ws_web_page_sk#3, t_time_sk#8]
 
 (19) Scan parquet default.web_page
-Output [2]: [wp_web_page_sk#11, wp_CHAR_count#12]
+Output [2]: [wp_web_page_sk#11, wp_char_count#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
-PushedFilters: [IsNotNull(wp_CHAR_count), GreaterThanOrEqual(wp_CHAR_count,5000), LessThanOrEqual(wp_CHAR_count,5200), IsNotNull(wp_web_page_sk)]
-ReadSchema: struct<wp_web_page_sk:int,wp_CHAR_count:int>
+PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
 
 (20) ColumnarToRow [codegen id : 3]
-Input [2]: [wp_web_page_sk#11, wp_CHAR_count#12]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 
 (21) Filter [codegen id : 3]
-Input [2]: [wp_web_page_sk#11, wp_CHAR_count#12]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 Condition : (((isnotnull(wp_char_count#12) AND (wp_char_count#12 >= 5000)) AND (wp_char_count#12 <= 5200)) AND isnotnull(wp_web_page_sk#11))
 
 (22) Project [codegen id : 3]
 Output [1]: [wp_web_page_sk#11]
-Input [2]: [wp_web_page_sk#11, wp_CHAR_count#12]
+Input [2]: [wp_web_page_sk#11, wp_char_count#12]
 
 (23) BroadcastExchange
 Input [1]: [wp_web_page_sk#11]
