@@ -680,9 +680,9 @@ private[spark] class TaskSchedulerImpl(
               // always reject the offered resources. As a result, the barrier taskset can't get
               // launched. And if we retry the resourceOffer, we'd go through the same path again
               // and get into the endless loop in the end.
-              val errorMsg = s"$msg We highly recommend you to use the new delay scheduling " +
-                s"by setting spark.locality.wait.legacyResetOnTaskLaunch to false to get rid " +
-                s"of this error."
+              val errorMsg = s"$msg We highly recommend you to use the non-legacy" +
+                s" delay scheduling by setting ${LEGACY_LOCALITY_WAIT_RESET.key} " +
+                s"to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
               throw new SparkException(errorMsg)
