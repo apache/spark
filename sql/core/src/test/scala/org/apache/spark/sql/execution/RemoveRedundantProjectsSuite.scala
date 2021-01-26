@@ -58,6 +58,7 @@ abstract class RemoveRedundantProjectsSuiteBase
       "cast(id * 3 as int) as b", "cast(id as string) as c", "array(id, id + 1, id + 3) as d")
       .write.partitionBy("key").parquet(path)
     spark.read.parquet(path).createOrReplaceTempView("testView")
+    spark.read.parquet(path).createOrReplaceTempView("testView2")
   }
 
   override def afterAll(): Unit = {
@@ -103,7 +104,7 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   test("join without ordering requirement") {
     val query = "select t1.key, t2.key, t1.a, t2.b from (select key, a, b, c from testView)" +
-      " as t1 join (select key, a, b, c from testView) as t2 on t1.c > t2.c and t1.key > 10"
+      " as t1 join (select key, a, b, c from testView2) as t2 on t1.c > t2.c and t1.key > 10"
     assertProjectExec(query, 1, 3)
   }
 
@@ -205,7 +206,7 @@ abstract class RemoveRedundantProjectsSuiteBase
         |SELECT t1.key, t2.key, sum(t1.a) AS s1, sum(t2.b) AS s2 FROM
         |(SELECT a, key FROM testView) t1
         |JOIN
-        |(SELECT b, key FROM testView) t2
+        |(SELECT b, key FROM testView2) t2
         |ON t1.key = t2.key
         |GROUP BY t1.key, t2.key GROUPING SETS(t1.key, t2.key)
         |ORDER BY t1.key, t2.key, s1, s2
