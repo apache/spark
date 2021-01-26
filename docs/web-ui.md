@@ -404,6 +404,16 @@ Here is the list of SQL metrics:
 <tr><td> <code>avg hash probe bucket list iters</code> </td><td> the average bucket list iterations per lookup during aggregation </td><td> HashAggregate </td></tr>
 <tr><td> <code>data size of build side</code> </td><td> the size of built hash map </td><td> ShuffledHashJoin </td></tr>
 <tr><td> <code>time to build hash map</code> </td><td> the time spent on building hash map </td><td> ShuffledHashJoin </td></tr>
+<tr><td> <code>time spent executing</code> </td><td> time spent executing the Python UDF and sending the results back to the executors. It contains time spent waiting for input queues to fill, when sending data is slow compared to execution </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>time spent sending data</code> </td><td> time spent sending data to the Python workers, this is part of the Python UDF execution and happens asynchronously using queues </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>time spent sending code</code> </td><td> time spent sending Python code to the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>bytes of code sent</code> </td><td> the number of bytes of serialized Python code sent the to the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>bytes of data returned</code> </td><td> the number of bytes of serialized data received back from the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>bytes of data sent</code> </td><td> the number of bytes of serialized data sent the to the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>number of batches returned</code> </td><td> the number of data batches received back from the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>number of batches processed</code> </td><td> the number of data batches sent to the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>number of rows returned</code> </td><td> the number of rows returned by the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
+<tr><td> <code>number of rows processed</code> </td><td> the number rows sent to the Python workers </td><td> BatchEvalPython, ArrowEvalPython, AggregateInPandas, FlaMapGroupsInPandas, FlatMapsCoGroupsInPandas, MapInPandas, WindowsInPandas </td></tr>
 
 </table>
 

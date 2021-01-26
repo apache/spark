@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
 import org.apache.spark.api.python._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -31,10 +32,17 @@ import org.apache.spark.sql.internal.SQLConf
 class PythonUDFRunner(
     funcs: Seq[ChainedPythonFunctions],
     evalType: Int,
-    argOffsets: Array[Array[Int]])
+    argOffsets: Array[Array[Int]],
+    pythonExecTime: SQLMetric,
+    pythonDataSerializeTime: SQLMetric,
+    pythonCodeSerializeTime: SQLMetric,
+    pythonCodeSent: SQLMetric,
+    pythonDataReceived: SQLMetric,
+    pythonDataSent: SQLMetric,
+    pythonNumBatchesReceived: SQLMetric,
+    pythonNumBatchesSent: SQLMetric)
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, evalType, argOffsets) {
-
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected override def newWriterThread(
@@ -46,12 +54,21 @@ class PythonUDFRunner(
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        val startTime = System.nanoTime()
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        val deltaTime = System.nanoTime()-startTime
+        pythonCodeSerializeTime += deltaTime
+        pythonCodeSent += dataOut.size()
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        val startTime = System.nanoTime()
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
+        val deltaTime = System.nanoTime() - startTime
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+
+        pythonDataSerializeTime += deltaTime
+        pythonDataSent += dataOut.size()
       }
     }
   }
@@ -73,10 +90,15 @@ class PythonUDFRunner(
           throw writerThread.exception.get
         }
         try {
+          val startTime = System.nanoTime()
           stream.readInt() match {
             case length if length > 0 =>
               val obj = new Array[Byte](length)
               stream.readFully(obj)
+              val deltaTime = System.nanoTime() - startTime
+              pythonExecTime += deltaTime
+              pythonDataReceived += length
+              pythonNumBatchesReceived += 1
               obj
             case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>

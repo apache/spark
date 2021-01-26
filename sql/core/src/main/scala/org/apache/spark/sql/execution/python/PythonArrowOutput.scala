@@ -26,16 +26,22 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, SpecialLengths}
+import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, SpecialLengths}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
-/**
- * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
- * Python (Arrow) to JVM (ColumnarBatch).
- */
-private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatch] =>
+// An abstract class implementing the logic from Python (Arrow) to JVM (ColumnarBatch).
+private[python] abstract class PythonArrowOutput[IN](
+                           funcs: Seq[ChainedPythonFunctions],
+                           evalType: Int,
+                           argOffsets: Array[Array[Int]],
+                           pythonDataReceived: SQLMetric,
+                           pythonExecTime: SQLMetric,
+                           pythonNumRowsReceived: SQLMetric,
+                           pythonNumBatchesReceived: SQLMetric)
+  extends BasePythonRunner[IN, ColumnarBatch](funcs, evalType, argOffsets) {
 
   protected def newReaderIterator(
       stream: DataInputStream,
@@ -73,10 +79,19 @@ private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatc
         }
         try {
           if (reader != null && batchLoaded) {
+            val bytesReadStart = reader.bytesRead()
+            val startTime = System.nanoTime()
             batchLoaded = reader.loadNextBatch()
+            val deltaTime = System.nanoTime() - startTime
             if (batchLoaded) {
+              pythonExecTime += deltaTime
               val batch = new ColumnarBatch(vectors)
-              batch.setNumRows(root.getRowCount)
+              val rowCount = root.getRowCount
+              batch.setNumRows(rowCount)
+              val bytesReadEnd = reader.bytesRead()
+              pythonDataReceived += bytesReadEnd - bytesReadStart
+              pythonNumRowsReceived += rowCount
+              pythonNumBatchesReceived += 1
               batch
             } else {
               reader.close(false)

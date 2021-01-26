@@ -24,13 +24,13 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamWriter
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, PythonRDD}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonRDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 
@@ -45,10 +45,20 @@ class CoGroupedArrowPythonRunner(
     leftSchema: StructType,
     rightSchema: StructType,
     timeZoneId: String,
-    conf: Map[String, String])
-  extends BasePythonRunner[
-    (Iterator[InternalRow], Iterator[InternalRow]), ColumnarBatch](funcs, evalType, argOffsets)
-  with PythonArrowOutput {
+    conf: Map[String, String],
+    pythonExecTime: SQLMetric,
+    pythonSerializeTime: SQLMetric,
+    pythonCodeSerializeTime: SQLMetric,
+    pythonCodeSent: SQLMetric,
+    pythonDataReceived: SQLMetric,
+    pythonDataSent: SQLMetric,
+    pythonNumRowsReceived: SQLMetric,
+    pythonNumRowsSent: SQLMetric,
+    pythonNumBatchesReceived: SQLMetric,
+    pythonNumBatchesSent: SQLMetric)
+  extends PythonArrowOutput[(Iterator[InternalRow], Iterator[InternalRow])](
+    funcs, evalType, argOffsets,
+    pythonDataReceived, pythonExecTime, pythonNumRowsReceived, pythonNumBatchesReceived) {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
@@ -63,6 +73,7 @@ class CoGroupedArrowPythonRunner(
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
 
+        val startTime = System.nanoTime()
         // Write config for the worker as a number of key -> value pairs of strings
         dataOut.writeInt(conf.size)
         for ((k, v) <- conf) {
@@ -71,6 +82,9 @@ class CoGroupedArrowPythonRunner(
         }
 
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        val deltaTime = System.nanoTime()-startTime
+        pythonCodeSerializeTime += deltaTime
+        pythonCodeSent += dataOut.size()
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
@@ -83,6 +97,7 @@ class CoGroupedArrowPythonRunner(
           writeGroup(nextRight, rightSchema, dataOut, "right")
         }
         dataOut.writeInt(0)
+        pythonDataSent += dataOut.size()
       }
 
       private def writeGroup(
@@ -101,10 +116,17 @@ class CoGroupedArrowPythonRunner(
           writer.start()
 
           while (group.hasNext) {
+            val startTime = System.nanoTime()
             arrowWriter.write(group.next())
+            val deltaTime = System.nanoTime() - startTime
+            pythonSerializeTime += deltaTime
           }
+
           arrowWriter.finish()
           writer.writeBatch()
+          val rowCount = root.getRowCount
+          pythonNumBatchesSent += 1
+          pythonNumRowsSent += rowCount
           writer.end()
         }{
           root.close()

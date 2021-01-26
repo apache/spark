@@ -27,10 +27,10 @@ import org.apache.spark._
 import org.apache.spark.api.python._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.Utils
 
 /**
@@ -42,9 +42,19 @@ class ArrowPythonRunner(
     argOffsets: Array[Array[Int]],
     schema: StructType,
     timeZoneId: String,
-    conf: Map[String, String])
-  extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](funcs, evalType, argOffsets)
-  with PythonArrowOutput {
+    conf: Map[String, String],
+    pythonExecTime: SQLMetric,
+    pythonSerializeTime: SQLMetric,
+    pythonCodeSerializeTime: SQLMetric,
+    pythonCodeSent: SQLMetric,
+    pythonDataReceived: SQLMetric,
+    pythonDataSent: SQLMetric,
+    pythonNumRowsReceived: SQLMetric,
+    pythonNumRowsSent: SQLMetric,
+    pythonNumBatchesReceived: SQLMetric,
+    pythonNumBatchesSent: SQLMetric)
+  extends PythonArrowOutput[Iterator[InternalRow]](funcs, evalType, argOffsets,
+    pythonDataReceived, pythonExecTime, pythonNumRowsReceived, pythonNumBatchesReceived) {
 
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
@@ -64,6 +74,7 @@ class ArrowPythonRunner(
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
 
+        val startTime = System.nanoTime()
         // Write config for the worker as a number of key -> value pairs of strings
         dataOut.writeInt(conf.size)
         for ((k, v) <- conf) {
@@ -72,6 +83,9 @@ class ArrowPythonRunner(
         }
 
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
+        val deltaTime = System.nanoTime()-startTime
+        pythonCodeSerializeTime += deltaTime
+        pythonCodeSent += dataOut.size()
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
@@ -88,14 +102,22 @@ class ArrowPythonRunner(
           while (inputIterator.hasNext) {
             val nextBatch = inputIterator.next()
 
+            val startTime = System.nanoTime()
             while (nextBatch.hasNext) {
               arrowWriter.write(nextBatch.next())
             }
 
             arrowWriter.finish()
             writer.writeBatch()
+
+            val deltaTime = System.nanoTime() - startTime
+            pythonSerializeTime += deltaTime
+            val rowCount = root.getRowCount
+            pythonNumBatchesSent += 1
+            pythonNumRowsSent += rowCount
             arrowWriter.reset()
           }
+          pythonDataSent += dataOut.size()
           // end writes footer to the output stream and doesn't clean any resources.
           // It could throw exception if the output stream is closed, so it should be
           // in the try block.

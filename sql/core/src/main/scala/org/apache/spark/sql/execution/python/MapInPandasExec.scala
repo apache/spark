@@ -42,7 +42,7 @@ case class MapInPandasExec(
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with PythonSQLMetrics {
 
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
 
@@ -78,7 +78,17 @@ case class MapInPandasExec(
         argOffsets,
         StructType(StructField("struct", outputTypes) :: Nil),
         sessionLocalTimeZone,
-        pythonRunnerConf).compute(batchIter, context.partitionId(), context)
+        pythonRunnerConf,
+        pythonExecTime,
+        pythonDataSerializeTime,
+        pythonCodeSerializeTime,
+        pythonCodeSent,
+        pythonDataReceived,
+        pythonDataSent,
+        pythonNumRowsReceived,
+        pythonNumRowsSent,
+        pythonNumBatchesReceived,
+        pythonNumBatchesSent).compute(batchIter, context.partitionId(), context)
 
       val unsafeProj = UnsafeProjection.create(output, output)
 

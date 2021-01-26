@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * A physical plan that evaluates a [[PythonUDF]]
  */
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
-  extends EvalPythonExec {
+  extends EvalPythonExec with PythonSQLMetrics {
 
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
@@ -61,6 +61,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     // For each row, add it to the queue.
     val inputIterator = iter.map { row =>
+      pythonNumRowsSent += 1
       if (needConversion) {
         EvaluatePython.toJava(row, schema)
       } else {
@@ -74,10 +75,23 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
         }
         fields
       }
-    }.grouped(100).map(x => pickle.dumps(x.toArray))
-
+    }.grouped(100).map(x => {
+      pythonNumBatchesSent += 1
+      pickle.dumps(x.toArray)
+    })
     // Output iterator for results from Python.
-    val outputIterator = new PythonUDFRunner(funcs, PythonEvalType.SQL_BATCHED_UDF, argOffsets)
+    val outputIterator = new PythonUDFRunner(
+      funcs,
+      PythonEvalType.SQL_BATCHED_UDF,
+      argOffsets,
+      pythonExecTime,
+      pythonDataSerializeTime,
+      pythonCodeSerializeTime,
+      pythonCodeSent,
+      pythonDataReceived,
+      pythonDataSent,
+      pythonNumBatchesReceived,
+      pythonNumBatchesSent)
       .compute(inputIterator, context.partitionId(), context)
 
     val unpickle = new Unpickler
@@ -94,12 +108,19 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
       val unpickledBatch = unpickle.loads(pickedResult)
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { result =>
+      pythonNumRowsReceived += 1
+      val startTime = System.nanoTime()
       if (udfs.length == 1) {
         // fast path for single UDF
         mutableRow(0) = fromJava(result)
+        val deltaTime = System.nanoTime() - startTime
+        pythonExecTime += deltaTime
         mutableRow
       } else {
-        fromJava(result).asInstanceOf[InternalRow]
+        val res = fromJava(result).asInstanceOf[InternalRow]
+        val deltaTime = System.nanoTime() - startTime
+        pythonExecTime += deltaTime
+        res
       }
     }
   }

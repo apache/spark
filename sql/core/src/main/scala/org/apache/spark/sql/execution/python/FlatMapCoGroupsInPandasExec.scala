@@ -54,7 +54,7 @@ case class FlatMapCoGroupsInPandasExec(
     output: Seq[Attribute],
     left: SparkPlan,
     right: SparkPlan)
-  extends SparkPlan with BinaryExecNode {
+  extends SparkPlan with BinaryExecNode with PythonSQLMetrics {
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowUtils.getPythonRunnerConfMap(conf)
@@ -97,7 +97,17 @@ case class FlatMapCoGroupsInPandasExec(
           StructType.fromAttributes(leftDedup),
           StructType.fromAttributes(rightDedup),
           sessionLocalTimeZone,
-          pythonRunnerConf)
+          pythonRunnerConf,
+          pythonExecTime,
+          pythonDataSerializeTime,
+          pythonCodeSerializeTime,
+          pythonCodeSent,
+          pythonDataReceived,
+          pythonDataSent,
+          pythonNumRowsReceived,
+          pythonNumRowsSent,
+          pythonNumBatchesReceived,
+          pythonNumBatchesSent)
 
         executePython(data, output, runner)
       }
