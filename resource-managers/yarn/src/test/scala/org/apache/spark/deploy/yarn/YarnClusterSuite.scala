@@ -438,7 +438,7 @@ private object YarnClusterDriver extends Logging with Matchers {
       executorInfos.foreach { info =>
         assert(info.logUrlMap.nonEmpty)
         info.logUrlMap.values.foreach { url =>
-          val log = Source.fromURL(url).mkString
+          val log = Utils.tryWithResource(Source.fromURL(url))(_.mkString)
           assert(
             !log.contains(SECRET_PASSWORD),
             s"Executor logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
@@ -457,7 +457,7 @@ private object YarnClusterDriver extends Logging with Matchers {
         assert(driverLogs.contains("stdout"))
         val urlStr = driverLogs("stderr")
         driverLogs.foreach { kv =>
-          val log = Source.fromURL(kv._2).mkString
+          val log = Utils.tryWithResource(Source.fromURL(kv._2))(_.mkString)
           assert(
             !log.contains(SECRET_PASSWORD),
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
