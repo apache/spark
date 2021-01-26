@@ -752,7 +752,7 @@ Input [4]: [c_last_name#43, c_first_name#42, sum#74, isEmpty#75]
 Keys [2]: [c_last_name#43, c_first_name#42]
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#55 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#56 as decimal(12,2)))), DecimalType(18,2), true))]
 Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#55 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#56 as decimal(12,2)))), DecimalType(18,2), true))#77]
-Results [3]: [c_last_name#43 AS c_last_name#78, c_first_name#42 AS c_first_name#79, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#55 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#56 as decimal(12,2)))), DecimalType(18,2), true))#77 AS sales#80]
+Results [3]: [c_last_name#43, c_first_name#42, sum(CheckOverflow((promote_precision(cast(cast(ws_quantity#55 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ws_list_price#56 as decimal(12,2)))), DecimalType(18,2), true))#77 AS sales#78]
 
 (136) Union
 
@@ -807,7 +807,7 @@ Subquery:3 Hosting operator id = 49 Hosting Expression = Subquery scalar-subquer
 Output [4]: [ss_customer_sk#26, ss_quantity#27, ss_sales_price#28, ss_sold_date_sk#9]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ss_sold_date_sk#9), dynamicpruningexpression(ss_sold_date_sk#9 IN dynamicpruning#81)]
+PartitionFilters: [isnotnull(ss_sold_date_sk#9), dynamicpruningexpression(ss_sold_date_sk#9 IN dynamicpruning#79)]
 PushedFilters: [IsNotNull(ss_customer_sk)]
 ReadSchema: struct<ss_customer_sk:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
 
@@ -838,7 +838,7 @@ Input [2]: [d_date_sk#11, d_year#13]
 
 (147) BroadcastExchange
 Input [1]: [d_date_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#82]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#80]
 
 (148) BroadcastHashJoin [codegen id : 2]
 Left keys [1]: [ss_sold_date_sk#9]
@@ -851,7 +851,7 @@ Input [5]: [ss_customer_sk#26, ss_quantity#27, ss_sales_price#28, ss_sold_date_s
 
 (150) Exchange
 Input [3]: [ss_customer_sk#26, ss_quantity#27, ss_sales_price#28]
-Arguments: hashpartitioning(ss_customer_sk#26, 5), ENSURE_REQUIREMENTS, [id=#83]
+Arguments: hashpartitioning(ss_customer_sk#26, 5), ENSURE_REQUIREMENTS, [id=#81]
 
 (151) Sort [codegen id : 3]
 Input [3]: [ss_customer_sk#26, ss_quantity#27, ss_sales_price#28]
@@ -873,7 +873,7 @@ Condition : isnotnull(c_customer_sk#30)
 
 (155) Exchange
 Input [1]: [c_customer_sk#30]
-Arguments: hashpartitioning(c_customer_sk#30, 5), ENSURE_REQUIREMENTS, [id=#84]
+Arguments: hashpartitioning(c_customer_sk#30, 5), ENSURE_REQUIREMENTS, [id=#82]
 
 (156) Sort [codegen id : 5]
 Input [1]: [c_customer_sk#30]
@@ -892,35 +892,35 @@ Input [4]: [ss_customer_sk#26, ss_quantity#27, ss_sales_price#28, c_customer_sk#
 Input [3]: [ss_quantity#27, ss_sales_price#28, c_customer_sk#30]
 Keys [1]: [c_customer_sk#30]
 Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#27 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#28 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [2]: [sum#85, isEmpty#86]
-Results [3]: [c_customer_sk#30, sum#87, isEmpty#88]
+Aggregate Attributes [2]: [sum#83, isEmpty#84]
+Results [3]: [c_customer_sk#30, sum#85, isEmpty#86]
 
 (160) HashAggregate [codegen id : 6]
-Input [3]: [c_customer_sk#30, sum#87, isEmpty#88]
+Input [3]: [c_customer_sk#30, sum#85, isEmpty#86]
 Keys [1]: [c_customer_sk#30]
 Functions [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#27 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#28 as decimal(12,2)))), DecimalType(18,2), true))]
-Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#27 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#28 as decimal(12,2)))), DecimalType(18,2), true))#89]
-Results [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#27 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#28 as decimal(12,2)))), DecimalType(18,2), true))#89 AS csales#90]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#27 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#28 as decimal(12,2)))), DecimalType(18,2), true))#87]
+Results [1]: [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity#27 as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price#28 as decimal(12,2)))), DecimalType(18,2), true))#87 AS csales#88]
 
 (161) HashAggregate [codegen id : 6]
-Input [1]: [csales#90]
+Input [1]: [csales#88]
 Keys: []
-Functions [1]: [partial_max(csales#90)]
-Aggregate Attributes [1]: [max#91]
-Results [1]: [max#92]
+Functions [1]: [partial_max(csales#88)]
+Aggregate Attributes [1]: [max#89]
+Results [1]: [max#90]
 
 (162) Exchange
-Input [1]: [max#92]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#93]
+Input [1]: [max#90]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#91]
 
 (163) HashAggregate [codegen id : 7]
-Input [1]: [max#92]
+Input [1]: [max#90]
 Keys: []
-Functions [1]: [max(csales#90)]
-Aggregate Attributes [1]: [max(csales#90)#94]
-Results [1]: [max(csales#90)#94 AS tpcds_cmax#95]
+Functions [1]: [max(csales#88)]
+Aggregate Attributes [1]: [max(csales#88)#92]
+Results [1]: [max(csales#88)#92 AS tpcds_cmax#93]
 
-Subquery:4 Hosting operator id = 140 Hosting Expression = ss_sold_date_sk#9 IN dynamicpruning#81
+Subquery:4 Hosting operator id = 140 Hosting Expression = ss_sold_date_sk#9 IN dynamicpruning#79
 ReusedExchange (164)
 
 

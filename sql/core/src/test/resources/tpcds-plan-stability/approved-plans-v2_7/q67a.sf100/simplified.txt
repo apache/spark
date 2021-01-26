@@ -58,7 +58,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                                     InputAdapter
                                                       Scan parquet default.item [i_item_sk,i_brand,i_class,i_category,i_product_name]
                     WholeStageCodegen (17)
-                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,sum,isEmpty] [sum(sumsales),s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy] #7
                             WholeStageCodegen (16)
@@ -67,7 +67,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #8
                     WholeStageCodegen (26)
-                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_moy,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,sum,isEmpty] [sum(sumsales),d_moy,s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy] #9
                             WholeStageCodegen (25)
@@ -76,7 +76,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #8
                     WholeStageCodegen (35)
-                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,i_brand,i_product_name,d_year,sum,isEmpty] [sum(sumsales),d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand,i_product_name,d_year] #10
                             WholeStageCodegen (34)
@@ -85,7 +85,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #8
                     WholeStageCodegen (44)
-                      HashAggregate [i_category,i_class,i_brand,i_product_name,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,i_brand,i_product_name,sum,isEmpty] [sum(sumsales),d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand,i_product_name] #11
                             WholeStageCodegen (43)
@@ -94,7 +94,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #8
                     WholeStageCodegen (53)
-                      HashAggregate [i_category,i_class,i_brand,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,i_brand,sum,isEmpty] [sum(sumsales),i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class,i_brand] #12
                             WholeStageCodegen (52)
@@ -103,7 +103,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #8
                     WholeStageCodegen (62)
-                      HashAggregate [i_category,i_class,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,i_class,sum,isEmpty] [sum(sumsales),i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category,i_class] #13
                             WholeStageCodegen (61)
@@ -112,7 +112,7 @@ TakeOrderedAndProject [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_
                                   InputAdapter
                                     ReusedExchange [i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sum,isEmpty] #8
                     WholeStageCodegen (71)
-                      HashAggregate [i_category,sum,isEmpty] [sum(sumsales),i_category,i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
+                      HashAggregate [i_category,sum,isEmpty] [sum(sumsales),i_class,i_brand,i_product_name,d_year,d_qoy,d_moy,s_store_id,sumsales,sum,isEmpty]
                         InputAdapter
                           Exchange [i_category] #14
                             WholeStageCodegen (70)
