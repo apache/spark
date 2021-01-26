@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, ResolveSessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogWithListener
@@ -36,7 +35,6 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
 /**
  * Builder that produces a Hive-aware `SessionState`.
  */
-@Unstable
 class HiveSessionStateBuilder(
     session: SparkSession,
     parentState: Option[SessionState],
