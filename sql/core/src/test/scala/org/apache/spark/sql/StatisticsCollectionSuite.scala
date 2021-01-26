@@ -712,4 +712,20 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       }
     }
   }
+
+  test("SPARK-34251: stats in truncated non-empty table") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable("tbl") {
+        sql("CREATE TABLE tbl (c0 int, part int) USING parquet PARTITIONED BY (part)")
+        sql("INSERT INTO tbl PARTITION (part=0) SELECT 0")
+        sql("INSERT INTO tbl PARTITION (part=1) SELECT 1")
+        sql("ANALYZE TABLE tbl COMPUTE STATISTICS")
+        val sizeOfTwoParts = getTableStats("tbl").sizeInBytes
+        assert(sizeOfTwoParts > 0)
+        sql("TRUNCATE TABLE tbl PARTITION (part=1)")
+        val sizeOfOnePart = getTableStats("tbl").sizeInBytes
+        assert(0 < sizeOfOnePart && sizeOfOnePart < sizeOfTwoParts)
+      }
+    }
+  }
 }
