@@ -670,23 +670,38 @@ private[spark] class TaskSchedulerImpl(
           val barrierPendingLaunchTasks = taskSet.barrierPendingLaunchTasks.values.toArray
           // Check whether the barrier tasks are partially launched.
           if (barrierPendingLaunchTasks.length != taskSet.numTasks) {
-            val curTime = clock.getTimeMillis()
-            if (curTime - taskSet.lastResourceOfferFailLogTime >
+            val msg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
+              s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
+              s"of ${taskSet.numTasks} tasks got resource offers."
+            if (legacyLocalityWaitReset) {
+              // Legacy delay scheduling always reset the timer when there's a task that is able
+              // to be scheduled. Thus, whenever there's a timer reset could happen during a single
+              // round resourceOffer, tasks that don't get or have the preferred locations would
+              // always reject the offered resources. As a result, the barrier taskset can't get
+              // launched. And if we retry the resourceOffer, we'd go through the same path again
+              // and get into the endless loop in the end.
+              val errorMsg = s"$msg We highly recommend you to use the new delay scheduling " +
+                s"by setting spark.locality.wait.legacyResetOnTaskLaunch to false to get rid " +
+                s"of this error."
+              logWarning(errorMsg)
+              taskSet.abort(errorMsg)
+              throw new SparkException(errorMsg)
+            } else {
+              val curTime = clock.getTimeMillis()
+              if (curTime - taskSet.lastResourceOfferFailLogTime >
                 TaskSetManager.BARRIER_LOGGING_INTERVAL) {
-              logInfo(s"Fail resource offers for barrier stage ${taskSet.stageId} " +
-                s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
-                s"of ${taskSet.numTasks} tasks got resource offers. Waiting for later round " +
-                s"resource offers.")
-              taskSet.lastResourceOfferFailLogTime = curTime
-            }
-            barrierPendingLaunchTasks.foreach { task =>
-              // revert all assigned resources
-              availableCpus(task.assignedOfferIndex) += task.assignedCores
-              task.assignedResources.foreach { case (rName, rInfo) =>
-                availableResources(task.assignedOfferIndex)(rName).appendAll(rInfo.addresses)
+                logInfo(s"$msg Waiting for later round resource offers.")
+                taskSet.lastResourceOfferFailLogTime = curTime
               }
-              // re-add the task to the schedule pending list
-              taskSet.addPendingTask(task.index)
+              barrierPendingLaunchTasks.foreach { task =>
+                // revert all assigned resources
+                availableCpus(task.assignedOfferIndex) += task.assignedCores
+                task.assignedResources.foreach { case (rName, rInfo) =>
+                  availableResources(task.assignedOfferIndex)(rName).appendAll(rInfo.addresses)
+                }
+                // re-add the task to the schedule pending list
+                taskSet.addPendingTask(task.index)
+              }
             }
           } else {
             // All tasks are able to launch in this barrier task set. Let's do
