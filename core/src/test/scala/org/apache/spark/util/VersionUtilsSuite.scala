@@ -108,11 +108,8 @@ class VersionUtilsSuite extends SparkFunSuite {
     assert(VersionUtils.majorMinorPatchVersion("3").contains((3, 0, 0)))
 
     // illegal cases
-    assert(VersionUtils.majorMinorPatchVersion("ABC").isEmpty)
-    assert(VersionUtils.majorMinorPatchVersion("3X").isEmpty)
-    assert(VersionUtils.majorMinorPatchVersion("3.2-SNAPSHOT").isEmpty)
-    assert(VersionUtils.majorMinorPatchVersion("3.2ABC").isEmpty)
-    assert(VersionUtils.majorMinorPatchVersion("3-ABC").isEmpty)
-    assert(VersionUtils.majorMinorPatchVersion("3.2.4XYZ").isEmpty)
+    Seq("ABC", "3X", "3.2-SNAPSHOT", "3.2ABC", "3-ABC", "3.2.4XYZ").foreach { version =>
+      assert(VersionUtils.majorMinorPatchVersion(version).isEmpty, s"version $version")
+    }
   }
 }

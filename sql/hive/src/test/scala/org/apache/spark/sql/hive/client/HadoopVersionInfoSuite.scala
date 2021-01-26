@@ -71,20 +71,17 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
   }
 
   test("SPARK-32212: test supportHadoopShadedClient()") {
-    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2"))
-    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.3"))
-    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2.1"))
-    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2-XYZ"))
-    assert(IsolatedClientLoader.supportHadoopShadedClient("3.2.2.4-SNAPSHOT"))
+    Seq("3.2.2", "3.2.3", "3.2.2.1", "3.2.2-XYZ", "3.2.2.4-SNAPSHOT").foreach { version =>
+      assert(IsolatedClientLoader.supportsHadoopShadedClient(version), s"version $version")
+    }
 
     // negative cases
-    assert(!IsolatedClientLoader.supportHadoopShadedClient("3.1.3"))
-    assert(!IsolatedClientLoader.supportHadoopShadedClient("3.2"))
-    assert(!IsolatedClientLoader.supportHadoopShadedClient("3.2.1"))
-    assert(!IsolatedClientLoader.supportHadoopShadedClient("4"))
+    Seq("3.1.3", "3.2", "3.2.1", "4").foreach { version =>
+      assert(!IsolatedClientLoader.supportsHadoopShadedClient(version), s"version $version")
+    }
   }
 
   test("SPARK-32212: built-in Hadoop version should support shaded client") {
-    assert(IsolatedClientLoader.supportHadoopShadedClient(VersionInfo.getVersion))
+    assert(IsolatedClientLoader.supportsHadoopShadedClient(VersionInfo.getVersion))
   }
 }
