@@ -89,6 +89,8 @@ license: |
     * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
     * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
 
+  - In Spark 3.1, usage of `count(table.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(table.*)` will output differently if there is any null values. To restore the behavior before spark 3.1, you can set `spark.sql.legacy.allowSingleTableStarInCount` to `true`.
+
 ## Upgrading from Spark SQL 3.0.1 to 3.0.2
 
   - In Spark 3.0.2, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:

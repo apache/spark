@@ -1559,6 +1559,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_SINGLE_TABLE_STAR_IN_COUNT =
+    buildConf("spark.sql.legacy.allowSingleTableStarInCount")
+      .internal()
+      .doc("When true, the SQL function 'count' is allowed to take single 'table.*' as parameter")
+      .version("3.1.1")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
     buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()
@@ -3566,6 +3574,8 @@ class SQLConf extends Serializable with Logging {
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
+
+  def allowSingleTableStarInCount: Boolean = getConf(SQLConf.ALLOW_SINGLE_TABLE_STAR_IN_COUNT)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

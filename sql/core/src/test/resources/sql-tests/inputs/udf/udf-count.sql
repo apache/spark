@@ -20,9 +20,9 @@ SELECT
 FROM testData;
 
 -- count with multiple expressions
-SELECT udf(count(a, b)), udf(count(b, a)), udf(count(testData.*)) FROM testData;
+SELECT udf(count(a, b)), udf(count(b, a)), udf(count(testData.a, testData.b)) FROM testData;
 
 -- distinct count with multiple expressions
 SELECT
-  udf(count(DISTINCT a, b)), udf(count(DISTINCT b, a)), udf(count(DISTINCT *)), udf(count(DISTINCT testData.*))
+  udf(count(DISTINCT a, b)), udf(count(DISTINCT b, a)), udf(count(DISTINCT *)), udf(count(DISTINCT testData.a, testData.b))
 FROM testData;
