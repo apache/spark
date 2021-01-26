@@ -77,7 +77,7 @@ private[spark] object HiveUtils extends Logging {
   val HIVE_METASTORE_JARS = buildStaticConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
-      | This property can be one of four options: "
+      | This property can be one of four options:
       | 1. "builtin"
       |   Use Hive ${builtinHiveVersion}, which is bundled with the Spark assembly when
       |   <code>-Phive</code> is enabled. When this option is chosen,
@@ -87,8 +87,10 @@ private[spark] object HiveUtils extends Logging {
       |   Use Hive jars of specified version downloaded from Maven repositories.
       | 3. "path"
       |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
-      |   in comma separated format. Support both local or remote paths.
-      | 4. A classpath in the standard format for both Hive and Hadoop.
+      |   in comma separated format. Support both local or remote paths.The provided jars
+      |   should be the same version as ${HIVE_METASTORE_VERSION}.
+      | 4. A classpath in the standard format for both Hive and Hadoop. The provided jars
+      |   should be the same version as ${HIVE_METASTORE_VERSION}.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
