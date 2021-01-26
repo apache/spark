@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -3870,8 +3871,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34212 Parquet should read decimals correctly") {
-    // Decimal(2, 1) for INT32-backed decimal, Decimal(17, 2) for INT64-backed decimal
-    val df = sql("SELECT 1.0 a, CAST(100 AS DECIMAL(17, 2)) b")
+    // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+    val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
 
     withTempPath { path =>
       df.write.parquet(path.toString)
@@ -3882,21 +3883,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        // Changed but incorrect
-        val m1 = intercept[SparkException] {
-          val schema = "a DECIMAL(3, 2), b DECIMAL(18, 3)"
-          checkAnswer(spark.read.schema(schema).parquet(path.toString), df.select("a", "b"))
-        }.getCause.getMessage
-        assert(m1.contains("Parquet vectorized reader doesn't support schema evolution on decimal"))
+        val e1 = intercept[SparkException] {
+          spark.read.schema("a DECIMAL(3, 2)").parquet(path.toString).collect()
+        }.getCause.getCause
+        assert(e1.isInstanceOf[SchemaColumnConvertNotSupportedException])
 
-        // Spark raised SparkException due to SchemaColumnConvertNotSupportedException
-        // because 19 > Decimal.MAX_LONG_DIGITS (18). Now, it raises SparkException
-        // caused by UnsupportedOperationException.
-        val m2 = intercept[SparkException] {
-          val schema = "b DECIMAL(19, 3)"
-          checkAnswer(spark.read.schema(schema).parquet(path.toString), df.select("b"))
-        }.getCause.getMessage
-        assert(m2.contains("Parquet vectorized reader doesn't support schema evolution on decimal"))
+        val e2 = intercept[SparkException] {
+          spark.read.schema("b DECIMAL(18, 1)").parquet(path.toString).collect()
+        }.getCause.getCause
+        assert(e2.isInstanceOf[SchemaColumnConvertNotSupportedException])
+
+        val e3 = intercept[SparkException] {
+          spark.read.schema("c DECIMAL(37, 1)").parquet(path.toString).collect()
+        }.getCause.getCause
+        assert(e3.isInstanceOf[SchemaColumnConvertNotSupportedException])
+      }
+    }
+
+    withTempPath { path =>
+      sql("SELECT 1 a").write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        val e = intercept[SparkException] {
+          spark.read.schema("a DECIMAL(3, 2)").parquet(path.toString).collect()
+        }.getCause.getCause
+        assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
       }
     }
   }
