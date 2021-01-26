@@ -48,6 +48,7 @@ import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.serializer
+import org.apache.spark.util.Utils
 
 object MockWorker {
   val counter = new AtomicInteger(10000)
@@ -327,22 +328,25 @@ class MasterSuite extends SparkFunSuite
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"$masterUrl/json").getLines().mkString("\n")
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
           val JString(workerWebUi) = workerSummaryJson \ "webuiaddress"
-          val workerResponse = parse(Source.fromURL(s"${workerWebUi}/json")
-            .getLines().mkString("\n"))
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(s"$workerWebUi/json"))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
         }
 
-        val html = Source.fromURL(s"$masterUrl/").getLines().mkString("\n")
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
         val workerLinks = (WORKER_LINK_RE findAllMatchIn html).toList
         workerLinks.size should be (2)
         workerLinks foreach { case WORKER_LINK_RE(workerUrl, workerId) =>
-          val workerHtml = Source.fromURL(workerUrl).getLines().mkString("\n")
+          val workerHtml = Utils
+            .tryWithResource(Source.fromURL(workerUrl))(_.getLines().mkString("\n"))
           workerHtml should include ("Spark Worker at")
           workerHtml should include ("Running Executors (0)")
         }
@@ -361,8 +365,8 @@ class MasterSuite extends SparkFunSuite
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"$masterUrl/json")
-          .getLines().mkString("\n")
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
@@ -370,11 +374,13 @@ class MasterSuite extends SparkFunSuite
           // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
           val url = s"$masterUrl/proxy/${workerId}/json"
-          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
+          val workerResponse = parse(
+            Utils.tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
         }
 
-        val html = Source.fromURL(s"$masterUrl/").getLines().mkString("\n")
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
         html should include ("""href="/static""")
         html should include ("""src="/static""")
@@ -397,8 +403,8 @@ class MasterSuite extends SparkFunSuite
     val masterUrl = s"http://localhost:${localCluster.masterWebUIPort}"
     try {
       eventually(timeout(5.seconds), interval(100.milliseconds)) {
-        val json = Source.fromURL(s"$masterUrl/json")
-          .getLines().mkString("\n")
+        val json = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/json"))(_.getLines().mkString("\n"))
         val JArray(workers) = (parse(json) \ "workers")
         workers.size should be (2)
         workers.foreach { workerSummaryJson =>
@@ -406,7 +412,8 @@ class MasterSuite extends SparkFunSuite
           // explicitly construct reverse proxy url targeting the master
           val JString(workerId) = workerSummaryJson \ "id"
           val url = s"$masterUrl/proxy/${workerId}/json"
-          val workerResponse = parse(Source.fromURL(url).getLines().mkString("\n"))
+          val workerResponse = parse(Utils
+            .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n")))
           (workerResponse \ "cores").extract[Int] should be (2)
           (workerResponse \ "masterwebuiurl").extract[String] should be (reverseProxyUrl + "/")
         }
@@ -417,7 +424,8 @@ class MasterSuite extends SparkFunSuite
         System.getProperty("spark.ui.proxyBase") should startWith
           (s"$reverseProxyUrl/proxy/worker-")
         System.setProperty("spark.ui.proxyBase", reverseProxyUrl)
-        val html = Source.fromURL(s"$masterUrl/").getLines().mkString("\n")
+        val html = Utils
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
         verifyStaticResourcesServedByProxy(html, reverseProxyUrl)
         verifyWorkerUI(html, masterUrl, reverseProxyUrl)
@@ -439,7 +447,8 @@ class MasterSuite extends SparkFunSuite
         // construct url directly targeting the master
         val url = s"$masterUrl/proxy/$workerId/"
         System.setProperty("spark.ui.proxyBase", workerUrl)
-        val workerHtml = Source.fromURL(url).getLines().mkString("\n")
+        val workerHtml = Utils
+          .tryWithResource(Source.fromURL(url))(_.getLines().mkString("\n"))
         workerHtml should include ("Spark Worker at")
         workerHtml should include ("Running Executors (0)")
         verifyStaticResourcesServedByProxy(workerHtml, workerUrl)
