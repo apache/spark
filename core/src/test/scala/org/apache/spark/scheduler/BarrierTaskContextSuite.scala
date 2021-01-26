@@ -275,15 +275,10 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     testBarrierTaskKilled(interruptOnKill = true)
   }
 
-<<<<<<< HEAD
-  test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
-    initLocalClusterSparkContext(2)
-=======
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched " +
     "under legacy delay scheduling") {
     val conf = new SparkConf().set(LEGACY_LOCALITY_WAIT_RESET, true)
     initLocalClusterSparkContext(2, conf)
->>>>>>> add back SPARK-31485 for legacy delay scheduling
     val id = sc.getExecutorIds().head
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
@@ -298,7 +293,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     }.getMessage
     assert(errorMsg.contains("Fail resource offers for barrier stage"))
   }
-<<<<<<< HEAD
 
   test("SPARK-34069: Kill barrier tasks should respect SPARK_JOB_INTERRUPT_ON_CANCEL") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
@@ -342,6 +336,4 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     // double check we kill task success
     assert(System.currentTimeMillis() - startTime < 5000)
   }
-=======
->>>>>>> add back SPARK-31485 for legacy delay scheduling
 }
