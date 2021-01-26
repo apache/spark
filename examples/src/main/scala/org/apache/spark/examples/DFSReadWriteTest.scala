@@ -47,7 +47,7 @@ object DFSReadWriteTest {
   private val NPARAMS = 2
 
   private def readFile(filename: String): List[String] = {
-    Utils.tryWithResource(fromFile(filename))(_.getLines()).toList
+    Utils.tryWithResource(fromFile(filename))(_.getLines().toList)
   }
 
   private def printUsage(): Unit = {
