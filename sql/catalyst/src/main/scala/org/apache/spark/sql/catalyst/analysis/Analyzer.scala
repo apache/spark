@@ -219,6 +219,12 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
+  def typeCoercionRules(): List[Rule[LogicalPlan]] = if (conf.ansiEnabled) {
+    AnsiTypeCoercion.typeCoercionRules
+  } else {
+    TypeCoercion.typeCoercionRules
+  }
+
   override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       // This rule optimizes `UpdateFields` expression chains so looks more like optimization rule.
@@ -279,7 +285,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveBinaryArithmetic ::
       ResolveUnion ::
       ResolveTableProperties ::
-      TypeCoercion.typeCoercionRules ++
+      typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Apply Char Padding", Once,
       ApplyCharTypePadding),
