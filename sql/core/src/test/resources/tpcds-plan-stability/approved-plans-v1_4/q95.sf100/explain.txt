@@ -1,67 +1,4 @@
 == Physical Plan ==
-<<<<<<< HEAD
-* Sort (61)
-+- * HashAggregate (60)
-   +- Exchange (59)
-      +- * HashAggregate (58)
-         +- * HashAggregate (57)
-            +- Exchange (56)
-               +- * HashAggregate (55)
-                  +- * Project (54)
-                     +- * BroadcastHashJoin Inner BuildRight (53)
-                        :- * Project (47)
-                        :  +- * BroadcastHashJoin Inner BuildRight (46)
-                        :     :- * Project (40)
-                        :     :  +- * BroadcastHashJoin Inner BuildRight (39)
-                        :     :     :- SortMergeJoin LeftSemi (33)
-                        :     :     :  :- * Sort (17)
-                        :     :     :  :  +- Exchange (16)
-                        :     :     :  :     +- SortMergeJoin LeftSemi (15)
-                        :     :     :  :        :- * Sort (5)
-                        :     :     :  :        :  +- Exchange (4)
-                        :     :     :  :        :     +- * Filter (3)
-                        :     :     :  :        :        +- * ColumnarToRow (2)
-                        :     :     :  :        :           +- Scan parquet default.web_sales (1)
-                        :     :     :  :        +- * Project (14)
-                        :     :     :  :           +- * SortMergeJoin Inner (13)
-                        :     :     :  :              :- * Sort (10)
-                        :     :     :  :              :  +- Exchange (9)
-                        :     :     :  :              :     +- * Filter (8)
-                        :     :     :  :              :        +- * ColumnarToRow (7)
-                        :     :     :  :              :           +- Scan parquet default.web_sales (6)
-                        :     :     :  :              +- * Sort (12)
-                        :     :     :  :                 +- ReusedExchange (11)
-                        :     :     :  +- * Project (32)
-                        :     :     :     +- * SortMergeJoin Inner (31)
-                        :     :     :        :- * Sort (25)
-                        :     :     :        :  +- Exchange (24)
-                        :     :     :        :     +- * Project (23)
-                        :     :     :        :        +- * SortMergeJoin Inner (22)
-                        :     :     :        :           :- * Sort (19)
-                        :     :     :        :           :  +- ReusedExchange (18)
-                        :     :     :        :           +- * Sort (21)
-                        :     :     :        :              +- ReusedExchange (20)
-                        :     :     :        +- * Sort (30)
-                        :     :     :           +- Exchange (29)
-                        :     :     :              +- * Filter (28)
-                        :     :     :                 +- * ColumnarToRow (27)
-                        :     :     :                    +- Scan parquet default.web_returns (26)
-                        :     :     +- BroadcastExchange (38)
-                        :     :        +- * Project (37)
-                        :     :           +- * Filter (36)
-                        :     :              +- * ColumnarToRow (35)
-                        :     :                 +- Scan parquet default.customer_address (34)
-                        :     +- BroadcastExchange (45)
-                        :        +- * Project (44)
-                        :           +- * Filter (43)
-                        :              +- * ColumnarToRow (42)
-                        :                 +- Scan parquet default.date_dim (41)
-                        +- BroadcastExchange (52)
-                           +- * Project (51)
-                              +- * Filter (50)
-                                 +- * ColumnarToRow (49)
-                                    +- Scan parquet default.web_site (48)
-=======
 * Sort (64)
 +- * HashAggregate (63)
    +- Exchange (62)
@@ -120,13 +57,12 @@
                         :        +- * Project (47)
                         :           +- * Filter (46)
                         :              +- * ColumnarToRow (45)
-                        :                 +- Scan parquet default.web_site (44)
+                        :                 +- Scan parquet default.date_dim (44)
                         +- BroadcastExchange (55)
                            +- * Project (54)
                               +- * Filter (53)
                                  +- * ColumnarToRow (52)
-                                    +- Scan parquet default.date_dim (51)
->>>>>>> master
+                                    +- Scan parquet default.web_site (51)
 
 
 (1) Scan parquet default.web_sales
@@ -312,126 +248,67 @@ Join condition: None
 Output [5]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
 Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, ca_address_sk#21]
 
-<<<<<<< HEAD
-(41) Scan parquet default.date_dim
-Output [2]: [d_date_sk#22, d_date#23]
-=======
-(44) Scan parquet default.web_site
-Output [2]: [web_site_sk#24, web_company_name#25]
->>>>>>> master
+(44) Scan parquet default.date_dim
+Output [2]: [d_date_sk#24, d_date#25]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
-<<<<<<< HEAD
-(42) ColumnarToRow [codegen id : 19]
-Input [2]: [d_date_sk#22, d_date#23]
-
-(43) Filter [codegen id : 19]
-Input [2]: [d_date_sk#22, d_date#23]
-Condition : (((isnotnull(d_date#23) AND (d_date#23 >= 10623)) AND (d_date#23 <= 10683)) AND isnotnull(d_date_sk#22))
-
-(44) Project [codegen id : 19]
-Output [1]: [d_date_sk#22]
-Input [2]: [d_date_sk#22, d_date#23]
-
-(45) BroadcastExchange
-Input [1]: [d_date_sk#22]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#24]
-
-(46) BroadcastHashJoin [codegen id : 21]
-Left keys [1]: [ws_ship_date_sk#1]
-Right keys [1]: [d_date_sk#22]
-Join condition: None
-
-(47) Project [codegen id : 21]
-Output [4]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
-Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, d_date_sk#22]
-
-(48) Scan parquet default.web_site
-Output [2]: [web_site_sk#25, web_company_name#26]
-=======
 (45) ColumnarToRow [codegen id : 19]
-Input [2]: [web_site_sk#24, web_company_name#25]
+Input [2]: [d_date_sk#24, d_date#25]
 
 (46) Filter [codegen id : 19]
-Input [2]: [web_site_sk#24, web_company_name#25]
-Condition : ((isnotnull(web_company_name#25) AND (web_company_name#25 = pri)) AND isnotnull(web_site_sk#24))
+Input [2]: [d_date_sk#24, d_date#25]
+Condition : (((isnotnull(d_date#25) AND (d_date#25 >= 10623)) AND (d_date#25 <= 10683)) AND isnotnull(d_date_sk#24))
 
 (47) Project [codegen id : 19]
-Output [1]: [web_site_sk#24]
-Input [2]: [web_site_sk#24, web_company_name#25]
+Output [1]: [d_date_sk#24]
+Input [2]: [d_date_sk#24, d_date#25]
 
 (48) BroadcastExchange
-Input [1]: [web_site_sk#24]
+Input [1]: [d_date_sk#24]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#26]
 
 (49) BroadcastHashJoin [codegen id : 21]
-Left keys [1]: [ws_web_site_sk#3]
-Right keys [1]: [web_site_sk#24]
+Left keys [1]: [ws_ship_date_sk#1]
+Right keys [1]: [d_date_sk#24]
 Join condition: None
 
 (50) Project [codegen id : 21]
-Output [4]: [ws_ship_date_sk#1, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
-Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, web_site_sk#24]
+Output [4]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
+Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, d_date_sk#24]
 
-(51) Scan parquet default.date_dim
-Output [2]: [d_date_sk#27, d_date#28]
->>>>>>> master
+(51) Scan parquet default.web_site
+Output [2]: [web_site_sk#27, web_company_name#28]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
 PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri), IsNotNull(web_site_sk)]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
-<<<<<<< HEAD
-(49) ColumnarToRow [codegen id : 20]
-Input [2]: [web_site_sk#25, web_company_name#26]
-
-(50) Filter [codegen id : 20]
-Input [2]: [web_site_sk#25, web_company_name#26]
-Condition : ((isnotnull(web_company_name#26) AND (web_company_name#26 = pri)) AND isnotnull(web_site_sk#25))
-
-(51) Project [codegen id : 20]
-Output [1]: [web_site_sk#25]
-Input [2]: [web_site_sk#25, web_company_name#26]
-
-(52) BroadcastExchange
-Input [1]: [web_site_sk#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
-
-(53) BroadcastHashJoin [codegen id : 21]
-Left keys [1]: [ws_web_site_sk#3]
-Right keys [1]: [web_site_sk#25]
-=======
 (52) ColumnarToRow [codegen id : 20]
-Input [2]: [d_date_sk#27, d_date#28]
+Input [2]: [web_site_sk#27, web_company_name#28]
 
 (53) Filter [codegen id : 20]
-Input [2]: [d_date_sk#27, d_date#28]
-Condition : (((isnotnull(d_date#28) AND (d_date#28 >= 10623)) AND (d_date#28 <= 10683)) AND isnotnull(d_date_sk#27))
+Input [2]: [web_site_sk#27, web_company_name#28]
+Condition : ((isnotnull(web_company_name#28) AND (web_company_name#28 = pri)) AND isnotnull(web_site_sk#27))
 
 (54) Project [codegen id : 20]
-Output [1]: [d_date_sk#27]
-Input [2]: [d_date_sk#27, d_date#28]
+Output [1]: [web_site_sk#27]
+Input [2]: [web_site_sk#27, web_company_name#28]
 
 (55) BroadcastExchange
-Input [1]: [d_date_sk#27]
+Input [1]: [web_site_sk#27]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#29]
 
 (56) BroadcastHashJoin [codegen id : 21]
-Left keys [1]: [ws_ship_date_sk#1]
-Right keys [1]: [d_date_sk#27]
->>>>>>> master
+Left keys [1]: [ws_web_site_sk#3]
+Right keys [1]: [web_site_sk#27]
 Join condition: None
 
 (57) Project [codegen id : 21]
 Output [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]
-<<<<<<< HEAD
-Input [5]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, web_site_sk#25]
-=======
-Input [5]: [ws_ship_date_sk#1, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, d_date_sk#27]
->>>>>>> master
+Input [5]: [ws_web_site_sk#3, ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6, web_site_sk#27]
 
 (58) HashAggregate [codegen id : 21]
 Input [3]: [ws_order_number#4, ws_ext_ship_cost#5, ws_net_profit#6]

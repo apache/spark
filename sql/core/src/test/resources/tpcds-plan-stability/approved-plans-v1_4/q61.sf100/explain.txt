@@ -117,125 +117,67 @@ Join condition: None
 Output [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5]
 Input [7]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, ss_sold_date_sk#6, d_date_sk#8]
 
-<<<<<<< HEAD
 (11) Scan parquet default.promotion
-Output [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
-=======
-(11) Scan parquet default.item
-Output [2]: [i_item_sk#12, i_category#13]
->>>>>>> master
+Output [4]: [p_promo_sk#12, p_channel_dmail#13, p_channel_email#14, p_channel_tv#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/promotion]
 PushedFilters: [Or(Or(EqualTo(p_channel_dmail,Y),EqualTo(p_channel_email,Y)),EqualTo(p_channel_tv,Y)), IsNotNull(p_promo_sk)]
 ReadSchema: struct<p_promo_sk:int,p_channel_dmail:string,p_channel_email:string,p_channel_tv:string>
 
 (12) ColumnarToRow [codegen id : 2]
-<<<<<<< HEAD
-Input [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
+Input [4]: [p_promo_sk#12, p_channel_dmail#13, p_channel_email#14, p_channel_tv#15]
 
 (13) Filter [codegen id : 2]
-Input [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
-Condition : ((((p_channel_dmail#12 = Y) OR (p_channel_email#13 = Y)) OR (p_channel_tv#14 = Y)) AND isnotnull(p_promo_sk#11))
+Input [4]: [p_promo_sk#12, p_channel_dmail#13, p_channel_email#14, p_channel_tv#15]
+Condition : ((((p_channel_dmail#13 = Y) OR (p_channel_email#14 = Y)) OR (p_channel_tv#15 = Y)) AND isnotnull(p_promo_sk#12))
 
 (14) Project [codegen id : 2]
-Output [1]: [p_promo_sk#11]
-Input [4]: [p_promo_sk#11, p_channel_dmail#12, p_channel_email#13, p_channel_tv#14]
+Output [1]: [p_promo_sk#12]
+Input [4]: [p_promo_sk#12, p_channel_dmail#13, p_channel_email#14, p_channel_tv#15]
 
 (15) BroadcastExchange
-Input [1]: [p_promo_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+Input [1]: [p_promo_sk#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#16]
 
 (16) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_promo_sk#5]
-Right keys [1]: [p_promo_sk#11]
+Left keys [1]: [ss_promo_sk#4]
+Right keys [1]: [p_promo_sk#12]
 Join condition: None
 
 (17) Project [codegen id : 7]
-Output [4]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
-Input [6]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_promo_sk#5, ss_ext_sales_price#6, p_promo_sk#11]
+Output [4]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5]
+Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, p_promo_sk#12]
 
 (18) Scan parquet default.item
-Output [2]: [i_item_sk#16, i_category#17]
-=======
-Input [2]: [i_item_sk#12, i_category#13]
-
-(13) Filter [codegen id : 2]
-Input [2]: [i_item_sk#12, i_category#13]
-Condition : ((isnotnull(i_category#13) AND (i_category#13 = Jewelry)) AND isnotnull(i_item_sk#12))
-
-(14) Project [codegen id : 2]
-Output [1]: [i_item_sk#12]
-Input [2]: [i_item_sk#12, i_category#13]
-
-(15) BroadcastExchange
-Input [1]: [i_item_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
-
-(16) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_item_sk#1]
-Right keys [1]: [i_item_sk#12]
-Join condition: None
-
-(17) Project [codegen id : 7]
-Output [4]: [ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5]
-Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, i_item_sk#12]
-
-(18) Scan parquet default.promotion
-Output [4]: [p_promo_sk#15, p_channel_dmail#16, p_channel_email#17, p_channel_tv#18]
->>>>>>> master
+Output [2]: [i_item_sk#17, i_category#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
 PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Jewelry), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_category:string>
 
 (19) ColumnarToRow [codegen id : 3]
-<<<<<<< HEAD
-Input [2]: [i_item_sk#16, i_category#17]
+Input [2]: [i_item_sk#17, i_category#18]
 
 (20) Filter [codegen id : 3]
-Input [2]: [i_item_sk#16, i_category#17]
-Condition : ((isnotnull(i_category#17) AND (i_category#17 = Jewelry)) AND isnotnull(i_item_sk#16))
+Input [2]: [i_item_sk#17, i_category#18]
+Condition : ((isnotnull(i_category#18) AND (i_category#18 = Jewelry)) AND isnotnull(i_item_sk#17))
 
 (21) Project [codegen id : 3]
-Output [1]: [i_item_sk#16]
-Input [2]: [i_item_sk#16, i_category#17]
+Output [1]: [i_item_sk#17]
+Input [2]: [i_item_sk#17, i_category#18]
 
 (22) BroadcastExchange
-Input [1]: [i_item_sk#16]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
-
-(23) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_item_sk#2]
-Right keys [1]: [i_item_sk#16]
-Join condition: None
-
-(24) Project [codegen id : 7]
-Output [3]: [ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
-Input [5]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, i_item_sk#16]
-=======
-Input [4]: [p_promo_sk#15, p_channel_dmail#16, p_channel_email#17, p_channel_tv#18]
-
-(20) Filter [codegen id : 3]
-Input [4]: [p_promo_sk#15, p_channel_dmail#16, p_channel_email#17, p_channel_tv#18]
-Condition : ((((p_channel_dmail#16 = Y) OR (p_channel_email#17 = Y)) OR (p_channel_tv#18 = Y)) AND isnotnull(p_promo_sk#15))
-
-(21) Project [codegen id : 3]
-Output [1]: [p_promo_sk#15]
-Input [4]: [p_promo_sk#15, p_channel_dmail#16, p_channel_email#17, p_channel_tv#18]
-
-(22) BroadcastExchange
-Input [1]: [p_promo_sk#15]
+Input [1]: [i_item_sk#17]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
 
 (23) BroadcastHashJoin [codegen id : 7]
-Left keys [1]: [ss_promo_sk#4]
-Right keys [1]: [p_promo_sk#15]
+Left keys [1]: [ss_item_sk#1]
+Right keys [1]: [i_item_sk#17]
 Join condition: None
 
 (24) Project [codegen id : 7]
 Output [3]: [ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5]
-Input [5]: [ss_customer_sk#2, ss_store_sk#3, ss_promo_sk#4, ss_ext_sales_price#5, p_promo_sk#15]
->>>>>>> master
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5, i_item_sk#17]
 
 (25) Scan parquet default.store
 Output [2]: [s_store_sk#20, s_gmt_offset#21]
@@ -371,31 +313,17 @@ Join condition: None
 Output [4]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5]
 Input [6]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5, ss_sold_date_sk#6, d_date_sk#8]
 
-<<<<<<< HEAD
 (54) ReusedExchange [Reuses operator id: 22]
-Output [1]: [i_item_sk#16]
-
-(55) BroadcastHashJoin [codegen id : 14]
-Left keys [1]: [ss_item_sk#2]
-Right keys [1]: [i_item_sk#16]
-Join condition: None
-
-(56) Project [codegen id : 14]
-Output [3]: [ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6]
-Input [5]: [ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ext_sales_price#6, i_item_sk#16]
-=======
-(54) ReusedExchange [Reuses operator id: 15]
-Output [1]: [i_item_sk#12]
+Output [1]: [i_item_sk#17]
 
 (55) BroadcastHashJoin [codegen id : 14]
 Left keys [1]: [ss_item_sk#1]
-Right keys [1]: [i_item_sk#12]
+Right keys [1]: [i_item_sk#17]
 Join condition: None
 
 (56) Project [codegen id : 14]
 Output [3]: [ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5]
-Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5, i_item_sk#12]
->>>>>>> master
+Input [5]: [ss_item_sk#1, ss_customer_sk#2, ss_store_sk#3, ss_ext_sales_price#5, i_item_sk#17]
 
 (57) ReusedExchange [Reuses operator id: 29]
 Output [1]: [s_store_sk#20]
