@@ -825,11 +825,9 @@ case class DescribeColumnCommand(
 case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String],
-    attributes: Seq[Attribute] = Seq.empty,
+    override val output: Seq[Attribute] = Seq.empty,
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
-
-  override val output: Seq[Attribute] = attributes
 
   override def producedAttributes: AttributeSet = outputSet
 
