@@ -145,16 +145,16 @@ class AvroDeserializer(rootAvroType: Schema, rootCatalystType: DataType) {
         }
         updater.set(ordinal, bytes)
 
-      case (FIXED, d: DecimalType) => (updater, ordinal, value) =>
-        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType,
-          LogicalTypes.decimal(d.precision, d.scale))
-        val decimal = createDecimal(bigDecimal, d.precision, d.scale)
+      case (FIXED, _: DecimalType) => (updater, ordinal, value) =>
+        val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
+        val bigDecimal = decimalConversions.fromFixed(value.asInstanceOf[GenericFixed], avroType, d)
+        val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
         updater.setDecimal(ordinal, decimal)
 
-      case (BYTES, d: DecimalType) => (updater, ordinal, value) =>
-        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType,
-          LogicalTypes.decimal(d.precision, d.scale))
-        val decimal = createDecimal(bigDecimal, d.precision, d.scale)
+      case (BYTES, _: DecimalType) => (updater, ordinal, value) =>
+        val d = avroType.getLogicalType.asInstanceOf[LogicalTypes.Decimal]
+        val bigDecimal = decimalConversions.fromBytes(value.asInstanceOf[ByteBuffer], avroType, d)
+        val decimal = createDecimal(bigDecimal, d.getPrecision, d.getScale)
         updater.setDecimal(ordinal, decimal)
 
       case (RECORD, st: StructType) =>
