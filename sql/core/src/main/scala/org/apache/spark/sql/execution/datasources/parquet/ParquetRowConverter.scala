@@ -268,26 +268,26 @@ private[parquet] class ParquetRowConverter(
         }
 
       // For INT32 backed decimals
-      case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
+      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
         val metadata = parquetType.asPrimitiveType().getDecimalMetadata
-        val precision = metadata.getPrecision()
-        val scale = metadata.getScale()
+        val precision = if (metadata == null) t.precision else metadata.getPrecision()
+        val scale = if (metadata == null) t.scale else metadata.getScale()
         new ParquetIntDictionaryAwareDecimalConverter(precision, scale, updater)
 
       // For INT64 backed decimals
-      case _: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
+      case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
         val metadata = parquetType.asPrimitiveType().getDecimalMetadata
-        val precision = metadata.getPrecision()
-        val scale = metadata.getScale()
+        val precision = if (metadata == null) t.precision else metadata.getPrecision()
+        val scale = if (metadata == null) t.scale else metadata.getScale()
         new ParquetLongDictionaryAwareDecimalConverter(precision, scale, updater)
 
       // For BINARY and FIXED_LEN_BYTE_ARRAY backed decimals
-      case _: DecimalType
+      case t: DecimalType
         if parquetType.asPrimitiveType().getPrimitiveTypeName == FIXED_LEN_BYTE_ARRAY ||
            parquetType.asPrimitiveType().getPrimitiveTypeName == BINARY =>
         val metadata = parquetType.asPrimitiveType().getDecimalMetadata
-        val precision = metadata.getPrecision()
-        val scale = metadata.getScale()
+        val precision = if (metadata == null) t.precision else metadata.getPrecision()
+        val scale = if (metadata == null) t.scale else metadata.getScale()
         new ParquetBinaryDictionaryAwareDecimalConverter(precision, scale, updater)
 
       case t: DecimalType =>
