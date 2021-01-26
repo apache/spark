@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.functions.col
 
 /**
  * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1
@@ -124,6 +125,24 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         s"SHOW PARTITIONS $t",
         Row("part=__HIVE_DEFAULT_PARTITION__") :: Nil)
       checkAnswer(spark.table(t), Row(0, null) :: Row(1, null) :: Nil)
+    }
+  }
+
+  test("SPARK-34238 Unify output of SHOW PARTITIONS and pass output attributes properly") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      sql(s"USE $catalog.ns")
+      withTable("tbl") {
+        sql("CREATE TABLE tbl(col1 int, p1 string) USING PARQUET PARTITIONED BY (p1)")
+        sql("INSERT INTO TABLE tbl PARTITION (p1 = 'part1') SELECT 0")
+        sql(s"show partitions $catalog.ns.tbl").explain(true)
+        checkAnswer(sql(s"show partitions $catalog.ns.tbl"), Row("p1=part1"))
+        checkAnswer(sql(s"show partitions $catalog.ns.tbl PARTITION (p1 = 'part1')"),
+          Row("p1=part1"))
+        checkAnswer(sql(s"show partitions $catalog.ns.tbl")
+          .select(col("partition")),
+          Row("p1=part1"))
+      }
     }
   }
 }
