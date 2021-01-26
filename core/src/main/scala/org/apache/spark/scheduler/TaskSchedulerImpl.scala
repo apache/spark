@@ -688,7 +688,6 @@ private[spark] class TaskSchedulerImpl(
               // re-add the task to the schedule pending list
               taskSet.addPendingTask(task.index)
             }
-            taskSet.currentLocalityIndex = 0
           } else {
             // All tasks are able to launch in this barrier task set. Let's do
             // some preparation work before launching them.
