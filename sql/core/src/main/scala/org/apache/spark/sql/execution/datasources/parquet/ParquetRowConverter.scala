@@ -243,6 +243,19 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
+   * Get a precision and a scale to interpret parquet decimal values.
+   * 1. If there is a decimal metadata, we read decimal values with the given precision and scale.
+   * 2. If there is no metadata, we read decimal values with scale `0` because it's plain integers
+   *    when it is written into INT32/INT64/BINARY/FIXED_LEN_BYTE_ARRAY types.
+   */
+  private def getPrecisionAndScale(parquetType: Type, t: DecimalType): (Int, Int) = {
+    val metadata = parquetType.asPrimitiveType().getDecimalMetadata
+    val precision = if (metadata == null) t.precision else metadata.getPrecision()
+    val scale = if (metadata == null) 0 else metadata.getScale()
+    (precision, scale)
+  }
+
+  /**
    * Creates a converter for the given Parquet type `parquetType` and Spark SQL data type
    * `catalystType`. Converted values are handled by `updater`.
    */
@@ -269,17 +282,20 @@ private[parquet] class ParquetRowConverter(
 
       // For INT32 backed decimals
       case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 =>
-        new ParquetIntDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val (precision, scale) = getPrecisionAndScale(parquetType, t)
+        new ParquetIntDictionaryAwareDecimalConverter(precision, scale, updater)
 
       // For INT64 backed decimals
       case t: DecimalType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT64 =>
-        new ParquetLongDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val (precision, scale) = getPrecisionAndScale(parquetType, t)
+        new ParquetLongDictionaryAwareDecimalConverter(precision, scale, updater)
 
       // For BINARY and FIXED_LEN_BYTE_ARRAY backed decimals
       case t: DecimalType
         if parquetType.asPrimitiveType().getPrimitiveTypeName == FIXED_LEN_BYTE_ARRAY ||
            parquetType.asPrimitiveType().getPrimitiveTypeName == BINARY =>
-        new ParquetBinaryDictionaryAwareDecimalConverter(t.precision, t.scale, updater)
+        val (precision, scale) = getPrecisionAndScale(parquetType, t)
+        new ParquetBinaryDictionaryAwareDecimalConverter(precision, scale, updater)
 
       case t: DecimalType =>
         throw new RuntimeException(
