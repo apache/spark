@@ -3051,6 +3051,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val ENABLE_GET_PARTITION_BYNAMES =
+    buildConf("spark.sql.partitionFilter.enableGetPartitionByNames")
+      .doc("When set to true, spark sql will use get partition by name interface to filter partition.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3710,6 +3717,8 @@ class SQLConf extends Serializable with Logging {
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 
   def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
+
+  def enableGetPartitionsByNames: Boolean = getConf(ENABLE_GET_PARTITION_BYNAMES)
 
   /** ********************** SQLConf functionality methods ************ */
 

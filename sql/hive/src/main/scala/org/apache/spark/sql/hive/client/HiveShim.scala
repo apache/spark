@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
-import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
+import java.util.{ArrayList => JArrayList, LinkedHashMap => JLinkedHashMap, List => JList, Locale, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.metastore.TableType
+import org.apache.hadoop.hive.metastore.Warehouse
 import org.apache.hadoop.hive.metastore.api.{Database, EnvironmentContext, Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.io.AcidUtils
@@ -509,6 +510,12 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       "getPartitionsByFilter",
       classOf[Table],
       classOf[String])
+  private lazy val getPartitionsByNamesMethod =
+    findMethod(
+      classOf[Hive],
+      "getPartitionsByNames",
+      classOf[Table],
+      classOf[JList[String]])
   private lazy val getCommandProcessorMethod =
     findStaticMethod(
       classOf[CommandProcessorFactory],
@@ -826,6 +833,41 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     filters.flatMap(convert).mkString(" and ")
   }
 
+  private def convertPartitionNames(hive: Hive, table: Table,
+                                    filters: Seq[Expression]): Seq[String] = {
+
+    val partitionNames: Set[JLinkedHashMap[String, String]] =
+      hive.getPartitionNames(table.getDbName, table.getTableName, -1).asScala.map {
+        partitionName =>
+          Warehouse.makeSpecFromName(partitionName)
+      }.toSet
+
+    def calcPredicate(predicate: Expression): Seq[String] = {
+      val filterPartNames = partitionNames.filter {
+        partName =>
+          predicate.transform {
+            case child if child.isInstanceOf[AttributeReference] =>
+              Literal(partName.get(child.asInstanceOf[AttributeReference].name))
+            case other => other
+          }.eval().asInstanceOf[Boolean]
+      }
+      filterPartNames.map{
+        partName =>
+          Warehouse.makePartName(partName, false)
+      }.toSeq
+    }
+
+    def convert(expr: Expression): Seq[String] = {
+      calcPredicate(expr)
+    }
+    if (filters.forall(_.isInstanceOf[Predicate])) {
+      filters.flatMap(convert).distinct
+    } else {
+      throw new RuntimeException(s"all filters must be predicate," +
+        s" not predicate filters ${filters.filter(!_.isInstanceOf[Predicate]).mkString(",")}")
+    }
+  }
+
   private def quoteStringLiteral(str: String): String = {
     if (!str.contains("\"")) {
       s""""$str""""
@@ -843,11 +885,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       predicates: Seq[Expression],
       timeZoneId: String): Seq[Partition] = {
 
-    // Hive getPartitionsByFilter() takes a string that represents partition
-    // predicates like "str_key=\"value\" and int_key=1 ..."
-    val filter = convertFilters(table, predicates, timeZoneId)
+    val partitions = if (SQLConf.get.enableGetPartitionsByNames) {
+      // Hive getPartitionsByFilter() takes a string that represents partition
+      // predicates like "str_key=\"value\" and int_key=1 ..."
+      val filter = convertFilters(table, predicates, timeZoneId)
 
-    val partitions =
       if (filter.isEmpty) {
         getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
       } else {
@@ -866,7 +908,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              !tryDirectSql =>
+            !tryDirectSql =>
             logWarning("Caught Hive MetaException attempting to get partition metadata by " +
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
@@ -874,7 +916,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
             // HiveShim clients are expected to handle a superset of the requested partitions
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              tryDirectSql =>
+            tryDirectSql =>
             throw new RuntimeException("Caught Hive MetaException attempting to get partition " +
               "metadata by filter from Hive. You can set the Spark configuration setting " +
               s"${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around this " +
@@ -882,6 +924,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               "https://issues.apache.org/jira/browse/SPARK", ex)
         }
       }
+    } else {
+      val partitionNames = convertPartitionNames(hive, table, predicates)
+      getPartitionsByNamesMethod.invoke(hive, table, partitionNames)
+        .asInstanceOf[JSet[Partition]]
+    }
 
     partitions.asScala.toSeq
   }
