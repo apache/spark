@@ -17,10 +17,12 @@ TakeOrderedAndProject [ext_price,brand_id,brand]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
-                      Filter [ss_sold_date_sk,ss_item_sk]
+                      Filter [ss_item_sk]
                         ColumnarToRow
                           InputAdapter
-                            Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_ext_sales_price]
+                            Scan parquet default.store_sales [ss_item_sk,ss_ext_sales_price,ss_sold_date_sk]
+                              SubqueryBroadcast [d_date_sk] #1
+                                ReusedExchange [d_date_sk] #2
                   InputAdapter
                     BroadcastExchange #3
                       WholeStageCodegen (2)

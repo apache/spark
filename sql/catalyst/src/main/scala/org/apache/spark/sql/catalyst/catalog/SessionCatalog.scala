@@ -877,11 +877,24 @@ class SessionCatalog(
     }
   }
 
-  // TODO: merge it with `isTemporaryTable`.
+  /**
+   * Return whether the given name parts belong to a temporary or global temporary view.
+   */
   def isTempView(nameParts: Seq[String]): Boolean = {
     if (nameParts.length > 2) return false
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    isTemporaryTable(nameParts.asTableIdentifier)
+    isTempView(nameParts.asTableIdentifier)
+  }
+
+  private def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
+    val tableName = formatTableName(name.table)
+    if (name.database.isEmpty) {
+      tempViews.get(tableName)
+    } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
+      globalTempViewManager.get(tableName)
+    } else {
+      None
+    }
   }
 
   /**
@@ -890,15 +903,8 @@ class SessionCatalog(
    * Note: The temporary view cache is checked only when database is not
    * explicitly specified.
    */
-  def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
-    val table = formatTableName(name.table)
-    if (name.database.isEmpty) {
-      tempViews.contains(table)
-    } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(table).isDefined
-    } else {
-      false
-    }
+  def isTempView(name: TableIdentifier): Boolean = synchronized {
+    lookupTempView(name).isDefined
   }
 
   def isView(nameParts: Seq[String]): Boolean = {
@@ -995,21 +1001,12 @@ class SessionCatalog(
    * Refresh the cache entry for a metastore table, if any.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
-    val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
-    val tableName = formatTableName(name.table)
-
-    // Go through temporary views and invalidate them.
-    // If the database is defined, this may be a global temporary view.
-    // If the database is not defined, there is a good chance this is a temp view.
-    if (name.database.isEmpty) {
-      tempViews.get(tableName).foreach(_.refresh())
-    } else if (dbName == globalTempViewManager.database) {
-      globalTempViewManager.get(tableName).foreach(_.refresh())
+    lookupTempView(name).map(_.refresh).getOrElse {
+      val dbName = formatDatabaseName(name.database.getOrElse(currentDb))
+      val tableName = formatTableName(name.table)
+      val qualifiedTableName = QualifiedTableName(dbName, tableName)
+      tableRelationCache.invalidate(qualifiedTableName)
     }
-
-    // Also invalidate the table relation cache.
-    val qualifiedTableName = QualifiedTableName(dbName, tableName)
-    tableRelationCache.invalidate(qualifiedTableName)
   }
 
   /**

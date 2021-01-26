@@ -28,6 +28,8 @@ import org.apache.spark.annotation.DeveloperApi
  * If an off-heap access exists in the parent iterator, it could cause segmentation fault
  * which crashes the executor.
  * Thus, we should use [[ContextAwareIterator]] to stop consuming after the task ends.
+ *
+ * @since 3.1.0
  */
 @DeveloperApi
 class ContextAwareIterator[+T](val context: TaskContext, val delegate: Iterator[T])

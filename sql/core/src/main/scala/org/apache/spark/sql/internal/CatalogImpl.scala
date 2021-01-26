@@ -115,7 +115,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     } catch {
       case NonFatal(_) => None
     }
-    val isTemp = sessionCatalog.isTemporaryTable(tableIdent)
+    val isTemp = sessionCatalog.isTempView(tableIdent)
     new Table(
       name = tableIdent.table,
       database = metadata.map(_.identifier.database).getOrElse(tableIdent.database).orNull,
@@ -257,7 +257,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def tableExists(dbName: String, tableName: String): Boolean = {
     val tableIdent = TableIdentifier(tableName, Option(dbName))
-    sessionCatalog.isTemporaryTable(tableIdent) || sessionCatalog.tableExists(tableIdent)
+    sessionCatalog.isTempView(tableIdent) || sessionCatalog.tableExists(tableIdent)
   }
 
   /**
@@ -490,7 +490,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   override def uncacheTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !sessionCatalog.isTemporaryTable(tableIdent)
+    val cascade = !sessionCatalog.isTempView(tableIdent)
     sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName), cascade)
   }
 
@@ -535,7 +535,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
     // Temporary and global temporary views are not supposed to be put into the relation cache
     // since they are tracked separately.
-    if (!sessionCatalog.isTemporaryTable(tableIdent)) {
+    if (!sessionCatalog.isTempView(tableIdent)) {
       sessionCatalog.invalidateCachedTable(tableIdent)
     }
 

@@ -114,16 +114,10 @@ if [[ $SPARK_VERSION > "2.3" ]]; then
   BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
 fi
 
-# TODO: revisit for Scala 2.13
-
-PUBLISH_SCALA_2_11=1
-SCALA_2_11_PROFILES="-Pscala-2.11"
-if [[ $SPARK_VERSION > "2.3" ]]; then
-  if [[ $SPARK_VERSION < "3.0." ]]; then
-    SCALA_2_11_PROFILES="-Pkafka-0-8 -Pflume $SCALA_2_11_PROFILES"
-  else
-    PUBLISH_SCALA_2_11=0
-  fi
+PUBLISH_SCALA_2_13=1
+SCALA_2_13_PROFILES="-Pscala-2.13"
+if [[ $SPARK_VERSION < "3.2" ]]; then
+  PUBLISH_SCALA_2_13=0
 fi
 
 PUBLISH_SCALA_2_12=0
@@ -291,11 +285,11 @@ if [[ "$1" == "package" ]]; then
   declare -A BINARY_PKGS_EXTRA
   BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
 
-  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
-    key="without-hadoop-scala-2.11"
-    args="-Phadoop-provided"
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    key="hadoop3.2-scala2.13"
+    args="-Phadoop-3.2 $HIVE_PROFILES"
     extra=""
-    if ! make_binary_release "$key" "$SCALA_2_11_PROFILES $args" "$extra" "2.11"; then
+    if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
       error "Failed to build $key package. Check logs for details."
     fi
   fi
@@ -380,10 +374,15 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
-  # Generate random point for Zinc
+  # Generate random port for Zinc
   export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.13
+    $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+  fi
 
   rm $tmp_settings
   cd ..
@@ -412,21 +411,19 @@ if [[ "$1" == "publish-release" ]]; then
 
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
-  # Generate random point for Zinc
+  # Generate random port for Zinc
   export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
-  # TODO: revisit for Scala 2.13 support
-
-  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.11
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.13
     $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+      $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
     $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+      $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   pushd $tmp_repo/org/apache/spark

@@ -78,7 +78,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       case unresolvedPartSpec: UnresolvedPartitionSpec =>
         val normalizedSpec = normalizePartitionSpec(
           unresolvedPartSpec.spec,
-          partSchema.map(_.name),
+          partSchema,
           tableName,
           conf.resolver)
         checkSpec(normalizedSpec)
