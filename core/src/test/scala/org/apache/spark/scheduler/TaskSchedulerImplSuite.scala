@@ -223,8 +223,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(!failedTaskSet)
   }
 
-  private def setupTaskSchedulerForLocalityTests(clock: ManualClock): TaskSchedulerImpl = {
-    val conf = new SparkConf()
+  private def setupTaskSchedulerForLocalityTests(
+      clock: ManualClock,
+      conf: SparkConf = new SparkConf()): TaskSchedulerImpl = {
     sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc,
       sc.conf.get(config.TASK_MAX_FAILURES),
@@ -1921,7 +1922,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("SPARK-24818: test delay scheduling for barrier TaskSetManager") {
     val clock = new ManualClock()
-    val sched = setupTaskSchedulerForLocalityTests(clock)
+    val conf = new SparkConf().set(config.LEGACY_LOCALITY_WAIT_RESET, false)
+    val sched = setupTaskSchedulerForLocalityTests(clock, conf)
 
     // Call resourceOffers() first, so executor-0 can be used
     // to calculate the locality levels of the TaskSetManager later
@@ -1948,7 +1950,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
   test("SPARK-24818: test resource revert of barrier TaskSetManager") {
     val clock = new ManualClock()
-    val sched = setupTaskSchedulerForLocalityTests(clock)
+    val conf = new SparkConf().set(config.LEGACY_LOCALITY_WAIT_RESET, false)
+    val sched = setupTaskSchedulerForLocalityTests(clock, conf)
 
     // Call resourceOffers() first, so executors can be used
     // to calculate the locality levels of the TaskSetManager later
