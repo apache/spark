@@ -3878,8 +3878,10 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       df.write.parquet(path.toString)
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val schema = "a DECIMAL(3, 2), b DECIMAL(18, 3)"
-        checkAnswer(spark.read.schema(schema).parquet(path.toString), df.select("a", "b"))
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(spark.read.schema(schema1).parquet(path.toString), df)
+        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
+        checkAnswer(spark.read.schema(schema2).parquet(path.toString), Row(1, 1.2, 1.2))
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
@@ -3901,7 +3903,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
 
     withTempPath { path =>
-      sql("SELECT 1 a").write.parquet(path.toString)
+      val df2 = sql(s"SELECT 1 a, ${Int.MaxValue + 1L} b, CAST(2 AS BINARY) c")
+      df2.write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val schema = "a DECIMAL(3, 2), b DECIMAL(17, 2), c DECIMAL(36, 2)"
+        checkAnswer(spark.read.schema(schema).parquet(path.toString),
+          Row(BigDecimal(100, 2), BigDecimal((Int.MaxValue + 1L) * 100, 2), BigDecimal(200, 2)))
+      }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
         val e = intercept[SparkException] {
