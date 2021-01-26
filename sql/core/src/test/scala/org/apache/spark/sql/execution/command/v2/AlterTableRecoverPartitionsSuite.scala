@@ -15,20 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.command
 
-class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
-  test("ALTER TABLE RECOVER PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
+/**
+ * The class contains tests for the `ALTER TABLE .. RECOVER PARTITIONS` command
+ * to check V2 table catalogs.
+ */
+class AlterTableRecoverPartitionsSuite
+  extends command.AlterTableRecoverPartitionsSuiteBase
+  with CommandSuiteBase {
+
+  test("partition recovering of v2 tables is not supported") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
+      val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }
-      assert(e.message.contains(
-        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables."))
+      }.getMessage
+      assert(errMsg.contains("ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables"))
     }
   }
 }

@@ -22,10 +22,11 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                   WholeStageCodegen (2)
                                     Project [ss_customer_sk]
                                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                        Filter [ss_sold_date_sk]
-                                          ColumnarToRow
-                                            InputAdapter
-                                              Scan parquet default.store_sales [ss_sold_date_sk,ss_customer_sk]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.store_sales [ss_customer_sk,ss_sold_date_sk]
+                                              SubqueryBroadcast [d_date_sk] #1
+                                                ReusedExchange [d_date_sk] #3
                                         InputAdapter
                                           BroadcastExchange #3
                                             WholeStageCodegen (1)
@@ -39,10 +40,10 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                 WholeStageCodegen (4)
                                   Project [ws_bill_customer_sk]
                                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                      Filter [ws_sold_date_sk]
-                                        ColumnarToRow
-                                          InputAdapter
-                                            Scan parquet default.web_sales [ws_sold_date_sk,ws_bill_customer_sk]
+                                      ColumnarToRow
+                                        InputAdapter
+                                          Scan parquet default.web_sales [ws_bill_customer_sk,ws_sold_date_sk]
+                                            ReusedSubquery [d_date_sk] #1
                                       InputAdapter
                                         ReusedExchange [d_date_sk] #3
                           InputAdapter
@@ -50,10 +51,10 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                               WholeStageCodegen (6)
                                 Project [cs_ship_customer_sk]
                                   BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                    Filter [cs_sold_date_sk]
-                                      ColumnarToRow
-                                        InputAdapter
-                                          Scan parquet default.catalog_sales [cs_sold_date_sk,cs_ship_customer_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.catalog_sales [cs_ship_customer_sk,cs_sold_date_sk]
+                                          ReusedSubquery [d_date_sk] #1
                                     InputAdapter
                                       ReusedExchange [d_date_sk] #3
                       InputAdapter

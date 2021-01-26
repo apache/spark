@@ -122,9 +122,10 @@ trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
           sql(s"SELECT * FROM $view"),
           spark.table("source").select("id").collect())
 
-        assert(!spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        val oldTable = spark.table(view)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isDefined)
         sql(s"DROP TABLE $t")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(oldTable).isEmpty)
       }
     }
   }

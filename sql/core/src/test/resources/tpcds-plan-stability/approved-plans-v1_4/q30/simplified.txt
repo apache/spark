@@ -16,10 +16,12 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                               BroadcastHashJoin [wr_returning_addr_sk,ca_address_sk]
                                 Project [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt]
                                   BroadcastHashJoin [wr_returned_date_sk,d_date_sk]
-                                    Filter [wr_returned_date_sk,wr_returning_addr_sk,wr_returning_customer_sk]
+                                    Filter [wr_returning_addr_sk,wr_returning_customer_sk]
                                       ColumnarToRow
                                         InputAdapter
-                                          Scan parquet default.web_returns [wr_returned_date_sk,wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt]
+                                          Scan parquet default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
+                                            SubqueryBroadcast [d_date_sk] #1
+                                              ReusedExchange [d_date_sk] #2
                                     InputAdapter
                                       BroadcastExchange #2
                                         WholeStageCodegen (1)
@@ -53,10 +55,11 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                               BroadcastHashJoin [wr_returning_addr_sk,ca_address_sk]
                                                 Project [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt]
                                                   BroadcastHashJoin [wr_returned_date_sk,d_date_sk]
-                                                    Filter [wr_returned_date_sk,wr_returning_addr_sk]
+                                                    Filter [wr_returning_addr_sk]
                                                       ColumnarToRow
                                                         InputAdapter
-                                                          Scan parquet default.web_returns [wr_returned_date_sk,wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt]
+                                                          Scan parquet default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
+                                                            ReusedSubquery [d_date_sk] #1
                                                     InputAdapter
                                                       ReusedExchange [d_date_sk] #2
                                                 InputAdapter

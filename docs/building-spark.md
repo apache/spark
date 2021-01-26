@@ -83,9 +83,9 @@ Example:
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 2.3.7.
+By default Spark will build with Hive 2.3.8.
 
-    # With Hive 2.3.7 support
+    # With Hive 2.3.8 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN

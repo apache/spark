@@ -19,16 +19,18 @@ TakeOrderedAndProject [cnt,ca_state,state]
                                     BroadcastHashJoin [ss_item_sk,i_item_sk]
                                       Project [ss_item_sk,ss_customer_sk]
                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                          Filter [ss_customer_sk,ss_sold_date_sk,ss_item_sk]
+                                          Filter [ss_customer_sk,ss_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk]
+                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_sold_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    ReusedExchange [d_date_sk] #3
                                           InputAdapter
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
                                                 Project [d_date_sk]
                                                   Filter [d_month_seq,d_date_sk]
-                                                    Subquery #1
+                                                    Subquery #2
                                                       WholeStageCodegen (2)
                                                         HashAggregate [d_month_seq]
                                                           InputAdapter

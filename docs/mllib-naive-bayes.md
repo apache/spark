@@ -72,16 +72,16 @@ Refer to the [`NaiveBayes` Java docs](api/java/org/apache/spark/mllib/classifica
 </div>
 <div data-lang="python" markdown="1">
 
-[NaiveBayes](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) implements multinomial
+[NaiveBayes](api/python/reference/api/pyspark.mllib.classification.NaiveBayes.html) implements multinomial
 naive Bayes. It takes an RDD of
-[LabeledPoint](api/python/pyspark.mllib.html#pyspark.mllib.regression.LabeledPoint) and an optionally
+[LabeledPoint](api/python/reference/api/pyspark.mllib.regression.LabeledPoint.html) and an optionally
 smoothing parameter `lambda` as input, and output a
-[NaiveBayesModel](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel), which can be
+[NaiveBayesModel](api/python/reference/api/pyspark.mllib.classification.NaiveBayesModel.html), which can be
 used for evaluation and prediction.
 
 Note that the Python API does not yet support model save/load but will in the future.
 
-Refer to the [`NaiveBayes` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayes) and [`NaiveBayesModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.NaiveBayesModel) for more details on the API.
+Refer to the [`NaiveBayes` Python docs](api/python/reference/api/pyspark.mllib.classification.NaiveBayes.html) and [`NaiveBayesModel` Python docs](api/python/reference/api/pyspark.mllib.classification.NaiveBayesModel.html) for more details on the API.
 
 {% include_example python/mllib/naive_bayes_example.py %}
 </div>

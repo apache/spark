@@ -22,6 +22,7 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.tags.DockerTest
 
 /**
@@ -111,21 +112,24 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Date types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 5)
-    assert(types(0).equals("class java.sql.Date"))
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
-    assert(types(3).equals("class java.sql.Timestamp"))
-    assert(types(4).equals("class java.sql.Date"))
-    assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
-    assert(rows(0).getAs[Timestamp](1).equals(Timestamp.valueOf("1970-01-01 13:31:24")))
-    assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
-    assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
-    assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+    withDefaultTimeZone(UTC) {
+      val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
+      val rows = df.collect()
+      assert(rows.length == 1)
+      val types = rows(0).toSeq.map(x => x.getClass.toString)
+      assert(types.length == 5)
+      assert(types(0).equals("class java.sql.Date"))
+      assert(types(1).equals("class java.lang.Integer"))
+      assert(types(2).equals("class java.sql.Timestamp"))
+      assert(types(3).equals("class java.sql.Timestamp"))
+      assert(types(4).equals("class java.sql.Date"))
+      assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
+      assert(
+        rows(0).getAs[Integer](1) === Timestamp.valueOf("1970-01-01 13:31:24").getTime)
+      assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+      assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
+      assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+    }
   }
 
   test("String types") {

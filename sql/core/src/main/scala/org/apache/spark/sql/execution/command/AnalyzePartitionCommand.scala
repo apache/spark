@@ -47,7 +47,7 @@ case class AnalyzePartitionCommand(
 
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val normalizedPartitionSpec =
-      PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionColumnNames,
+      PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionSchema,
         table.identifier.quotedString, conf.resolver)
 
     // Report an error if partition columns in partition specification do not form
