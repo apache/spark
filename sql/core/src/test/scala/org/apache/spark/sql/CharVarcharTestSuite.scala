@@ -472,16 +472,16 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-34233: char type comparison with null values") {
-    val conditions = Seq("c1 = null", "c1 IN ('e', null)", "c1 IN (null)")
+    val conditions = Seq("c = null", "c IN ('e', null)", "c IN (null)")
     withTable("t") {
-      sql(s"CREATE TABLE t(c1 CHAR(2), c2 CHAR(5)) USING $format")
-      sql("INSERT INTO t VALUES ('a', 'a')")
+      sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
       testNullConditions(spark.table("t"), conditions)
     }
 
     withTable("t") {
-      sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 CHAR(5)) USING $format PARTITIONED BY (c1, c2)")
-      sql("INSERT INTO t VALUES (1, 'a', 'a')")
+      sql(s"CREATE TABLE t(i INT, c CHAR(2)) USING $format PARTITIONED BY (c)")
+      sql("INSERT INTO t VALUES (1, 'a')")
       testNullConditions(spark.table("t"), conditions)
     }
   }
