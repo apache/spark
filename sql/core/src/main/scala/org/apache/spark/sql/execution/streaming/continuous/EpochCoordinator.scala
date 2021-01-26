@@ -135,8 +135,8 @@ private[continuous] class EpochCoordinator(
 
   val INSTRUCTION_FOR_FEWER_CORES =
     """
-      |Total %s kafka partitions to read,
-      |but only have %s(executors) * %s(cores per executor) = %s(total cores).
+      |Total %s (kafka partitions) * %s (cpus per task) = %s needed ,
+      |but only have %s (executors) * %s (cores per executor) = %s (total cores).
       |Please increase total number of executor cores to at least %s.
     """.stripMargin
 
@@ -279,12 +279,13 @@ private[continuous] class EpochCoordinator(
   private def checkTotalCores(): Unit = {
     val numExecutors = session.conf.get("spark.executor.instances", "1").toInt
     val coresPerExecutor = session.conf.get("spark.executor.cores", "1").toInt
+    val cpusPerTask = session.conf.get("spark.task.cpus", "1").toInt
     val totalCores = numExecutors * coresPerExecutor
-    logDebug(s"Check total cores $totalCores and kafka partition number $numReaderPartitions")
+    val neededCores = numReaderPartitions * cpusPerTask
     if (totalCores < numReaderPartitions) {
-      throw new IllegalStateException(INSTRUCTION_FOR_FEWER_CORES
-        .format(numReaderPartitions, numExecutors, coresPerExecutor,
-          totalCores, numReaderPartitions))
+      query.stopInNewThread(new IllegalStateException(INSTRUCTION_FOR_FEWER_CORES
+        .format(numReaderPartitions, cpusPerTask, neededCores, numExecutors, coresPerExecutor,
+          totalCores, neededCores)))
     }
   }
 }

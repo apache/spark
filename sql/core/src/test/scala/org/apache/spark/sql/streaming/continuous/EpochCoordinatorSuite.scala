@@ -252,6 +252,11 @@ class EpochCoordinatorSuite
     verifyStoppedWithException("Size of the epoch queue has exceeded its maximum")
   }
 
+  test("SPARK-33274: check total cores is enough for all kafka partitions") {
+    setReaderPartitions(2)
+    verifyStoppedWithException("Please increase total number of executor cores")
+  }
+
   private def setWriterPartitions(numPartitions: Int): Unit = {
     epochCoordinator.askSync[Unit](SetWriterPartitions(numPartitions))
   }
