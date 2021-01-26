@@ -212,8 +212,9 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = {
     import scala.io.Source
-    try {
-      Source.fromURL("https://dist.apache.org/repos/dist/release/spark/").mkString
+    try Utils.tryWithResource(
+      Source.fromURL("https://dist.apache.org/repos/dist/release/spark/")) { source =>
+      source.mkString
         .split("\n")
         .filter(_.contains("""<li><a href="spark-"""))
         .filterNot(_.contains("preview"))

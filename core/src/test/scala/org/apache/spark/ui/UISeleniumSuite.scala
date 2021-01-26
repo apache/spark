@@ -43,6 +43,7 @@ import org.apache.spark.internal.config.{EXECUTOR_HEARTBEAT_INTERVAL, MEMORY_OFF
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 import org.apache.spark.status.config._
+import org.apache.spark.util.Utils
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -679,8 +680,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       rdd.count()
 
       eventually(timeout(5 seconds), interval(100 milliseconds)) {
-        val stage0 = Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
+        val stage0 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=0&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
           "label=&quot;Stage 0&quot;;\n    subgraph "))
         assert(stage0.contains("{\n      label=&quot;parallelize&quot;;\n      " +
@@ -690,8 +691,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
           "2 [label=&quot;MapPartitionsRDD [2]"))
 
-        val stage1 = Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
+        val stage1 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=1&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
           "label=&quot;Stage 1&quot;;\n    subgraph "))
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
@@ -701,8 +702,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
           "5 [label=&quot;MapPartitionsRDD [5]"))
 
-        val stage2 = Source.fromURL(sc.ui.get.webUrl +
-          "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
+        val stage2 = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl +
+          "/stages/stage/?id=2&attempt=0&expandDagViz=true"))(_.mkString)
         assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
           "label=&quot;Stage 2&quot;;\n    subgraph "))
         assert(stage2.contains("{\n      label=&quot;groupBy&quot;;\n      " +

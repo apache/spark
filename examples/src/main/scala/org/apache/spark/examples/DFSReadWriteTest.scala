@@ -23,6 +23,7 @@ import java.io.File
 import scala.io.Source._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.util.Utils
 
 /**
  * Simple test for reading and writing to a distributed
@@ -43,9 +44,7 @@ object DFSReadWriteTest {
   private val NPARAMS = 2
 
   private def readFile(filename: String): List[String] = {
-    val lineIter: Iterator[String] = fromFile(filename).getLines()
-    val lineList: List[String] = lineIter.toList
-    lineList
+    Utils.tryWithResource(fromFile(filename))(_.getLines().toList)
   }
 
   private def printUsage(): Unit = {
