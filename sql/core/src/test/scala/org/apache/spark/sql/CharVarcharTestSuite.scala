@@ -146,7 +146,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("char/varchar with null value for partitioned columns") {
+  test("SPARK-34233: char/varchar with null value for partitioned columns") {
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
         sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
@@ -156,7 +156,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         checkPlainResult(spark.table("t"), typ, null)
         sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
         checkPlainResult(spark.table("t"), typ, null)
-        sql(s"ALTER TABLE t DROP PARTITION(c=null)")
+        sql("ALTER TABLE t DROP PARTITION(c=null)")
         checkAnswer(spark.table("t"), Nil)
       }
     }

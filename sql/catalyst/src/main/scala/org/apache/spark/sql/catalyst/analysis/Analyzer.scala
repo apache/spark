@@ -3960,13 +3960,12 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
               val (nulls, literalChars) =
                 list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
               val literalCharLengths = literalChars.map(_.numChars())
-              val targetLen = literalCharLengths.fold(length)(_ max _)
-
-              val newAttr = addPadding(attr, length, targetLen)
-              val newList = list.zip(literalCharLengths).map {
-                case (lit, charLength) => addPadding(lit, charLength, targetLen)
-              } ++ nulls.map(Literal.create(_, StringType))
-              Some(i.copy(value = newAttr, list = newList))
+              val targetLen = (length +: literalCharLengths).max
+              Some(i.copy(
+                value = addPadding(attr, length, targetLen),
+                list = list.zip(literalCharLengths).map {
+                  case (lit, charLength) => addPadding(lit, charLength, targetLen)
+                } ++ nulls.map(Literal.create(_, StringType))))
             case _ => None
           }.getOrElse(i)
 
