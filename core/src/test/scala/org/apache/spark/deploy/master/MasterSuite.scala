@@ -425,7 +425,7 @@ class MasterSuite extends SparkFunSuite
           (s"$reverseProxyUrl/proxy/worker-")
         System.setProperty("spark.ui.proxyBase", reverseProxyUrl)
         val html = Utils
-          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.mkString("\n"))
+          .tryWithResource(Source.fromURL(s"$masterUrl/"))(_.getLines().mkString("\n"))
         html should include ("Spark Master at spark://")
         verifyStaticResourcesServedByProxy(html, reverseProxyUrl)
         verifyWorkerUI(html, masterUrl, reverseProxyUrl)
