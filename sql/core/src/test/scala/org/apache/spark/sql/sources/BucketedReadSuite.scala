@@ -813,7 +813,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         aggregated.count()
       }
 
-      assert(error.getCause().toString contains "Invalid bucket file")
+      assert(error.toString contains "Invalid bucket file")
     }
   }
 
