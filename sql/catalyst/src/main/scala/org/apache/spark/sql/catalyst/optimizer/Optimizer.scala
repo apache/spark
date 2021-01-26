@@ -358,8 +358,6 @@ object EliminateDistinct extends Rule[LogicalPlan] {
     case _: Min => true
     case _: BitAndAgg => true
     case _: BitOrAgg => true
-    case _: First => true
-    case _: Last => true
     case _: CollectSet => true
     case _ => false
   }

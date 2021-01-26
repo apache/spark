@@ -37,8 +37,6 @@ class EliminateDistinctSuite extends PlanTest {
   Seq(
     Max(_),
     Min(_),
-    First(_, ignoreNulls = true),
-    Last(_, ignoreNulls = true),
     BitAndAgg(_),
     BitOrAgg(_),
     CollectSet(_: Expression)
