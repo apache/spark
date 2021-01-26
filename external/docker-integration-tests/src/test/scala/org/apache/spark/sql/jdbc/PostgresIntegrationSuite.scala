@@ -181,7 +181,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
+    assert(types(2).equals("class java.lang.Integer"))
   }
 
   test("SPARK-22291: Conversion error when transforming array types of " +

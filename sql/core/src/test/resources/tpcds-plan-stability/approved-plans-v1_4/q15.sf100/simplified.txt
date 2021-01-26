@@ -15,10 +15,12 @@ TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
                             WholeStageCodegen (2)
                               Project [cs_bill_customer_sk,cs_sales_price]
                                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                  Filter [cs_bill_customer_sk,cs_sold_date_sk]
+                                  Filter [cs_bill_customer_sk]
                                     ColumnarToRow
                                       InputAdapter
-                                        Scan parquet default.catalog_sales [cs_sold_date_sk,cs_bill_customer_sk,cs_sales_price]
+                                        Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_sales_price,cs_sold_date_sk]
+                                          SubqueryBroadcast [d_date_sk] #1
+                                            ReusedExchange [d_date_sk] #3
                                   InputAdapter
                                     BroadcastExchange #3
                                       WholeStageCodegen (1)

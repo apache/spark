@@ -16,7 +16,9 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import com.google.common.cache.Cache
+import java.util.concurrent.TimeUnit
+
+import com.google.common.cache.CacheBuilder
 import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
@@ -33,17 +35,21 @@ import org.apache.spark.util.Utils
 private[spark] class ExecutorPodsLifecycleManager(
     val conf: SparkConf,
     kubernetesClient: KubernetesClient,
-    snapshotsStore: ExecutorPodsSnapshotsStore,
-    // Use a best-effort to track which executors have been removed already. It's not generally
-    // job-breaking if we remove executors more than once but it's ideal if we make an attempt
-    // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
-    // bounds.
-    removedExecutorsCache: Cache[java.lang.Long, java.lang.Long]) extends Logging {
+    snapshotsStore: ExecutorPodsSnapshotsStore) extends Logging {
 
   import ExecutorPodsLifecycleManager._
 
   private lazy val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
   private lazy val missingPodDetectDelta = conf.get(KUBERNETES_EXECUTOR_MISSING_POD_DETECT_DELTA)
+
+  // Use a best-effort to track which executors have been removed already. It's not generally
+  // job-breaking if we remove executors more than once but it's ideal if we make an attempt
+  // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
+  // bounds.
+  private lazy val removedExecutorsCache =
+    CacheBuilder.newBuilder()
+      .expireAfterWrite(3, TimeUnit.MINUTES)
+      .build[java.lang.Long, java.lang.Long]()
 
   private var lastFullSnapshotTs: Long = 0
 

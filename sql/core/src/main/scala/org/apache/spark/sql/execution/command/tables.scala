@@ -189,7 +189,7 @@ case class AlterTableRenameCommand(
     val catalog = sparkSession.sessionState.catalog
     // If this is a temp view, just rename the view.
     // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
-    if (catalog.isTemporaryTable(oldName)) {
+    if (catalog.isTempView(oldName)) {
       catalog.renameTable(oldName, newName)
     } else {
       val table = catalog.getTableMetadata(oldName)
@@ -309,7 +309,7 @@ case class LoadDataCommand(
     val normalizedSpec = partition.map { spec =>
       PartitioningUtils.normalizePartitionSpec(
         spec,
-        targetTable.partitionColumnNames,
+        targetTable.partitionSchema,
         tableIdentwithDB,
         sparkSession.sessionState.conf.resolver)
     }
@@ -390,8 +390,8 @@ case class LoadDataCommand(
         isSrcLocal = isLocal)
     }
 
-    // Refresh the metadata cache to ensure the data visible to the users
-    catalog.refreshTable(targetTable.identifier)
+    // Refresh the data and metadata cache to ensure the data visible to the users
+    sparkSession.catalog.refreshTable(tableIdentwithDB)
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
@@ -469,7 +469,7 @@ case class TruncateTableCommand(
         val normalizedSpec = partitionSpec.map { spec =>
           PartitioningUtils.normalizePartitionSpec(
             spec,
-            partCols,
+            table.partitionSchema,
             table.identifier.quotedString,
             spark.sessionState.conf.resolver)
         }
@@ -561,16 +561,9 @@ case class TruncateTableCommand(
         }
       }
     }
-    // After deleting the data, invalidate the table to make sure we don't keep around a stale
-    // file relation in the metastore cache.
-    spark.sessionState.refreshTable(tableName.unquotedString)
-    // Also try to drop the contents of the table from the columnar cache
-    try {
-      spark.sharedState.cacheManager.uncacheQuery(spark.table(table.identifier), cascade = true)
-    } catch {
-      case NonFatal(e) =>
-        log.warn(s"Exception when attempting to uncache table $tableIdentWithDB", e)
-    }
+    // After deleting the data, refresh the table to make sure we don't keep around a stale
+    // file relation in the metastore cache and cached table data in the cache manager.
+    spark.catalog.refreshTable(tableIdentWithDB)
 
     if (table.stats.nonEmpty) {
       // empty table after truncation
@@ -627,7 +620,7 @@ case class DescribeTableCommand(
     val result = new ArrayBuffer[Row]
     val catalog = sparkSession.sessionState.catalog
 
-    if (catalog.isTemporaryTable(table)) {
+    if (catalog.isTempView(table)) {
       if (partitionSpec.nonEmpty) {
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
@@ -863,7 +856,7 @@ case class ShowTablesCommand(
       tables.map { tableIdent =>
         val database = tableIdent.database.getOrElse("")
         val tableName = tableIdent.table
-        val isTemp = catalog.isTemporaryTable(tableIdent)
+        val isTemp = catalog.isTempView(tableIdent)
         if (isExtended) {
           val information = catalog.getTempViewOrPermanentTableMetadata(tableIdent).simpleString
           Row(database, tableName, isTemp, s"$information\n")
@@ -883,13 +876,13 @@ case class ShowTablesCommand(
       val tableIdent = table.identifier
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         partitionSpec.get,
-        table.partitionColumnNames,
+        table.partitionSchema,
         tableIdent.quotedString,
         sparkSession.sessionState.conf.resolver)
       val partition = catalog.getPartition(tableIdent, normalizedSpec)
       val database = tableIdent.database.getOrElse("")
       val tableName = tableIdent.table
-      val isTemp = catalog.isTemporaryTable(tableIdent)
+      val isTemp = catalog.isTempView(tableIdent)
       val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
@@ -919,7 +912,7 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (catalog.isTemporaryTable(table)) {
+    if (catalog.isTempView(table)) {
       Seq.empty[Row]
     } else {
       val catalogTable = catalog.getTableMetadata(table)
@@ -1010,7 +1003,7 @@ case class ShowPartitionsCommand(
      */
     val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
-      table.partitionColumnNames,
+      table.partitionSchema,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver))
 
@@ -1112,7 +1105,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    if (catalog.isTemporaryTable(table)) {
+    if (catalog.isTempView(table)) {
       throw new AnalysisException(
         s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {

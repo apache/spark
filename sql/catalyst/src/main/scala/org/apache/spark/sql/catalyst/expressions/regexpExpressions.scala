@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -625,10 +626,10 @@ object RegExpReplace {
 object RegExpExtractBase {
   def checkGroupIndex(groupCount: Int, groupIndex: Int): Unit = {
     if (groupIndex < 0) {
-      throw new IllegalArgumentException("The specified group index cannot be less than zero")
+      throw QueryExecutionErrors.regexGroupIndexLessThanZeroError
     } else if (groupCount < groupIndex) {
-      throw new IllegalArgumentException(
-        s"Regex group count is $groupCount, but the specified group index is $groupIndex")
+      throw QueryExecutionErrors.regexGroupIndexExceedGroupCountError(
+        groupCount, groupIndex)
     }
   }
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.sql.Date
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -79,5 +81,11 @@ class ResolveAliasesSuite extends AnalysisTest {
     checkSubqueryAliasName(
       t1.select(ScalarSubquery(t2.select(EqualTo("b".attr.cast(IntegerType), Literal(1))))),
       "(CAST(b AS INT) = 1)")
+  }
+
+  test("SPARK-34150: Strip Null literal.sql in resolve alias") {
+    checkAliasName(t1.select(Rand(Literal(null))), "rand(NULL)")
+    checkAliasName(t1.select(DateSub(Literal(Date.valueOf("2021-01-18")), Literal(null))),
+      "date_sub(DATE '2021-01-18', NULL)")
   }
 }

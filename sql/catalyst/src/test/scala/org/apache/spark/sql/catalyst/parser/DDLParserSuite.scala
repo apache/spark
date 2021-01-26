@@ -1966,6 +1966,7 @@ class DDLParserSuite extends AnalysisTest {
       CacheTableAsSelect(
         "t",
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
+        "SELECT * FROM testData",
         false,
         Map.empty))
 
@@ -2035,13 +2036,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
-  }
-
-  test("alter table: recover partitions") {
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
-      AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("alter view: add partition (not supported)") {
