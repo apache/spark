@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
@@ -799,7 +798,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"a" / $"d" as "div4",
         $"e" / $"e" as "div5")
 
-      val message = intercept[TreeNodeException[LogicalPlan]] {
+      val message = intercept[AnalysisException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
@@ -961,7 +960,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"a" / $"d" as "div4",
         $"e" / $"e" as "div5")
 
-      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+      val message1 = intercept[AnalysisException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
@@ -971,13 +970,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         try {
           testAnalyzer.execute(plan)
         } catch {
-          case ex: TreeNodeException[_]
+          case ex: AnalysisException
             if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
               fail("analyzer.execute should not reach max iterations.")
         }
       }
 
-      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+      val message2 = intercept[AnalysisException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +

@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
@@ -59,7 +58,7 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
+  protected def getStateInfo: StatefulOperatorStateInfo = {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }

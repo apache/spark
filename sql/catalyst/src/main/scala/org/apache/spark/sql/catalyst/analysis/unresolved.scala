@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.ParserUtils
@@ -35,7 +35,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * resolved.
  */
 class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String)
-  extends TreeNodeException(tree, s"Invalid call to $function on unresolved object", null)
+  extends AnalysisException(s"Invalid call to $function on unresolved object")
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.

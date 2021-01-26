@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.rules
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -169,7 +169,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
            |Once strategy's idempotence is broken for batch ${batch.name}
            |${sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")}
           """.stripMargin
-      throw new TreeNodeException(reOptimized, message, null)
+      throw new AnalysisException(message)
     }
   }
 
@@ -199,7 +199,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
     if (!isPlanIntegral(plan)) {
       val message = "The structural integrity of the input plan is broken in " +
         s"${this.getClass.getName.stripSuffix("$")}."
-      throw new TreeNodeException(plan, message, null)
+      throw new AnalysisException(message)
     }
 
     batches.foreach { batch =>
@@ -232,7 +232,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             if (effective && !isPlanIntegral(result)) {
               val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
                 "the structural integrity of the plan is broken."
-              throw new TreeNodeException(result, message, null)
+              throw new AnalysisException(message)
             }
 
             result
@@ -249,7 +249,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}" +
               s"$endingMsg"
             if (Utils.isTesting || batch.strategy.errorOnExceed) {
-              throw new TreeNodeException(curPlan, message, null)
+              throw new AnalysisException(message)
             } else {
               logWarning(message)
             }
