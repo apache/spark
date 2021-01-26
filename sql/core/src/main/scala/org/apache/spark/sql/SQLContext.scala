@@ -659,6 +659,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sparkSession.table(tableName)
   }
 
+  // Since the output is not specified when constructing ShowTablesCommand in SQLContext.tables,
+  // in order to maintain backward compatibility, the default output is defined here.
+  private val defaultTablesOutput =
+    AttributeReference("namespace", StringType, nullable = false)() ::
+      AttributeReference("tableName", StringType, nullable = false)() ::
+      AttributeReference("isTemporary", BooleanType, nullable = false)() :: Nil
+
   /**
    * Returns a `DataFrame` containing names of existing tables in the current database.
    * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
@@ -668,7 +675,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
+    Dataset.ofRows(sparkSession, ShowTablesCommand(None, None, defaultTablesOutput))
   }
 
   /**
@@ -680,7 +687,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTablesCommand(Some(databaseName), None))
+    Dataset.ofRows(sparkSession, ShowTablesCommand(Some(databaseName), None, defaultTablesOutput))
   }
 
   /**
