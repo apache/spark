@@ -25,17 +25,19 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.internal.config.LEGACY_LOCALITY_WAIT_RESET
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
-  def initLocalClusterSparkContext(numWorker: Int = 4): Unit = {
-    val conf = new SparkConf()
+  def initLocalClusterSparkContext(numWorker: Int = 4, conf: SparkConf = new SparkConf()): Unit = {
+    conf
       // Init local cluster here so each barrier task runs in a separated process, thus `barrier()`
       // call is actually useful.
       .setMaster(s"local-cluster[$numWorker, 1, 1024]")
       .setAppName("test-cluster")
       .set(TEST_NO_STAGE_RETRY, true)
+      .set(LEGACY_LOCALITY_WAIT_RESET, true)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, numWorker, 60000)
   }
@@ -273,8 +275,15 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     testBarrierTaskKilled(interruptOnKill = true)
   }
 
+<<<<<<< HEAD
   test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
     initLocalClusterSparkContext(2)
+=======
+  test("SPARK-31485: barrier stage should fail if only partial tasks are launched " +
+    "under legacy delay scheduling") {
+    val conf = new SparkConf().set(LEGACY_LOCALITY_WAIT_RESET, true)
+    initLocalClusterSparkContext(2, conf)
+>>>>>>> add back SPARK-31485 for legacy delay scheduling
     val id = sc.getExecutorIds().head
     val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
     val dep = new OneToOneDependency[Int](rdd0)
@@ -289,6 +298,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     }.getMessage
     assert(errorMsg.contains("Fail resource offers for barrier stage"))
   }
+<<<<<<< HEAD
 
   test("SPARK-34069: Kill barrier tasks should respect SPARK_JOB_INTERRUPT_ON_CANCEL") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
@@ -332,4 +342,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     // double check we kill task success
     assert(System.currentTimeMillis() - startTime < 5000)
   }
+=======
+>>>>>>> add back SPARK-31485 for legacy delay scheduling
 }
