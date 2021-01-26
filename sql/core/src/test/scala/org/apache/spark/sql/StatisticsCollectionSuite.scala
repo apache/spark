@@ -719,7 +719,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql("CREATE TABLE tbl (c0 int, part int) USING parquet PARTITIONED BY (part)")
         sql("INSERT INTO tbl PARTITION (part=0) SELECT 0")
         sql("INSERT INTO tbl PARTITION (part=1) SELECT 1")
-        sql("ANALYZE TABLE tbl COMPUTE STATISTICS")
         val sizeOfTwoParts = getTableStats("tbl").sizeInBytes
         assert(sizeOfTwoParts > 0)
         sql("TRUNCATE TABLE tbl PARTITION (part=1)")
