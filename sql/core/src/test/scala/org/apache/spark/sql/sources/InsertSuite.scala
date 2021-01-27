@@ -954,14 +954,6 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       assert(msg.contains("cannot resolve '`c3`' given input columns"))
     }
   }
-
-  test("SPARK-34223: static partition with null raise NPE") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
-      sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
-      checkAnswer(spark.table("t"), Row("1", null))
-    }
-  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {
