@@ -381,7 +381,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
 
   if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
     ./dev/change-scala-version.sh 2.13
-    $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+    $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
   fi
 
   rm $tmp_settings
