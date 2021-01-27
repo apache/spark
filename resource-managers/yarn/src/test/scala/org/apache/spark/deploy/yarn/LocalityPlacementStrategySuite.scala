@@ -30,7 +30,7 @@ import org.apache.spark.resource.ResourceProfile
 
 class LocalityPlacementStrategySuite extends SparkFunSuite {
 
-  (1 to 150).foreach(s => test(s"handle large number of containers and tasks (SPARK-18750) $s") {
+  test("handle large number of containers and tasks (SPARK-18750)") {
     // Run the test in a thread with a small stack size, since the original issue
     // surfaced as a StackOverflowError.
     @volatile var error: Throwable = null
@@ -46,7 +46,7 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
     val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 256 * 1024)
     thread.setDaemon(true)
     thread.start()
-    val secondsToWait = 20
+    val secondsToWait = 30
     thread.join(secondsToWait * 1000)
     if (thread.isAlive()) {
       error = new RuntimeException(
@@ -60,7 +60,7 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       error.printStackTrace(new PrintWriter(errors))
       fail(s"Failed with an exception or a timeout at thread join:\n\n$errors")
     }
-  })
+  }
 
   private def runTest(): Unit = {
     val yarnConf = new YarnConfiguration()
