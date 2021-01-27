@@ -206,9 +206,11 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
 
   test("implicit type cast - StringType") {
     val checkedType = StringType
-    checkTypeCasting(checkedType, castableTypes = Seq(StringType))
+    val nonCastableTypes =
+      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    checkTypeCasting(checkedType, castableTypes = allTypes.filterNot(nonCastableTypes.contains))
     shouldNotCast(checkedType, DecimalType)
-    shouldNotCast(checkedType, NumericType)
+    shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
     shouldNotCast(checkedType, IntegralType)
   }
 

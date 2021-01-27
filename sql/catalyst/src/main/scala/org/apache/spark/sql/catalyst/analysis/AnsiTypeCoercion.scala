@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
-import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -76,6 +77,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
     InConversion ::
       WidenSetOperationTypes ::
+      PromoteStringLiterals ::
       DecimalPrecision ::
       FunctionArgumentConversion ::
       ConcatCoercion ::
@@ -159,8 +161,17 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-    implicitCast(e.dataType, expectedType).map { dt =>
-      if (dt == e.dataType) e else Cast(e, dt)
+    (e, expectedType) match {
+      case (_ @ StringType(), a: AtomicType) if e.foldable && a != BooleanType && a != StringType =>
+        Some(Cast(e, a))
+
+      case (_ @ StringType(), NumericType) if e.foldable =>
+        Some(Cast(e, DoubleType))
+
+      case _ =>
+        implicitCast(e.dataType, expectedType).map { dt =>
+          if (dt == e.dataType) e else Cast(e, dt)
+        }
     }
   }
 
@@ -224,6 +235,65 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         }
 
       case _ => None
+    }
+  }
+
+  /**
+   * Promotes string literals that appear in arithmetic expressions.
+   */
+  object PromoteStringLiterals extends TypeCoercionRule {
+    private def castExpr(expr: Expression, targetType: DataType): Expression = {
+      (expr.dataType, targetType) match {
+        case (NullType, dt) => Literal.create(null, targetType)
+        case (l, dt) if (l != dt) => Cast(expr, targetType)
+        case _ => expr
+      }
+    }
+
+    override protected def coerceTypes(
+        plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case a @ BinaryArithmetic(left @ StringType(), right)
+        if right.dataType != CalendarIntervalType && left.foldable =>
+        a.makeCopy(Array(Cast(left, DoubleType), right))
+      case a @ BinaryArithmetic(left, right @ StringType())
+        if left.dataType != CalendarIntervalType && right.foldable =>
+        a.makeCopy(Array(left, Cast(right, DoubleType)))
+
+      // For equality between string and timestamp we cast the string to a timestamp
+      // so that things like rounding of subsecond precision does not affect the comparison.
+      case p @ Equality(left @ StringType(), right @ TimestampType()) if left.foldable =>
+        p.makeCopy(Array(Cast(left, TimestampType), right))
+      case p @ Equality(left @ TimestampType(), right @ StringType()) if right.foldable =>
+        p.makeCopy(Array(left, Cast(right, TimestampType)))
+
+      case p @ BinaryComparison(left @ StringType(), right @ AtomicType()) if left.foldable =>
+        p.makeCopy(Array(castExpr(left, right.dataType), right))
+
+      case p @ BinaryComparison(left @ AtomicType(), right @ StringType()) if right.foldable =>
+        p.makeCopy(Array(left, castExpr(right, left.dataType)))
+
+      case Abs(e @ StringType()) if e.foldable => Abs(Cast(e, DoubleType))
+      case Sum(e @ StringType()) if e.foldable => Sum(Cast(e, DoubleType))
+      case Average(e @ StringType()) if e.foldable => Average(Cast(e, DoubleType))
+      case s @ StddevPop(e @ StringType(), _) if e.foldable =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ StddevSamp(e @ StringType(), _) if e.foldable =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>
+        m.withNewChildren(Seq(Cast(e, DoubleType)))
+      case UnaryPositive(e @ StringType()) if e.foldable =>
+        UnaryPositive(Cast(e, DoubleType))
+      case v @ VariancePop(e @ StringType(), _) if e.foldable =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case v @ VarianceSamp(e @ StringType(), _) if e.foldable =>
+        v.withNewChildren(Seq(Cast(e, DoubleType)))
+      case s @ Skewness(e @ StringType(), _) if e.foldable =>
+        s.withNewChildren(Seq(Cast(e, DoubleType)))
+      case k @ Kurtosis(e @ StringType(), _) if e.foldable =>
+        k.withNewChildren(Seq(Cast(e, DoubleType)))
     }
   }
 }
