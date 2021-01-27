@@ -883,7 +883,7 @@ $(document).ready(function () {
                                     return "";
                                 } else {
                                     var indexOfLineSeperator = msg.indexOf("\n");
-                                    var formHead = indexOfLineSeperator > 0 ? msg.substring(0, indexOfLineSeperator).replace(/(\s*$)/g, ""); : 
+                                    var formHead = indexOfLineSeperator > 0 ? msg.substring(0, indexOfLineSeperator).replace(/(\s*$)/g, "") : 
                                     (msg.length > 100 ? msg.substring(0, 100).replace(/(\s*$)/g, "") : msg)
                                     var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
                                     var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
