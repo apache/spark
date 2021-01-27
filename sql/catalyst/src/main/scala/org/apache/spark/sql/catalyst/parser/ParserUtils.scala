@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
  */
 object ParserUtils {
 
-  val U16_CHAR_PATTERN = """\\u([a-f,A-F,0-9]{4})(?s).*""".r
-  val U32_CHAR_PATTERN = """\\U([a-f,A-F,0-9]{8})(?s).*""".r
+  val U16_CHAR_PATTERN = """\\u([a-fA-F0-9]{4})(?s).*""".r
+  val U32_CHAR_PATTERN = """\\U([a-fA-F0-9]{8})(?s).*""".r
   val OCTAL_CHAR_PATTERN = """\\([01][0-7]{2})(?s).*""".r
   val ESCAPED_CHAR_PATTERN = """\\(.)(?s).*""".r
 
