@@ -3871,52 +3871,56 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-34212 Parquet should read decimals correctly") {
-    // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
-    val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
+    def readParquet(schema: String, path: File): DataFrame = {
+      spark.read.schema(schema).parquet(path.toString)
+    }
 
     withTempPath { path =>
+      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
       df.write.parquet(path.toString)
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
-        checkAnswer(spark.read.schema(schema1).parquet(path.toString), df)
+        checkAnswer(readParquet(schema1, path), df)
         val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
-        checkAnswer(spark.read.schema(schema2).parquet(path.toString), Row(1, 1.2, 1.2))
+        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        val e1 = intercept[SparkException] {
-          spark.read.schema("a DECIMAL(3, 2)").parquet(path.toString).collect()
-        }.getCause.getCause
-        assert(e1.isInstanceOf[SchemaColumnConvertNotSupportedException])
-
-        val e2 = intercept[SparkException] {
-          spark.read.schema("b DECIMAL(18, 1)").parquet(path.toString).collect()
-        }.getCause.getCause
-        assert(e2.isInstanceOf[SchemaColumnConvertNotSupportedException])
-
-        val e3 = intercept[SparkException] {
-          spark.read.schema("c DECIMAL(37, 1)").parquet(path.toString).collect()
-        }.getCause.getCause
-        assert(e3.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
       }
     }
 
+    // tests for parquet types without decimal metadata.
     withTempPath { path =>
-      val df2 = sql(s"SELECT 1 a, ${Int.MaxValue + 1L} b, CAST(2 AS BINARY) c")
-      df2.write.parquet(path.toString)
+      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      df.write.parquet(path.toString)
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val schema = "a DECIMAL(3, 2), b DECIMAL(17, 2), c DECIMAL(36, 2)"
-        checkAnswer(spark.read.schema(schema).parquet(path.toString),
-          Row(BigDecimal(100, 2), BigDecimal((Int.MaxValue + 1L) * 100, 2), BigDecimal(200, 2)))
+        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
+        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
+        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
+        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        val e = intercept[SparkException] {
+          readParquet("d DECIMAL(3, 2)", path).collect()
+        }.getCause
+        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
       }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
-        val e = intercept[SparkException] {
-          spark.read.schema("a DECIMAL(3, 2)").parquet(path.toString).collect()
-        }.getCause.getCause
-        assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
       }
     }
   }
