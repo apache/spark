@@ -34,6 +34,9 @@ import org.apache.spark.sql.types._
 trait TypeCoercionBase {
   def typeCoercionRules: List[Rule[LogicalPlan]]
 
+  /**
+   * Find the tightest common type of the two given types
+   */
   def findTightestCommonType(type1: DataType, type2: DataType): Option[DataType]
 
   /**
@@ -199,8 +202,8 @@ trait TypeCoercionBase {
    *   - two different decimal types will be converted into a wider decimal type for both of them.
    *   - decimal type will be converted into double if there float or double together with it.
    *
-   * Additionally, all types when UNION-ed with strings will be promoted to strings.
-   * Other string conversions are handled by PromoteStrings.
+   * Additionally when ANSI mode is off, all types when UNION-ed with strings will be promoted to
+   * strings. Other string conversions are handled by PromoteStrings.
    *
    * Widening types might result in loss of precision in the following cases:
    * - IntegerType to FloatType

@@ -72,6 +72,8 @@ import org.apache.spark.sql.types._
  *   * For complex types (struct, array, map), Spark recursively looks into the element type and
  *     applies the rules above. If the element nullability is converted from true to false, add
  *     runtime null check to the elements.
+ *  Note: this new type coercion system will allow implicit converting String type literals as other
+ *  primitive types, in case of breaking too many existing Spark SQL queries.
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
@@ -163,6 +165,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
     (e, expectedType) match {
+      // This type coercion system will allow implicit converting String type literals as other
+      // primitive types, in case of breaking too many existing Spark SQL queries.
       case (_ @ StringType(), a: AtomicType) if e.foldable && a != BooleanType && a != StringType =>
         Some(Cast(e, a))
 
