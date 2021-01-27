@@ -324,7 +324,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         --------
         >>> df.explain()
         == Physical Plan ==
-        *(1) Scan ExistingRDD[age#0,name#1]
+        *(1) Scan ExistingRDD[age#3,name#4]
 
         >>> df.explain(True)
         == Parsed Logical Plan ==
@@ -340,7 +340,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         == Physical Plan ==
         * Scan ExistingRDD (1)
         (1) Scan ExistingRDD [codegen id : 1]
-        Output [2]: [age#0, name#1]
+        Output [2]: [age#3, name#4]
         ...
 
         >>> df.explain("cost")
