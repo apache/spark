@@ -19,11 +19,11 @@ SELECT
 FROM testData;
 
 -- count with multiple expressions
-SELECT count(a, b), count(b, a), count(testData.a, testData.b) FROM testData;
+SELECT count(a, b), count(b, a), count(testData.*, testData.*) FROM testData;
 
 -- distinct count with multiple expressions
 SELECT
-  count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.a, testData.b)
+  count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.*, testData.*)
 FROM testData;
 
 -- distinct count with multiple literals

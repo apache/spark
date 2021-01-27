@@ -250,10 +250,9 @@ object QueryCompilationErrors {
     new AnalysisException(s"Invalid usage of '*' in $prettyName")
   }
 
-  def tableStarInCountNotAllowedError(targetString: String): Throwable = {
-    new AnalysisException(s"It's not allowed to qualify $targetString.* " +
-      "using table name inside a count function. " +
-      "Please use '*' only or expand the table manually, e.g. court(*), count(col1, col2)")
+  def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
+    new AnalysisException(s"count($targetString.*) is not allowed. " +
+      "Please use count(*) or expand the columns manually, e.g. count(col1, col2)")
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {

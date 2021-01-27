@@ -1774,7 +1774,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             f1.arguments.foreach {
               case u: UnresolvedStar if u.isQualifiedByTable(child, resolver) =>
                 throw QueryCompilationErrors
-                  .tableStarInCountNotAllowedError(u.target.get.mkString("."))
+                  .singleTableStarInCountNotAllowedError(u.target.get.mkString("."))
               case _ => // do nothing
             }
           }

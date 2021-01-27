@@ -49,6 +49,8 @@ license: |
     * and the method `spark.catalog.refreshTable`
   In Spark 3.1 and earlier, table refreshing leaves dependents uncached.
 
+  - In Spark 3.2, usage of `count(table.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(table.*)` will output differently if there is any null values. To restore the behavior before spark 3.2, you can set `spark.sql.legacy.allowSingleTableStarInCount` to `true`.
+
 ## Upgrading from Spark SQL 3.0 to 3.1
 
   - In Spark 3.1, statistical aggregation function includes `std`, `stddev`, `stddev_samp`, `variance`, `var_samp`, `skewness`, `kurtosis`, `covar_samp`, `corr` will return `NULL` instead of `Double.NaN` when `DivideByZero` occurs during expression evaluation, for example, when `stddev_samp` applied on a single element set. In Spark version 3.0 and earlier, it will return `Double.NaN` in such case. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.statisticalAggregate` to `true`.
@@ -88,8 +90,6 @@ license: |
   - In Spark 3.1, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
     * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
     * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
-
-  - In Spark 3.1, usage of `count(table.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(table.*)` will output differently if there is any null values. To restore the behavior before spark 3.1, you can set `spark.sql.legacy.allowSingleTableStarInCount` to `true`.
 
 ## Upgrading from Spark SQL 3.0.1 to 3.0.2
 

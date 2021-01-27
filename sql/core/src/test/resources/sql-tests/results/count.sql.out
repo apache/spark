@@ -38,19 +38,19 @@ struct<count(DISTINCT 1):bigint,count(DISTINCT NULL):bigint,count(DISTINCT a):bi
 
 
 -- !query
-SELECT count(a, b), count(b, a), count(testData.a, testData.b) FROM testData
+SELECT count(a, b), count(b, a), count(testData.*, testData.*) FROM testData
 -- !query schema
-struct<count(a, b):bigint,count(b, a):bigint,count(a, b):bigint>
+struct<count(a, b):bigint,count(b, a):bigint,count(a, b, a, b):bigint>
 -- !query output
 4	4	4
 
 
 -- !query
 SELECT
-  count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.a, testData.b)
+  count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.*, testData.*)
 FROM testData
 -- !query schema
-struct<count(DISTINCT a, b):bigint,count(DISTINCT b, a):bigint,count(DISTINCT a, b):bigint,count(DISTINCT a, b):bigint>
+struct<count(DISTINCT a, b):bigint,count(DISTINCT b, a):bigint,count(DISTINCT a, b):bigint,count(DISTINCT a, b, a, b):bigint>
 -- !query output
 3	3	3	3
 
@@ -182,4 +182,4 @@ SELECT count(testData.*) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It's not allowed to qualify testData.* using table name inside a count function. Please use '*' only or expand the table manually, e.g. court(*), count(col1, col2)
+count(testData.*) is not allowedPlease use count(*) or expand the columns manually, e.g. count(col1, col2)
