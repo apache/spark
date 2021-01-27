@@ -61,15 +61,15 @@ object EliminateView extends Rule[LogicalPlan] with CastSupport {
       val resolver = conf.resolver
       val queryColumnNames = desc.viewQueryColumnNames
       val queryOutput = if (queryColumnNames.nonEmpty) {
-        // Find the attribute that has the expected attribute name from an attribute list, the
-        // names are compared using conf.resolver.
+        // Find the attribute that has the expected attribute name from an attribute list, the names
+        // are compared using conf.resolver.
         // `CheckAnalysis` already guarantees the expected attribute can be found for sure.
         desc.viewQueryColumnNames.map { colName =>
           child.output.find(attr => resolver(attr.name, colName)).get
         }
       } else {
-        // For view created before Spark 2.2.0, the view text is already fully qualified,
-        // the plan output is the same with the view output.
+        // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
+        // output is the same with the view output.
         child.output
       }
       // Map the attributes in the query output to the attributes in the view output by index.
