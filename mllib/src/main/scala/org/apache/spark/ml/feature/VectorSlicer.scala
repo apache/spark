@@ -100,10 +100,10 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     // Validity checks
     transformSchema(dataset.schema)
     val inputAttr = AttributeGroup.fromStructField(dataset.schema($(inputCol)))
-    inputAttr.numAttributes.foreach { numFeatures =>
+    if ($(indices).nonEmpty && inputAttr.size >= 0) {
       val maxIndex = $(indices).max
-      require(maxIndex < numFeatures,
-        s"Selected feature index $maxIndex invalid for only $numFeatures input features.")
+      require(maxIndex < inputAttr.size,
+        s"Selected feature index $maxIndex invalid for only ${inputAttr.size} input features.")
     }
 
     // Prepare output attributes
@@ -159,8 +159,13 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
   @Since("3.0.0")
   override def toString: String = {
-    s"VectorSlicer: uid=$uid" +
-      get(indices).map(i => s", numSelectedFeatures=${i.length}").getOrElse("")
+    val numSelectedFeatures =
+      get(indices).map(_.length).getOrElse(0) + get(names).map(_.length).getOrElse(0)
+    if (numSelectedFeatures > 0) {
+      s"VectorSlicer: uid=$uid, numSelectedFeatures=$numSelectedFeatures"
+    } else {
+      s"VectorSlicer: uid=$uid"
+    }
   }
 }
 
