@@ -20,25 +20,26 @@ package org.apache.spark.sql.connector.distributions
 import org.apache.spark.sql.connector.expressions.{Expression, SortOrder}
 
 private[sql] object LogicalDistributions {
+  val NO_REQUIREMENT_NUM_PARTITIONS: Int = 0
 
   def unspecified(): UnspecifiedDistribution = {
     UnspecifiedDistributionImpl
   }
 
   def clustered(clustering: Array[Expression]): ClusteredDistribution = {
-    ClusteredDistributionImpl(clustering)
+    ClusteredDistributionImpl(clustering, NO_REQUIREMENT_NUM_PARTITIONS)
   }
 
   def clustered(clustering: Array[Expression], numPartitions: Int): ClusteredDistribution = {
-    ClusteredDistributionImpl(clustering, Some(numPartitions))
+    ClusteredDistributionImpl(clustering, numPartitions)
   }
 
   def ordered(ordering: Array[SortOrder]): OrderedDistribution = {
-    OrderedDistributionImpl(ordering)
+    OrderedDistributionImpl(ordering, NO_REQUIREMENT_NUM_PARTITIONS)
   }
 
   def ordered(ordering: Array[SortOrder], numPartitions: Int): OrderedDistribution = {
-    OrderedDistributionImpl(ordering, Some(numPartitions))
+    OrderedDistributionImpl(ordering, numPartitions)
   }
 }
 
@@ -48,11 +49,11 @@ private[sql] object UnspecifiedDistributionImpl extends UnspecifiedDistribution 
 
 private[sql] final case class ClusteredDistributionImpl(
     clusteringExprs: Seq[Expression],
-    numPartitions: Option[Int] = None) extends ClusteredDistribution {
+    numPartitions: Int) extends ClusteredDistribution {
 
   override def clustering: Array[Expression] = clusteringExprs.toArray
 
-  override def requiredNumPartitions(): Int = numPartitions.getOrElse(0)
+  override def requiredNumPartitions(): Int = numPartitions
 
   override def toString: String = {
     s"ClusteredDistribution(${clusteringExprs.map(_.describe).mkString(", ")}" +
@@ -62,11 +63,11 @@ private[sql] final case class ClusteredDistributionImpl(
 
 private[sql] final case class OrderedDistributionImpl(
     orderingExprs: Seq[SortOrder],
-    numPartitions: Option[Int] = None) extends OrderedDistribution {
+    numPartitions: Int) extends OrderedDistribution {
 
   override def ordering: Array[SortOrder] = orderingExprs.toArray
 
-  override def requiredNumPartitions(): Int = numPartitions.getOrElse(0)
+  override def requiredNumPartitions(): Int = numPartitions
 
   override def toString: String = {
     s"OrderedDistribution(${orderingExprs.map(_.describe).mkString(", ")} " +
