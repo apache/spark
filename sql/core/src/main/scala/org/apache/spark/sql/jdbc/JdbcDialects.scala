@@ -66,7 +66,6 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  */
 @DeveloperApi
 abstract class JdbcDialect extends Serializable with Logging{
-
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -182,11 +181,11 @@ abstract class JdbcDialect extends Serializable with Logging{
     case timestampValue: Instant =>
       val timestampFormatter = TimestampFormatter.getFractionFormatter(
         DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      "'" + timestampFormatter.format(timestampValue) + "'"
+      s"'${timestampFormatter.format(timestampValue)}'"
     case dateValue: Date => "'" + dateValue + "'"
     case dateValue: LocalDate =>
       val dateFormatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      "'" + dateFormatter.format(dateValue) + "'"
+      s"'${dateFormatter.format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
   }
