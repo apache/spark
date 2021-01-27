@@ -90,6 +90,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       IntegralDivision ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
+      WindowFrameCoercion ::
       StringLiteralCoercion ::
       Nil
 
@@ -237,6 +238,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case _ => None
     }
   }
+
+  override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
   /**
    * Promotes string literals that appear in arithmetic expressions.

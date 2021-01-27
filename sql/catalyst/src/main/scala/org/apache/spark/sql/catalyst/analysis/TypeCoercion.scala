@@ -44,6 +44,11 @@ trait TypeCoercionBase {
    */
   def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
 
+  /**
+   * Whether casting `from` as `to` is valid.
+   */
+  def canCast(from: DataType, to: DataType): Boolean
+
   protected def findTypeForComplex(
       t1: DataType,
       t2: DataType,
@@ -764,7 +769,7 @@ trait TypeCoercionBase {
         case (e: SpecialFrameBoundary, _) => e
         case (e, _: DateType) => e
         case (e, _: TimestampType) => e
-        case (e: Expression, t) if e.dataType != t && Cast.canCast(e.dataType, t) =>
+        case (e: Expression, t) if e.dataType != t && canCast(e.dataType, t) =>
           Cast(e, t)
         case _ => boundary
       }
@@ -836,49 +841,7 @@ object TypeCoercion extends TypeCoercionBase {
       StringLiteralCoercion ::
       Nil
 
-    /**
-   * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
-   */
-  object BooleanEquality extends Rule[LogicalPlan] {
-    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
-    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-
-      // Hive treats (true = 1) as true and (false = 0) as true,
-      // all other cases are considered as false.
-
-      // We may simplify the expression if one side is literal numeric values
-      // TODO: Maybe these rules should go into the optimizer.
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => bool
-      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => Not(bool)
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
-        if trueValues.contains(value) => bool
-      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
-        if falseValues.contains(value) => Not(bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
-        if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
-        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
-        if trueValues.contains(value) => And(IsNotNull(bool), bool)
-      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
-        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
-
-      case EqualTo(left @ BooleanType(), right @ NumericType()) =>
-        EqualTo(Cast(left, right.dataType), right)
-      case EqualTo(left @ NumericType(), right @ BooleanType()) =>
-        EqualTo(left, Cast(right, left.dataType))
-      case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
-        EqualNullSafe(Cast(left, right.dataType), right)
-      case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
-        EqualNullSafe(left, Cast(right, left.dataType))
-    }
-  }
+  override def canCast(from: DataType, to: DataType): Boolean = Cast.canCast(from, to)
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
@@ -1125,6 +1088,50 @@ object TypeCoercion extends TypeCoercionBase {
         s.withNewChildren(Seq(Cast(e, DoubleType)))
       case k @ Kurtosis(e @ StringType(), _) =>
         k.withNewChildren(Seq(Cast(e, DoubleType)))
+    }
+  }
+
+  /**
+   * Changes numeric values to booleans so that expressions like true = 1 can be evaluated.
+   */
+  object BooleanEquality extends Rule[LogicalPlan] {
+    private val trueValues = Seq(1.toByte, 1.toShort, 1, 1L, Decimal.ONE)
+    private val falseValues = Seq(0.toByte, 0.toShort, 0, 0L, Decimal.ZERO)
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      // Hive treats (true = 1) as true and (false = 0) as true,
+      // all other cases are considered as false.
+
+      // We may simplify the expression if one side is literal numeric values
+      // TODO: Maybe these rules should go into the optimizer.
+      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => bool
+      case EqualTo(bool @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => Not(bool)
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+        if trueValues.contains(value) => bool
+      case EqualTo(Literal(value, _: NumericType), bool @ BooleanType())
+        if falseValues.contains(value) => Not(bool)
+      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+        if trueValues.contains(value) => And(IsNotNull(bool), bool)
+      case EqualNullSafe(bool @ BooleanType(), Literal(value, _: NumericType))
+        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+        if trueValues.contains(value) => And(IsNotNull(bool), bool)
+      case EqualNullSafe(Literal(value, _: NumericType), bool @ BooleanType())
+        if falseValues.contains(value) => And(IsNotNull(bool), Not(bool))
+
+      case EqualTo(left @ BooleanType(), right @ NumericType()) =>
+        EqualTo(Cast(left, right.dataType), right)
+      case EqualTo(left @ NumericType(), right @ BooleanType()) =>
+        EqualTo(left, Cast(right, left.dataType))
+      case EqualNullSafe(left @ BooleanType(), right @ NumericType()) =>
+        EqualNullSafe(Cast(left, right.dataType), right)
+      case EqualNullSafe(left @ NumericType(), right @ BooleanType()) =>
+        EqualNullSafe(left, Cast(right, left.dataType))
     }
   }
 }
