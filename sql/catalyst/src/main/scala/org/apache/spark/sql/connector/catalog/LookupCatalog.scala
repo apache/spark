@@ -57,7 +57,6 @@ private[sql] trait LookupCatalog extends Logging {
    * Extract session catalog and identifier from a multi-part identifier.
    */
   object SessionCatalogAndIdentifier {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 
     def unapply(parts: Seq[String]): Option[(CatalogPlugin, Identifier)] = parts match {
       case CatalogAndIdentifier(catalog, ident) if CatalogV2Util.isSessionCatalog(catalog) =>
