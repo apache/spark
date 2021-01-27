@@ -35,9 +35,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ImplicitCastInputTypes}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, ExpressionInfo, ImplicitCastInputTypes, UpCast}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -844,18 +844,41 @@ class SessionCatalog(
     }
   }
 
+  def getTempViewSchema(plan: LogicalPlan): StructType = {
+    plan match {
+      case viewInfo: TemporaryViewRelation => viewInfo.tableMeta.schema
+      case v => v.schema
+    }
+  }
+
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
-    val viewText = metadata.viewText.getOrElse(sys.error("Invalid view without text."))
+    val viewText = metadata.viewText.getOrElse {
+      throw new IllegalStateException("Invalid view without text.")
+    }
     val viewConfigs = metadata.viewSQLConfigs
-    val viewPlan =
-      SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView = isTempView)) {
-        parser.parsePlan(viewText)
-      }
-    View(
-      desc = metadata,
-      isTempView = isTempView,
-      output = metadata.schema.toAttributes,
-      child = viewPlan)
+    val parsedPlan = SQLConf.withExistingConf(View.effectiveSQLConf(viewConfigs, isTempView)) {
+      parser.parsePlan(viewText)
+    }
+    val viewColumnNames = if (metadata.viewQueryColumnNames.isEmpty) {
+      // For view created before Spark 2.2.0, the view text is already fully qualified, the plan
+      // output is the same with the view output.
+      metadata.schema.fieldNames.toSeq
+    } else {
+      assert(metadata.viewQueryColumnNames.length == metadata.schema.length)
+      metadata.viewQueryColumnNames
+    }
+
+    // For view queries like `SELECT * FROM t`, the schema of the referenced table/view may
+    // change after the view has been created. We need to add an extra SELECT to pick the columns
+    // according to the recorded column names (to get the correct view column ordering and omit
+    // the extra columns that we don't require), with UpCast (to make sure the type change is
+    // safe) and Alias (to respect user-specified view column names) according to the view schema
+    // in the catalog.
+    val projectList = viewColumnNames.zip(metadata.schema).map { case (name, field) =>
+      Alias(UpCast(UnresolvedAttribute.quoted(name), field.dataType), field.name)(
+        explicitMetadata = Some(field.metadata))
+    }
+    View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
   }
 
   def lookupTempView(table: String): Option[SubqueryAlias] = {
