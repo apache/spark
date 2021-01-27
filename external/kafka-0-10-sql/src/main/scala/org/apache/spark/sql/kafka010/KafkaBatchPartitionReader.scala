@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.{CustomMetric, CustomSumMetric}
 import org.apache.spark.sql.kafka010.consumer.KafkaDataConsumer
 
 /** A [[InputPartition]] for reading Kafka data in a batch based streaming query. */
@@ -104,5 +105,13 @@ private case class KafkaBatchPartitionReader(
     } else {
       range
     }
+  }
+
+  override def getCustomMetrics(): Array[CustomMetric] = {
+    Array(
+      CustomSumMetric("offsetOutOfRange", "estimated number of fetched offsets out of range",
+        consumer.getNumOffsetOutOfRange()),
+      CustomSumMetric("dataLoss", "number of data loss error",
+        consumer.getNumDataLoss()))
   }
 }

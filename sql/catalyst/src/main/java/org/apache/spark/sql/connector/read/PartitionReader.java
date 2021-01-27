@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.read.streaming.CustomMetric;
 
 /**
  * A partition reader returned by {@link PartitionReaderFactory#createReader(InputPartition)} or
@@ -48,4 +49,12 @@ public interface PartitionReader<T> extends Closeable {
    * Return the current record. This method should return same value until `next` is called.
    */
   T get();
+
+  /**
+   * Returns an array of custom metrics. By default it returns empty array.
+   */
+  default CustomMetric[] getCustomMetrics() {
+    CustomMetric[] NO_METRICS = {};
+    return NO_METRICS;
+  }
 }
