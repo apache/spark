@@ -189,9 +189,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       case DecommissionExecutorsOnHost(host) =>
         val reason = ExecutorDecommissionInfo(s"Decommissioning all executors on $host.")
         scheduler.getExecutorsAliveOnHost(host).foreach { execs =>
-          val execsWithReasons = execs.map { exec =>
-            (exec, reason)
-          }.toArray
+          val execsWithReasons = execs.map(exec => (exec, reason)).toArray
+
           decommissionExecutors(execsWithReasons, adjustTargetNumExecutors = false,
             triggeredByExecutor = false)
         }
