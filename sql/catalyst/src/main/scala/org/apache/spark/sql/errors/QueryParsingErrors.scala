@@ -47,23 +47,21 @@ object QueryParsingErrors {
   }
 
   def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException(
-      s"Unrecognized matched action: ${ctx.matchedAction().getText}",
+    new ParseException(s"Unrecognized matched action: ${ctx.matchedAction().getText}",
       ctx.matchedAction())
   }
 
-  def insertValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
+  def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
     new ParseException("The number of inserted values cannot match the fields.",
       ctx.notMatchedAction())
   }
 
   def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(
-      s"Unrecognized not matched action: ${ctx.notMatchedAction().getText}",
+    new ParseException(s"Unrecognized not matched action: ${ctx.notMatchedAction().getText}",
       ctx.notMatchedAction())
   }
 
-  def mergeStatementNotExistWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
+  def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
     new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
   }
 
@@ -98,7 +96,7 @@ object QueryParsingErrors {
     new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
   }
 
-  def windowRepetitiveError(name: String, ctx: WindowClauseContext): Throwable = {
+  def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
     new ParseException(s"The definition of window '$name' is repetitive", ctx)
   }
 
@@ -122,12 +120,6 @@ object QueryParsingErrors {
     new ParseException("TABLESAMPLE does not accept empty inputs.", ctx)
   }
 
-  val byteLengthLiteralMsg = "byteLengthLiteral"
-
-  val bucketOutOfColumnMsg = "BUCKET x OUT OF y ON colname"
-
-  val bucketOutOfFunctionMsg = "BUCKET x OUT OF y ON function"
-
   def tableSampleByBytesUnsupportedError(msg: String, ctx: SampleMethodContext): Throwable = {
     new ParseException(s"TABLESAMPLE($msg) is not supported", ctx)
   }
@@ -146,7 +138,7 @@ object QueryParsingErrors {
       s"type $trimOption. Please use BOTH, LEADING or TRAILING as trim type", ctx)
   }
 
-  def functionUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
+  def functionNameUnsupportedError(functionName: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Unsupported function name '$functionName'", ctx)
   }
 
@@ -159,7 +151,8 @@ object QueryParsingErrors {
     new ParseException(s"Cannot parse the INTERVAL value: $value", ctx)
   }
 
-  def literalOfTypeUnsupportedError(valueType: String, ctx: TypeConstructorContext): Throwable = {
+  def literalValueTypeUnsupportedError(
+      valueType: String, ctx: TypeConstructorContext): Throwable = {
     new ParseException(s"Literals of type '$valueType' are currently not supported.", ctx)
   }
 
@@ -169,7 +162,7 @@ object QueryParsingErrors {
     new ParseException(message, ctx)
   }
 
-  def numericLiteralOutTypeRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
+  def invalidNumericLiteralRangeError(rawStrippedQualifier: String, minValue: BigDecimal,
       maxValue: BigDecimal, typeName: String, ctx: NumberContext): Throwable = {
     new ParseException(s"Numeric literal $rawStrippedQualifier does not " +
       s"fit in range [$minValue, $maxValue] for type $typeName", ctx)
@@ -188,7 +181,7 @@ object QueryParsingErrors {
       s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
   }
 
-  def fromToUnitIsStringError(ctx: IntervalValueContext): Throwable = {
+  def invalidFromToUnitValueError(ctx: IntervalValueContext): Throwable = {
     new ParseException("The value of from-to unit must be a string", ctx)
   }
 
@@ -222,11 +215,7 @@ object QueryParsingErrors {
     new ParseException("Invalid transform argument", ctx)
   }
 
-  val locationMsg = "please use the LOCATION clause to specify it"
-
-  val ownerMsg = "it will be set to the current user"
-
-  def cannotCleanReservedNamespaceProperty(
+  def cannotCleanReservedNamespacePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(s"$property is a reserved namespace property, $msg.", ctx)
   }
@@ -239,9 +228,7 @@ object QueryParsingErrors {
     new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
   }
 
-  val providerMsg = "please use the USING clause to specify it"
-
-  def cannotCleanReservedTableProperty(
+  def cannotCleanReservedTablePropertyError(
       property: String, ctx: ParserRuleContext, msg: String): Throwable = {
     new ParseException(s"$property is a reserved table property, $msg.", ctx)
   }
@@ -268,15 +255,6 @@ object QueryParsingErrors {
     new ParseException(msg, ctx)
   }
 
-  val notNullOperation = "NOT NULL"
-
-  val alterColumnCommand = "ALTER COLUMN"
-
-  val replaceColumnsCommand = "REPLACE COLUMNS"
-
-  val alterTablePartitionReplaceColumnMsg =
-    "ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS"
-
   def operationNotAllowedError(message: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Operation not allowed: $message", ctx)
   }
@@ -290,7 +268,7 @@ object QueryParsingErrors {
     new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
   }
 
-  def isNotNoscanError(ctx: IdentifierContext): Throwable = {
+  def computeStatisticsNotExpectedError(ctx: IdentifierContext): Throwable = {
     new ParseException(s"Expected `NOSCAN` instead of `${ctx.getText}`", ctx)
   }
 
@@ -304,7 +282,7 @@ object QueryParsingErrors {
     new ParseException(s"SHOW $identifier FUNCTIONS not supported", ctx)
   }
 
-  def cteDefinitionHaveDuplicateNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
+  def duplicateCteDefinitionNamesError(duplicateNames: String, ctx: CtesContext): Throwable = {
     new ParseException(s"CTE definition can't have duplicate names: $duplicateNames.", ctx)
   }
 

@@ -134,7 +134,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     // Check for duplicate names.
     val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
-      throw QueryParsingErrors.cteDefinitionHaveDuplicateNamesError(
+      throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.mkString("'", "', '", "'"), ctx)
     }
     With(plan, ctes.toSeq)
@@ -436,7 +436,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
             val values = clause.notMatchedAction().expression().asScala.map(expression)
             if (columns.size != values.size) {
-              throw QueryParsingErrors.insertValueNumberNotMatchFieldNumberError(clause)
+              throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
             }
             InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }
@@ -447,7 +447,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       }
     }
     if (matchedActions.isEmpty && notMatchedActions.isEmpty) {
-      throw QueryParsingErrors.mergeStatementNotExistWhenClauseError(ctx)
+      throw QueryParsingErrors.mergeStatementWithoutWhenClauseError(ctx)
     }
     // children being empty means that the condition is not set
     val matchedActionSize = matchedActions.length
@@ -865,7 +865,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     baseWindowTuples.groupBy(_._1).foreach { kv =>
       if (kv._2.size > 1) {
-        throw QueryParsingErrors.windowRepetitiveError(kv._1, ctx)
+        throw QueryParsingErrors.repetitiveWindowDefinitionError(kv._1, ctx)
       }
     }
     val baseWindowMap = baseWindowTuples.toMap
@@ -1070,8 +1070,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ctx: SampleByBytesContext =>
         val bytesStr = ctx.bytes.getText
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
-          throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            QueryParsingErrors.byteLengthLiteralMsg, ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("byteLengthLiteral", ctx)
         } else {
           throw QueryParsingErrors.invalidByteLengthLiteralError(bytesStr, ctx)
         }
@@ -1079,10 +1078,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ctx: SampleByBucketContext if ctx.ON() != null =>
         if (ctx.identifier != null) {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            QueryParsingErrors.bucketOutOfColumnMsg, ctx)
+            "BUCKET x OUT OF y ON colname", ctx)
         } else {
           throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
-            QueryParsingErrors.bucketOutOfFunctionMsg, ctx)
+            "BUCKET x OUT OF y ON function", ctx)
         }
 
       case ctx: SampleByBucketContext =>
@@ -1730,7 +1729,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other =>
-        throw QueryParsingErrors.functionUnsupportedError(texts.mkString("."), ctx)
+        throw QueryParsingErrors.functionNameUnsupportedError(texts.mkString("."), ctx)
     }
   }
 
@@ -1991,7 +1990,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case other =>
-          throw QueryParsingErrors.literalOfTypeUnsupportedError(other, ctx)
+          throw QueryParsingErrors.literalValueTypeUnsupportedError(other, ctx)
       }
     } catch {
       case e: IllegalArgumentException =>
@@ -2064,7 +2063,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
       if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
-        throw QueryParsingErrors.numericLiteralOutTypeRangeError(
+        throw QueryParsingErrors.invalidNumericLiteralRangeError(
           rawStrippedQualifier, minValue, maxValue, typeName, ctx)
       }
       Literal(converter(rawStrippedQualifier))
@@ -2266,7 +2265,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
       val value = Option(ctx.intervalValue.STRING).map(string).getOrElse {
-        throw QueryParsingErrors.fromToUnitIsStringError(ctx.intervalValue)
+        throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
       }
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
@@ -2691,12 +2690,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
     properties.filter {
       case (PROP_LOCATION, _) if !legacyOn =>
-        throw QueryParsingErrors.cannotCleanReservedNamespaceProperty(
-          PROP_LOCATION, ctx, QueryParsingErrors.locationMsg)
+        throw QueryParsingErrors.cannotCleanReservedNamespacePropertyError(
+          PROP_LOCATION, ctx, "please use the LOCATION clause to specify it")
       case (PROP_LOCATION, _) => false
       case (PROP_OWNER, _) if !legacyOn =>
-        throw QueryParsingErrors.cannotCleanReservedNamespaceProperty(
-          PROP_OWNER, ctx, QueryParsingErrors.ownerMsg)
+        throw QueryParsingErrors.cannotCleanReservedNamespacePropertyError(
+          PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
       case _ => true
     }
@@ -2831,16 +2830,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
     properties.filter {
       case (PROP_PROVIDER, _) if !legacyOn =>
-        throw QueryParsingErrors.cannotCleanReservedTableProperty(
-          PROP_PROVIDER, ctx, QueryParsingErrors.providerMsg)
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_PROVIDER, ctx, "please use the USING clause to specify it")
       case (PROP_PROVIDER, _) => false
       case (PROP_LOCATION, _) if !legacyOn =>
-        throw QueryParsingErrors.cannotCleanReservedTableProperty(
-          PROP_LOCATION, ctx, QueryParsingErrors.locationMsg)
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_LOCATION, ctx, "please use the LOCATION clause to specify it")
       case (PROP_LOCATION, _) => false
       case (PROP_OWNER, _) if !legacyOn =>
-        throw QueryParsingErrors.cannotCleanReservedTableProperty(
-          PROP_OWNER, ctx, QueryParsingErrors.ownerMsg)
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
       case _ => true
     }
@@ -3417,11 +3416,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val columnNameParts = typedVisit[Seq[String]](ctx.colName)
     if (!conf.resolver(columnNameParts.last, ctx.colType().colName.getText)) {
       throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError("Renaming column",
-        QueryParsingErrors.alterColumnCommand, ctx, Some("please run RENAME COLUMN instead"))
+        "ALTER COLUMN", ctx, Some("please run RENAME COLUMN instead"))
     }
     if (ctx.colType.NULL != null) {
       throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-        QueryParsingErrors.notNullOperation, QueryParsingErrors.alterColumnCommand, ctx,
+        "NOT NULL", "ALTER COLUMN", ctx,
         Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
     }
 
@@ -3437,18 +3436,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitHiveReplaceColumns(
       ctx: HiveReplaceColumnsContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.partitionSpec != null) {
-      operationNotAllowed(QueryParsingErrors.alterTablePartitionReplaceColumnMsg, ctx)
+      operationNotAllowed("ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS", ctx)
     }
     AlterTableReplaceColumnsStatement(
       visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         if (colType.NULL != null) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            QueryParsingErrors.notNullOperation, QueryParsingErrors.replaceColumnsCommand, ctx)
+            "NOT NULL", "REPLACE COLUMNS", ctx)
         }
         if (colType.colPosition != null) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
-            "Column position", QueryParsingErrors.replaceColumnsCommand, ctx)
+            "Column position", "REPLACE COLUMNS", ctx)
         }
         typedVisit[QualifiedColType](colType)
       }.toSeq
@@ -3606,7 +3605,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     if (ctx.identifier != null &&
         ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw QueryParsingErrors.isNotNoscanError(ctx.identifier())
+      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
     }
 
     if (ctx.ALL() != null) {
