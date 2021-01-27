@@ -1335,7 +1335,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               // ResolveOutputRelation runs, using the query's column names that will match the
               // table names at that point. because resolution happens after a future rule, create
               // an UnresolvedAttribute.
-              EqualTo(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
+              EqualNullSafe(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
             case None =>
               throw QueryCompilationErrors.unknownStaticPartitionColError(name)
           }
@@ -3957,13 +3957,15 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           if attr.dataType == StringType && list.forall(_.foldable) =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
             case CharType(length) =>
-              val literalCharLengths = list.map(_.eval().asInstanceOf[UTF8String].numChars())
+              val (nulls, literalChars) =
+                list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
+              val literalCharLengths = literalChars.map(_.numChars())
               val targetLen = (length +: literalCharLengths).max
               Some(i.copy(
                 value = addPadding(attr, length, targetLen),
                 list = list.zip(literalCharLengths).map {
                   case (lit, charLength) => addPadding(lit, charLength, targetLen)
-                }))
+                } ++ nulls.map(Literal.create(_, StringType))))
             case _ => None
           }.getOrElse(i)
 
@@ -3984,13 +3986,17 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       CharVarcharUtils.getRawType(attr.metadata).flatMap {
         case CharType(length) =>
           val str = lit.eval().asInstanceOf[UTF8String]
-          val stringLitLen = str.numChars()
-          if (length < stringLitLen) {
-            Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
-          } else if (length > stringLitLen) {
-            Some(Seq(attr, StringRPad(lit, Literal(length))))
-          } else {
+          if (str == null) {
             None
+          } else {
+            val stringLitLen = str.numChars()
+            if (length < stringLitLen) {
+              Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
+            } else if (length > stringLitLen) {
+              Some(Seq(attr, StringRPad(lit, Literal(length))))
+            } else {
+              None
+            }
           }
         case _ => None
       }
