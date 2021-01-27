@@ -811,6 +811,7 @@ package object config {
 
   private[spark] val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.decommissionExcludedExecutors")
+      .doc("Attempt decommission of excluded nodes instead of going directly to kill")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
