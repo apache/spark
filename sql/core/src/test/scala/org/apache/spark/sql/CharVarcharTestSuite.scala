@@ -146,6 +146,22 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-34233: char/varchar with null value for partitioned columns") {
+    Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
+        sql("INSERT INTO t VALUES ('1', null)")
+        checkPlainResult(spark.table("t"), typ, null)
+        sql("INSERT OVERWRITE t VALUES ('1', null)")
+        checkPlainResult(spark.table("t"), typ, null)
+        sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
+        checkPlainResult(spark.table("t"), typ, null)
+        sql("ALTER TABLE t DROP PARTITION(c=null)")
+        checkAnswer(spark.table("t"), Nil)
+      }
+    }
+  }
+
   test("char/varchar type values length check: partitioned columns of other types") {
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
@@ -427,7 +443,8 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ("c1 IN ('a', 'b')", true),
         ("c1 = c2", true),
         ("c1 < c2", false),
-        ("c1 IN (c2)", true)))
+        ("c1 IN (c2)", true),
+        ("c1 <=> null", false)))
     }
   }
 
@@ -443,7 +460,29 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
         ("c1 IN ('a', 'b')", true),
         ("c1 = c2", true),
         ("c1 < c2", false),
-        ("c1 IN (c2)", true)))
+        ("c1 IN (c2)", true),
+        ("c1 <=> null", false)))
+    }
+  }
+
+  private def testNullConditions(df: DataFrame, conditions: Seq[String]): Unit = {
+    conditions.foreach { cond =>
+      checkAnswer(df.selectExpr(cond), Row(null))
+    }
+  }
+
+  test("SPARK-34233: char type comparison with null values") {
+    val conditions = Seq("c = null", "c IN ('e', null)", "c IN (null)")
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+      testNullConditions(spark.table("t"), conditions)
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(i INT, c CHAR(2)) USING $format PARTITIONED BY (c)")
+      sql("INSERT INTO t VALUES (1, 'a')")
+      testNullConditions(spark.table("t"), conditions)
     }
   }
 

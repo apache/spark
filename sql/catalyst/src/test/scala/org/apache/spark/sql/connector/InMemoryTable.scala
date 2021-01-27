@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransfor
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
+import org.apache.spark.sql.sources.{And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
 import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -401,6 +401,17 @@ object InMemoryTable {
       filters.flatMap(splitAnd).forall {
         case EqualTo(attr, value) =>
           value == extractValue(attr, partitionNames, partValues)
+        case EqualNullSafe(attr, value) =>
+          val attrVal = extractValue(attr, partitionNames, partValues)
+          if (attrVal == null && value === null) {
+            true
+          } else if (attrVal == null || value === null) {
+            false
+          } else {
+            value == attrVal
+          }
+        case IsNull(attr) =>
+          null == extractValue(attr, partitionNames, partValues)
         case IsNotNull(attr) =>
           null != extractValue(attr, partitionNames, partValues)
         case f =>
@@ -412,6 +423,8 @@ object InMemoryTable {
   def supportsFilters(filters: Array[Filter]): Boolean = {
     filters.flatMap(splitAnd).forall {
       case _: EqualTo => true
+      case _: EqualNullSafe => true
+      case _: IsNull => true
       case _: IsNotNull => true
       case _ => false
     }

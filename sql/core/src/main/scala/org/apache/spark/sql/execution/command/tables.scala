@@ -565,11 +565,7 @@ case class TruncateTableCommand(
     // file relation in the metastore cache and cached table data in the cache manager.
     spark.catalog.refreshTable(tableIdentWithDB)
 
-    if (table.stats.nonEmpty) {
-      // empty table after truncation
-      val newStats = CatalogStatistics(sizeInBytes = 0, rowCount = Some(0))
-      catalog.alterTableStats(tableName, Some(newStats))
-    }
+    CommandUtils.updateTableStats(spark, table)
     Seq.empty[Row]
   }
 
