@@ -1187,7 +1187,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-34167: read LongDecimals with precision < 10, VectorizedReader off") {
-    readParquetFile(testFile("test-data/decimal32-written-as-64-bit.snappy.parquet"), false) { 
+    readParquetFile(testFile("test-data/decimal32-written-as-64-bit.snappy.parquet"), false) {
       df => assert(10 == df.collect().length)
     }
     readParquetFile(testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
