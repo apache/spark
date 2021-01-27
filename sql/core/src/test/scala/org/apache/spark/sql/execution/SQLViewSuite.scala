@@ -735,4 +735,20 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34260: replace existing view using CREATE OR REPLACE") {
+    withTempView("testView") {
+      sql("CREATE TEMP VIEW testView AS SELECT * FROM (SELECT 1)")
+      checkAnswer(sql("SELECT * FROM testView"), Row(1))
+      sql("CREATE OR REPLACE TEMP VIEW testView AS SELECT * FROM (SELECT 2)")
+      checkAnswer(sql("SELECT * FROM testView"), Row(2))
+    }
+
+    withTempView("testView") {
+      sql("CREATE GLOBAL TEMP VIEW testView AS SELECT * FROM (SELECT 1)")
+      checkAnswer(sql("SELECT * FROM testView"), Row(1))
+      sql("CREATE OR REPLACE GLOBAL TEMP VIEW testView AS SELECT * FROM (SELECT 2)")
+      checkAnswer(sql("SELECT * FROM testView"), Row(2))
+    }
+  }
 }
