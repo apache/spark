@@ -489,7 +489,8 @@ final class SlidingWindowFunctionFrame(
  */
 final class UnboundedWindowFunctionFrame(
     target: InternalRow,
-    processor: AggregateProcessor)
+    processor: AggregateProcessor,
+    jumpToEnd: Boolean = false)
   extends WindowFunctionFrame {
 
   val lowerBound: Int = 0
@@ -500,8 +501,18 @@ final class UnboundedWindowFunctionFrame(
     if (processor != null) {
       processor.initialize(rows.length)
       val iterator = rows.generateIterator()
-      while (iterator.hasNext) {
-        processor.update(iterator.next())
+      if (jumpToEnd) {
+        var lastRow = EmptyRow
+        while (iterator.hasNext) {
+          lastRow = iterator.next()
+        }
+        if (lastRow != EmptyRow) {
+          processor.update(lastRow)
+        }
+      } else {
+        while (iterator.hasNext) {
+          processor.update(iterator.next())
+        }
       }
 
       processor.evaluate(target)

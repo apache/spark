@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Last}
 import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
@@ -147,6 +147,9 @@ trait WindowExecBase extends UnaryExecNode {
         case e @ WindowExpression(function, spec) =>
           val frame = spec.frameSpecification.asInstanceOf[SpecifiedWindowFrame]
           function match {
+            case AggregateExpression(l: Last, _, _, _, _) if !l.ignoreNulls &&
+              frame.lower == UnboundedPreceding && frame.upper == UnboundedFollowing =>
+              collect("AGGREGATE_LAST", frame, e, l)
             case AggregateExpression(f, _, _, _, _) => collect("AGGREGATE", frame, e, f)
             case f: FrameLessOffsetWindowFunction =>
               collect("FRAME_LESS_OFFSET", f.fakeFrame, e, f)
@@ -235,6 +238,11 @@ trait WindowExecBase extends UnaryExecNode {
           case ("AGGREGATE", _, UnboundedPreceding, UnboundedFollowing, _) =>
             target: InternalRow => {
               new UnboundedWindowFunctionFrame(target, processor)
+            }
+
+          case ("AGGREGATE_LAST", _, UnboundedPreceding, UnboundedFollowing, _) =>
+            target: InternalRow => {
+              new UnboundedWindowFunctionFrame(target, processor, true)
             }
 
           // Growing Frame.
