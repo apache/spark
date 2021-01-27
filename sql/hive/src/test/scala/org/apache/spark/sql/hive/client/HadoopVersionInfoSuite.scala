@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URLClassLoader
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -67,5 +68,20 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
     } finally {
       Utils.deleteRecursively(ivyPath)
     }
+  }
+
+  test("SPARK-32212: test supportHadoopShadedClient()") {
+    Seq("3.2.2", "3.2.3", "3.2.2.1", "3.2.2-XYZ", "3.2.2.4-SNAPSHOT").foreach { version =>
+      assert(IsolatedClientLoader.supportsHadoopShadedClient(version), s"version $version")
+    }
+
+    // negative cases
+    Seq("3.1.3", "3.2", "3.2.1", "4").foreach { version =>
+      assert(!IsolatedClientLoader.supportsHadoopShadedClient(version), s"version $version")
+    }
+  }
+
+  test("SPARK-32212: built-in Hadoop version should support shaded client") {
+    assert(IsolatedClientLoader.supportsHadoopShadedClient(VersionInfo.getVersion))
   }
 }

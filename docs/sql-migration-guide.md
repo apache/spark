@@ -49,6 +49,7 @@ license: |
     * `MSCK REPAIR TABLE`
     * `LOAD DATA`
     * `REFRESH TABLE`
+    * `TRUNCATE TABLE`
     * and the method `spark.catalog.refreshTable`
   In Spark 3.1 and earlier, table refreshing leaves dependents uncached.
 
@@ -85,6 +86,8 @@ license: |
   - In Spark 3.1, creating or altering a permanent view will capture runtime SQL configs and store them as view properties. These configs will be applied during the parsing and analysis phases of the view resolution. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.useCurrentConfigsForView` to `true`.
 
   - In Spark 3.1, the temporary view will have same behaviors with the permanent view, i.e. capture and store runtime SQL configs, SQL text, catalog and namespace. The capatured view properties will be applied during the parsing and analysis phases of the view resolution. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.storeAnalyzedPlanForView` to `true`.
+
+  - In Spark 3.1, temporary view created via `CACHE TABLE ... AS SELECT` will also have the same behavior with permanent view. In particular, when the temporary view is dropped, Spark will invalidate all its cache dependents, as well as the cache for the temporary view itself. This is different from Spark 3.0 and below, which only does the latter. To restore the previous behavior, you can set `spark.sql.legacy.storeAnalyzedPlanForView` to `true`.
 
   - Since Spark 3.1, CHAR/CHARACTER and VARCHAR types are supported in the table schema. Table scan/insertion will respect the char/varchar semantic. If char/varchar is used in places other than table schema, an exception will be thrown (CAST is an exception that simply treats char/varchar as string like before). To restore the behavior before Spark 3.1, which treats them as STRING types and ignores a length parameter, e.g. `CHAR(4)`, you can set `spark.sql.legacy.charVarcharAsString` to `true`.
 
