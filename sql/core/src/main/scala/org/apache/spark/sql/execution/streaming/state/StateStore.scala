@@ -165,10 +165,18 @@ case class StateStoreMetrics(
 
 object StateStoreMetrics {
   def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
+    val customMetricNames = allMetrics.flatMap(_.customMetrics.keySet).map(_.name).toSet
+    val customMetrics = allMetrics.flatMap(_.customMetrics)
+    val combinedCustomMetrics = customMetricNames.map { currentName =>
+      val metricsWithSameName = customMetrics.filter(_._1.name == currentName)
+      val sumOfMetrics = metricsWithSameName.map(_._2).sum
+      metricsWithSameName.head._1 -> sumOfMetrics
+    }.toMap
+
     StateStoreMetrics(
       allMetrics.map(_.numKeys).sum,
       allMetrics.map(_.memoryUsedBytes).sum,
-      allMetrics.flatMap(_.customMetrics).toMap)
+      combinedCustomMetrics)
   }
 }
 
