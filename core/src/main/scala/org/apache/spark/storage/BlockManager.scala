@@ -260,12 +260,10 @@ private[spark] class BlockManager(
   }
 
   @inline final private def checkShouldStore(blockId: BlockId) = {
-    if (isDecommissioning()) {
-      // Don't reject broadcast blocks since they may be stored during task exec and
-      // don't need to be migrated.
-      if (!blockId.isBroadcast) {
+    // Don't reject broadcast blocks since they may be stored during task exec and
+    // don't need to be migrated.
+    if (isDecommissioning() && !blockId.isBroadcast) {
         throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
-      }
     }
   }
 
