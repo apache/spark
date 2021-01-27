@@ -810,7 +810,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
-    ConfigBuilder("spark.excludeOnFailure.decommissionExcludedExecutors")
+    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors.decommission")
       .doc("Attempt decommission of excluded nodes instead of going directly to kill")
       .version("3.2.0")
       .booleanConf
@@ -1952,7 +1952,9 @@ package object config {
 
   private[spark] val EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL =
     ConfigBuilder("spark.executor.decommission.cleanupInterval")
-      .doc("Duration after which a Spark will ask a decommissioning executor to exit.")
+      .doc("Duration after which a Spark will force a decommissioning executor to exit." +
+        " this should be set to a high value in most situations as low values will prevent " +
+        " block migrations from having enough time to complete.")
       .version("3.2.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional

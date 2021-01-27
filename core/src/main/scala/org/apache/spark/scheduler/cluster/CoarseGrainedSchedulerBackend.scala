@@ -523,10 +523,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map { cleanupInterval =>
       val cleanupTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
-          val stragglers = executorsToDecommission.filter(executorsPendingDecommission.contains(_))
+          val stragglers = CoarseGrainedSchedulerBackend.this.synchronized {
+            executorsToDecommission.filter(executorsPendingDecommission.contains)
+          }
           if (stragglers.nonEmpty) {
-            logInfo(
-              s"${stragglers.toList} failed to decommission in ${cleanupInterval}, killing.")
+            logInfo(s"${stragglers.toList} failed to decommission in ${cleanupInterval}, killing.")
             killExecutors(stragglers, false, false, true)
           }
         }
@@ -868,6 +869,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         Future.successful (if (killSuccessful) executorsToKill else Seq.empty[String])
       )(ThreadUtils.sameThread)
     }
+
     defaultAskTimeout.awaitResult(response)
   }
 
@@ -883,7 +885,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the decommission request is acknowledged.
    */
   final override def decommissionExecutorsOnHost(host: String): Boolean = {
-    logInfo(s"Requesting to kill any and all executors on host ${host}")
+    logInfo(s"Requesting to kill any and all executors on host $host")
     // A potential race exists if a new executor attempts to register on a host
     // that is on the exclude list and is no longer valid. To avoid this race,
     // all executor registration and decommissioning happens in the event loop. This way, either
@@ -899,7 +901,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * @return whether the kill request is acknowledged.
    */
   final override def killExecutorsOnHost(host: String): Boolean = {
-    logInfo(s"Requesting to kill any and all executors on host ${host}")
+    logInfo(s"Requesting to kill any and all executors on host $host")
     // A potential race exists if a new executor attempts to register on a host
     // that is on the exclude list and is no longer valid. To avoid this race,
     // all executor registration and killing happens in the event loop. This way, either

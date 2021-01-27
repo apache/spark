@@ -556,7 +556,6 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
 
   test("excluding decommission and kills executors when enabled") {
     val allocationClientMock = mock[ExecutorAllocationClient]
-    healthTracker = new HealthTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
 
     // verify we decommission when configured
     conf.set(config.EXCLUDE_ON_FAILURE_KILL_ENABLED, true)

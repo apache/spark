@@ -349,7 +349,7 @@ class KubernetesSuite extends SparkFunSuite
                 // exits once the blocks are done migrating and doesn't wait for the
                 // entire grace period if it does not need to.
                 kubernetesTestComponents.kubernetesClient.pods()
-                  .withName(name).withGracePeriod(8640000).delete()
+                  .withName(name).withGracePeriod(Int.MaxValue).delete()
                 logDebug(s"Triggered pod decom/delete: $name deleted")
                 // Make sure this pod is deleted
                 Eventually.eventually(TIMEOUT, INTERVAL) {

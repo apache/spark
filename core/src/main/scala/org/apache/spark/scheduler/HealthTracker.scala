@@ -40,7 +40,7 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *      stage, but still many failures over the entire application
  *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
  *      excluding
- *  * missing shuffle files -- may trigger fetch failures on health executors.
+ *  * missing shuffle files -- may trigger fetch failures on healthy executors.
  *
  * See the design doc on SPARK-8425 for a more in-depth discussion. Note SPARK-32037 renamed
  * the feature.
@@ -192,11 +192,11 @@ private[scheduler] class HealthTracker (
           logInfo(s"Killing all executors on excluded host $node " +
             s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
           if (decommission) {
-            if (a.decommissionExecutorsOnHost(node) == false) {
+            if (!a.decommissionExecutorsOnHost(node)) {
               logError(s"Decommissioning executors on $node failed.")
             }
           } else {
-            if (a.killExecutorsOnHost(node) == false) {
+            if (!a.killExecutorsOnHost(node)) {
               logError(s"Killing executors on node $node failed.")
             }
           }
