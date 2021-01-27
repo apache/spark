@@ -524,7 +524,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *      Cached data is cleared while keeping the table/view and all its dependents are cached.
    *
    * The method does not do:
-   *   - schema inference for data source tables
+   *   - schema inference for file source tables
    *   - statistics update
    *
    * The method is supposed to use in all cases when need to refresh table/view data and meta-data.
