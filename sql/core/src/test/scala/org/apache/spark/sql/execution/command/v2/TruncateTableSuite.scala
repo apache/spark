@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `DROP TABLE` command to check V2 table catalogs.
+ * The class contains tests for the `TRUNCATE TABLE` command to check V2 table catalogs.
  */
-class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
-
-}
+class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase
