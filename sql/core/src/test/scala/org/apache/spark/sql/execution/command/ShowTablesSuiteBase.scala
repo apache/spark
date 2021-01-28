@@ -21,7 +21,6 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 
 /**
  * This base suite contains unified tests for the `SHOW TABLES` command that check V1 and V2
