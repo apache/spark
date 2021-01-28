@@ -237,14 +237,16 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 }
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
-  val releaseMirror = "https://dist.apache.org/repos/dist/release"
+  val releaseMirror = sys.env.getOrElse("SPARK_RELEASE_MIRROR",
+    "https://dist.apache.org/repos/dist/release")
   // Tests the latest version of every release line.
   val testingVersions: Seq[String] = {
     import scala.io.Source
-    val versions: Seq[String] = try {
-      Source.fromURL(s"${releaseMirror}/spark").mkString
+    val versions: Seq[String] = try Utils.tryWithResource(
+      Source.fromURL(s"$releaseMirror/spark")) { source =>
+      source.mkString
         .split("\n")
-        .filter(_.contains("""<li><a href="spark-"""))
+        .filter(_.contains("""<a href="spark-"""))
         .filterNot(_.contains("preview"))
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)

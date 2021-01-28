@@ -18,7 +18,7 @@ WholeStageCodegen (9)
                                   BroadcastHashJoin [cr_returning_customer_sk,c_customer_sk]
                                     Project [cc_call_center_id,cc_name,cc_manager,cr_returning_customer_sk,cr_net_loss]
                                       BroadcastHashJoin [cr_returned_date_sk,d_date_sk]
-                                        Project [cc_call_center_id,cc_name,cc_manager,cr_returned_date_sk,cr_returning_customer_sk,cr_net_loss]
+                                        Project [cc_call_center_id,cc_name,cc_manager,cr_returning_customer_sk,cr_net_loss,cr_returned_date_sk]
                                           BroadcastHashJoin [cc_call_center_sk,cr_call_center_sk]
                                             Filter [cc_call_center_sk]
                                               ColumnarToRow
@@ -27,10 +27,12 @@ WholeStageCodegen (9)
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
-                                                  Filter [cr_call_center_sk,cr_returned_date_sk,cr_returning_customer_sk]
+                                                  Filter [cr_call_center_sk,cr_returning_customer_sk]
                                                     ColumnarToRow
                                                       InputAdapter
-                                                        Scan parquet default.catalog_returns [cr_returned_date_sk,cr_returning_customer_sk,cr_call_center_sk,cr_net_loss]
+                                                        Scan parquet default.catalog_returns [cr_returning_customer_sk,cr_call_center_sk,cr_net_loss,cr_returned_date_sk]
+                                                          SubqueryBroadcast [d_date_sk] #1
+                                                            ReusedExchange [d_date_sk] #4
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)

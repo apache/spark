@@ -1414,6 +1414,16 @@ object functions {
   def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
 
   /**
+   * Get the value of the bit (0 or 1) at the specified position.
+   * The positions are numbered from right to left, starting at zero.
+   * The position argument cannot be negative.
+   *
+   * @group bitwise_funcs
+   * @since 3.2.0
+   */
+  def bitwiseGet(e: Column, pos: Column): Column = withExpr { BitwiseGet(e.expr, pos.expr) }
+
+  /**
    * Parses the expression string into the column that it represents, similar to
    * [[Dataset#selectExpr]].
    * {{{
@@ -2625,19 +2635,6 @@ object functions {
    */
   def regexp_extract(e: Column, exp: String, groupIdx: Int): Column = withExpr {
     RegExpExtract(e.expr, lit(exp).expr, lit(groupIdx).expr)
-  }
-
-  /**
-   * Extract all specific groups matched by a Java regex, from the specified string column.
-   * If the regex did not match, or the specified group did not match, return an empty array.
-   * if the specified group index exceeds the group count of regex, an IllegalArgumentException
-   * will be thrown.
-   *
-   * @group string_funcs
-   * @since 3.1.0
-   */
-  def regexp_extract_all(e: Column, exp: String, groupIdx: Int): Column = withExpr {
-    RegExpExtractAll(e.expr, lit(exp).expr, lit(groupIdx).expr)
   }
 
   /**

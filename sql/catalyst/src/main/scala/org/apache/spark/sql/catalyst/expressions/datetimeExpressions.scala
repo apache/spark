@@ -24,7 +24,6 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -32,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, Tim
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -2074,7 +2074,7 @@ case class MakeTimestamp(
           // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL
           LocalDateTime.of(year, month, day, hour, min, 0, 0).plusMinutes(1)
         } else {
-          throw new DateTimeException("The fraction of sec must be zero. Valid range is [0, 60].")
+          throw QueryExecutionErrors.invalidFractionOfSecondError
         }
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
@@ -2125,8 +2125,7 @@ case class MakeTimestamp(
             ldt = java.time.LocalDateTime.of(
               $year, $month, $day, $hour, $min, 0, 0).plusMinutes(1);
           } else {
-            throw new java.time.DateTimeException(
-              "The fraction of sec must be zero. Valid range is [0, 60].");
+            throw QueryExecutionErrors.invalidFractionOfSecondError();
           }
         } else {
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
@@ -2165,22 +2164,22 @@ object DatePart {
 
   def toEquivalentExpr(field: Expression, source: Expression): Expression = {
     if (!field.foldable) {
-      throw new AnalysisException("The field parameter needs to be a foldable string value.")
+      throw QueryCompilationErrors.unfoldableFieldUnsupportedError
     }
     val fieldEval = field.eval()
     if (fieldEval == null) {
       Literal(null, DoubleType)
     } else {
       val fieldStr = fieldEval.asInstanceOf[UTF8String].toString
-      val errMsg = s"Literals of type '$fieldStr' are currently not supported " +
-        s"for the ${source.dataType.catalogString} type."
+      val analysisException = QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(
+        fieldStr, source)
       if (source.dataType == CalendarIntervalType) {
         ExtractIntervalPart.parseExtractField(
           fieldStr,
           source,
-          throw new AnalysisException(errMsg))
+          throw analysisException)
       } else {
-        DatePart.parseExtractField(fieldStr, source, throw new AnalysisException(errMsg))
+        DatePart.parseExtractField(fieldStr, source, throw analysisException)
       }
     }
   }

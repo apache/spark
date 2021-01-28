@@ -76,7 +76,7 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        val html = Source.fromURL(sc.ui.get.webUrl).mkString
+        val html = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl))(_.mkString)
         assert(!html.contains("random data that should not be present"))
         assert(html.toLowerCase(Locale.ROOT).contains("stages"))
         assert(html.toLowerCase(Locale.ROOT).contains("storage"))
@@ -90,7 +90,7 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if visible from http://localhost:4040
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        val html = Source.fromURL("http://localhost:4040").mkString
+        val html = Utils.tryWithResource(Source.fromURL("http://localhost:4040"))(_.mkString)
         assert(html.toLowerCase(Locale.ROOT).contains("stages"))
       }
     }

@@ -1680,4 +1680,20 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       }
     }
   }
+
+  test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
+    withBasicCatalog { catalog =>
+      catalog.createTempView("tbl1", Range(1, 10, 1, 10), false)
+      val qualifiedName1 = QualifiedTableName("default", "tbl1")
+      catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
+      catalog.refreshTable(TableIdentifier("tbl1"))
+      assert(catalog.getCachedTable(qualifiedName1) != null)
+
+      catalog.createGlobalTempView("tbl2", Range(2, 10, 1, 10), false)
+      val qualifiedName2 = QualifiedTableName(catalog.globalTempViewManager.database, "tbl2")
+      catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
+      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempViewManager.database)))
+      assert(catalog.getCachedTable(qualifiedName2) != null)
+    }
+  }
 }
