@@ -3888,15 +3888,13 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
           if attr.dataType == StringType && list.forall(_.foldable) =>
           CharVarcharUtils.getRawType(attr.metadata).flatMap {
             case CharType(length) =>
-              val (nulls, literalChars) =
-                list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
-              val literalCharLengths = literalChars.map(_.numChars())
+              val literalCharLengths = list.map(_.eval().asInstanceOf[UTF8String].numChars())
               val targetLen = (length +: literalCharLengths).max
               Some(i.copy(
                 value = addPadding(attr, length, targetLen),
                 list = list.zip(literalCharLengths).map {
                   case (lit, charLength) => addPadding(lit, charLength, targetLen)
-                } ++ nulls.map(Literal.create(_, StringType))))
+                }))
             case _ => None
           }.getOrElse(i)
 
@@ -3917,17 +3915,13 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
       CharVarcharUtils.getRawType(attr.metadata).flatMap {
         case CharType(length) =>
           val str = lit.eval().asInstanceOf[UTF8String]
-          if (str == null) {
-            None
+          val stringLitLen = str.numChars()
+          if (length < stringLitLen) {
+            Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
+          } else if (length > stringLitLen) {
+            Some(Seq(attr, StringRPad(lit, Literal(length))))
           } else {
-            val stringLitLen = str.numChars()
-            if (length < stringLitLen) {
-              Some(Seq(StringRPad(attr, Literal(stringLitLen)), lit))
-            } else if (length > stringLitLen) {
-              Some(Seq(attr, StringRPad(lit, Literal(length))))
-            } else {
-              None
-            }
+            None
           }
         case _ => None
       }
