@@ -95,6 +95,16 @@ def lit(col):
     .. versionchanged:: 3.2.0
         Added support for complex type literals.
 
+    Parameters
+    ----------
+    col : bool, float, int, str, datetime.date, datetime.datetime, dict, list, tuple
+        Object to be converted into :class:`Column`.
+
+        If it is a collection, conversion will be applied recursively. In such case,
+        all stored values should be of compatible types.
+
+        I `col` is already a :class:`Column`, it will be returned unmodified.
+
     Examples
     --------
     >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
