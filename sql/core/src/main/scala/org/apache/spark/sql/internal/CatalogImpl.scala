@@ -521,7 +521,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   3. Table/View schema in the Hive Metastore if the SQL config
    *      `spark.sql.hive.caseSensitiveInferenceMode` is set to `INFER_AND_SAVE`.
    *   4. Cached data of the given table or view, and all its dependents that refer to it.
-   *      Cached data is cleared while keeping the table/view and all its dependents are cached.
+   *      Cached data is cleared while keeping the table/view and all its dependents as cached.
    *
    * The method does not do:
    *   - schema inference for file source tables
