@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
