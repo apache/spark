@@ -300,27 +300,17 @@ class Dataset[T] private[sql](
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)
 
-    def escapeMetaCharacters(str: String): String = {
-      str.replaceAll("\n", "\\\\n")
-        .replaceAll("\r", "\\\\r")
-        .replaceAll("\t", "\\\\t")
-        .replaceAll("\f", "\\\\f")
-        .replaceAll("\b", "\\\\b")
-        .replaceAll("\u000B", "\\\\v")
-        .replaceAll("\u0007", "\\\\a")
-    }
-
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
     // first `truncate-3` and "..."
-    schema.fieldNames.map(escapeMetaCharacters).toSeq +: data.map { row =>
+    schema.fieldNames.map(SchemaUtils.escapeMetaCharacters).toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
           case _ =>
             // Escapes meta-characters not to break the `showString` format
-            escapeMetaCharacters(cell.toString)
+            SchemaUtils.escapeMetaCharacters(cell.toString)
         }
         if (truncate > 0 && str.length > truncate) {
           // do not show ellipses for strings shorter than 4 characters.
