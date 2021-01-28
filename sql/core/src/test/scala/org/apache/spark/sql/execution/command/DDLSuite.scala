@@ -22,7 +22,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
-import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, AclStatus, FsAction, FsPermission}
+import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
@@ -1659,99 +1659,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         } else {
           assert(message.contains("Can not drop default database"))
         }
-      }
-    }
-  }
-
-  test("SPARK-30312: truncate table - keep acl/permission") {
-    val ignorePermissionAcl = Seq(true, false)
-
-    ignorePermissionAcl.foreach { ignore =>
-      withSQLConf(
-        "fs.file.impl" -> classOf[FakeLocalFsFileSystem].getName,
-        "fs.file.impl.disable.cache" -> "true",
-        SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> ignore.toString) {
-        withTable("tab1") {
-          sql("CREATE TABLE tab1 (col INT) USING parquet")
-          sql("INSERT INTO tab1 SELECT 1")
-          checkAnswer(spark.table("tab1"), Row(1))
-
-          val tablePath = new Path(spark.sessionState.catalog
-            .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
-
-          val hadoopConf = spark.sessionState.newHadoopConf()
-          val fs = tablePath.getFileSystem(hadoopConf)
-          val fileStatus = fs.getFileStatus(tablePath);
-
-          fs.setPermission(tablePath, new FsPermission("777"))
-          assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
-
-          // Set ACL to table path.
-          val customAcl = new java.util.ArrayList[AclEntry]()
-          customAcl.add(new AclEntry.Builder()
-            .setName("test")
-            .setType(AclEntryType.USER)
-            .setScope(AclEntryScope.ACCESS)
-            .setPermission(FsAction.READ).build())
-          fs.setAcl(tablePath, customAcl)
-          assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
-
-          sql("TRUNCATE TABLE tab1")
-          assert(spark.table("tab1").collect().isEmpty)
-
-          val fileStatus2 = fs.getFileStatus(tablePath)
-          if (ignore) {
-            assert(fileStatus2.getPermission().toString() != "rwxrwxrwx")
-          } else {
-            assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
-          }
-          val aclEntries = fs.getAclStatus(tablePath).getEntries()
-          if (ignore) {
-            assert(aclEntries.size() == 0)
-          } else {
-            assert(aclEntries.size() == 4)
-            assert(aclEntries.get(0) == customAcl.get(0))
-
-            // Setting ACLs will also set user/group/other permissions
-            // as ACL entries.
-            val user = new AclEntry.Builder()
-              .setType(AclEntryType.USER)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL).build()
-            val group = new AclEntry.Builder()
-              .setType(AclEntryType.GROUP)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL).build()
-            val other = new AclEntry.Builder()
-              .setType(AclEntryType.OTHER)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL).build()
-            assert(aclEntries.get(1) == user)
-            assert(aclEntries.get(2) == group)
-            assert(aclEntries.get(3) == other)
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-31163: acl/permission should handle non-existed path when truncating table") {
-    withSQLConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> "false") {
-      withTable("tab1") {
-        sql("CREATE TABLE tab1 (col1 STRING, col2 INT) USING parquet PARTITIONED BY (col2)")
-        sql("INSERT INTO tab1 SELECT 'one', 1")
-        checkAnswer(spark.table("tab1"), Row("one", 1))
-        val part = spark.sessionState.catalog.listPartitions(TableIdentifier("tab1")).head
-        val path = new File(part.location.getPath)
-        sql("TRUNCATE TABLE tab1")
-        // simulate incomplete/unsuccessful truncate
-        assert(path.exists())
-        path.delete()
-        assert(!path.exists())
-        // execute without java.io.FileNotFoundException
-        sql("TRUNCATE TABLE tab1")
-        // partition path should be re-created
-        assert(path.exists())
       }
     }
   }
