@@ -19,19 +19,12 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 /**
  * The class contains tests for the `SHOW TABLES` command to check V2 table catalogs.
  */
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
-  override def showSchema: StructType = {
-    new StructType()
-      .add("namespace", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-      .add("isTemporary", BooleanType, nullable = false)
-  }
   override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
     showRows.map {
       case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
