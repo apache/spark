@@ -43,7 +43,7 @@ class ObjectAggregationIterator(
     fallbackCountThreshold: Int,
     numOutputRows: SQLMetric,
     spillSize: SQLMetric,
-    fallbackToSortBasedAgg: SQLMetric)
+    numTasksFallBacked: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -179,7 +179,7 @@ class ObjectAggregationIterator(
 
           // Falls back to sort-based aggregation
           sortBased = true
-          fallbackToSortBasedAgg += 1
+          numTasksFallBacked += 1
         }
       }
 

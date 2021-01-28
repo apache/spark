@@ -211,7 +211,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     testSparkPlanMetrics(df2, 1, Map(
       2L -> (("ObjectHashAggregate", Map(
         "number of output rows" -> 4L,
-        "number of fallback to sort-based aggregation" -> 0L))),
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))),
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
@@ -219,7 +219,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         "remote blocks read" -> 0L))),
       0L -> (("ObjectHashAggregate", Map(
         "number of output rows" -> 3L,
-        "number of fallback to sort-based aggregation" -> 0L))))
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))))
     )
 
     // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
@@ -228,10 +228,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       testSparkPlanMetrics(df3, 1, Map(
         2L -> (("ObjectHashAggregate", Map(
           "number of output rows" -> 4L,
-          "number of fallback to sort-based aggregation" -> 2L))),
+          "number of tasks fall-backed to sort-based aggregation" -> 2L))),
         0L -> (("ObjectHashAggregate", Map(
           "number of output rows" -> 3L,
-          "number of fallback to sort-based aggregation" -> 3L))))
+          "number of tasks fall-backed to sort-based aggregation" -> 1L))))
       )
       testSparkPlanMetricsWithPredicates(df3, 1, Map(
         2L -> (("ObjectHashAggregate", Map(
