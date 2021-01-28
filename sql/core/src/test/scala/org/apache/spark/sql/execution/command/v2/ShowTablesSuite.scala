@@ -25,11 +25,6 @@ import org.apache.spark.sql.execution.command
  */
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
-  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
-    showRows.map {
-      case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
-    }
-  }
 
   // The test fails for V1 catalog with the error:
   // org.apache.spark.sql.AnalysisException:

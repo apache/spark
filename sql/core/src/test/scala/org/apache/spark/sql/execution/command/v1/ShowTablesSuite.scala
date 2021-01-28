@@ -32,11 +32,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
-  override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
-    showRows.map {
-      case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
-    }
-  }
 
   private def withSourceViews(f: => Unit): Unit = {
     withTable("source", "source2") {
