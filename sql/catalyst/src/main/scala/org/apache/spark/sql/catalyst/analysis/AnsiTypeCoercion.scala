@@ -248,7 +248,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
   /**
-   * Promotes string literals that appear in arithmetic expressions.
+   * Promotes string literals that appear in arithmetic and comparison expressions.
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
@@ -283,6 +283,15 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       case p @ BinaryComparison(left @ AtomicType(), right @ StringType()) if right.foldable =>
         p.makeCopy(Array(left, castExpr(right, left.dataType)))
+
+      // Promotes string literals in `In predicate`.
+      case p @ In(a, b)
+        if a.dataType != StringType && b.exists( e => e.foldable && e.dataType == StringType) =>
+        val newList = b.map {
+          case e @ StringType() if e.foldable => Cast(e, a.dataType)
+          case other => other
+        }
+        p.makeCopy(Array(a, newList))
 
       case Abs(e @ StringType()) if e.foldable => Abs(Cast(e, DoubleType))
       case Sum(e @ StringType()) if e.foldable => Sum(Cast(e, DoubleType))
