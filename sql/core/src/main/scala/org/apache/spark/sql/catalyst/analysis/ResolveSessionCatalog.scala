@@ -503,8 +503,8 @@ class ResolveSessionCatalog(
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
 
-    case ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
-      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
+    case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, s.output)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
