@@ -1379,8 +1379,7 @@ class SessionCatalog(
       }
       e
     } else {
-      throw new InvalidUDFClassException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
-        s"Use sparkSession.udf.register(...) instead.")
+      throw QueryCompilationErrors.noHandlerForUDAFError(clazz.getCanonicalName)
     }
   }
 
