@@ -154,7 +154,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           }
           x
         }).count()
-        assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
+        assert(sc.listFiles().count(_.contains("somesuffix1")) == 1)
       } finally {
         sc.stop()
       }
@@ -245,7 +245,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
-      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
+      assert(sc.listJars().count(_.contains("TestUDTF.jar")) == 1)
     } finally {
       sc.stop()
     }
