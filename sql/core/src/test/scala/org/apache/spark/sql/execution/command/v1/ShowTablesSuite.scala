@@ -21,7 +21,6 @@ import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
 /**
  * This base suite contains unified tests for the `SHOW TABLES` command that check V1
@@ -68,17 +67,11 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   test("SHOW TABLE EXTENDED from default") {
     withSourceViews {
       val expected = Seq(Row("", "source", true), Row("", "source2", true))
-      val schema = new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-        .add("information", StringType, nullable = false)
 
       val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
       val result = df.collect()
       val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
 
-      assert(df.schema === schema)
       assert(resultWithoutInfo === expected)
       result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
     }
