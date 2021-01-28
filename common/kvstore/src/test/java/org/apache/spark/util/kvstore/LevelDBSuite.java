@@ -28,17 +28,18 @@ import java.util.stream.StreamSupport;
 import com.google.common.collect.ImmutableSet;
 import org.apache.commons.io.FileUtils;
 import org.iq80.leveldb.DBIterator;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 public class LevelDBSuite {
 
   private LevelDB db;
   private File dbpath;
 
-  @After
+  @AfterEach
   public void cleanup() throws Exception {
     if (db != null) {
       db.close();
@@ -48,7 +49,7 @@ public class LevelDBSuite {
     }
   }
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     dbpath = File.createTempFile("test.", ".ldb");
     dbpath.delete();
