@@ -155,14 +155,14 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     checkAnswer(testData.as("testData").select($"testData.*"), testData.collect().toSeq)
   }
 
-  test("star can be qualified by table name inside a non-count function") {
+  test("SPARK-34199: star can be qualified by table name inside a non-count function") {
     checkAnswer(
       testData.as("testData").selectExpr("hash(testData.*)"),
       testData.as("testData").selectExpr("hash(testData.key, testData.value)")
     )
   }
 
-  test("star cannot be qualified by table name inside a count function") {
+  test("SPARK-34199: star cannot be qualified by table name inside a count function") {
     val e = intercept[AnalysisException] {
       testData.as("testData").selectExpr("count(testData.*)").collect()
     }

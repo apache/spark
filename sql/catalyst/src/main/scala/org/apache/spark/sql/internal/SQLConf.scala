@@ -1563,7 +1563,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.allowSingleTableStarInCount")
       .internal()
       .doc("When true, the SQL function 'count' is allowed to take single 'table.*' as parameter")
-      .version("3.1.1")
+      .version("3.2")
       .booleanConf
       .createWithDefault(false)
 
