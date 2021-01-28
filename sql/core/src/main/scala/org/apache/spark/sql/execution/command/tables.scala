@@ -972,9 +972,8 @@ case class ShowColumnsCommand(
  */
 case class ShowPartitionsCommand(
     tableName: TableIdentifier,
-    attributes: Seq[Attribute],
+    override val output: Seq[Attribute],
     spec: Option[TablePartitionSpec]) extends RunnableCommand {
-  override val output: Seq[Attribute] = attributes
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
