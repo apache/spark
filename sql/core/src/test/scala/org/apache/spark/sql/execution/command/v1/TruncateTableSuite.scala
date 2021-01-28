@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.execution.command
 
@@ -29,7 +29,21 @@ import org.apache.spark.sql.execution.command
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.TruncateTableSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
  */
-trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase
+trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
+
+  test("SPARK-34215: keep table cached after truncation") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c0 int) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0")
+      sql(s"CACHE TABLE $t")
+      assert(spark.catalog.isCached(t))
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(0))
+      sql(s"TRUNCATE TABLE $t")
+      assert(spark.catalog.isCached(t))
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq.empty)
+    }
+  }
+}
 
 /**
  * The class contains tests for the `TRUNCATE TABLE` command to check V1 In-Memory table catalog.
