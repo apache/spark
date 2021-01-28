@@ -35,11 +35,11 @@ object DistributionAndOrderingUtils {
       val (distribution, numPartitions) = write.requiredDistribution match {
         case d: OrderedDistribution =>
           val dist = d.ordering.map(e => toCatalyst(e, query, resolver))
-          val numParts = d.requiredNumPartitions()
+          val numParts = write.requiredNumPartitionsOnDistribution()
           (dist, numParts)
         case d: ClusteredDistribution =>
           val dist = d.clustering.map(e => toCatalyst(e, query, resolver))
-          val numParts = d.requiredNumPartitions()
+          val numParts = write.requiredNumPartitionsOnDistribution()
           (dist, numParts)
         case _: UnspecifiedDistribution =>
           (Array.empty[Expression], 0)

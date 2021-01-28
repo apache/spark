@@ -96,7 +96,7 @@ class WriteDistributionAndOrderingSuite
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = orderedTableDistribution(tableOrdering, targetNumPartitions)
+    val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -110,6 +110,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -152,7 +153,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
     val clustering = Array[Expression](FieldReference("data"), FieldReference("id"))
-    val tableDistribution = clusteredTableDistribution(clustering, targetNumPartitions)
+    val tableDistribution = clusteredTableDistribution(clustering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -173,6 +174,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -216,7 +218,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
     val clustering = Array[Expression](FieldReference("data"))
-    val tableDistribution = clusteredTableDistribution(clustering, targetNumPartitions)
+    val tableDistribution = clusteredTableDistribution(clustering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -237,6 +239,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -273,6 +276,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      None,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -300,6 +304,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      None,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -342,7 +347,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = orderedTableDistribution(tableOrdering, targetNumPartitions)
+    val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -362,6 +367,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -406,7 +412,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = orderedTableDistribution(tableOrdering, targetNumPartitions)
+    val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -426,6 +432,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -469,7 +476,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = orderedTableDistribution(tableOrdering, targetNumPartitions)
+    val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -489,6 +496,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -532,7 +540,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = orderedTableDistribution(tableOrdering, targetNumPartitions)
+    val tableDistribution = Distributions.ordered(tableOrdering)
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -552,6 +560,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -596,8 +605,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = clusteredTableDistribution(Array(FieldReference("data")),
-      targetNumPartitions)
+    val tableDistribution = clusteredTableDistribution(Array(FieldReference("data")))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -618,6 +626,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -662,8 +671,7 @@ class WriteDistributionAndOrderingSuite
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST),
       sort(FieldReference("id"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
     )
-    val tableDistribution = clusteredTableDistribution(Array(FieldReference("data")),
-      targetNumPartitions)
+    val tableDistribution = clusteredTableDistribution(Array(FieldReference("data")))
 
     val writeOrdering = Seq(
       catalyst.expressions.SortOrder(
@@ -684,6 +692,7 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
+      targetNumPartitions,
       tableOrdering,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
@@ -693,13 +702,15 @@ class WriteDistributionAndOrderingSuite
 
   private def checkWriteRequirements(
       tableDistribution: Distribution,
+      tableNumPartitionsOnDistribution: Option[Int],
       tableOrdering: Array[SortOrder],
       expectedWritePartitioning: physical.Partitioning,
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
       writeCommand: String = "append"): Unit = {
 
-    catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution, tableOrdering)
+    catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
+      tableNumPartitionsOnDistribution, tableOrdering)
 
     val df = spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
     val writer = writeTransform(df).writeTo(tableNameAsString)
@@ -788,15 +799,6 @@ class WriteDistributionAndOrderingSuite
     }
   }
 
-  private def orderedTableDistribution(
-      tableOrdering: Array[SortOrder],
-      targetNumPartitions: Option[Int]): Distribution = {
-    targetNumPartitions match {
-      case Some(parts) => Distributions.ordered(tableOrdering, parts)
-      case _ => Distributions.ordered(tableOrdering)
-    }
-  }
-
   private def orderedWritePartitioning(
       writeOrdering: Seq[catalyst.expressions.SortOrder],
       targetNumPartitions: Option[Int]): physical.Partitioning = {
@@ -806,13 +808,8 @@ class WriteDistributionAndOrderingSuite
     }
   }
 
-  private def clusteredTableDistribution(
-      clustering: Array[Expression],
-      targetNumPartitions: Option[Int]): Distribution = {
-    targetNumPartitions match {
-      case Some(parts) => Distributions.clustered(clustering, parts)
-      case _ => Distributions.clustered(clustering)
-    }
+  private def clusteredTableDistribution(clustering: Array[Expression]): Distribution = {
+    Distributions.clustered(clustering)
   }
 
   private def clusteredWritePartitioning(

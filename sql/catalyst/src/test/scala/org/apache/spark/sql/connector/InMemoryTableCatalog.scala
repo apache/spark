@@ -70,7 +70,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    createTable(ident, schema, partitions, properties, Distributions.unspecified(), Array.empty)
+    createTable(ident, schema, partitions, properties, Distributions.unspecified(), None,
+      Array.empty)
   }
 
   def createTable(
@@ -79,6 +80,7 @@ class BasicInMemoryTableCatalog extends TableCatalog {
       partitions: Array[Transform],
       properties: util.Map[String, String],
       distribution: Distribution,
+      requiredNumPartitionsOnDistribution: Option[Int],
       ordering: Array[SortOrder]): Table = {
     if (tables.containsKey(ident)) {
       throw new TableAlreadyExistsException(ident)
@@ -87,7 +89,8 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     InMemoryTableCatalog.maybeSimulateFailedTableCreation(properties)
 
     val tableName = s"$name.${ident.quoted}"
-    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution, ordering)
+    val table = new InMemoryTable(tableName, schema, partitions, properties, distribution,
+      requiredNumPartitionsOnDistribution, ordering)
     tables.put(ident, table)
     namespaces.putIfAbsent(ident.namespace.toList, Map())
     table

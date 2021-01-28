@@ -20,40 +20,17 @@ package org.apache.spark.sql.connector.distributions
 import org.apache.spark.sql.connector.expressions.{Expression, SortOrder}
 
 private[sql] object LogicalDistributions {
-  val NO_REQUIREMENT_NUM_PARTITIONS: Int = 0
 
   def unspecified(): UnspecifiedDistribution = {
     UnspecifiedDistributionImpl
   }
 
   def clustered(clustering: Array[Expression]): ClusteredDistribution = {
-    ClusteredDistributionImpl(clustering, NO_REQUIREMENT_NUM_PARTITIONS)
-  }
-
-  def clustered(clustering: Array[Expression], numPartitions: Int): ClusteredDistribution = {
-    ClusteredDistributionImpl(clustering, numPartitions)
+    ClusteredDistributionImpl(clustering)
   }
 
   def ordered(ordering: Array[SortOrder]): OrderedDistribution = {
-    OrderedDistributionImpl(ordering, NO_REQUIREMENT_NUM_PARTITIONS)
-  }
-
-  def ordered(ordering: Array[SortOrder], numPartitions: Int): OrderedDistribution = {
-    OrderedDistributionImpl(ordering, numPartitions)
-  }
-
-  def representation(distName: String, exprs: Seq[Expression], numPartitions: Int): String = {
-    val distributionStr = if (exprs.nonEmpty) {
-      exprs.map(_.describe).mkString(", ")
-    } else {
-      ""
-    }
-    val numPartitionsStr = if (numPartitions > 0) {
-      s"/ numPartitions=$numPartitions)"
-    } else {
-      ""
-    }
-    s"$distName($distributionStr $numPartitionsStr)"
+    OrderedDistributionImpl(ordering)
   }
 }
 
@@ -62,27 +39,21 @@ private[sql] object UnspecifiedDistributionImpl extends UnspecifiedDistribution 
 }
 
 private[sql] final case class ClusteredDistributionImpl(
-    clusteringExprs: Seq[Expression],
-    numPartitions: Int) extends ClusteredDistribution {
+    clusteringExprs: Seq[Expression]) extends ClusteredDistribution {
 
   override def clustering: Array[Expression] = clusteringExprs.toArray
 
-  override def requiredNumPartitions(): Int = numPartitions
-
   override def toString: String = {
-    LogicalDistributions.representation("ClusteredDistribution", clusteringExprs, numPartitions)
+    s"ClusteredDistribution(${clusteringExprs.map(_.describe).mkString(", ")})"
   }
 }
 
 private[sql] final case class OrderedDistributionImpl(
-    orderingExprs: Seq[SortOrder],
-    numPartitions: Int) extends OrderedDistribution {
+    orderingExprs: Seq[SortOrder]) extends OrderedDistribution {
 
   override def ordering: Array[SortOrder] = orderingExprs.toArray
 
-  override def requiredNumPartitions(): Int = numPartitions
-
   override def toString: String = {
-    LogicalDistributions.representation("OrderedDistribution", orderingExprs, numPartitions)
+    s"OrderedDistribution(${orderingExprs.map(_.describe).mkString(", ")})"
   }
 }
