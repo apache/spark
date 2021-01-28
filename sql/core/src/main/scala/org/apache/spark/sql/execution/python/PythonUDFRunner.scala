@@ -39,10 +39,10 @@ class PythonUDFRunner(
     pythonCodeSent: SQLMetric,
     pythonDataReceived: SQLMetric,
     pythonDataSent: SQLMetric,
-    pythonNumBatchesReceived: SQLMetric,
-    pythonNumBatchesSent: SQLMetric)
+    pythonNumBatchesReceived: SQLMetric)
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, evalType, argOffsets) {
+
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected override def newWriterThread(
@@ -54,21 +54,25 @@ class PythonUDFRunner(
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        val startData = dataOut.size()
         val startTime = System.nanoTime()
         PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
         val deltaTime = System.nanoTime()-startTime
         pythonCodeSerializeTime += deltaTime
-        pythonCodeSent += dataOut.size()
+        val deltaData = dataOut.size() - startData
+        pythonCodeSent += deltaData
       }
 
       protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        val startData = dataOut.size()
         val startTime = System.nanoTime()
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         val deltaTime = System.nanoTime() - startTime
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
 
         pythonDataSerializeTime += deltaTime
-        pythonDataSent += dataOut.size()
+        val deltaData = dataOut.size() - startData
+        pythonDataSent += deltaData
       }
     }
   }

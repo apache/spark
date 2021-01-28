@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
-trait PythonSQLMetrics extends SparkPlan {
+private[python] trait PythonSQLMetrics { self: SparkPlan =>
+
   override val metrics = Map(
     "pythonExecTime" ->
       SQLMetrics.createNanoTimingMetric(sparkContext, "time spent executing"),

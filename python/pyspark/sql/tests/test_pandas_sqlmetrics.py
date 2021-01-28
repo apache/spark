@@ -54,6 +54,7 @@ class PandasSQLMetrics(ReusedSQLTestCase):
         for metric in PythonSQLMetrics:
             self.assertIn(metric, executionMetrics)
 
+
 if __name__ == "__main__":
     from pyspark.sql.tests.test_pandas_sqlmetrics import *  # noqa: F401
 

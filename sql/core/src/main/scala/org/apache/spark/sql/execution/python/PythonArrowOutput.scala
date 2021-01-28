@@ -26,22 +26,22 @@ import org.apache.arrow.vector.VectorSchemaRoot
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
-import org.apache.spark.api.python.{BasePythonRunner, ChainedPythonFunctions, SpecialLengths}
+import org.apache.spark.api.python.{BasePythonRunner, SpecialLengths}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 
-// An abstract class implementing the logic from Python (Arrow) to JVM (ColumnarBatch).
-private[python] abstract class PythonArrowOutput[IN](
-                           funcs: Seq[ChainedPythonFunctions],
-                           evalType: Int,
-                           argOffsets: Array[Array[Int]],
-                           pythonDataReceived: SQLMetric,
-                           pythonExecTime: SQLMetric,
-                           pythonNumRowsReceived: SQLMetric,
-                           pythonNumBatchesReceived: SQLMetric)
-  extends BasePythonRunner[IN, ColumnarBatch](funcs, evalType, argOffsets) {
+/**
+ * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
+ * Python (Arrow) to JVM (ColumnarBatch).
+ */
+private[python] trait PythonArrowOutput { self: BasePythonRunner[_, ColumnarBatch] =>
+
+  def pythonDataReceived: SQLMetric
+  def pythonExecTime: SQLMetric
+  def pythonNumRowsReceived: SQLMetric
+  def pythonNumBatchesReceived: SQLMetric
 
   protected def newReaderIterator(
       stream: DataInputStream,
