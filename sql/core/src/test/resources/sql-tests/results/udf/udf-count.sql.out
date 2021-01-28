@@ -32,7 +32,7 @@ SELECT
   udf(count(DISTINCT (a, b)))
 FROM testData
 -- !query schema
-struct<udf(count(DISTINCT 1)):bigint,udf(count(DISTINCT NULL)):bigint,udf(count(DISTINCT a)):bigint,udf(count(DISTINCT b)):bigint,udf(count(DISTINCT (a + b))):bigint,udf(count(DISTINCT named_struct(a, a, b, b))):bigint>
+struct<udf(count(distinct 1)):bigint,udf(count(distinct NULL)):bigint,udf(count(distinct a)):bigint,udf(count(distinct b)):bigint,udf(count(distinct (a + b))):bigint,udf(count(distinct named_struct(a, a, b, b))):bigint>
 -- !query output
 1	0	2	2	2	6
 
@@ -50,6 +50,6 @@ SELECT
   udf(count(DISTINCT a, b)), udf(count(DISTINCT b, a)), udf(count(DISTINCT *)), udf(count(DISTINCT testData.*))
 FROM testData
 -- !query schema
-struct<udf(count(DISTINCT a, b)):bigint,udf(count(DISTINCT b, a)):bigint,udf(count(DISTINCT a, b)):bigint,udf(count(DISTINCT a, b)):bigint>
+struct<udf(count(distinct a, b)):bigint,udf(count(distinct b, a)):bigint,udf(count(distinct a, b)):bigint,udf(count(distinct a, b)):bigint>
 -- !query output
 3	3	3	3

@@ -136,6 +136,16 @@ package object dsl {
       }
     }
 
+    def ansiCast(to: DataType): Expression = {
+      if (expr.resolved && expr.dataType.sameType(to)) {
+        expr
+      } else {
+        val cast = AnsiCast(expr, to)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
+      }
+    }
+
     def asc: SortOrder = SortOrder(expr, Ascending)
     def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)

@@ -109,7 +109,7 @@ struct<udf(var_samp(b)):double>
 -- !query
 SELECT udf(stddev_pop(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query schema
-struct<udf(stddev_pop(CAST(b AS DECIMAL(38,0)))):double>
+struct<udf(stddev_pop(ansi_cast(b as decimal(38,0)))):double>
 -- !query output
 131.18117242958306
 
@@ -125,7 +125,7 @@ struct<stddev_samp(CAST(udf(b) AS DECIMAL(38,0))):double>
 -- !query
 SELECT udf(var_pop(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query schema
-struct<udf(var_pop(CAST(b AS DECIMAL(38,0)))):double>
+struct<udf(var_pop(ansi_cast(b as decimal(38,0)))):double>
 -- !query output
 17208.5
 
@@ -133,7 +133,7 @@ struct<udf(var_pop(CAST(b AS DECIMAL(38,0)))):double>
 -- !query
 SELECT var_samp(udf(CAST(b AS Decimal(38,0)))) FROM aggtest
 -- !query schema
-struct<var_samp(udf(CAST(b AS DECIMAL(38,0)))):double>
+struct<var_samp(udf(ansi_cast(b as decimal(38,0)))):double>
 -- !query output
 22944.666666666668
 
@@ -149,7 +149,7 @@ struct<udf(var_pop(1.0)):double,var_samp(udf(2.0)):double>
 -- !query
 SELECT stddev_pop(udf(CAST(3.0 AS Decimal(38,0)))), stddev_samp(CAST(udf(4.0) AS Decimal(38,0)))
 -- !query schema
-struct<stddev_pop(udf(CAST(3.0 AS DECIMAL(38,0)))):double,stddev_samp(CAST(udf(4.0) AS DECIMAL(38,0))):double>
+struct<stddev_pop(udf(ansi_cast(3.0 as decimal(38,0)))):double,stddev_samp(CAST(udf(4.0) AS DECIMAL(38,0))):double>
 -- !query output
 0.0	NULL
 
@@ -157,7 +157,7 @@ struct<stddev_pop(udf(CAST(3.0 AS DECIMAL(38,0)))):double,stddev_samp(CAST(udf(4
 -- !query
 select sum(udf(CAST(null AS int))) from range(1,4)
 -- !query schema
-struct<sum(udf(CAST(NULL AS INT))):bigint>
+struct<sum(udf(ansi_cast(NULL as int))):bigint>
 -- !query output
 NULL
 
@@ -165,7 +165,7 @@ NULL
 -- !query
 select sum(udf(CAST(null AS long))) from range(1,4)
 -- !query schema
-struct<sum(udf(CAST(NULL AS BIGINT))):bigint>
+struct<sum(udf(ansi_cast(NULL as bigint))):bigint>
 -- !query output
 NULL
 
@@ -173,7 +173,7 @@ NULL
 -- !query
 select sum(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query schema
-struct<sum(udf(CAST(NULL AS DECIMAL(38,0)))):decimal(38,0)>
+struct<sum(udf(ansi_cast(NULL as decimal(38,0)))):decimal(38,0)>
 -- !query output
 NULL
 
@@ -181,7 +181,7 @@ NULL
 -- !query
 select sum(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query schema
-struct<sum(udf(CAST(NULL AS DOUBLE))):double>
+struct<sum(udf(ansi_cast(NULL as double))):double>
 -- !query output
 NULL
 
@@ -189,7 +189,7 @@ NULL
 -- !query
 select avg(udf(CAST(null AS int))) from range(1,4)
 -- !query schema
-struct<avg(udf(CAST(NULL AS INT))):double>
+struct<avg(udf(ansi_cast(NULL as int))):double>
 -- !query output
 NULL
 
@@ -197,7 +197,7 @@ NULL
 -- !query
 select avg(udf(CAST(null AS long))) from range(1,4)
 -- !query schema
-struct<avg(udf(CAST(NULL AS BIGINT))):double>
+struct<avg(udf(ansi_cast(NULL as bigint))):double>
 -- !query output
 NULL
 
@@ -205,7 +205,7 @@ NULL
 -- !query
 select avg(udf(CAST(null AS Decimal(38,0)))) from range(1,4)
 -- !query schema
-struct<avg(udf(CAST(NULL AS DECIMAL(38,0)))):decimal(38,4)>
+struct<avg(udf(ansi_cast(NULL as decimal(38,0)))):decimal(38,4)>
 -- !query output
 NULL
 
@@ -213,7 +213,7 @@ NULL
 -- !query
 select avg(udf(CAST(null AS DOUBLE))) from range(1,4)
 -- !query schema
-struct<avg(udf(CAST(NULL AS DOUBLE))):double>
+struct<avg(udf(ansi_cast(NULL as double))):double>
 -- !query output
 NULL
 
@@ -265,7 +265,7 @@ NaN	NaN
 SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (100000003), (100000004), (100000006), (100000007)) v(x)
 -- !query schema
-struct<avg(udf(CAST(x AS DOUBLE))):double,udf(var_pop(CAST(x AS DOUBLE))):double>
+struct<avg(udf(ansi_cast(x as double))):double,udf(var_pop(ansi_cast(x as double))):double>
 -- !query output
 1.00000005E8	2.5
 
@@ -274,7 +274,7 @@ struct<avg(udf(CAST(x AS DOUBLE))):double,udf(var_pop(CAST(x AS DOUBLE))):double
 SELECT avg(udf(CAST(x AS DOUBLE))), udf(var_pop(CAST(x AS DOUBLE)))
 FROM (VALUES (7000000000005), (7000000000007)) v(x)
 -- !query schema
-struct<avg(udf(CAST(x AS DOUBLE))):double,udf(var_pop(CAST(x AS DOUBLE))):double>
+struct<avg(udf(ansi_cast(x as double))):double,udf(var_pop(ansi_cast(x as double))):double>
 -- !query output
 7.000000000006E12	1.0
 
@@ -333,7 +333,7 @@ struct<ten:int,udf(count(1)):bigint,sum(udf(four)):bigint>
 select ten, count(udf(four)), udf(sum(DISTINCT four)) from onek
 group by ten order by ten
 -- !query schema
-struct<ten:int,count(udf(four)):bigint,udf(sum(DISTINCT four)):bigint>
+struct<ten:int,count(udf(four)):bigint,udf(sum(distinct four)):bigint>
 -- !query output
 0	100	2
 1	100	4
@@ -352,7 +352,7 @@ select ten, udf(sum(distinct four)) from onek a
 group by ten
 having exists (select 1 from onek b where udf(sum(distinct a.four)) = b.four)
 -- !query schema
-struct<ten:int,udf(sum(DISTINCT four)):bigint>
+struct<ten:int,udf(sum(distinct four)):bigint>
 -- !query output
 0	2
 2	2

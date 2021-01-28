@@ -79,7 +79,7 @@ struct<foo:string>
 -- !query
 SELECT 'foo', udf(APPROX_COUNT_DISTINCT(udf(a))) FROM testData WHERE a = 0 GROUP BY udf(1)
 -- !query schema
-struct<foo:string,udf(approx_count_distinct(udf(a))):bigint>
+struct<foo:string,udf(approx_count_distinct(udf(a), 0.05, 0, 0)):bigint>
 -- !query output
 
 
@@ -136,7 +136,7 @@ struct<skewness(udf(a)):double,udf(kurtosis(a)):double,udf(min(a)):int,max(udf(a
 -- !query
 SELECT COUNT(DISTINCT udf(b)), udf(COUNT(DISTINCT b, c)) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY udf(a)
 -- !query schema
-struct<count(DISTINCT udf(b)):bigint,udf(count(DISTINCT b, c)):bigint>
+struct<count(DISTINCT udf(b)):bigint,udf(count(distinct b, c)):bigint>
 -- !query output
 1	1
 
@@ -247,7 +247,7 @@ struct<1:int>
 SELECT corr(DISTINCT x, y), udf(corr(DISTINCT y, x)), count(*)
   FROM (VALUES (1, 1), (2, 2), (2, 2)) t(x, y)
 -- !query schema
-struct<corr(DISTINCT x, y):double,udf(corr(DISTINCT y, x)):double,count(1):bigint>
+struct<corr(DISTINCT x, y):double,udf(corr(distinct y, x)):double,count(1):bigint>
 -- !query output
 1.0	1.0	3
 

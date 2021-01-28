@@ -1018,4 +1018,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       )
     }
   }
+
+  test("SPARK-34272: Pretty SQL should check NonSQLExpression") {
+    val udf = ScalaUDF((s: String) => s, StringType, Literal(1).ansiCast(StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil)
+    // AnsiCast.toString will print ansi_cast instead of cast
+    assert(toPrettySQL(udf).contains("ansi_cast"))
+  }
 }
