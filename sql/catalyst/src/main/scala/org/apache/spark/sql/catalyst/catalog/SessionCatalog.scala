@@ -1000,7 +1000,7 @@ class SessionCatalog(
   /**
    * Refresh table entries in structures maintained by the session catalog such as:
    *   - The map of temporary or global temporary view names to their logical plans
-   *   - The relation cache which maps table/view identifiers to their logical plans
+   *   - The relation cache which maps table identifiers to their logical plans
    *
    * For temp views, it refreshes their logical plans, and as a consequence of that it can refresh
    * the file indexes of the base relations (`HadoopFsRelation` for instance) used in the views.
