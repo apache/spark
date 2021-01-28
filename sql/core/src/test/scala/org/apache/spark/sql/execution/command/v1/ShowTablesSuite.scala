@@ -33,12 +33,6 @@ import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
  */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
   override def defaultNamespace: Seq[String] = Seq("default")
-  override def showSchema: StructType = {
-    new StructType()
-      .add("namespace", StringType, nullable = false)
-      .add("tableName", StringType, nullable = false)
-      .add("isTemporary", BooleanType, nullable = false)
-  }
   override def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
     showRows.map {
       case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)

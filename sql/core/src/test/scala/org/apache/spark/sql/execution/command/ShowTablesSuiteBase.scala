@@ -38,12 +38,9 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   protected def defaultNamespace: Seq[String]
   case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
   protected def getRows(showRows: Seq[ShowRow]): Seq[Row]
-  // Gets the schema of `SHOW TABLES`
-  protected def showSchema: StructType
 
   protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
     val df = spark.sql(sqlText)
-    assert(df.schema === showSchema)
     checkAnswer(df, getRows(expected))
   }
 
