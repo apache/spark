@@ -133,13 +133,6 @@ private[continuous] class EpochCoordinator(
 
   private var currentDriverEpoch = startEpoch
 
-  val INSTRUCTION_FOR_FEWER_CORES =
-    """
-      |Total %s (kafka partitions) * %s (cpus per task) = %s needed ,
-      |but only have %s (executors) * %s (cores per executor) = %s (total cores).
-      |Please increase total number of executor cores to at least %s.
-    """.stripMargin
-
   // (epoch, partition) -> message
   private val partitionCommits =
     mutable.Map[(Long, Int), WriterCommitMessage]()
@@ -277,6 +270,12 @@ private[continuous] class EpochCoordinator(
   }
 
   private def checkTotalCores(): Unit = {
+    val INSTRUCTION_FOR_FEWER_CORES =
+      """
+        |Total %s (kafka partitions) * %s (cpus per task) = %s needed,
+        |but only have %s (executors) * %s (cores per executor) = %s (total cores).
+        |Please increase total number of executor cores to at least %s.
+    """.stripMargin
     val numExecutors = session.conf.get("spark.executor.instances", "1").toInt
     val coresPerExecutor = session.conf.get("spark.executor.cores", "1").toInt
     val cpusPerTask = session.conf.get("spark.task.cpus", "1").toInt
