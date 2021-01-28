@@ -18,8 +18,10 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.QualifiedTableName
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1
@@ -30,6 +32,55 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
  */
 trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
+
+  test("invalidation of tableRelationCache after table truncation") {
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withNamespaceAndTable("ns", "tbl") { t =>
+          spark.range(100).write.saveAsTable(t)
+          sql(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+          spark.table(t)
+          sql(s"TRUNCATE TABLE $t")
+          spark.table(t)
+
+          val catalog = spark.sessionState.catalog
+          val qualifiedTableName = QualifiedTableName("ns", "tbl")
+          val cachedPlan = catalog.getCachedTable(qualifiedTableName)
+          assert(cachedPlan.stats.sizeInBytes == 0)
+        }
+      }
+    }
+  }
+
+  test("change stats after truncate command") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT, value INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0, 100")
+      // analyze to get initial stats
+      sql(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR COLUMNS id, value")
+      assert(getTableSize(t) > 0)
+
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        sql(s"TRUNCATE TABLE $t")
+        assert(getTableSize(t) == 0)
+      }
+    }
+  }
+
+  test("SPARK-34251: stats in truncated non-empty table") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t (c0 int, part int) $defaultUsing PARTITIONED BY (part)")
+        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+        sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+        val sizeOfTwoParts = getTableSize(t)
+        assert(sizeOfTwoParts > 0)
+        sql(s"TRUNCATE TABLE $t PARTITION (part=1)")
+        val sizeOfOnePart = getTableSize(t)
+        assert(0 < sizeOfOnePart && sizeOfOnePart < sizeOfTwoParts)
+      }
+    }
+  }
 
   test("SPARK-34215: keep table cached after truncation") {
     withNamespaceAndTable("ns", "tbl") { t =>

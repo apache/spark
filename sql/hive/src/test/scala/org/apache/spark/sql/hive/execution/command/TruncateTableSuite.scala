@@ -23,6 +23,4 @@ import org.apache.spark.sql.execution.command.v1
  * The class contains tests for the `TRUNCATE TABLE` command to check
  * V1 Hive external table catalog.
  */
-class TruncateTableSuite extends v1.TruncateTableSuiteBase with CommandSuiteBase {
-  
-}
+class TruncateTableSuite extends v1.TruncateTableSuiteBase with CommandSuiteBase
