@@ -21,6 +21,7 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
@@ -206,24 +207,27 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Date types") {
-    val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val row = rows(0)
-    val types = row.toSeq.map(x => x.getClass.toString)
-    assert(types.length == 6)
-    assert(types(0).equals("class java.sql.Date"))
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
-    assert(types(3).equals("class java.lang.String"))
-    assert(types(4).equals("class java.sql.Timestamp"))
-    assert(types(5).equals("class java.sql.Timestamp"))
-    assert(row.getAs[Date](0).equals(Date.valueOf("1991-11-09")))
-    assert(row.getAs[Timestamp](1).equals(Timestamp.valueOf("1999-01-01 13:23:35.0")))
-    assert(row.getAs[Timestamp](2).equals(Timestamp.valueOf("9999-12-31 23:59:59.0")))
-    assert(row.getString(3).equals("1901-05-09 23:59:59.0000000 +14:00"))
-    assert(row.getAs[Timestamp](4).equals(Timestamp.valueOf("1996-01-01 23:24:00.0")))
-    assert(row.getAs[Timestamp](5).equals(Timestamp.valueOf("1900-01-01 13:31:24.0")))
+    withDefaultTimeZone(UTC) {
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+      val rows = df.collect()
+      assert(rows.length == 1)
+      val row = rows(0)
+      val types = row.toSeq.map(x => x.getClass.toString)
+      assert(types.length == 6)
+      assert(types(0).equals("class java.sql.Date"))
+      assert(types(1).equals("class java.sql.Timestamp"))
+      assert(types(2).equals("class java.sql.Timestamp"))
+      assert(types(3).equals("class java.lang.String"))
+      assert(types(4).equals("class java.sql.Timestamp"))
+      assert(types(5).equals("class java.lang.Integer"))
+      assert(row.getAs[Date](0).equals(Date.valueOf("1991-11-09")))
+      assert(row.getAs[Timestamp](1).equals(Timestamp.valueOf("1999-01-01 13:23:35.0")))
+      assert(row.getAs[Timestamp](2).equals(Timestamp.valueOf("9999-12-31 23:59:59.0")))
+      assert(row.getString(3).equals("1901-05-09 23:59:59.0000000 +14:00"))
+      assert(row.getAs[Timestamp](4).equals(Timestamp.valueOf("1996-01-01 23:24:00.0")))
+      assert(
+        row.getAs[Integer](5) === Timestamp.valueOf("1970-01-01 13:31:24.0").getTime)
+    }
   }
 
   test("String types") {

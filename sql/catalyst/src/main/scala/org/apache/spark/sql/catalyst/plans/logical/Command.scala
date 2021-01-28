@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,
@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  */
 trait Command extends LogicalPlan {
   override def output: Seq[Attribute] = Seq.empty
+  override def producedAttributes: AttributeSet = outputSet
   override def children: Seq[LogicalPlan] = Seq.empty
   // Commands are eagerly executed. They will be converted to LocalRelation after the DataFrame
   // is created. That said, the statistics of a command is useless. Here we just return a dummy

@@ -47,10 +47,11 @@ WholeStageCodegen (14)
                                                                                             WholeStageCodegen (2)
                                                                                               Project [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_net_paid,s_store_name,s_state,s_zip]
                                                                                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
-                                                                                                  Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
-                                                                                                    ColumnarToRow
-                                                                                                      InputAdapter
-                                                                                                        Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                                                  Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                                                    Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                                                                      ColumnarToRow
+                                                                                                        InputAdapter
+                                                                                                          Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                                                                   InputAdapter
                                                                                                     BroadcastExchange #16
                                                                                                       WholeStageCodegen (1)
@@ -95,10 +96,11 @@ WholeStageCodegen (14)
                                         InputAdapter
                                           Exchange [sr_ticket_number,sr_item_sk] #20
                                             WholeStageCodegen (16)
-                                              Filter [sr_ticket_number,sr_item_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
+                                              Project [sr_item_sk,sr_ticket_number]
+                                                Filter [sr_ticket_number,sr_item_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]
       HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum(netpaid),sum,isEmpty]
         InputAdapter
           Exchange [c_last_name,c_first_name,s_store_name] #1
@@ -129,10 +131,11 @@ WholeStageCodegen (14)
                                                             WholeStageCodegen (2)
                                                               Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,i_current_price,i_size,i_color,i_units,i_manager_id]
                                                                 BroadcastHashJoin [ss_item_sk,i_item_sk]
-                                                                  Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
-                                                                    ColumnarToRow
-                                                                      InputAdapter
-                                                                        Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                  Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                    Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                                   InputAdapter
                                                                     BroadcastExchange #5
                                                                       WholeStageCodegen (1)
@@ -173,7 +176,8 @@ WholeStageCodegen (14)
                                     InputAdapter
                                       Exchange [sr_ticket_number,sr_item_sk] #9
                                         WholeStageCodegen (10)
-                                          Filter [sr_ticket_number,sr_item_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
+                                          Project [sr_item_sk,sr_ticket_number]
+                                            Filter [sr_ticket_number,sr_item_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]

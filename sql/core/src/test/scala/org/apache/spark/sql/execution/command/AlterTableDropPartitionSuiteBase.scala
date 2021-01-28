@@ -177,6 +177,26 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
+  test("SPARK-33591, SPARK-34203: insert and drop partitions with null values") {
+    def insertAndDropNullPart(t: String, insertCmd: String): Unit = {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(insertCmd)
+      checkPartitions(t, Map("p1" -> nullPartitionValue))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
+    }
+
+    withNamespaceAndTable("ns", "tbl") { t =>
+      insertAndDropNullPart(t, s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+    }
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        insertAndDropNullPart(t, s"INSERT OVERWRITE TABLE $t VALUES (0, null)")
+      }
+    }
+  }
+
   test("SPARK-34161, SPARK-34138, SPARK-34099: keep dependents cached after table altering") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")

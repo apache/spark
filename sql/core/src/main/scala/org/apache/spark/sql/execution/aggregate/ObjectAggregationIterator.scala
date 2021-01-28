@@ -158,7 +158,7 @@ class ObjectAggregationIterator(
         processRow(buffer, newInput)
 
         // The hash map gets too large, makes a sorted spill and clear the map.
-        if (hashMap.size >= fallbackCountThreshold) {
+        if (hashMap.size >= fallbackCountThreshold && inputRows.hasNext) {
           logInfo(
             s"Aggregation hash map size ${hashMap.size} reaches threshold " +
               s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +

@@ -435,7 +435,8 @@ class ALSModel private[ml] (
    * relatively efficient, the approach implemented here is significantly more efficient.
    *
    * This approach groups factors into blocks and computes the top-k elements per block,
-   * using dot product and an efficient [[BoundedPriorityQueue]] (instead of gemm).
+   * using GEMV (it use less memory compared with GEMM, and is much faster than DOT) and
+   * an efficient selection based on [[GuavaOrdering]] (instead of [[BoundedPriorityQueue]]).
    * It then computes the global top-k by aggregating the per block top-k elements with
    * a [[TopByKeyAggregator]]. This significantly reduces the size of intermediate and shuffle data.
    * This is the DataFrame equivalent to the approach used in
@@ -481,7 +482,7 @@ class ALSModel private[ml] (
           }
 
           Iterator.range(0, m).flatMap { i =>
-            // buffer = i-th vec in srcMat * dstMat
+            // scores = i-th vec in srcMat * dstMat
             BLAS.f2jBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
               srcMat, i * rank, 1, 0.0F, scores, 0, 1)
 

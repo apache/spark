@@ -414,11 +414,12 @@ class ResolveSessionCatalog(
         ident.asTableIdentifier,
         partitionSpec)
 
-    case ShowPartitions(
+    case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
         pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
       ShowPartitionsCommand(
         ident.asTableIdentifier,
+        s.output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>

@@ -200,6 +200,14 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         e1.getMessage.contains(v2Msg))
     }
   }
+
+  test("SPARK-34223: static partition with null raise NPE") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
+      sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
+      checkAnswer(spark.table("t"), Row("1", null))
+    }
+  }
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {

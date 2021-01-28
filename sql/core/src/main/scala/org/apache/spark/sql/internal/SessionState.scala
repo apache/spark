@@ -119,10 +119,6 @@ private[sql] class SessionState(
   // ------------------------------------------------------
 
   def executePlan(plan: LogicalPlan): QueryExecution = createQueryExecution(plan)
-
-  def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
 }
 
 private[sql] object SessionState {

@@ -50,11 +50,13 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
+  usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
+      > SELECT _FUNC_('s');
+
   """,
   since = "1.5.0",
   group = "string_funcs")
