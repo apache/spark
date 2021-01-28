@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util.{Calendar, GregorianCalendar, Properties}
 import java.util.concurrent.TimeUnit
 
@@ -1029,6 +1030,19 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(0).getAs[java.sql.Timestamp](2)
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
+  }
+
+  test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
+    // Test for SPARK-33867
+    val timestamp = Instant.parse("2001-02-20T11:22:33.543543Z")
+    val date = LocalDate.parse("1995-01-01")
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
+      assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
+      // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
+      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
+    }
   }
 
   test("test credentials in the properties are not in plan output") {
