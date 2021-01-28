@@ -41,6 +41,20 @@ private[sql] object LogicalDistributions {
   def ordered(ordering: Array[SortOrder], numPartitions: Int): OrderedDistribution = {
     OrderedDistributionImpl(ordering, numPartitions)
   }
+
+  def representation(distName: String, exprs: Seq[Expression], numPartitions: Int): String = {
+    val distributionStr = if (exprs.nonEmpty) {
+      exprs.map(_.describe).mkString(", ")
+    } else {
+      ""
+    }
+    val numPartitionsStr = if (numPartitions > 0) {
+      s"/ numPartitions=$numPartitions)"
+    } else {
+      ""
+    }
+    s"$distName($distributionStr $numPartitionsStr)"
+  }
 }
 
 private[sql] object UnspecifiedDistributionImpl extends UnspecifiedDistribution {
@@ -56,8 +70,7 @@ private[sql] final case class ClusteredDistributionImpl(
   override def requiredNumPartitions(): Int = numPartitions
 
   override def toString: String = {
-    s"ClusteredDistribution(${clusteringExprs.map(_.describe).mkString(", ")}" +
-      s" / numPartitions=$numPartitions)"
+    LogicalDistributions.representation("ClusteredDistribution", clusteringExprs, numPartitions)
   }
 }
 
@@ -70,7 +83,6 @@ private[sql] final case class OrderedDistributionImpl(
   override def requiredNumPartitions(): Int = numPartitions
 
   override def toString: String = {
-    s"OrderedDistribution(${orderingExprs.map(_.describe).mkString(", ")} " +
-      s"/ numPartitions=$numPartitions)"
+    LogicalDistributions.representation("OrderedDistribution", orderingExprs, numPartitions)
   }
 }
