@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.Alias
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisHelper, LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -53,7 +53,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * completely resolved during the batch of Resolution.
  */
 object EliminateView extends Rule[LogicalPlan] with CastSupport {
-  override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  // Temporary fix until https://github.com/apache/spark/pull/31368 is merged.
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      applyInternal(plan)
+    }
+  }
+
+  private def applyInternal(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // The child has the different output attributes with the View operator. Adds a Project over
     // the child of the view.
     case v @ View(Some(desc), _, output, child) if child.resolved && !v.sameOutput(child) =>
