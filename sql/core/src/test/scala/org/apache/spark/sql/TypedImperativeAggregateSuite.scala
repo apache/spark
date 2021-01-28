@@ -147,9 +147,9 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"),
       count($"value"))
     val maxKey = nullableData.map(_._1).filter(_ != null).max
-    val countKey = nullableData.map(_._1).filter(_ != null).size
+    val countKey = nullableData.map(_._1).count(_ != null)
     val maxValue = nullableData.map(_._2).filter(_ != null).max
-    val countValue = nullableData.map(_._2).filter(_ != null).size
+    val countValue = nullableData.map(_._2).count(_ != null)
     val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
     checkAnswer(query, expected)
   }

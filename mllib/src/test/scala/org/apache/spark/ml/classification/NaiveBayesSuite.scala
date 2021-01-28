@@ -56,10 +56,10 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
   }
 
   def validatePrediction(predictionAndLabels: Seq[Row]): Unit = {
-    val numOfErrorPredictions = predictionAndLabels.filter {
+    val numOfErrorPredictions = predictionAndLabels.count {
       case Row(prediction: Double, label: Double) =>
         prediction != label
-    }.length
+    }
     // At least 80% of the predictions should be on.
     assert(numOfErrorPredictions < predictionAndLabels.length / 5)
   }
