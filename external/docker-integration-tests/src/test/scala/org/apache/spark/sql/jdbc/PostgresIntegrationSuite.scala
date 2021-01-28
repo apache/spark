@@ -74,7 +74,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       .executeUpdate()
 
     conn.prepareStatement("CREATE TABLE st_with_array (c0 uuid, c1 inet, c2 cidr," +
-      "c3 json, c4 jsonb, c5 uuid[], c6 inet[], c7 cidr[], c8 json[], c9 jsonb[])")
+      "c3 json, c4 jsonb, c5 uuid[], c6 inet[], c7 cidr[], c8 json[], c9 jsonb[], c10 xml[])")
       .executeUpdate()
     conn.prepareStatement("INSERT INTO st_with_array VALUES ( " +
       "'0a532531-cdf1-45e3-963d-5de90b6a30f1', '172.168.22.1', '192.168.100.128/25', " +
@@ -83,7 +83,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       "'205f9bfc-018c-4452-a605-609c0cfad228']::uuid[], ARRAY['172.16.0.41', " +
       "'172.16.0.42']::inet[], ARRAY['192.168.0.0/24', '10.1.0.0/16']::cidr[], " +
       """ARRAY['{"a": "foo", "b": "bar"}', '{"a": 1, "b": 2}']::json[], """ +
-      """ARRAY['{"a": 1, "b": 2, "c": 3}']::jsonb[])"""
+      """ARRAY['{"a": 1, "b": 2, "c": 3}']::jsonb[], """ +
+      """ARRAY['<key>id</key><value>10</value>']::xml[])"""
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE char_types (" +
@@ -199,6 +200,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(7) == Seq("192.168.0.0/24", "10.1.0.0/16"))
     assert(rows(0).getSeq(8) == Seq("""{"a": "foo", "b": "bar"}""", """{"a": 1, "b": 2}"""))
     assert(rows(0).getSeq(9) == Seq("""{"a": 1, "b": 2, "c": 3}"""))
+    assert(rows(0).getSeq(10) == Seq("""<key>id</key><value>10</value>"""))
   }
 
   test("query JDBC option") {
