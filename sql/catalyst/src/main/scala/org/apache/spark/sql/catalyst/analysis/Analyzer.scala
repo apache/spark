@@ -219,7 +219,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  def typeCoercionRules(): List[Rule[LogicalPlan]] = if (conf.ansiEnabled) {
+  private def typeCoercionRules(): List[Rule[LogicalPlan]] = if (conf.ansiEnabled) {
     AnsiTypeCoercion.typeCoercionRules
   } else {
     TypeCoercion.typeCoercionRules

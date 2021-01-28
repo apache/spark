@@ -73,7 +73,8 @@ import org.apache.spark.sql.types._
  *     applies the rules above. If the element nullability is converted from true to false, add
  *     runtime null check to the elements.
  *  Note: this new type coercion system will allow implicit converting String type literals as other
- *  primitive types, in case of breaking too many existing Spark SQL queries.
+ *  primitive types, in case of breaking too many existing Spark SQL queries. This is a special
+ *  rule and it is not from the ANSI SQL standard.
  */
 object AnsiTypeCoercion extends TypeCoercionBase {
   override def typeCoercionRules: List[Rule[LogicalPlan]] =
@@ -116,7 +117,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   @tailrec
-  private def findTightestCommonNumericType(t1: DataType, t2: DataType): Option[DataType] = {
+  private def findTightestCommonNumericType(t1: NumericType, t2: NumericType): Option[DataType] = {
     (t1, t2) match {
       case (i: IntegralType, d: DecimalType) =>
         if (d.isWiderThan(i)) {
@@ -135,8 +136,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         Some(DoubleType)
 
       // Promote numeric types to the highest of the two
-      case (t1: NumericType, t2: NumericType)
-          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+      case _ =>
+        // The cases that t1 or t2 is DecimalType should be handled already.
+        assert(!t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType])
         val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
         val widerType = numericPrecedence(index)
         if (widerType == FloatType) {

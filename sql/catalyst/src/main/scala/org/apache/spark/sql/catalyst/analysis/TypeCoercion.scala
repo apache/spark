@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-trait TypeCoercionBase {
+abstract class TypeCoercionBase {
   def typeCoercionRules: List[Rule[LogicalPlan]]
 
   /**
