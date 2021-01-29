@@ -29,6 +29,14 @@ import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
+object FakeConf {
+  import SQLConf.buildConf
+  val FAKE_CONFIG =
+    buildConf("spark.sql.fake.config")
+      .intConf
+      .createWithDefault(10)
+}
+
 class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   private val testKey = "test.key.0"
@@ -104,6 +112,16 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
       Row("spark.sql.groupByOrdinal", "false"))
+  }
+
+  test("eager init") {
+    checkAnswer(
+      sql("SET").where(s"key = '${FakeConf.FAKE_CONFIG.key}'").select("key", "value"),
+      Nil)
+
+    checkAnswer(
+      sql("SET -v").where(s"key = '${FakeConf.FAKE_CONFIG.key}'").select("key", "value"),
+      Row(FakeConf.FAKE_CONFIG.key, FakeConf.FAKE_CONFIG.defaultValueString))
   }
 
   test("deprecated property") {

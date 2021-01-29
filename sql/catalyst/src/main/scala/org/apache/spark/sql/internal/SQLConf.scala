@@ -57,9 +57,6 @@ object SQLConf {
   val staticConfKeys: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
 
-  // Eagerly load conf objects to force the conf entries registering
-  SparkConfRegisterLoader.load(Utils.getContextOrSparkClassLoader)
-
   private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
     require(!sqlConfEntries.containsKey(entry.key),
       s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
@@ -3814,6 +3811,8 @@ class SQLConf extends Serializable with Logging {
    * definition contains key, defaultValue and doc.
    */
   def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
+    // Eagerly load conf objects to force the conf entries registering
+    SparkConfRegisterLoader.load(Utils.getContextOrSparkClassLoader)
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
