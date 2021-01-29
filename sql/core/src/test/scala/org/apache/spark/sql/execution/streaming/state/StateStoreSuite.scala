@@ -978,6 +978,23 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
     assert(store.metrics.memoryUsedBytes > noDataMemoryUsed)
   }
 
+  test("SPARK-34270: StateStoreMetrics.combine should not override individual metrics") {
+    val customMetric = StateStoreCustomSumMetric("metric1", "custom metric 1")
+    val leftCustomMetrics: Map[StateStoreCustomMetric, Long] =
+      Map(customMetric -> 10L)
+    val leftMetrics = StateStoreMetrics(1, 10, leftCustomMetrics)
+
+    val rightCustomMetrics: Map[StateStoreCustomMetric, Long] =
+      Map(customMetric -> 20L)
+    val rightMetrics = StateStoreMetrics(3, 20, rightCustomMetrics)
+
+    val combinedMetrics = StateStoreMetrics.combine(Seq(leftMetrics, rightMetrics))
+    assert(combinedMetrics.numKeys == 4)
+    assert(combinedMetrics.memoryUsedBytes == 30)
+    assert(combinedMetrics.customMetrics.size == 1)
+    assert(combinedMetrics.customMetrics(customMetric) == 30L)
+  }
+
   /** Return a new provider with a random id */
   def newStoreProvider(): ProviderClass
 
