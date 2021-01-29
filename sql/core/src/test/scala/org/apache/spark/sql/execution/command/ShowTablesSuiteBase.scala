@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -124,6 +125,23 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       // Update the current namespace to match "ns.tbl".
       sql(s"USE $catalog.ns")
       runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
+    }
+  }
+
+  test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
+    withNamespace(s"$catalog.ns") {
+      sql(s"CREATE NAMESPACE $catalog.ns")
+      sql(s"USE $catalog.ns")
+      withTable("tbl") {
+        sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
+        checkAnswer(sql("show tables"), Row("ns", "tbl", false))
+        checkAnswer(sql("show tables")
+          .select(col("namespace"), col("tableName"), col("isTemporary")),
+          Row("ns", "tbl", false))
+        assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+        assert(sql("show table extended like 'tbl'").select(col("namespace"), col("tableName"),
+          col("isTemporary"), col("information")).collect()(0).length == 4)
+      }
     }
   }
 }

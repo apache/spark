@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -118,23 +117,6 @@ class ShowTablesSuite extends ShowTablesSuiteBase with CommandSuiteBase {
         val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
         df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
         assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
-      }
-    }
-  }
-
-  test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
-    withNamespace(s"$catalog.ns") {
-      sql(s"CREATE NAMESPACE $catalog.ns")
-      sql(s"USE $catalog.ns")
-      withTable("tbl") {
-        sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
-        checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-        checkAnswer(sql("show tables")
-          .select(col("namespace"), col("tableName"), col("isTemporary")),
-          Row("ns", "tbl", false))
-        assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-        assert(sql("show table extended like 'tbl'").select(col("namespace"), col("tableName"),
-          col("isTemporary"), col("information")).collect()(0).length == 4)
       }
     }
   }
