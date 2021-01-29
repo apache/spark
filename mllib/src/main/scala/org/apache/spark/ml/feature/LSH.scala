@@ -116,7 +116,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     require(numNearestNeighbors > 0, "The number of nearest neighbors cannot be less than 1")
     // Get Hash Value of the key
     val keyHash = hashFunction(key)
-    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
+    val modelDataset = if (!dataset.columns.contains($(outputCol))) {
         transform(dataset)
       } else {
         dataset.toDF()
@@ -124,7 +124,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
 
     val modelSubset = if (singleProbe) {
       def sameBucket(x: Seq[Vector], y: Seq[Vector]): Boolean = {
-        x.zip(y).exists(tuple => tuple._1 == tuple._2)
+        x.iterator.zip(y.iterator).exists(tuple => tuple._1 == tuple._2)
       }
 
       // In the origin dataset, find the hash value that hash the same bucket with the key
@@ -223,7 +223,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
       inputName: String,
       explodeCols: Seq[String]): Dataset[_] = {
     require(explodeCols.size == 2, "explodeCols must be two strings.")
-    val modelDataset: DataFrame = if (!dataset.columns.contains($(outputCol))) {
+    val modelDataset = if (!dataset.columns.contains($(outputCol))) {
       transform(dataset)
     } else {
       dataset.toDF()
