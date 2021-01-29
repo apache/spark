@@ -603,21 +603,6 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     taskMetrics.sum
   }
 
-  test("SPARK-34144: write and read java.sql Date and Timestamp") {
-    val schema = new StructType().add("d", DateType).add("t", TimestampType);
-    val values = Seq(Row.apply(Date.valueOf("2020-01-01"),
-      Timestamp.valueOf("2020-02-02 12:13:14.56789")))
-    val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
-
-    df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
-
-    val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
-    assert(1 === rows.length);
-    assert(rows(0).getAs[java.sql.Date](0) === java.sql.Date.valueOf("2020-01-01"))
-    assert(rows(0).getAs[java.sql.Timestamp](1)
-      === java.sql.Timestamp.valueOf("2020-02-02 12:13:14.56789"))
-  }
-
   test("SPARK-34144: write and read java.time LocalDate and Instant") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("d", DateType).add("t", TimestampType);
