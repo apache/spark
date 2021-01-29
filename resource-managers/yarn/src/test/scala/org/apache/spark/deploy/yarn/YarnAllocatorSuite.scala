@@ -22,7 +22,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.hadoop.net._
+import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
