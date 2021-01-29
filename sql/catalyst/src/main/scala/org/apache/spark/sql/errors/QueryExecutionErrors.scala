@@ -45,18 +45,9 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("Please add an implementation for a column change here")
   }
 
-  def unexpectedPlanReturnError(plan: LogicalPlan, methodName: String): Throwable = {
-    new IllegalStateException(s"[BUG] unexpected plan returned by `$methodName`: $plan")
-  }
-
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new IllegalStateException(
       "Internal error: logical hint operator should have been removed during analysis")
-  }
-
-  def logicalPlanHaveOutputOfCharOrVarcharError(leaf: LeafNode): Throwable = {
-    new IllegalStateException(
-      s"[BUG] logical plan should not have output of char/varchar type: $leaf")
   }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
