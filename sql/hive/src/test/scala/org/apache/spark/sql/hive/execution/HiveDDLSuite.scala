@@ -40,7 +40,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -2903,6 +2903,28 @@ class HiveDDLSuite
         assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
           " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
       }
+    }
+  }
+
+  test("SPARK-34261: Avoid side effect if create exists temporary function") {
+    withUserDefinedFunction("f1" -> true) {
+      sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
+
+      val jarName = "TestUDTF.jar"
+      val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
+      spark.sparkContext.addedJars.keys.find(_.contains(jarName))
+        .foreach(spark.sparkContext.addedJars.remove)
+      assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
+      val msg = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY FUNCTION f1 AS " +
+          s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
+      }.getMessage
+      assert(msg.contains("Function f1 already exists"))
+      assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
+
+      sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +
+        s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
+      assert(spark.sparkContext.listJars().exists(_.contains(jarName)))
     }
   }
 }
