@@ -262,12 +262,12 @@ More details on these committers can be found in the latest Hadoop documentation
 
 Note: depending upon the committer used, in-progress statistics may be
 under-reported with Hadoop versions before 3.3.1.
-Are
+
 ## Further Reading
 
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
-* [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html). Are
+* [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html).
 * [Azure Blob Storage and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
 * [Azure Data Lake Gen 1](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html).
 * [Amazon S3 Strong Consistency](https://aws.amazon.com/s3/consistency/)
