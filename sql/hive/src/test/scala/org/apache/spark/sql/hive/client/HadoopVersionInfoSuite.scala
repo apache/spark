@@ -81,7 +81,10 @@ class HadoopVersionInfoSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-32212: built-in Hadoop version should support shaded client") {
-    assert(IsolatedClientLoader.supportsHadoopShadedClient(VersionInfo.getVersion))
+  test("SPARK-32212: built-in Hadoop version should support shaded client if it is not hadoop 2") {
+    val hadoopVersion = VersionInfo.getVersion
+    if (!hadoopVersion.startsWith("2")) {
+      assert(IsolatedClientLoader.supportsHadoopShadedClient(hadoopVersion))
+    }
   }
 }
