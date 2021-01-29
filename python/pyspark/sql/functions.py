@@ -103,7 +103,7 @@ def lit(col):
         If it is a collection, conversion will be applied recursively. In such case,
         all stored values should be of compatible types.
 
-        I `col` is already a :class:`Column`, it will be returned unmodified.
+        The passed in object is returned directly if it is already a :class:`Column`.
 
     Examples
     --------
