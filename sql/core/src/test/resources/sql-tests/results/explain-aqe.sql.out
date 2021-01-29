@@ -934,7 +934,7 @@ Schema: root
 Arguments: spark_catalog.default.explain_temp1
 
 (5) Project
-Arguments: ['key, 'val]
+Arguments: [key#x, val#x]
 
 
 -- !query
