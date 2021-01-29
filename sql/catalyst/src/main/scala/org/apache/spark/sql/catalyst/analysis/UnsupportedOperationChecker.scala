@@ -394,6 +394,7 @@ object UnsupportedOperationChecker extends Logging {
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias |
               _: TypedFilter) =>
         case node if node.nodeName == "StreamingRelationV2" =>
+        case v: View if v.desc == None && v.isTempView => // Skip dataframe temp views.
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")
       }
