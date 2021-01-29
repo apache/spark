@@ -1074,7 +1074,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(desc, isTempView, _, child) if !child.resolved =>
+      case view @ View(desc, isTempView, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth

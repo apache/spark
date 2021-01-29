@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -421,41 +421,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
-
-          // If the view output doesn't have the same number of columns neither with the child
-          // output, nor with the query column names, throw an AnalysisException.
-          // If the view's child output can't up cast to the view output,
-          // throw an AnalysisException, too.
-          case v @ View(desc, _, output, child) if child.resolved && !v.sameOutput(child) =>
-            val queryColumnNames = desc.viewQueryColumnNames
-            val queryOutput = if (queryColumnNames.nonEmpty) {
-              if (output.length != queryColumnNames.length) {
-                // If the view output doesn't have the same number of columns with the query column
-                // names, throw an AnalysisException.
-                throw QueryCompilationErrors.viewOutputNumberMismatchQueryColumnNamesError(
-                  output, queryColumnNames)
-              }
-              val resolver = SQLConf.get.resolver
-              queryColumnNames.map { colName =>
-                child.output.find { attr =>
-                  resolver(attr.name, colName)
-                }.getOrElse(throw QueryCompilationErrors.attributeNotFoundError(colName, child))
-              }
-            } else {
-              child.output
-            }
-
-            output.zip(queryOutput).foreach {
-              case (attr, originAttr) if !attr.dataType.sameType(originAttr.dataType) =>
-                // The dataType of the output attributes may be not the same with that of the view
-                // output, so we should cast the attribute to the dataType of the view output
-                // attribute. Will throw an AnalysisException if the cast is not a up-cast.
-                if (!Cast.canUpCast(originAttr.dataType, attr.dataType)) {
-                  throw QueryCompilationErrors.cannotUpCastAsAttributeError(
-                    originAttr, attr)
-                }
-              case _ =>
-            }
 
           case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
