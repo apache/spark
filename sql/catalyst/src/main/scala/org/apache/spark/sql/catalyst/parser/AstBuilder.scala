@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -133,9 +134,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     // Check for duplicate names.
     val duplicates = ctes.groupBy(_._1).filter(_._2.size > 1).keys
     if (duplicates.nonEmpty) {
-      throw new ParseException(
-        s"CTE definition can't have duplicate names: ${duplicates.mkString("'", "', '", "'")}.",
-        ctx)
+      throw QueryParsingErrors.duplicateCteDefinitionNamesError(
+        duplicates.mkString("'", "', '", "'"), ctx)
     }
     With(plan, ctes.toSeq)
   }
@@ -289,7 +289,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val (isLocal, storage, provider) = visitInsertOverwriteHiveDir(hiveDir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
       case _ =>
-        throw new ParseException("Invalid InsertIntoContext", ctx)
+        throw QueryParsingErrors.invalidInsertIntoError(ctx)
     }
   }
 
@@ -331,7 +331,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitInsertOverwriteDir(
       ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
-    throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+    throw QueryParsingErrors.insertOverwriteDirectoryUnsupportedError(ctx)
   }
 
   /**
@@ -339,7 +339,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitInsertOverwriteHiveDir(
       ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
-    throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+    throw QueryParsingErrors.insertOverwriteDirectoryUnsupportedError(ctx)
   }
 
   private def getTableAliasWithoutColumnAlias(
@@ -349,7 +349,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       val ident = ctx.strictIdentifier()
       if (ctx.identifierList() != null) {
-        throw new ParseException(s"Columns aliases are not allowed in $op.", ctx.identifierList())
+        throw QueryParsingErrors.columnAliasInOperationNotAllowedError(op, ctx)
       }
       if (ident != null) Some(ident.getText) else None
     }
@@ -400,8 +400,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else if (ctx.sourceQuery != null) {
       visitQuery(ctx.sourceQuery)
     } else {
-      throw new ParseException("Empty source for merge: you should specify a source" +
-        " table/subquery in merge.", ctx.source)
+      throw QueryParsingErrors.emptySourceForMergeError(ctx)
     }
     val sourceTableAlias = getTableAliasWithoutColumnAlias(ctx.sourceAlias, "MERGE")
     val aliasedSource =
@@ -422,9 +421,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           }
         } else {
           // It should not be here.
-          throw new ParseException(
-            s"Unrecognized matched action: ${clause.matchedAction().getText}",
-            clause.matchedAction())
+          throw QueryParsingErrors.unrecognizedMatchedActionError(clause)
         }
       }
     }
@@ -439,32 +436,27 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 .asScala.map(attr => UnresolvedAttribute(visitMultipartIdentifier(attr)))
             val values = clause.notMatchedAction().expression().asScala.map(expression)
             if (columns.size != values.size) {
-              throw new ParseException("The number of inserted values cannot match the fields.",
-                clause.notMatchedAction())
+              throw QueryParsingErrors.insertedValueNumberNotMatchFieldNumberError(clause)
             }
             InsertAction(condition, columns.zip(values).map(kv => Assignment(kv._1, kv._2)).toSeq)
           }
         } else {
           // It should not be here.
-          throw new ParseException(
-            s"Unrecognized not matched action: ${clause.notMatchedAction().getText}",
-            clause.notMatchedAction())
+          throw QueryParsingErrors.unrecognizedNotMatchedActionError(clause)
         }
       }
     }
     if (matchedActions.isEmpty && notMatchedActions.isEmpty) {
-      throw new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
+      throw QueryParsingErrors.mergeStatementWithoutWhenClauseError(ctx)
     }
     // children being empty means that the condition is not set
     val matchedActionSize = matchedActions.length
     if (matchedActionSize >= 2 && !matchedActions.init.forall(_.condition.nonEmpty)) {
-      throw new ParseException("When there are more than one MATCHED clauses in a MERGE " +
-          "statement, only the last MATCHED clause can omit the condition.", ctx)
+      throw QueryParsingErrors.nonLastMatchedClauseOmitConditionError(ctx)
     }
     val notMatchedActionSize = notMatchedActions.length
     if (notMatchedActionSize >= 2 && !notMatchedActions.init.forall(_.condition.nonEmpty)) {
-      throw new ParseException("When there are more than one NOT MATCHED clauses in a MERGE " +
-          "statement, only the last NOT MATCHED clause can omit the condition.", ctx)
+      throw QueryParsingErrors.nonLastNotMatchedClauseOmitConditionError(ctx)
     }
 
     MergeIntoTable(
@@ -498,7 +490,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   protected def visitNonOptionalPartitionSpec(
       ctx: PartitionSpecContext): Map[String, String] = withOrigin(ctx) {
     visitPartitionSpec(ctx).map {
-      case (key, None) => throw new ParseException(s"Found an empty partition key '$key'.", ctx)
+      case (key, None) => throw QueryParsingErrors.emptyPartitionKeyError(key, ctx)
       case (key, Some(value)) => key -> value
     }
   }
@@ -553,8 +545,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       // [EMPTY]
       query
     } else {
-      throw new ParseException(
-        "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported", ctx)
+      throw QueryParsingErrors.combinationQueryResultClausesUnsupportedError(ctx)
     }
 
     // WINDOWS
@@ -574,7 +565,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: QueryOrganizationContext,
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
-    throw new ParseException("DISTRIBUTE BY is not supported", ctx)
+    throw QueryParsingErrors.distributeByUnsupportedError(ctx)
   }
 
   override def visitTransformQuerySpecification(
@@ -788,7 +779,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         getRowFormatDelimited(c)
 
       case c: RowFormatSerdeContext =>
-        throw new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
+        throw QueryParsingErrors.transformWithSerdeUnsupportedError(ctx)
 
       // SPARK-32106: When there is no definition about format, we return empty result
       // to use a built-in default Serde in SparkScriptTransformationExec.
@@ -820,7 +811,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     if (ctx.pivotClause() != null) {
       if (!ctx.lateralView.isEmpty) {
-        throw new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+        throw QueryParsingErrors.lateralWithPivotInFromClauseNotAllowedError(ctx)
       }
       withPivot(ctx.pivotClause, from)
     } else {
@@ -874,7 +865,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     baseWindowTuples.groupBy(_._1).foreach { kv =>
       if (kv._2.size > 1) {
-        throw new ParseException(s"The definition of window '${kv._1}' is repetitive", ctx)
+        throw QueryParsingErrors.repetitiveWindowDefinitionError(kv._1, ctx)
       }
     }
     val baseWindowMap = baseWindowTuples.toMap
@@ -889,9 +880,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case Some(spec: WindowSpecDefinition) =>
             spec
           case Some(ref) =>
-            throw new ParseException(s"Window reference '$name' is not a window specification", ctx)
+            throw QueryParsingErrors.invalidWindowReferenceError(name, ctx)
           case None =>
-            throw new ParseException(s"Cannot resolve window reference '$name'", ctx)
+            throw QueryParsingErrors.cannotResolveWindowReferenceError(name, ctx)
         }
       case spec: WindowSpecDefinition => spec
     }
@@ -1027,10 +1018,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case Some(c) if c.booleanExpression != null =>
             (baseJoinType, Option(expression(c.booleanExpression)))
           case Some(c) =>
-            throw new ParseException(s"Unimplemented joinCriteria: $c", ctx)
+            throw QueryParsingErrors.joinCriteriaUnimplementedError(c, ctx)
           case None if join.NATURAL != null =>
             if (baseJoinType == Cross) {
-              throw new ParseException("NATURAL CROSS JOIN is not supported", ctx)
+              throw QueryParsingErrors.naturalCrossJoinUnsupportedError(ctx)
             }
             (NaturalJoin(baseJoinType), None)
           case None =>
@@ -1064,7 +1055,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     if (ctx.sampleMethod() == null) {
-      throw new ParseException("TABLESAMPLE does not accept empty inputs.", ctx)
+      throw QueryParsingErrors.emptyInputForTableSampleError(ctx)
     }
 
     ctx.sampleMethod() match {
@@ -1079,20 +1070,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ctx: SampleByBytesContext =>
         val bytesStr = ctx.bytes.getText
         if (bytesStr.matches("[0-9]+[bBkKmMgG]")) {
-          throw new ParseException("TABLESAMPLE(byteLengthLiteral) is not supported", ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError("byteLengthLiteral", ctx)
         } else {
-          throw new ParseException(
-            bytesStr + " is not a valid byte length literal, " +
-              "expected syntax: DIGIT+ ('B' | 'K' | 'M' | 'G')", ctx)
+          throw QueryParsingErrors.invalidByteLengthLiteralError(bytesStr, ctx)
         }
 
       case ctx: SampleByBucketContext if ctx.ON() != null =>
         if (ctx.identifier != null) {
-          throw new ParseException(
-            "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported", ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
+            "BUCKET x OUT OF y ON colname", ctx)
         } else {
-          throw new ParseException(
-            "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported", ctx)
+          throw QueryParsingErrors.tableSampleByBytesUnsupportedError(
+            "BUCKET x OUT OF y ON function", ctx)
         }
 
       case ctx: SampleByBucketContext =>
@@ -1489,8 +1478,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case _ =>
             val escapeChar = Option(ctx.escapeChar).map(string).map { str =>
               if (str.length != 1) {
-                throw new ParseException("Invalid escape string." +
-                  "Escape string must contain only one character.", ctx)
+                throw QueryParsingErrors.invalidEscapeStringError(ctx)
               }
               str.charAt(0)
             }.getOrElse('\\')
@@ -1667,8 +1655,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case SqlBaseParser.TRAILING =>
         StringTrimRight(srcStr, trimStr)
       case other =>
-        throw new ParseException("Function trim doesn't support with " +
-          s"type $other. Please use BOTH, LEADING or TRAILING as trim type", ctx)
+        throw QueryParsingErrors.trimOptionUnsupportedError(other, ctx)
     }
   }
 
@@ -1742,7 +1729,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case Seq(db, fn) => FunctionIdentifier(fn, Option(db))
       case Seq(fn) => FunctionIdentifier(fn, None)
       case other =>
-        throw new ParseException(s"Unsupported function name '${texts.mkString(".")}'", ctx)
+        throw QueryParsingErrors.functionNameUnsupportedError(texts.mkString("."), ctx)
     }
   }
 
@@ -1979,7 +1966,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     def toLiteral[T](f: UTF8String => Option[T], t: DataType): Literal = {
       f(UTF8String.fromString(value)).map(Literal(_, t)).getOrElse {
-        throw new ParseException(s"Cannot parse the $valueType value: $value", ctx)
+        throw QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
       }
     }
     try {
@@ -1994,7 +1981,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             IntervalUtils.stringToInterval(UTF8String.fromString(value))
           } catch {
             case e: IllegalArgumentException =>
-              val ex = new ParseException("Cannot parse the INTERVAL value: " + value, ctx)
+              val ex = QueryParsingErrors.cannotParseIntervalValueError(value, ctx)
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
@@ -2003,13 +1990,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
         case other =>
-          throw new ParseException(s"Literals of type '$other' are currently not" +
-            " supported.", ctx)
+          throw QueryParsingErrors.literalValueTypeUnsupportedError(other, ctx)
       }
     } catch {
       case e: IllegalArgumentException =>
-        val message = Option(e.getMessage).getOrElse(s"Exception parsing $valueType")
-        throw new ParseException(message, ctx)
+        throw QueryParsingErrors.parsingValueTypeError(e, valueType, ctx)
     }
   }
 
@@ -2078,8 +2063,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     try {
       val rawBigDecimal = BigDecimal(rawStrippedQualifier)
       if (rawBigDecimal < minValue || rawBigDecimal > maxValue) {
-        throw new ParseException(s"Numeric literal ${rawStrippedQualifier} does not " +
-          s"fit in range [${minValue}, ${maxValue}] for type ${typeName}", ctx)
+        throw QueryParsingErrors.invalidNumericLiteralRangeError(
+          rawStrippedQualifier, minValue, maxValue, typeName, ctx)
       }
       Literal(converter(rawStrippedQualifier))
     } catch {
@@ -2222,8 +2207,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.errorCapturingMultiUnitsInterval != null) {
       val innerCtx = ctx.errorCapturingMultiUnitsInterval
       if (innerCtx.unitToUnitInterval != null) {
-        throw new ParseException(
-          "Can only have a single from-to unit in the interval literal syntax",
+        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(
           innerCtx.unitToUnitInterval)
       }
       visitMultiUnitsInterval(innerCtx.multiUnitsInterval)
@@ -2231,13 +2215,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val innerCtx = ctx.errorCapturingUnitToUnitInterval
       if (innerCtx.error1 != null || innerCtx.error2 != null) {
         val errorCtx = if (innerCtx.error1 != null) innerCtx.error1 else innerCtx.error2
-        throw new ParseException(
-          "Can only have a single from-to unit in the interval literal syntax",
-          errorCtx)
+        throw QueryParsingErrors.moreThanOneFromToUnitInIntervalLiteralError(errorCtx)
       }
       visitUnitToUnitInterval(innerCtx.body)
     } else {
-      throw new ParseException("at least one time unit should be given for interval literal", ctx)
+      throw QueryParsingErrors.invalidIntervalLiteralError(ctx)
     }
   }
 
@@ -2259,8 +2241,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
             // units and become valid ones, e.g. '1 day 2 hour'.
             // Ideally, we only ensure the value parts don't contain any units here.
             if (value.exists(Character.isLetter)) {
-              throw new ParseException("Can only use numbers in the interval value part for" +
-                s" multiple unit value pairs interval form, but got invalid value: $value", ctx)
+              throw QueryParsingErrors.invalidIntervalFormError(value, ctx)
             }
             value
           } else {
@@ -2284,7 +2265,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitUnitToUnitInterval(ctx: UnitToUnitIntervalContext): CalendarInterval = {
     withOrigin(ctx) {
       val value = Option(ctx.intervalValue.STRING).map(string).getOrElse {
-        throw new ParseException("The value of from-to unit must be a string", ctx.intervalValue)
+        throw QueryParsingErrors.invalidFromToUnitValueError(ctx.intervalValue)
       }
       try {
         val from = ctx.from.getText.toLowerCase(Locale.ROOT)
@@ -2305,7 +2286,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           case ("minute", "second") =>
             IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
           case _ =>
-            throw new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
+            throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
       } catch {
         // Handle Exceptions thrown by CalendarInterval
@@ -2349,7 +2330,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ("interval", Nil) => CalendarIntervalType
       case (dt, params) =>
         val dtStr = if (params.nonEmpty) s"$dt(${params.mkString(",")})" else dt
-        throw new ParseException(s"DataType $dtStr is not supported.", ctx)
+        throw QueryParsingErrors.dataTypeUnsupportedError(dtStr, ctx)
     }
   }
 
@@ -2626,8 +2607,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case ref: FieldReference =>
           ref
         case nonRef =>
-          throw new ParseException(
-            s"Expected a column reference for transform $name: ${nonRef.describe}", ctx)
+          throw QueryParsingErrors.partitionTransformNotExpectedError(name, nonRef.describe, ctx)
       }
     }
 
@@ -2636,9 +2616,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         arguments: Seq[V2Expression]): FieldReference = {
       lazy val name: String = ctx.identifier.getText
       if (arguments.size > 1) {
-        throw new ParseException(s"Too many arguments for transform $name", ctx)
+        throw QueryParsingErrors.tooManyArgumentsForTransformError(name, ctx)
       } else if (arguments.isEmpty) {
-        throw new ParseException(s"Not enough arguments for transform $name", ctx)
+        throw QueryParsingErrors.notEnoughArgumentsForTransformError(name, ctx)
       } else {
         getFieldReference(ctx, arguments.head)
       }
@@ -2661,7 +2641,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               case LiteralValue(longValue, LongType) =>
                 longValue.asInstanceOf[Long].toInt
               case lit =>
-                throw new ParseException(s"Invalid number of buckets: ${lit.describe}", applyCtx)
+                throw QueryParsingErrors.invalidBucketsNumberError(lit.describe, applyCtx)
             }
 
             val fields = arguments.tail.map(arg => getFieldReference(applyCtx, arg))
@@ -2699,7 +2679,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           .map(typedVisit[Literal])
           .map(lit => LiteralValue(lit.value, lit.dataType))
       reference.orElse(literal)
-          .getOrElse(throw new ParseException(s"Invalid transform argument", ctx))
+          .getOrElse(throw QueryParsingErrors.invalidTransformArgumentError(ctx))
     }
   }
 
@@ -2710,12 +2690,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
     properties.filter {
       case (PROP_LOCATION, _) if !legacyOn =>
-        throw new ParseException(s"$PROP_LOCATION is a reserved namespace property, please use" +
-          s" the LOCATION clause to specify it.", ctx)
+        throw QueryParsingErrors.cannotCleanReservedNamespacePropertyError(
+          PROP_LOCATION, ctx, "please use the LOCATION clause to specify it")
       case (PROP_LOCATION, _) => false
       case (PROP_OWNER, _) if !legacyOn =>
-        throw new ParseException(s"$PROP_OWNER is a reserved namespace property, it will be" +
-          s" set to the current user.", ctx)
+        throw QueryParsingErrors.cannotCleanReservedNamespacePropertyError(
+          PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
       case _ => true
     }
@@ -2743,7 +2723,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     checkDuplicateClauses(ctx.DBPROPERTIES, "WITH DBPROPERTIES", ctx)
 
     if (!ctx.PROPERTIES.isEmpty && !ctx.DBPROPERTIES.isEmpty) {
-      throw new ParseException(s"Either PROPERTIES or DBPROPERTIES is allowed.", ctx)
+      throw QueryParsingErrors.propertiesAndDbPropertiesBothSpecifiedError(ctx)
     }
 
     var properties = ctx.tablePropertyList.asScala.headOption
@@ -2820,7 +2800,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitShowNamespaces(ctx: ShowNamespacesContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.DATABASES != null && ctx.multipartIdentifier != null) {
-      throw new ParseException(s"FROM/IN operator is not allowed in SHOW DATABASES", ctx)
+      throw QueryParsingErrors.fromOrInNotAllowedInShowDatabasesError(ctx)
     }
 
     val multiPart = Option(ctx.multipartIdentifier).map(visitMultipartIdentifier)
@@ -2850,16 +2830,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val legacyOn = conf.getConf(SQLConf.LEGACY_PROPERTY_NON_RESERVED)
     properties.filter {
       case (PROP_PROVIDER, _) if !legacyOn =>
-        throw new ParseException(s"$PROP_PROVIDER is a reserved table property, please use" +
-          s" the USING clause to specify it.", ctx)
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_PROVIDER, ctx, "please use the USING clause to specify it")
       case (PROP_PROVIDER, _) => false
       case (PROP_LOCATION, _) if !legacyOn =>
-        throw new ParseException(s"$PROP_LOCATION is a reserved table property, please use" +
-          s" the LOCATION clause to specify it.", ctx)
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_LOCATION, ctx, "please use the LOCATION clause to specify it")
       case (PROP_LOCATION, _) => false
       case (PROP_OWNER, _) if !legacyOn =>
-        throw new ParseException(s"$PROP_OWNER is a reserved table property, it will be" +
-          s" set to the current user", ctx)
+        throw QueryParsingErrors.cannotCleanReservedTablePropertyError(
+          PROP_OWNER, ctx, "it will be set to the current user")
       case (PROP_OWNER, _) => false
       case _ => true
     }
@@ -2872,9 +2852,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     var path = location
     val filtered = cleanTableProperties(ctx, options).filter {
       case (k, v) if k.equalsIgnoreCase("path") && path.nonEmpty =>
-        throw new ParseException(s"Duplicated table paths found: '${path.get}' and '$v'. LOCATION" +
-          s" and the case insensitive key 'path' in OPTIONS are all used to indicate the custom" +
-          s" table path, you can only specify one of them.", ctx)
+        throw QueryParsingErrors.duplicatedTablePathsFoundError(path.get, v, ctx)
       case (k, v) if k.equalsIgnoreCase("path") =>
         path = Some(v)
         false
@@ -2899,7 +2877,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case (null, storageHandler) =>
         operationNotAllowed("STORED BY", ctx)
       case _ =>
-        throw new ParseException("Expected either STORED AS or STORED BY, not both", ctx)
+        throw QueryParsingErrors.storedAsAndStoredByBothSpecifiedError(ctx)
     }
   }
 
@@ -3437,12 +3415,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     val columnNameParts = typedVisit[Seq[String]](ctx.colName)
     if (!conf.resolver(columnNameParts.last, ctx.colType().colName.getText)) {
-      throw new AnalysisException("Renaming column is not supported in Hive-style ALTER COLUMN, " +
-        "please run RENAME COLUMN instead.")
+      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError("Renaming column",
+        "ALTER COLUMN", ctx, Some("please run RENAME COLUMN instead"))
     }
     if (ctx.colType.NULL != null) {
-      throw new AnalysisException("NOT NULL is not supported in Hive-style ALTER COLUMN, " +
-        "please run ALTER COLUMN ... SET/DROP NOT NULL instead.")
+      throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+        "NOT NULL", "ALTER COLUMN", ctx,
+        Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
     }
 
     AlterTableAlterColumnStatement(
@@ -3463,12 +3442,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       visitMultipartIdentifier(ctx.multipartIdentifier),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         if (colType.NULL != null) {
-          throw new AnalysisException(
-            "NOT NULL is not supported in Hive-style REPLACE COLUMNS")
+          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+            "NOT NULL", "REPLACE COLUMNS", ctx)
         }
         if (colType.colPosition != null) {
-          throw new AnalysisException(
-            "Column position is not supported in Hive-style REPLACE COLUMNS")
+          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+            "Column position", "REPLACE COLUMNS", ctx)
         }
         typedVisit[QualifiedColType](colType)
       }.toSeq
@@ -3577,7 +3556,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       "DESCRIBE TABLE")
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
-        throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
+        throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
       } else {
         DescribeColumn(
           relation,
@@ -3590,7 +3569,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         visitPartitionSpec(ctx.partitionSpec).map {
           case (key, Some(value)) => key -> value
           case (key, _) =>
-            throw new ParseException(s"PARTITION specification is incomplete: `$key`", ctx)
+            throw QueryParsingErrors.incompletePartitionSpecificationError(key, ctx)
         }
       } else {
         Map.empty[String, String]
@@ -3626,8 +3605,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     if (ctx.identifier != null &&
         ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`",
-        ctx.identifier())
+      throw QueryParsingErrors.computeStatisticsNotExpectedError(ctx.identifier())
     }
 
     if (ctx.ALL() != null) {
@@ -3722,9 +3700,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val tableName = relation.multipartIdentifier
     if (query.isDefined && tableName.length > 1) {
       val catalogAndNamespace = tableName.init
-      throw new ParseException("It is not allowed to add catalog/namespace " +
-        s"prefix ${catalogAndNamespace.quoted} to " +
-        "the table name in CACHE TABLE AS SELECT", ctx)
+      throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
+        catalogAndNamespace.quoted, ctx)
     }
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val isLazy = ctx.LAZY != null
@@ -4063,7 +4040,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case None | Some("all") => (true, true)
         case Some("system") => (false, true)
         case Some("user") => (true, false)
-        case Some(x) => throw new ParseException(s"SHOW $x FUNCTIONS not supported", ctx)
+        case Some(x) => throw QueryParsingErrors.showFunctionsUnsupportedError(x, ctx.identifier())
     }
     val pattern = Option(ctx.pattern).map(string(_))
     val unresolvedFuncOpt = Option(ctx.multipartIdentifier)
