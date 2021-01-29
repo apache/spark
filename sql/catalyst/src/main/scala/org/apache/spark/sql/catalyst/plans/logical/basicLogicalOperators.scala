@@ -475,11 +475,11 @@ case class View(
   // creation. We should remove this extra Project during canonicalize if it does nothing.
   // See more details in `SessionCatalog.fromCatalogTable`.
   private def canRemoveProject(p: Project): Boolean = {
-    p.output.length == p.child.output.length && p.projectList.zipWithIndex.forall {
-      case (Alias(cast: CastBase, name), index) =>
+    p.output.length == p.child.output.length && p.projectList.zip(p.child.output).forall {
+      case (Alias(cast: CastBase, name), childAttr) =>
         cast.child match {
           case a: AttributeReference =>
-            a.dataType == cast.dataType && a.name == name && p.child.output(index).semanticEquals(a)
+            a.dataType == cast.dataType && a.name == name && childAttr.semanticEquals(a)
           case _ => false
         }
       case _ => false
