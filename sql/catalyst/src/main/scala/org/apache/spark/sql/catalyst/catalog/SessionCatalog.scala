@@ -1011,7 +1011,7 @@ class SessionCatalog(
    * The method is supposed to use in the following situations:
    *   1. The logical plan of a table/view was changed, and cached table/view data is cleared
    *      explicitly. For example, like in `AlterTableRenameCommand` which re-caches the table
-   *      itself. Otherwise if you need to re-fresh cached data, consider using of
+   *      itself. Otherwise if you need to refresh cached data, consider using of
    *      `CatalogImpl.refreshTable()`.
    *   2. A table/view doesn't exist, and need to only remove its entry in the relation cache since
    *      the cached data is invalidated explicitly like in `DropTableCommand` which uncaches
