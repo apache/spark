@@ -528,7 +528,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    *   - schema inference for file source tables
    *   - statistics update
    *
-   * The method is supposed to use in all cases when need to refresh table/view data and meta-data.
+   * The method is supposed to be used in all cases when need to refresh table/view data
+   * and meta-data.
    *
    * @group cachemgmt
    * @since 2.0.0
