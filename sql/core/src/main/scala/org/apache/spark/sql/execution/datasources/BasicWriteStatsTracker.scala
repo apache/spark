@@ -104,7 +104,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
       val attr = fs.getXAttr(path, BasicWriteJobStatsTracker.FILE_LENGTH_XATTR)
       if (attr != null && attr.nonEmpty) {
         val str = new String(attr, StandardCharsets.UTF_8)
-        logInfo(s"File Length statistics for $path retrieved from XAttr: $str")
+        logDebug(s"File Length statistics for $path retrieved from XAttr: $str")
         // a non-empty header was found. parse to a long via the java class
         val l = java.lang.Long.parseLong(str)
         if (l > 0) {
@@ -117,10 +117,11 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
       case e: NumberFormatException =>
         // warn but don't dump the whole stack
         logInfo(s"Failed to parse" +
-          s" ${BasicWriteJobStatsTracker.FILE_LENGTH_XATTR}:$e");
+          s" ${BasicWriteJobStatsTracker.FILE_LENGTH_XATTR}:$e;" +
+          s" bytes written may be under-reported");
       case e: UnsupportedOperationException =>
         // this is not unusual; ignore
-        logDebug(s"Xattr not supported on path $path", e);
+        logDebug(s"XAttr not supported on path $path", e);
       case e: Exception =>
         // Something else. Log at debug and continue.
         logDebug(s"Xattr processing failure on $path", e);
