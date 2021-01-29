@@ -516,7 +516,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   /**
    * The method fully refreshes a table or view with the given name including:
-   *   1. The relation cache in the session catalog. The method remove table entry from the cache.
+   *   1. The relation cache in the session catalog. The method removes table entry from the cache.
    *   2. The file indexes of all relations used by the given view.
    *   3. Table/View schema in the Hive Metastore if the SQL config
    *      `spark.sql.hive.caseSensitiveInferenceMode` is set to `INFER_AND_SAVE`.
