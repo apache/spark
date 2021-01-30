@@ -1490,7 +1490,7 @@ def factorial(col):
 def lag(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows before the current row, and
-    `defaultValue` if there is less than `offset` rows before the current row. For example,
+    `default` if there is less than `offset` rows before the current row. For example,
     an `offset` of one will return the previous row at any given point in the window partition.
 
     This is equivalent to the LAG function in SQL.
@@ -1513,7 +1513,7 @@ def lag(col, offset=1, default=None):
 def lead(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows after the current row, and
-    `defaultValue` if there is less than `offset` rows after the current row. For example,
+    `default` if there is less than `offset` rows after the current row. For example,
     an `offset` of one will return the next row at any given point in the window partition.
 
     This is equivalent to the LEAD function in SQL.
