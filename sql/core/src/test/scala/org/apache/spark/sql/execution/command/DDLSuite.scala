@@ -1706,35 +1706,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("truncate table - external table, temporary table, view (not allowed)") {
-    import testImplicits._
-    withTempPath { tempDir =>
-      withTable("my_ext_tab") {
-        (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
-        (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
-        sql(s"CREATE VIEW my_view AS SELECT 1")
-        val e1 = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE my_temp_tab")
-        }.getMessage
-        assert(e1.contains("my_temp_tab is a temp view. 'TRUNCATE TABLE' expects a table"))
-        assertUnsupported("TRUNCATE TABLE my_ext_tab")
-        val e2 = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE my_view")
-        }.getMessage
-        assert(e2.contains("default.my_view is a view. 'TRUNCATE TABLE' expects a table"))
-      }
-    }
-  }
-
-  test("truncate table - non-partitioned table (not allowed)") {
-    withTable("my_tab") {
-      sql("CREATE TABLE my_tab (age INT, name STRING) using parquet")
-      sql("INSERT INTO my_tab values (10, 'a')")
-      assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
-    }
-  }
-
   test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
     import testImplicits._
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")

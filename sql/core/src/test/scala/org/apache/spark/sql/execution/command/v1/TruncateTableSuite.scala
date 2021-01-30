@@ -256,9 +256,55 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
       checkAnswer(sql(s"SELECT * FROM $t"), Seq.empty)
     }
   }
+
+  test("truncation of views is not allowed") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+
+      withView("v0") {
+        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        val errMsg = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE v0")
+        }.getMessage
+        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+      }
+
+      withTempView("v1") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        val errMsg = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE v1")
+        }.getMessage
+        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+      }
+
+      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      withGlobalTempView(v2) {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        val errMsg = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE v2")
+        }.getMessage
+        assert(errMsg.contains("Table not found"))
+      }
+    }
+  }
 }
 
 /**
  * The class contains tests for the `TRUNCATE TABLE` command to check V1 In-Memory table catalog.
  */
-class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase
+class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
+  test("truncation of external tables is not allowed") {
+    import testImplicits._
+    withTempPath { tempDir =>
+      withNamespaceAndTable("ns", "tbl") { t =>
+        (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
+        sql(s"CREATE TABLE $t $defaultUsing LOCATION '${tempDir.toURI}'")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t")
+        }.getMessage
+        assert(errMsg.contains("Operation not allowed: TRUNCATE TABLE on external tables"))
+      }
+    }
+  }
+}
