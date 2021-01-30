@@ -39,6 +39,68 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 
+  test("truncate non-partitioned table") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0, 1")
+
+      sql(s"TRUNCATE TABLE $t")
+      checkAnswer(sql(s"SELECT * FROM $t"), Nil)
+
+      // not supported since the table is not partitioned
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (width=1)")
+      }.getMessage
+      assert(errMsg.contains(
+        "TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned"))
+    }
+  }
+
+  test("truncate partitioned tables") {
+    def createPartTable(t: String): Unit = {
+      sql(s"""
+        |CREATE TABLE $t (width INT, length INT, height INT)
+        |$defaultUsing
+        |PARTITIONED BY (width, length)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION (width = 0, length = 0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (width = 1, length = 1) SELECT 1")
+      sql(s"INSERT INTO $t PARTITION (width = 1, length = 2) SELECT 3")
+    }
+
+    withNamespaceAndTable("ns", "partTable") { t =>
+      createPartTable(t)
+      sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 1)")
+      checkAnswer(sql(s"SELECT width, length, height FROM $t"), Seq(Row(0, 0, 0), Row(1, 2, 3)))
+    }
+
+    withNamespaceAndTable("ns", "partTable") { t =>
+      createPartTable(t)
+      // support partial partition spec
+      sql(s"TRUNCATE TABLE $t PARTITION (width = 1)")
+      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, 0, 0))
+    }
+
+    withNamespaceAndTable("ns", "partTable") { t =>
+      createPartTable(t)
+      // do nothing if no partition is matched for the given partial partition spec
+      sql(s"TRUNCATE TABLE $t PARTITION (width = 100)")
+      checkAnswer(
+        sql(s"SELECT width, length, height FROM $t"),
+        Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
+
+      // throw exception if no partition is matched for the given non-partial partition spec.
+      intercept[NoSuchPartitionException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (width = 100, length = 100)")
+      }
+
+      // throw exception if the column in partition spec is not a partition column.
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
+      }.getMessage
+      assert(errMsg.contains("unknown is not a valid partition column"))
+    }
+  }
+
   test("invalidation of tableRelationCache after table truncation") {
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
@@ -106,66 +168,6 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
  * The class contains tests for the `TRUNCATE TABLE` command to check V1 In-Memory table catalog.
  */
 class TruncateTableSuite extends TruncateTableSuiteBase with CommandSuiteBase {
-  import testImplicits._
-
-  test("truncate datasource table") {
-    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
-    // Test both a Hive compatible and incompatible code path.
-    Seq("json", "parquet").foreach { format =>
-      withNamespaceAndTable("ns", "tbl") { t =>
-        data.write.format(format).saveAsTable(t)
-        assert(spark.table(t).collect().nonEmpty, "bad test; table was empty to begin with")
-
-        sql(s"TRUNCATE TABLE $t")
-        assert(spark.table(t).collect().isEmpty)
-
-        // not supported since the table is not partitioned
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t PARTITION (width=1)")
-        }.getMessage
-        assert(errMsg.contains(
-          "TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned"))
-      }
-    }
-  }
-
-  test("truncate partitioned table - datasource table") {
-    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
-
-    withNamespaceAndTable("ns", "partTable") { t =>
-      data.write.partitionBy("width", "length").saveAsTable(t)
-      // supported since partitions are stored in the metastore
-      sql(s"TRUNCATE TABLE $t PARTITION (width=1, length=1)")
-      assert(spark.table(t).filter($"width" === 1).collect().nonEmpty)
-      assert(spark.table(t).filter($"width" === 1 && $"length" === 1).collect().isEmpty)
-    }
-
-    withNamespaceAndTable("ns", "partTable") { t =>
-      data.write.partitionBy("width", "length").saveAsTable(t)
-      // support partial partition spec
-      sql(s"TRUNCATE TABLE $t PARTITION (width=1)")
-      assert(spark.table(t).collect().nonEmpty)
-      assert(spark.table(t).filter($"width" === 1).collect().isEmpty)
-    }
-
-    withNamespaceAndTable("ns", "partTable") { t =>
-      data.write.partitionBy("width", "length").saveAsTable(t)
-      // do nothing if no partition is matched for the given partial partition spec
-      sql(s"TRUNCATE TABLE $t PARTITION (width=100)")
-      assert(spark.table(t).count() == data.count())
-
-      // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (width=100, length=100)")
-      }
-
-      // throw exception if the column in partition spec is not a partition column.
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (unknown=1)")
-      }.getMessage
-      assert(errMsg.contains("unknown is not a valid partition column"))
-    }
-  }
 
   test("SPARK-30312: truncate table - keep acl/permission") {
     val ignorePermissionAcl = Seq(true, false)
