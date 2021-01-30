@@ -83,6 +83,8 @@ abstract class ParquetPartitionDiscoverySuite
       Literal.create(decimal, DecimalType(decimal.precision, decimal.scale)))
     check("1.5", Literal.create(1.5, DoubleType))
     check("hello", Literal.create("hello", StringType))
+    check("now", Literal.create("now", StringType))
+    check("TODAY", Literal.create("TODAY", StringType))
     check("1990-02-24", Literal.create(Date.valueOf("1990-02-24"), DateType))
     check("1990-02-24 12:00:30",
       Literal.create(Timestamp.valueOf("1990-02-24 12:00:30"), TimestampType))
