@@ -485,7 +485,7 @@ object PartitioningUtils {
       // SPARK-23436: see comment for date
       val timestampValue = Cast(Literal(unescapedRaw), TimestampType, Some(zoneId.getId)).eval()
       // Disallow TimestampType if the cast returned null or if it's a special timestamp
-      require(timestampValue != null && DateTimeUtils.isSpecialTimestamp(raw.trim))
+      require(timestampValue != null && !DateTimeUtils.isSpecialTimestamp(raw.trim))
       Literal.create(timestampValue, TimestampType)
     }
 
