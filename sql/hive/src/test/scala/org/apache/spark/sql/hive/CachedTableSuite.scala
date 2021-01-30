@@ -477,24 +477,28 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  private def getPartitionLocation(t: String, partition: String): String = {
+    val information = sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION ($partition)")
+      .select("information")
+      .first().getString(0)
+    information
+      .split("\\r?\\n")
+      .filter(_.startsWith("Location:"))
+      .head
+      .replace("Location: file:", "")
+  }
+
   test("SPARK-34213: LOAD DATA refreshes cached table") {
     withTable("src_tbl") {
       withTable("dst_tbl") {
         sql("CREATE TABLE src_tbl (c0 int, part int) USING hive PARTITIONED BY (part)")
         sql("INSERT INTO src_tbl PARTITION (part=0) SELECT 0")
-        val information = sql("SHOW TABLE EXTENDED LIKE 'src_tbl' PARTITION (part=0)")
-          .select("information")
-          .first().getString(0)
-        val location = information
-          .split("\\r?\\n")
-          .filter(_.startsWith("Location:"))
-          .head
-          .replace("Location: file:", "")
         sql("CREATE TABLE dst_tbl (c0 int, part int) USING hive PARTITIONED BY (part)")
         sql("INSERT INTO dst_tbl PARTITION (part=1) SELECT 1")
         sql("CACHE TABLE dst_tbl")
         assert(spark.catalog.isCached("dst_tbl"))
         checkAnswer(sql("SELECT * FROM dst_tbl"), Row(1, 1))
+        val location = getPartitionLocation("src_tbl", "part=0")
         sql(s"LOAD DATA LOCAL INPATH '$location' INTO TABLE dst_tbl PARTITION (part=0)")
         assert(spark.catalog.isCached("dst_tbl"))
         checkAnswer(sql("SELECT * FROM dst_tbl"), Seq(Row(0, 0), Row(1, 1)))
@@ -512,6 +516,25 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       sql("TRUNCATE TABLE tbl")
       assert(spark.catalog.isCached("tbl"))
       checkAnswer(sql("SELECT * FROM tbl"), Seq.empty)
+    }
+  }
+
+  test("SPARK-34262: ALTER TABLE .. SET LOCATION refreshes cached table") {
+    withTable("src_tbl") {
+      withTable("dst_tbl") {
+        sql("CREATE TABLE src_tbl (c0 int, part int) USING hive PARTITIONED BY (part)")
+        sql("INSERT INTO src_tbl PARTITION (part=0) SELECT 0")
+        sql("CREATE TABLE dst_tbl (c0 int, part int) USING hive PARTITIONED BY (part)")
+        sql("ALTER TABLE dst_tbl ADD PARTITION (part=0)")
+        sql("INSERT INTO dst_tbl PARTITION (part=1) SELECT 1")
+        sql("CACHE TABLE dst_tbl")
+        assert(spark.catalog.isCached("dst_tbl"))
+        checkAnswer(sql("SELECT * FROM dst_tbl"), Row(1, 1))
+        val location = getPartitionLocation("src_tbl", "part=0")
+        sql(s"ALTER TABLE dst_tbl PARTITION (part=0) SET LOCATION '$location'")
+        assert(spark.catalog.isCached("dst_tbl"))
+        checkAnswer(sql("SELECT * FROM dst_tbl"), Seq(Row(0, 0), Row(1, 1)))
+      }
     }
   }
 }

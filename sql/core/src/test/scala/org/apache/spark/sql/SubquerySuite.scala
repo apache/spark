@@ -512,7 +512,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
-  test("SPARK-34252: correlated scalar subquery with view in aggregate") {
+  test("SPARK-34269: correlated subquery with view in aggregate's grouping expression") {
     withTable("tr") {
       withView("vr") {
         r.write.saveAsTable("tr")

@@ -2670,6 +2670,8 @@ class Dataset[T] private[sql](
    *   <li>min</li>
    *   <li>max</li>
    *   <li>arbitrary approximate percentiles specified as a percentage (e.g. 75%)</li>
+   *   <li>count_distinct</li>
+   *   <li>approx_count_distinct</li>
    * </ul>
    *
    * If no statistics are given, this function computes count, mean, stddev, min,
@@ -2710,6 +2712,20 @@ class Dataset[T] private[sql](
    *
    * {{{
    *   ds.select("age", "height").summary().show()
+   * }}}
+   *
+   * Specify statistics to output custom summaries:
+   *
+   * {{{
+   *   ds.summary("count", "count_distinct").show()
+   * }}}
+   *
+   * The distinct count isn't included by default.
+   *
+   * You can also run approximate distinct counts which are faster:
+   *
+   * {{{
+   *   ds.summary("count", "approx_count_distinct").show()
    * }}}
    *
    * See also [[describe]] for basic statistics.

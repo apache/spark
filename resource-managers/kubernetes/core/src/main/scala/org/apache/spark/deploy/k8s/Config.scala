@@ -224,7 +224,6 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
       .version("2.3.0")
-      .internal()
       .stringConf
       .createOptional
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Command, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, Range, SubqueryAlias, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -634,6 +634,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  private def getViewPlan(metadata: CatalogTable): LogicalPlan = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    val projectList = metadata.schema.map { field =>
+      UpCast(field.name.attr, field.dataType).as(field.name)
+    }
+    Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
+  }
+
   test("look up view relation") {
     withBasicCatalog { catalog =>
       val props = CatalogTable.catalogAndNamespaceToProps("cat1", Seq("ns1"))
@@ -646,8 +654,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Look up a view.
       catalog.setCurrentDatabase("default")
-      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
-        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
       // Look up a view using current database of the session catalog.
@@ -666,8 +673,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(metadata.viewText.isDefined)
       assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
 
-      val view = View(desc = metadata, isTempView = false, output = metadata.schema.toAttributes,
-        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
       comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))
     }
