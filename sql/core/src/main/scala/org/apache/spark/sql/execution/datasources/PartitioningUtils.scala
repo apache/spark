@@ -472,8 +472,8 @@ object PartitioningUtils {
       // the partition values with the right DataType (see
       // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
       val dateValue = Cast(Literal(raw), DateType, Some(zoneId.getId)).eval()
-      // Disallow DateType if the cast returned null
-      require(dateValue != null)
+      // Disallow DateType if the cast returned null or if it's a special date
+      require(dateValue != null && !DateTimeUtils.isSpecialDate(raw.trim))
       Literal.create(dateValue, DateType)
     }
 
@@ -484,8 +484,8 @@ object PartitioningUtils {
       timestampFormatter.parse(unescapedRaw)
       // SPARK-23436: see comment for date
       val timestampValue = Cast(Literal(unescapedRaw), TimestampType, Some(zoneId.getId)).eval()
-      // Disallow TimestampType if the cast returned null
-      require(timestampValue != null)
+      // Disallow TimestampType if the cast returned null or if it's a special timestamp
+      require(timestampValue != null && DateTimeUtils.isSpecialTimestamp(raw.trim))
       Literal.create(timestampValue, TimestampType)
     }
 

@@ -893,6 +893,16 @@ object DateTimeUtils {
   }
 
   /**
+   * Determines if the string is one of the notational shorthands for timestamps
+   *
+   * @param input A trimmed string
+   * @return true if the string matches one the of the notational shorthands
+   */
+  def isSpecialTimestamp(input: String): Boolean = {
+    convertSpecialTimestamp(input, ZoneId.systemDefault()).isDefined
+  }
+
+  /**
    * Converts notational shorthands that are converted to ordinary dates.
    *
    * @param input A trimmed string
@@ -907,6 +917,16 @@ object DateTimeUtils {
       case "yesterday" => Some(Math.subtractExact(currentDate(zoneId), 1))
       case _ => None
     }
+  }
+
+  /**
+   * Determines if the string is one of the notational shorthands for dates
+   *
+   * @param input A trimmed string
+   * @return true if the string matches one the of the notational shorthands
+   */
+  def isSpecialDate(input: String): Boolean = {
+    convertSpecialDate(input, ZoneId.systemDefault()).isDefined
   }
 
   private def convertSpecialDate(bytes: Array[Byte], zoneId: ZoneId): Option[Int] = {
