@@ -1316,26 +1316,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-34269: cache lookup with ORDER BY clause") {
-    withTable("t") {
-      withTempView("v1") {
-        sql("CREATE TABLE t (key bigint, value string) USING parquet")
-        sql("CACHE TABLE v1 AS SELECT * FROM t ORDER BY key")
+  test("SPARK-34269: cache lookup with ORDER BY / LIMIT clause") {
+    Seq("ORDER BY key", "LIMIT 10").foreach { clause =>
+      withTable("t") {
+        withTempView("v1") {
+          sql("CREATE TABLE t (key bigint, value string) USING parquet")
+          sql(s"CACHE TABLE v1 AS SELECT * FROM t $clause")
 
-        val query = sql("SELECT * FROM t ORDER BY key")
-        assert(spark.sharedState.cacheManager.lookupCachedData(query).isDefined)
-      }
-    }
-  }
-
-  test("SPARK-34269: cache lookup with LIMIT clause") {
-    withTable("t") {
-      withTempView("v1") {
-        sql("CREATE TABLE t (key bigint, value string) USING parquet")
-        sql("CACHE TABLE v1 AS SELECT * FROM t LIMIT 10")
-
-        val query = sql("SELECT * FROM t LIMIT 10")
-        assert(spark.sharedState.cacheManager.lookupCachedData(query).isDefined)
+          val query = sql(s"SELECT * FROM t $clause")
+          assert(spark.sharedState.cacheManager.lookupCachedData(query).isDefined)
+        }
       }
     }
   }
