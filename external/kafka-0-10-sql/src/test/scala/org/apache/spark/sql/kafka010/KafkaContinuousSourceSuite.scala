@@ -240,6 +240,11 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
 
 class KafkaContinuousSourceStressForDontFailOnDataLossSuite
     extends KafkaSourceStressForDontFailOnDataLossSuite {
+
+  override protected def sparkConf() = {
+    super.sparkConf.set("spark.executor.cores", "10")
+  }
+
   override protected def startStream(ds: Dataset[Int]) = {
     ds.writeStream
       .format("memory")
