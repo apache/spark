@@ -132,6 +132,7 @@ Currently, **officially** using Airflow:
 1. [Cyscale](https://cyscale.com) [[@ocical](https://github.com/ocical)]
 1. [Dailymotion](http://www.dailymotion.com/fr) [[@germaintanguy](https://github.com/germaintanguy) & [@hc](https://github.com/hc)]
 1. [Danamica](https://www.danamica.dk) [[@testvinder](https://github.com/testvinder)]
+1. [DANA](https://www.dana.id/) [[@imamdigmi](https://github.com/imamdigmi)]
 1. [DataCamp](https://datacamp.com/) [[@dgrtwo](https://github.com/dgrtwo)]
 1. [DataFox](https://www.datafox.com/) [[@sudowork](https://github.com/sudowork)]
 1. [Datamaran](https://www.datamaran.com) [[@valexharo](https://github.com/valexharo)]
