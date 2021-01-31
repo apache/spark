@@ -159,9 +159,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
-    val qe = spark.sessionState.executePlan(plan)
-    qe.assertAnalyzed()
-    val analyzedPlan = qe.analyzed
+    val analyzedPlan = if (plan.resolved) {
+      plan
+    } else {
+      val qe = spark.sessionState.executePlan(plan)
+      qe.assertAnalyzed()
+      qe.analyzed
+    }
 
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
