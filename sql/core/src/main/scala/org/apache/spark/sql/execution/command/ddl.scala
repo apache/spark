@@ -633,7 +633,6 @@ case class AlterTableRecoverPartitionsCommand(
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")

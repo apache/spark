@@ -124,6 +124,39 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       checkPartitions(t, expected: _*)
     }
   }
+
+  test("SPARK-XXXXX: recover partitions in views is not allowed") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
+      def checkViewAltering(createViewCmd: String, alterCmd: String): Unit = {
+        sql(createViewCmd)
+        val errMsg = intercept[AnalysisException] {
+          sql(alterCmd)
+        }.getMessage
+        assert(errMsg.contains("'ALTER TABLE ... RECOVER PARTITIONS' expects a table"))
+        checkPartitions(t) // no partitions
+      }
+
+      withView("v0") {
+        checkViewAltering(
+          s"CREATE VIEW v0 AS SELECT * FROM $t",
+          "ALTER TABLE v0 RECOVER PARTITIONS")
+      }
+
+      withTempView("v1") {
+        checkViewAltering(
+          s"CREATE TEMP VIEW v1 AS SELECT * FROM $t",
+          "ALTER TABLE v1 RECOVER PARTITIONS")
+      }
+
+      withGlobalTempView("v2") {
+        val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+        checkViewAltering(
+          s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t",
+          s"ALTER TABLE $v2 RECOVER PARTITIONS")
+      }
+    }
+  }
 }
 
 /**

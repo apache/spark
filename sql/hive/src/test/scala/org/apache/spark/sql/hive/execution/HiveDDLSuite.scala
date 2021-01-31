@@ -884,10 +884,6 @@ class HiveDDLSuite
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
           s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
 
-        assertAnalysisError(
-          s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
-          s"$oldViewName is a view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table.")
-
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
         assert(!catalog.tableExists(TableIdentifier(newViewName)))
