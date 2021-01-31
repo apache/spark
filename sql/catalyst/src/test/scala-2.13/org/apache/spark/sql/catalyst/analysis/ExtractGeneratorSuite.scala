@@ -23,6 +23,9 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
+/**
+ * Note: this test supports Scala 2.13. A parallel source tree has a 2.12 implementation.
+ */
 class ExtractGeneratorSuite extends AnalysisTest {
 
   test("SPARK-34141: ExtractGenerator with lazy project list") {
