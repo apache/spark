@@ -55,9 +55,11 @@ case class ScalaUDF(
     udfDeterministic: Boolean = true)
   extends Expression with NonSQLExpression with UserDefinedExpression {
 
+  override def name: String = udfName.getOrElse("UDF")
+
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
-  override def toString: String = s"${udfName.getOrElse("UDF")}(${children.mkString(", ")})"
+  override def toString: String = s"$name(${children.mkString(", ")})"
 
   override lazy val canonicalized: Expression = {
     // SPARK-32307: `ExpressionEncoder` can't be canonicalized, and technically we don't

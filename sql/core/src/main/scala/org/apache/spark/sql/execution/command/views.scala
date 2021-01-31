@@ -26,12 +26,11 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, PythonUDF, ScalaUDF, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
@@ -576,10 +575,7 @@ object ViewHelper {
       child.collect {
         case plan if plan.resolved => plan.expressions.flatMap(_.collect {
           case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: PythonUDF if isTemporaryFunction(e.name) => Seq(e.name)
-          case e: ScalaUDAF if e.name.exists(name => isTemporaryFunction(name)) => Seq(e.name.get)
-          case e: ScalaUDF if e.udfName.exists(name => isTemporaryFunction(name)) =>
-            Seq(e.udfName.get)
+          case e: UserDefinedExpression if isTemporaryFunction(e.name) => Seq(e.name)
         }).flatten
       }.flatten.distinct
     }

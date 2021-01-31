@@ -326,12 +326,14 @@ case class ScalaUDAF(
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0,
-    name: Option[String] = None)
+    udafName: Option[String] = None)
   extends ImperativeAggregate
   with NonSQLExpression
   with Logging
   with ImplicitCastInputTypes
   with UserDefinedExpression {
+
+  override def name: String = udafName.getOrElse("UDAF")
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -462,7 +464,8 @@ case class ScalaAggregator[IN, BUF, OUT](
     nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    aggregatorName: Option[String] = None)
   extends TypedImperativeAggregate[BUF]
   with NonSQLExpression
   with UserDefinedExpression
@@ -475,6 +478,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
   private[this] lazy val outputSerializer = outputEncoder.createSerializer()
+
+  override def name: String = aggregatorName.getOrElse(nodeName)
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
