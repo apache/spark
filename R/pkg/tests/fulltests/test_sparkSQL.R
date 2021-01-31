@@ -3982,9 +3982,7 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
                      "'zxwtyswklpf_db' does not exist"))
 
   # recoverPartitions does not work with temporary view
-  expect_error(recoverPartitions("cars"),
-               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
-                     "'recoverPartitions()' expects a table"))
+  expect_error(recoverPartitions("cars"), "'recoverPartitions()' expects a table")
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
