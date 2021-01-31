@@ -231,7 +231,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
     }
   }
 
-  test("SPARK-XXXXX: dripping partitions from views is not allowed") {
+  test("SPARK-34304: dripping partitions from views is not allowed") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")

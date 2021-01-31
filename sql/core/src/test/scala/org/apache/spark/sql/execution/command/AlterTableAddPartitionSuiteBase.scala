@@ -182,7 +182,7 @@ trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils
     }
   }
 
-  test("SPARK-XXXXX: adding partitions to views is not allowed") {
+  test("SPARK-34304: adding partitions to views is not allowed") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
       def checkViewAltering(createViewCmd: String, alterCmd: String): Unit = {

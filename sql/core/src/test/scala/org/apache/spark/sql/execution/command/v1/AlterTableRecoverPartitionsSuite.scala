@@ -125,7 +125,7 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
     }
   }
 
-  test("SPARK-XXXXX: recover partitions in views is not allowed") {
+  test("SPARK-34304: recover partitions in views is not allowed") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
       def checkViewAltering(createViewCmd: String, alterCmd: String): Unit = {

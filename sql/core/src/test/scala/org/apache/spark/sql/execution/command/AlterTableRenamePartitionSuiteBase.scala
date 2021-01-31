@@ -211,7 +211,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
     }
   }
 
-  test("SPARK-XXXXX: renaming partitions in views is not allowed") {
+  test("SPARK-34304: renaming partitions in views is not allowed") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
