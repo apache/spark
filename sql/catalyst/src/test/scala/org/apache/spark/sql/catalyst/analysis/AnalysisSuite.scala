@@ -29,7 +29,7 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -653,28 +652,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
       checkAnalysis(input, expected)
     }
-  }
-
-  test("SPARK-25691: AliasViewChild with different nullabilities") {
-    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("View", Once, EliminateView) :: Nil
-    }
-    val relation = LocalRelation(Symbol("a").int.notNull, Symbol("b").string)
-    val view = View(CatalogTable(
-        identifier = TableIdentifier("v1"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
-      isTempView = false,
-      output = Seq(Symbol("a").int, Symbol("b").string),
-      child = relation)
-    val tz = Option(conf.sessionLocalTimeZone)
-    val expected = Project(Seq(
-        Alias(Cast(Symbol("a").int.notNull, IntegerType, tz), "a")(),
-        Alias(Cast(Symbol("b").string, StringType, tz), "b")()),
-      relation)
-    val res = ViewAnalyzer.execute(view)
-    comparePlans(res, expected)
   }
 
   test("CTE with non-existing column alias") {

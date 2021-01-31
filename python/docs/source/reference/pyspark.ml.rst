@@ -61,8 +61,6 @@ Feature
     :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVASelector
-    ANOVASelectorModel
     Binarizer
     BucketedRandomProjectionLSH
     BucketedRandomProjectionLSHModel
@@ -74,8 +72,6 @@ Feature
     DCT
     ElementwiseProduct
     FeatureHasher
-    FValueSelector
-    FValueSelectorModel
     HashingTF
     IDF
     IDFModel
@@ -109,6 +105,8 @@ Feature
     StringIndexer
     StringIndexerModel
     Tokenizer
+    UnivariateFeatureSelector
+    UnivariateFeatureSelectorModel
     VarianceThresholdSelector
     VarianceThresholdSelectorModel
     VectorAssembler
@@ -272,10 +270,8 @@ Statistics
     :template: autosummary/class_with_docs.rst
     :toctree: api/
 
-    ANOVATest
     ChiSquareTest
     Correlation
-    FValueTest
     KolmogorovSmirnovTest
     MultivariateGaussian
     Summarizer

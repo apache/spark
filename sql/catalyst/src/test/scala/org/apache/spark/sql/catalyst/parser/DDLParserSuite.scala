@@ -1089,13 +1089,13 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
       RenameTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO"),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO", true),
         Seq("x", "y", "z"),
         isView = false))
     comparePlans(
       parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
       RenameTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER VIEW ... RENAME TO"),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER VIEW ... RENAME TO", true),
         Seq("x", "y", "z"),
         isView = true))
   }
@@ -1103,38 +1103,38 @@ class DDLParserSuite extends AnalysisTest {
   test("describe table column") {
     comparePlans(parsePlan("DESCRIBE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `abc.xyz`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("abc.xyz")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE t abc.xyz"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("abc", "xyz")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE t `a.b`.`x.y`"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("a.b", "x.y")),
         isExtended = false))
 
     comparePlans(parsePlan("DESCRIBE TABLE t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = false))
     comparePlans(parsePlan("DESCRIBE TABLE EXTENDED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
     comparePlans(parsePlan("DESCRIBE TABLE FORMATTED t col"),
       DescribeColumn(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"),
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true),
         UnresolvedAttribute(Seq("col")),
         isExtended = true))
 
@@ -1156,16 +1156,16 @@ class DDLParserSuite extends AnalysisTest {
   test("SPARK-17328 Fix NPE with EXPLAIN DESCRIBE TABLE") {
     comparePlans(parsePlan("describe t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = false))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = false))
     comparePlans(parsePlan("describe table extended t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
     comparePlans(parsePlan("describe table formatted t"),
       DescribeRelation(
-        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE"), Map.empty, isExtended = true))
+        UnresolvedTableOrView(Seq("t"), "DESCRIBE TABLE", true), Map.empty, isExtended = true))
   }
 
   test("insert table: basic append") {
@@ -1875,7 +1875,7 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS key, value"),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ..."),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ...", true),
         Option(Seq("key", "value")),
         allColumns = false))
 
@@ -1887,7 +1887,7 @@ class DDLParserSuite extends AnalysisTest {
            |COMPUTE STATISTICS FOR COLUMNS key, value
          """.stripMargin),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ..."),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR COLUMNS ...", true),
         Option(Seq("key", "value")),
         allColumns = false))
 
@@ -1899,7 +1899,7 @@ class DDLParserSuite extends AnalysisTest {
            |COMPUTE STATISTICS FOR ALL COLUMNS
          """.stripMargin),
       AnalyzeColumn(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR ALL COLUMNS"),
+        UnresolvedTableOrView(Seq("a", "b", "c"), "ANALYZE TABLE ... FOR ALL COLUMNS", true),
         None,
         allColumns = true))
 
@@ -1966,6 +1966,7 @@ class DDLParserSuite extends AnalysisTest {
       CacheTableAsSelect(
         "t",
         Project(Seq(UnresolvedStar(None)), UnresolvedRelation(Seq("testData"))),
+        "SELECT * FROM testData",
         false,
         Map.empty))
 
@@ -2011,7 +2012,7 @@ class DDLParserSuite extends AnalysisTest {
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
-      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE")))
+      RefreshTable(UnresolvedTableOrView(Seq("a", "b", "c"), "REFRESH TABLE", true)))
   }
 
   test("show columns") {
@@ -2021,27 +2022,20 @@ class DDLParserSuite extends AnalysisTest {
     val sql4 = "SHOW COLUMNS FROM db1.t1 IN db1"
 
     val parsed1 = parsePlan(sql1)
-    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1"), "SHOW COLUMNS"), None)
+    val expected1 = ShowColumns(UnresolvedTableOrView(Seq("t1"), "SHOW COLUMNS", true), None)
     val parsed2 = parsePlan(sql2)
-    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS"), None)
+    val expected2 = ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), None)
     val parsed3 = parsePlan(sql3)
     val expected3 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS"), Some(Seq("db1")))
+      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
     val parsed4 = parsePlan(sql4)
     val expected4 =
-      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS"), Some(Seq("db1")))
+      ShowColumns(UnresolvedTableOrView(Seq("db1", "t1"), "SHOW COLUMNS", true), Some(Seq("db1")))
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
-  }
-
-  test("alter table: recover partitions") {
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c RECOVER PARTITIONS"),
-      AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... RECOVER PARTITIONS")))
   }
 
   test("alter view: add partition (not supported)") {
@@ -2270,12 +2264,14 @@ class DDLParserSuite extends AnalysisTest {
   test("SHOW TBLPROPERTIES table") {
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c"),
-      ShowTableProperties(UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES"), None))
+      ShowTableProperties(
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true),
+        None))
 
     comparePlans(
       parsePlan("SHOW TBLPROPERTIES a.b.c('propKey1')"),
       ShowTableProperties(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES"), Some("propKey1")))
+        UnresolvedTableOrView(Seq("a", "b", "c"), "SHOW TBLPROPERTIES", true), Some("propKey1")))
   }
 
   test("DESCRIBE FUNCTION") {

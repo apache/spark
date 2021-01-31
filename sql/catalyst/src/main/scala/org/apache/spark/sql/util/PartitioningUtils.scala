@@ -20,8 +20,13 @@ package org.apache.spark.sql.util
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
+import org.apache.spark.sql.catalyst.util.CharVarcharCodegenUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.types.{CharType, StructType, VarcharType}
+import org.apache.spark.unsafe.types.UTF8String
 
-object PartitioningUtils {
+private[sql] object PartitioningUtils {
   /**
    * Normalize the column names in partition specification, w.r.t. the real partition column names
    * and case sensitivity. e.g., if the partition spec has a column named `monTh`, and there is a
@@ -30,20 +35,49 @@ object PartitioningUtils {
    */
   def normalizePartitionSpec[T](
       partitionSpec: Map[String, T],
-      partColNames: Seq[String],
+      partCols: StructType,
       tblName: String,
       resolver: Resolver): Map[String, T] = {
+    val rawSchema = CharVarcharUtils.getRawSchema(partCols)
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
+      val normalizedFiled = rawSchema.find(f => resolver(f.name, key)).getOrElse {
         throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
       }
-      normalizedKey -> value
+
+      val normalizedVal = normalizedFiled.dataType match {
+        case CharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+          val v = value match {
+            case Some(str: String) => Some(charTypeWriteSideCheck(str, len))
+            case str: String => charTypeWriteSideCheck(str, len)
+            case other => other
+          }
+          v.asInstanceOf[T]
+        case VarcharType(len) if value != null && value != DEFAULT_PARTITION_NAME =>
+          val v = value match {
+            case Some(str: String) => Some(varcharTypeWriteSideCheck(str, len))
+            case str: String => varcharTypeWriteSideCheck(str, len)
+            case other => other
+          }
+          v.asInstanceOf[T]
+        case _ => value
+      }
+      normalizedFiled.name -> normalizedVal
     }
 
     SchemaUtils.checkColumnNameDuplication(
       normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
+  }
+
+  private def charTypeWriteSideCheck(inputStr: String, limit: Int): String = {
+    val toUtf8 = UTF8String.fromString(inputStr)
+    CharVarcharCodegenUtils.charTypeWriteSideCheck(toUtf8, limit).toString
+  }
+
+  private def varcharTypeWriteSideCheck(inputStr: String, limit: Int): String = {
+    val toUtf8 = UTF8String.fromString(inputStr)
+    CharVarcharCodegenUtils.varcharTypeWriteSideCheck(toUtf8, limit).toString
   }
 
   /**

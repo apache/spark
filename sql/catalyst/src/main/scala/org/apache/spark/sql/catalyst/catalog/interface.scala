@@ -510,6 +510,33 @@ object CatalogTable {
     propKey == originalKey || propKey == s"$originalKey.numParts" ||
       propKey.startsWith(s"$originalKey.part.")
   }
+
+  def normalize(table: CatalogTable): CatalogTable = {
+    val nondeterministicProps = Set(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      // The following are hive specific schema parameters which we do not need to match exactly.
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize"
+    )
+
+    table.copy(
+      createTime = 0L,
+      lastAccessTime = 0L,
+      properties = table.properties
+        .filterKeys(!nondeterministicProps.contains(_))
+        .map(identity)
+        .toMap,
+      stats = None,
+      ignoredProperties = Map.empty
+    )
+  }
 }
 
 /**
@@ -781,10 +808,7 @@ case class HiveTableRelation(
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
   override def doCanonicalize(): HiveTableRelation = copy(
-    tableMeta = tableMeta.copy(
-      storage = CatalogStorageFormat.empty,
-      createTime = -1
-    ),
+    tableMeta = CatalogTable.normalize(tableMeta),
     dataCols = dataCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index))
     },

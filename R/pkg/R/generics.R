@@ -780,7 +780,8 @@ setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCoun
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_aggregate", function(x, zero, merge, ...) { standardGeneric("array_aggregate") })
+setGeneric("array_aggregate",
+           function(x, initialValue, merge, ...) { standardGeneric("array_aggregate") })
 
 #' @rdname column_collection_functions
 #' @name NULL

@@ -53,7 +53,7 @@ struct<>
 -- !query
 SELECT float('NaN')
 -- !query schema
-struct<CAST(NaN AS FLOAT):float>
+struct<NaN:float>
 -- !query output
 NaN
 
@@ -61,7 +61,7 @@ NaN
 -- !query
 SELECT float('nan')
 -- !query schema
-struct<CAST(nan AS FLOAT):float>
+struct<nan:float>
 -- !query output
 NaN
 
@@ -69,7 +69,7 @@ NaN
 -- !query
 SELECT float('   NAN  ')
 -- !query schema
-struct<CAST(   NAN   AS FLOAT):float>
+struct<   NAN  :float>
 -- !query output
 NaN
 
@@ -77,7 +77,7 @@ NaN
 -- !query
 SELECT float('infinity')
 -- !query schema
-struct<CAST(infinity AS FLOAT):float>
+struct<infinity:float>
 -- !query output
 Infinity
 
@@ -85,7 +85,7 @@ Infinity
 -- !query
 SELECT float('          -INFINiTY   ')
 -- !query schema
-struct<CAST(          -INFINiTY    AS FLOAT):float>
+struct<          -INFINiTY   :float>
 -- !query output
 -Infinity
 
@@ -120,7 +120,7 @@ invalid input syntax for type numeric:  INFINITY    x
 -- !query
 SELECT float('Infinity') + 100.0
 -- !query schema
-struct<(CAST(CAST(Infinity AS FLOAT) AS DOUBLE) + CAST(100.0 AS DOUBLE)):double>
+struct<(Infinity + 100.0):double>
 -- !query output
 Infinity
 
@@ -128,7 +128,7 @@ Infinity
 -- !query
 SELECT float('Infinity') / float('Infinity')
 -- !query schema
-struct<(CAST(CAST(Infinity AS FLOAT) AS DOUBLE) / CAST(CAST(Infinity AS FLOAT) AS DOUBLE)):double>
+struct<(Infinity / Infinity):double>
 -- !query output
 NaN
 
@@ -136,7 +136,7 @@ NaN
 -- !query
 SELECT float('nan') / float('nan')
 -- !query schema
-struct<(CAST(CAST(nan AS FLOAT) AS DOUBLE) / CAST(CAST(nan AS FLOAT) AS DOUBLE)):double>
+struct<(nan / nan):double>
 -- !query output
 NaN
 
@@ -282,7 +282,7 @@ struct<five:string,f1:float>
 -- !query
 SELECT smallint(float('32767.4'))
 -- !query schema
-struct<CAST(CAST(32767.4 AS FLOAT) AS SMALLINT):smallint>
+struct<32767.4:smallint>
 -- !query output
 32767
 
@@ -290,7 +290,7 @@ struct<CAST(CAST(32767.4 AS FLOAT) AS SMALLINT):smallint>
 -- !query
 SELECT smallint(float('32767.6'))
 -- !query schema
-struct<CAST(CAST(32767.6 AS FLOAT) AS SMALLINT):smallint>
+struct<32767.6:smallint>
 -- !query output
 32767
 
@@ -298,7 +298,7 @@ struct<CAST(CAST(32767.6 AS FLOAT) AS SMALLINT):smallint>
 -- !query
 SELECT smallint(float('-32768.4'))
 -- !query schema
-struct<CAST(CAST(-32768.4 AS FLOAT) AS SMALLINT):smallint>
+struct<-32768.4:smallint>
 -- !query output
 -32768
 
@@ -306,7 +306,7 @@ struct<CAST(CAST(-32768.4 AS FLOAT) AS SMALLINT):smallint>
 -- !query
 SELECT smallint(float('-32768.6'))
 -- !query schema
-struct<CAST(CAST(-32768.6 AS FLOAT) AS SMALLINT):smallint>
+struct<-32768.6:smallint>
 -- !query output
 -32768
 
@@ -314,7 +314,7 @@ struct<CAST(CAST(-32768.6 AS FLOAT) AS SMALLINT):smallint>
 -- !query
 SELECT int(float('2147483520'))
 -- !query schema
-struct<CAST(CAST(2147483520 AS FLOAT) AS INT):int>
+struct<2147483520:int>
 -- !query output
 2147483520
 
@@ -331,7 +331,7 @@ Casting 2.14748365E9 to int causes overflow
 -- !query
 SELECT int(float('-2147483648.5'))
 -- !query schema
-struct<CAST(CAST(-2147483648.5 AS FLOAT) AS INT):int>
+struct<-2147483648.5:int>
 -- !query output
 -2147483648
 
@@ -348,7 +348,7 @@ Casting -2.1474839E9 to int causes overflow
 -- !query
 SELECT bigint(float('9223369837831520256'))
 -- !query schema
-struct<CAST(CAST(9223369837831520256 AS FLOAT) AS BIGINT):bigint>
+struct<9223369837831520256:bigint>
 -- !query output
 9223369837831520256
 
@@ -356,7 +356,7 @@ struct<CAST(CAST(9223369837831520256 AS FLOAT) AS BIGINT):bigint>
 -- !query
 SELECT bigint(float('9223372036854775807'))
 -- !query schema
-struct<CAST(CAST(9223372036854775807 AS FLOAT) AS BIGINT):bigint>
+struct<9223372036854775807:bigint>
 -- !query output
 9223372036854775807
 
@@ -364,7 +364,7 @@ struct<CAST(CAST(9223372036854775807 AS FLOAT) AS BIGINT):bigint>
 -- !query
 SELECT bigint(float('-9223372036854775808.5'))
 -- !query schema
-struct<CAST(CAST(-9223372036854775808.5 AS FLOAT) AS BIGINT):bigint>
+struct<-9223372036854775808.5:bigint>
 -- !query output
 -9223372036854775808
 

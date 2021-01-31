@@ -1007,7 +1007,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     val tsm = stageToMockTaskSetManager(0)
 
     // submit an offer with one executor
-    var taskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+    val taskAttempts = taskScheduler.resourceOffers(IndexedSeq(
       WorkerOffer("executor0", "host0", 1)
     )).flatten
 
@@ -1763,7 +1763,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
 
     taskScheduler.submitTasks(taskSet)
     // Launch tasks on executor that satisfies resource requirements.
-    var taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
+    val taskDescriptions = taskScheduler.resourceOffers(singleCoreWorkerOffers).flatten
     assert(3 === taskDescriptions.length)
     assert(!failedTaskSet)
     assert(ArrayBuffer("0") === taskDescriptions(0).resources.get(GPU).get.addresses)

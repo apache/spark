@@ -762,8 +762,9 @@ class DataSourceV2SQLSuite
           checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
           checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
 
+          val oldView = spark.table(view)
           sql(s"REPLACE TABLE $t (a bigint) USING foo")
-          assert(spark.sharedState.cacheManager.lookupCachedData(spark.table(view)).isEmpty)
+          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
         }
       }
     }
@@ -1629,16 +1630,23 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33435: REFRESH TABLE should invalidate all caches referencing the table") {
+  test("SPARK-33435, SPARK-34099: REFRESH TABLE should refresh all caches referencing the table") {
     val tblName = "testcat.ns.t"
     withTable(tblName) {
       withTempView("t") {
         sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+        sql(s"INSERT INTO $tblName SELECT 0")
         sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
+        checkAnswer(spark.table(tblName), Row(0))
+        checkAnswer(spark.table("t"), Row(0))
+
+        sql(s"INSERT INTO $tblName SELECT 1")
 
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
         sql(s"REFRESH TABLE $tblName")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        checkAnswer(spark.table(tblName), Seq(Row(0), Row(1)))
+        checkAnswer(spark.table("t"), Seq(Row(0), Row(1)))
       }
     }
   }

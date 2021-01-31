@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RENAME PARTITION` command that
@@ -44,6 +45,27 @@ trait AlterTableRenamePartitionSuiteBase extends command.AlterTableRenamePartiti
       // V1 catalogs rename the partition location of managed tables
       checkLocation(t, Map("id" -> "3"), "id=3")
       checkAnswer(sql(s"SELECT id, data FROM $t WHERE id = 3"), Row(3, "def"))
+    }
+  }
+
+  test("SPARK-34060, SPARK-34071: update stats of cached table") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withNamespaceAndTable("ns", "tbl") { t =>
+        sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+        sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+        sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+        assert(!spark.catalog.isCached(t))
+        sql(s"CACHE TABLE $t")
+        assert(spark.catalog.isCached(t))
+        QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
+        val tableSize = getTableSize(t)
+        assert(tableSize > 0)
+
+        sql(s"ALTER TABLE $t PARTITION (part=0) RENAME TO PARTITION (part=2)")
+        assert(spark.catalog.isCached(t))
+        assert(tableSize == getTableSize(t))
+        QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 2), Row(1, 1)))
+      }
     }
   }
 }

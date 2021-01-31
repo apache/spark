@@ -267,11 +267,12 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(fetched1.get.sizeInBytes > 0)
       assert(fetched1.get.colStats.size == 2)
 
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        sql(s"TRUNCATE TABLE $table")
+        val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+        assert(fetched2.get.sizeInBytes == 0)
+        assert(fetched2.get.colStats.isEmpty)
+      }
     }
   }
 
@@ -677,6 +678,53 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           }.getMessage
           assert(errorMsg.contains("Found duplicate column(s)"))
         }
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+      }
+    }
+  }
+
+  test("SPARK-34251: stats in truncated non-empty table") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable("tbl") {
+        sql("CREATE TABLE tbl (c0 int, part int) USING parquet PARTITIONED BY (part)")
+        sql("INSERT INTO tbl PARTITION (part=0) SELECT 0")
+        sql("INSERT INTO tbl PARTITION (part=1) SELECT 1")
+        val sizeOfTwoParts = getTableStats("tbl").sizeInBytes
+        assert(sizeOfTwoParts > 0)
+        sql("TRUNCATE TABLE tbl PARTITION (part=1)")
+        val sizeOfOnePart = getTableStats("tbl").sizeInBytes
+        assert(0 < sizeOfOnePart && sizeOfOnePart < sizeOfTwoParts)
       }
     }
   }

@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CountDownLatch, Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
+import scala.io.Source
 
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -153,7 +154,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           }
           x
         }).count()
-        assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
+        assert(sc.listFiles().count(_.contains("somesuffix1")) == 1)
       } finally {
         sc.stop()
       }
@@ -244,7 +245,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
-      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
+      assert(sc.listJars().count(_.contains("TestUDTF.jar")) == 1)
     } finally {
       sc.stop()
     }
@@ -376,7 +377,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc.addFile(file1.getAbsolutePath)
       def getAddedFileContents(): String = {
         sc.parallelize(Seq(0)).map { _ =>
-          scala.io.Source.fromFile(SparkFiles.get("file")).mkString
+          Utils.tryWithResource(Source.fromFile(SparkFiles.get("file")))(_.mkString)
         }.first()
       }
       assert(getAddedFileContents() === "old")
@@ -939,7 +940,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       .setAppName("test-cluster")
     conf.set(TASK_GPU_ID.amountConf, "1")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -954,7 +955,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "1")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -970,7 +971,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
 
-    var error = intercept[SparkException] {
+    val error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
@@ -1067,17 +1068,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       dependencyJars.foreach(jar => assert(sc.listJars().exists(_.contains(jar))))
 
       assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "Added dependency jars of Ivy URI" +
-          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+        "Added dependency jars of Ivy URI " +
+          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
 
       // test dependency jars exist
       sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
       assert(logAppender.loggingEvents.count(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI" +
-          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
+        "The dependency jars of Ivy URI " +
+          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")) == 1)
       val existMsg = logAppender.loggingEvents.filter(_.getRenderedMessage.contains(
-        "The dependency jars of Ivy URI" +
-          " ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
+        "The dependency jars of Ivy URI " +
+          "ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true"))
         .head.getRenderedMessage
       dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
     }
@@ -1109,8 +1110,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         "invalidParam1=foo&invalidParam2=boo")
       assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
       assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(
-        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query" +
-          " `invalidParam1=foo&invalidParam2=boo`.")))
+        "Invalid parameters `invalidParam1,invalidParam2` found in Ivy URI query " +
+          "`invalidParam1=foo&invalidParam2=boo`.")))
     }
   }
 

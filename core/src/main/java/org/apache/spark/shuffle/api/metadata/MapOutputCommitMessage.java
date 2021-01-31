@@ -23,7 +23,6 @@ import org.apache.spark.annotation.Private;
 
 /**
  * :: Private ::
- *
  * Represents the result of writing map outputs for a shuffle map task.
  * <p>
  * Partition lengths represents the length of each block written in the map task. This can

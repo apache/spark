@@ -30,11 +30,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
+import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransform, HoursTransform, IdentityTransform, MonthsTransform, SortOrder, Transform, YearsTransform}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.sources.{And, EqualTo, Filter, IsNotNull}
+import org.apache.spark.sql.sources.{And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
 import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -46,7 +47,9 @@ class InMemoryTable(
     val name: String,
     val schema: StructType,
     override val partitioning: Array[Transform],
-    override val properties: util.Map[String, String])
+    override val properties: util.Map[String, String],
+    val distribution: Distribution = Distributions.unspecified(),
+    val ordering: Array[SortOrder] = Array.empty)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
       with SupportsMetadataColumns {
 
@@ -191,6 +194,16 @@ class InMemoryTable(
     dataMap.remove(key)
   }
 
+  protected def createPartitionKey(key: Seq[Any]): Unit = dataMap.synchronized {
+    if (!dataMap.contains(key)) {
+      val emptyRows = new BufferedRows(key.toArray.mkString("/"))
+      val rows = if (key.length == schema.length) {
+        emptyRows.withRow(InternalRow.fromSeq(key))
+      } else emptyRows
+      dataMap.put(key, rows)
+    }
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
@@ -274,7 +287,11 @@ class InMemoryTable(
         this
       }
 
-      override def build(): Write = new Write {
+      override def build(): Write = new Write with RequiresDistributionAndOrdering {
+        override def requiredDistribution: Distribution = distribution
+
+        override def requiredOrdering: Array[SortOrder] = ordering
+
         override def toBatch: BatchWrite = writer
 
         override def toStreaming: StreamingWrite = streamingWriter match {
@@ -384,6 +401,17 @@ object InMemoryTable {
       filters.flatMap(splitAnd).forall {
         case EqualTo(attr, value) =>
           value == extractValue(attr, partitionNames, partValues)
+        case EqualNullSafe(attr, value) =>
+          val attrVal = extractValue(attr, partitionNames, partValues)
+          if (attrVal == null && value === null) {
+            true
+          } else if (attrVal == null || value === null) {
+            false
+          } else {
+            value == attrVal
+          }
+        case IsNull(attr) =>
+          null == extractValue(attr, partitionNames, partValues)
         case IsNotNull(attr) =>
           null != extractValue(attr, partitionNames, partValues)
         case f =>
@@ -395,6 +423,8 @@ object InMemoryTable {
   def supportsFilters(filters: Array[Filter]): Boolean = {
     filters.flatMap(splitAnd).forall {
       case _: EqualTo => true
+      case _: EqualNullSafe => true
+      case _: IsNull => true
       case _: IsNotNull => true
       case _ => false
     }

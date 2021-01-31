@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import java.lang.{Long => JLong}
 import java.util
 
 import scala.collection.mutable.StringBuilder
@@ -26,6 +27,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
+import org.apache.spark.sql.errors.QueryParsingErrors
 
 /**
  * A collection of utility methods for use during the parsing process.
@@ -38,20 +40,20 @@ object ParserUtils {
   }
 
   def operationNotAllowed(message: String, ctx: ParserRuleContext): Nothing = {
-    throw new ParseException(s"Operation not allowed: $message", ctx)
+    throw QueryParsingErrors.operationNotAllowedError(message, ctx)
   }
 
   def checkDuplicateClauses[T](
       nodes: util.List[T], clauseName: String, ctx: ParserRuleContext): Unit = {
     if (nodes.size() > 1) {
-      throw new ParseException(s"Found duplicate clauses: $clauseName", ctx)
+      throw QueryParsingErrors.duplicateClausesError(clauseName, ctx)
     }
   }
 
   /** Check if duplicate keys exist in a set of key-value pairs. */
   def checkDuplicateKeys[T](keyPairs: Seq[(String, T)], ctx: ParserRuleContext): Unit = {
     keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
-      throw new ParseException(s"Found duplicate keys '$key'.", ctx)
+      throw QueryParsingErrors.duplicateKeysError(key, ctx)
     }
   }
 
@@ -163,7 +165,7 @@ object ParserUtils {
       } else if (currentChar == '\\') {
 
         if ((i + 6 < strLength) && b.charAt(i + 1) == 'u') {
-          // \u0000 style character literals.
+          // \u0000 style 16-bit unicode character literals.
 
           val base = i + 2
           val code = (0 until 4).foldLeft(0) { (mid, j) =>
@@ -172,6 +174,21 @@ object ParserUtils {
           }
           sb.append(code.asInstanceOf[Char])
           i += 5
+        } else if ((i + 10 < strLength) && b.charAt(i + 1) == 'U' &&
+                   (2 until 10).forall(j => Character.digit(b.charAt(i + j), 16) != -1)) {
+          // \U00000000 style 32-bit unicode character literals.
+
+          // Use Long to treat codePoint as unsigned in the range of 32-bit.
+          val codePoint = JLong.parseLong(b.substring(i + 2, i + 10), 16)
+          if (codePoint < 0x10000) {
+            sb.append((codePoint & 0xFFFF).toChar)
+          } else {
+            val highSurrogate = (codePoint - 0x10000) / 0x400 + 0xD800
+            val lowSurrogate = (codePoint - 0x10000) % 0x400 + 0xDC00
+            sb.append(highSurrogate.toChar)
+            sb.append(lowSurrogate.toChar)
+          }
+          i += 9
         } else if (i + 4 < strLength) {
           // \000 style character literals.
 
