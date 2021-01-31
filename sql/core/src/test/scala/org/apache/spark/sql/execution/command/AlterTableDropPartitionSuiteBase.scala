@@ -222,11 +222,45 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView(v2) {
+      withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t DROP PARTITION (part=3)")
         checkCachedRelation(v2, Seq(Row(0, 0)))
+      }
+    }
+  }
+
+  test("SPARK-XXXXX: dripping partitions from views is not allowed") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      def checkViewAltering(createViewCmd: String, alterCmd: String): Unit = {
+        sql(createViewCmd)
+        val errMsg = intercept[AnalysisException] {
+          sql(alterCmd)
+        }.getMessage
+        assert(errMsg.contains("'ALTER TABLE ... DROP PARTITION ...' expects a table"))
+        checkPartitions(t, Map("part" -> "0"))
+      }
+
+      withView("v0") {
+        checkViewAltering(
+          s"CREATE VIEW v0 AS SELECT * FROM $t",
+          "ALTER TABLE v0 DROP PARTITION (part=0)")
+      }
+
+      withTempView("v1") {
+        checkViewAltering(
+          s"CREATE TEMP VIEW v1 AS SELECT * FROM $t",
+          "ALTER TABLE v1 DROP PARTITION (part=0)")
+      }
+
+      withGlobalTempView("v2") {
+        val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+        checkViewAltering(
+          s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t",
+          s"ALTER TABLE $v2 DROP PARTITION (part=0)")
       }
     }
   }

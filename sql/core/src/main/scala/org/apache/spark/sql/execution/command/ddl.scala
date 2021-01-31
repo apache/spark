@@ -466,7 +466,6 @@ case class AlterTableAddPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
@@ -522,7 +521,6 @@ case class AlterTableRenamePartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
 
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
@@ -570,7 +568,6 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
     val normalizedSpecs = specs.map { spec =>

@@ -202,11 +202,45 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView(v2) {
+      withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
         checkCachedRelation(v2, Seq(Row(0, 4), Row(1, 3)))
+      }
+    }
+  }
+
+  test("SPARK-XXXXX: renaming partitions in views is not allowed") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id INT, part INT) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      def checkViewAltering(createViewCmd: String, alterCmd: String): Unit = {
+        sql(createViewCmd)
+        val errMsg = intercept[AnalysisException] {
+          sql(alterCmd)
+        }.getMessage
+        assert(errMsg.contains("'ALTER TABLE ... RENAME TO PARTITION' expects a table"))
+        checkPartitions(t, Map("part" -> "0"))
+      }
+
+      withView("v0") {
+        checkViewAltering(
+          s"CREATE VIEW v0 AS SELECT * FROM $t",
+          "ALTER TABLE v0 PARTITION (part=0) RENAME TO PARTITION (part=1)")
+      }
+
+      withTempView("v1") {
+        checkViewAltering(
+          s"CREATE TEMP VIEW v1 AS SELECT * FROM $t",
+          "ALTER TABLE v1 PARTITION (part=0) RENAME TO PARTITION (part=1)")
+      }
+
+      withGlobalTempView("v2") {
+        val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+        checkViewAltering(
+          s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t",
+          s"ALTER TABLE $v2 PARTITION (part=0) RENAME TO PARTITION (part=1)")
       }
     }
   }

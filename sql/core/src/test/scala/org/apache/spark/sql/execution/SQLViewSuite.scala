@@ -150,9 +150,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
         s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
       assertAnalysisError(
-        s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')",
-        s"$viewName is a temp view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table")
-      assertAnalysisError(
         s"ALTER TABLE $viewName RECOVER PARTITIONS",
         s"$viewName is a temp view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table")
 
@@ -160,12 +157,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertAnalysisError(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
         s"'$viewName' is a view not a table")
-      assertAnalysisError(
-        s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
-        s"$viewName is a temp view. 'ALTER TABLE ... ADD PARTITION ...' expects a table")
-      assertAnalysisError(
-        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
-        s"$viewName is a temp view. 'ALTER TABLE ... DROP PARTITION ...' expects a table")
 
       // For the following v2 ALERT TABLE statements, unsupported operations are checked first
       // before resolving the relations.
