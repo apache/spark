@@ -89,9 +89,10 @@ object PredicateReorder extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.cboEnabled && conf.predicateReorder) {
+    if (conf.predicateReorder) {
       plan transform {
-        case f @ Filter(cond, _) => f.copy(condition = reorderPredicates(cond, FilterEstimation(f)))
+        case f @ Filter(cond, _) if cond.references.toSet.subsetOf(f.stats.attributeStats.keySet) =>
+          f.copy(condition = reorderPredicates(cond, FilterEstimation(f)))
       }
     } else {
       plan
