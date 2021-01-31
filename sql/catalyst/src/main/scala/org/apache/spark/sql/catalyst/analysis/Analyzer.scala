@@ -1078,7 +1078,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(Some(desc), isTempView, _, child) if !child.resolved =>
+      case view @ View(Some(desc), isTempView, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
@@ -1093,7 +1093,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         view.copy(child = newChild)
       // If view.desc is None, view must be storing a dataframe temp view.
-      case view @ View(None, isTempView, _, child) =>
+      case view @ View(None, isTempView, child) =>
         assert(isTempView && child.resolved)
         view
       case p @ SubqueryAlias(_, view: View) =>

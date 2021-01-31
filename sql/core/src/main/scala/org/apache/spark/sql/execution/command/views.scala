@@ -134,7 +134,7 @@ case class CreateViewCommand(
             child))
       } else {
         assert(isTemporary)
-        View(None, isTemporary, aliasedPlan.output, aliasedPlan)
+        View(None, isTemporary, aliasedPlan)
       }
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
@@ -158,7 +158,7 @@ case class CreateViewCommand(
             child))
       } else {
         assert(isTemporary)
-        View(None, isTemporary, aliasedPlan.output, aliasedPlan)
+        View(None, isTemporary, aliasedPlan)
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -497,7 +497,7 @@ object ViewHelper {
       path: Seq[TableIdentifier],
       viewIdent: TableIdentifier): Unit = {
     plan match {
-      case v @ View(Some(desc), _, _, _) =>
+      case v @ View(Some(desc), _, _) =>
         val ident = desc.identifier
         val newPath = path :+ ident
         // If the table identifier equals to the `viewIdent`, current view node is the same with
