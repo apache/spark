@@ -545,4 +545,11 @@ class CatalogSuite extends SharedSparkSession {
     assert(spark.table("my_temp_table").storageLevel == StorageLevel.DISK_ONLY)
   }
 
+  test("SPARK-34301: recover partitions of views is not supported") {
+    createTempTable("my_temp_table")
+    val errMsg = intercept[AnalysisException] {
+      spark.catalog.recoverPartitions("my_temp_table")
+    }.getMessage
+    assert(errMsg.contains("my_temp_table is a temp view. 'recoverPartitions()' expects a table"))
+  }
 }
