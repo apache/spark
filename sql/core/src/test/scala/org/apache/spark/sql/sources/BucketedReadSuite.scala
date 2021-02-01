@@ -154,8 +154,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
         withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
           // Bucket pruning should still work when bucketing is disabled
-          val planWithBucketDisabled = spark.table("bucketed_table").select("i", "j", "k").filter(filterCondition)
-            .queryExecution.executedPlan
+          val planWithBucketDisabled = spark.table("bucketed_table").select("i", "j", "k")
+            .filter(filterCondition).queryExecution.executedPlan
           val fileScanWithBucketDisabled = getFileScan(planWithBucketDisabled)
           assert(!fileScanWithBucketDisabled.bucketedScan,
             "except no bucketed scan when disabling bucketing but found\n" +
