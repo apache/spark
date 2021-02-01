@@ -22,6 +22,7 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
@@ -49,6 +50,9 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
   override def resolve(hostName: String): String = {
     if (hostName == "host3") "/rack2" else "/rack1"
   }
+
+  override def resolve(hostNames: Seq[String]): Seq[Node] =
+    hostNames.map(n => new NodeBase(n, resolve(n)))
 
 }
 

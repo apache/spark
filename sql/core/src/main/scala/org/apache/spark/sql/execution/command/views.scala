@@ -114,13 +114,13 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
 
     if (viewType == LocalTempView) {
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       if (replace && catalog.getRawTempView(name.table).isDefined &&
-          !catalog.getRawTempView(name.table).get.sameResult(child)) {
+          !catalog.getRawTempView(name.table).get.sameResult(aliasedPlan)) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
         TemporaryViewRelation(
@@ -138,13 +138,13 @@ case class CreateViewCommand(
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       if (replace && catalog.getRawGlobalTempView(name.table).isDefined &&
-          !catalog.getRawGlobalTempView(name.table).get.sameResult(child)) {
+          !catalog.getRawGlobalTempView(name.table).get.sameResult(aliasedPlan)) {
         logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
       }
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
         TemporaryViewRelation(
           prepareTemporaryView(
