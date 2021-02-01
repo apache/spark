@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
-import com.google.common.cache._
+import com.github.benmanes.caffeine.cache.{Cache, Caffeine, RemovalCause, RemovalListener, Weigher}
 import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.internal.Logging
@@ -119,11 +119,10 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
         }
       }
     }
-    val removalListener = new RemovalListener[(ClientId, Path), Array[FileStatus]]() {
-      override def onRemoval(
-          removed: RemovalNotification[(ClientId, Path),
-          Array[FileStatus]]): Unit = {
-        if (removed.getCause == RemovalCause.SIZE &&
+    val removalListener = new RemovalListener[(ClientId, Path), Array[FileStatus]] {
+      override def onRemoval(key: (ClientId, Path), value: Array[FileStatus],
+          cause: RemovalCause): Unit = {
+        if (cause == RemovalCause.SIZE &&
           warnedAboutEviction.compareAndSet(false, true)) {
           logWarning(
             "Evicting cached table partition metadata from memory due to size constraints " +
@@ -133,7 +132,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends 
       }
     }
 
-    var builder = CacheBuilder.newBuilder()
+    var builder = Caffeine.newBuilder()
       .weigher(weigher)
       .removalListener(removalListener)
       .maximumWeight(maxSizeInBytes / weightScale)

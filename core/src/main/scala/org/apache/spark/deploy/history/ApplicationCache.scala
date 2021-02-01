@@ -25,7 +25,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
@@ -62,18 +62,19 @@ private[history] class ApplicationCache(
 
     /**
      * Removal event notifies the provider to detach the UI.
-     * @param rm removal notification
+     * @param key removal key
+     * @param value removal value
      */
-    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
+    override def onRemoval(key: CacheKey, value: CacheEntry,
+        cause: RemovalCause): Unit = {
       metrics.evictionCount.inc()
-      val key = rm.getKey
-      logDebug(s"Evicting entry ${key}")
-      operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().loadedUI.ui)
+      logDebug(s"Evicting entry $key")
+      operations.detachSparkUI(key.appId, key.attemptId, value.loadedUI.ui)
     }
   }
 
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
-    CacheBuilder.newBuilder()
+    Caffeine.newBuilder()
         .maximumSize(retainedApplications)
         .removalListener(removalListener)
         .build(appLoader)
@@ -86,7 +87,7 @@ private[history] class ApplicationCache(
 
   def get(appId: String, attemptId: Option[String] = None): CacheEntry = {
     try {
-      appCache.get(new CacheKey(appId, attemptId))
+      appCache.get(CacheKey(appId, attemptId))
     } catch {
       case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
         throw Option(e.getCause()).getOrElse(e)
@@ -127,7 +128,7 @@ private[history] class ApplicationCache(
   }
 
   /** @return Number of cached UIs. */
-  def size(): Long = appCache.size()
+  def size(): Long = appCache.estimatedSize()
 
   private def time[T](t: Timer)(f: => T): T = {
     val timeCtx = t.time()
@@ -196,7 +197,7 @@ private[history] class ApplicationCache(
     val sb = new StringBuilder(s"ApplicationCache(" +
           s" retainedApplications= $retainedApplications)")
     sb.append(s"; time= ${clock.getTimeMillis()}")
-    sb.append(s"; entry count= ${appCache.size()}\n")
+    sb.append(s"; entry count= ${appCache.estimatedSize()}\n")
     sb.append("----\n")
     appCache.asMap().asScala.foreach {
       case(key, entry) => sb.append(s"  $key -> $entry\n")

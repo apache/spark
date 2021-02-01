@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.google.common.cache.{CacheBuilder, CacheLoader}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
@@ -84,7 +84,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
   }
 
   // Cache of preferred locations of checkpointed files.
-  @transient private[spark] lazy val cachedPreferredLocations = CacheBuilder.newBuilder()
+  @transient private[spark] lazy val cachedPreferredLocations = Caffeine.newBuilder()
     .expireAfterWrite(
       SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
       TimeUnit.MINUTES)

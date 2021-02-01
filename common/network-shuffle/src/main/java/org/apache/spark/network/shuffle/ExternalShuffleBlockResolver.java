@@ -32,11 +32,11 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.CacheLoader;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -116,7 +116,7 @@ public class ExternalShuffleBlockResolver {
             return new ShuffleIndexInformation(file);
           }
         };
-    shuffleIndexCache = CacheBuilder.newBuilder()
+    shuffleIndexCache = Caffeine.newBuilder()
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
       .weigher(new Weigher<File, ShuffleIndexInformation>() {
         public int weigh(File file, ShuffleIndexInformation indexInfo) {
