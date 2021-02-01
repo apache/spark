@@ -556,13 +556,9 @@ case class ShowTableProperties(
     propertyKey: Option[String]) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
 
-  override val output: Seq[Attribute] = {
-    val schema = AttributeReference("value", StringType, nullable = false)() :: Nil
-    propertyKey match {
-      case None => AttributeReference("key", StringType, nullable = false)() :: schema
-      case _ => schema
-    }
-  }
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("key", StringType, nullable = false)(),
+    AttributeReference("value", StringType, nullable = false)())
 }
 
 /**

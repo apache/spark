@@ -911,7 +911,7 @@ case class ShowTablePropertiesCommand(
           val propValue = catalogTable
             .properties
             .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-          Seq(Row(propValue))
+          Seq(Row(p, propValue))
         case None =>
           catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
       }
