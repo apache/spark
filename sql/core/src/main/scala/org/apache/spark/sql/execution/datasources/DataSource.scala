@@ -413,9 +413,8 @@ case class DataSource(
         } else {
           val globbedPaths = checkAndGlobPathIfNecessary(
             checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-          val indexInSchemaInferring = createInMemoryFileIndex(globbedPaths)
           val (resultDataSchema, resultPartitionSchema) =
-            getOrInferFileFormatSchema(format, () => indexInSchemaInferring)
+            getOrInferFileFormatSchema(format, () => createInMemoryFileIndex(globbedPaths))
           val index = createInMemoryFileIndex(globbedPaths, Some(resultPartitionSchema))
           (index, resultDataSchema, resultPartitionSchema)
         }
