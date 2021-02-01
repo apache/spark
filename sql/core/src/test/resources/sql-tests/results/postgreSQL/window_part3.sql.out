@@ -284,7 +284,7 @@ struct<f1:int,sum(f1) OVER (PARTITION BY f1, f2 ORDER BY f2 ASC NULLS FIRST RANG
 -- !query
 SELECT rank() OVER (ORDER BY length('abc'))
 -- !query schema
-struct<RANK() OVER (ORDER BY length(abc) ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
+struct<RANK() OVER (ORDER BY length(abc) ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int>
 -- !query output
 1
 
@@ -319,7 +319,7 @@ org.apache.spark.sql.AnalysisException
 
 The query operator `Aggregate` contains one or more unsupported
 expression types Aggregate, Window or Generate.
-Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
+Invalid expressions: [RANK() OVER (ORDER BY 1 ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)]
 
 
 -- !query
