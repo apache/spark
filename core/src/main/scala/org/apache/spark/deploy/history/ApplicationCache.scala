@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.CompletionException
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
@@ -89,7 +89,7 @@ private[history] class ApplicationCache(
     try {
       appCache.get(new CacheKey(appId, attemptId))
     } catch {
-      case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
+      case e @ (_: CompletionException | _: UncheckedExecutionException) =>
         throw Option(e.getCause()).getOrElse(e)
     }
   }
