@@ -3532,16 +3532,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableSetLocationStatement]] command.
+   * Create an [[AlterTableSetLocation]] command.
    *
    * For example:
    * {{{
-   *   ALTER TABLE table SET LOCATION "loc";
+   *   ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION "loc";
    * }}}
    */
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocationStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterTableSetLocation(
+      createUnresolvedTable(
+        ctx.multipartIdentifier,
+        "ALTER TABLE ... SET LOCATION ..."),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }

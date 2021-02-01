@@ -292,7 +292,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // Final aggregate
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
-            val condition = e.filter.map(distinctAggFilterAttrLookup.get(_)).flatten
+            val condition = e.filter.flatMap(distinctAggFilterAttrLookup.get)
             val naf = if (af.children.forall(_.foldable)) {
               // If aggregateFunction's children are all foldable, we only put the first child in
               // distinctAggGroups. So here we only need to rewrite the first child to

@@ -870,7 +870,9 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",
+          s"$oldViewName is a view. 'ALTER TABLE ... SET LOCATION ...' expects a table.")
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName SET SERDE 'whatever'",
