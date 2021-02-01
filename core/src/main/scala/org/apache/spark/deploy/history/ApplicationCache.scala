@@ -58,21 +58,6 @@ private[history] class ApplicationCache(
 
   }
 
-  private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
-
-    /**
-     * Removal event notifies the provider to detach the UI.
-     * @param key removal key
-     * @param value removal value
-     */
-    override def onRemoval(key: CacheKey, value: CacheEntry,
-        cause: RemovalCause): Unit = {
-      metrics.evictionCount.inc()
-      logDebug(s"Evicting entry $key")
-      operations.detachSparkUI(key.appId, key.attemptId, value.loadedUI.ui)
-    }
-  }
-
   private val cacheWriter = new CacheWriter[CacheKey, CacheEntry] {
     override def write(key: CacheKey, value: CacheEntry): Unit = {}
 
