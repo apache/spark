@@ -309,4 +309,17 @@ class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
       checkAnswer(sql(s"SELECT * FROM $t"), Row(0, "abc"))
     }
   }
+
+  test("SPARK-33990: don not return data from dropped partition") {
+    val t = "testpart.ns1.ns2.tbl"
+
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, part int) USING foo PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(0, 0), Row(1, 1)))
+      sql(s"ALTER TABLE $t DROP PARTITION (part=0)")
+      checkAnswer(sql(s"SELECT * FROM $t"), Seq(Row(1, 1)))
+    }
+  }
 }
