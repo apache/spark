@@ -61,6 +61,11 @@ private[history] class ApplicationCache(
   private val cacheWriter = new CacheWriter[CacheKey, CacheEntry] {
     override def write(key: CacheKey, value: CacheEntry): Unit = {}
 
+    /**
+     * Removal event notifies the provider to detach the UI.
+     * @param key removal key
+     * @param value removal value
+     */
     override def delete(key: CacheKey, value: CacheEntry,
         cause: RemovalCause): Unit = {
       metrics.evictionCount.inc()
