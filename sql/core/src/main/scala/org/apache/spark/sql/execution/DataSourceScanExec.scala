@@ -542,7 +542,7 @@ case class FileSourceScanExec(
       }.groupBy { f =>
         BucketingUtils
           .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+          .getOrElse(throw new IllegalStateException(s"Invalid bucket file ${f.filePath}"))
       }
 
     val prunedFilesGroupedToBuckets = if (optionalBucketSet.isDefined) {
@@ -591,10 +591,24 @@ case class FileSourceScanExec(
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     // Filter files with bucket pruning if possible
-    val filePruning: Path => Boolean = optionalBucketSet match {
+    val ignoreCorruptFiles = fsRelation.sparkSession.sessionState.conf.ignoreCorruptFiles
+    val canPrune: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) =>
-        filePath => bucketSet.get(BucketingUtils.getBucketId(filePath.getName)
-          .getOrElse(sys.error(s"Invalid bucket file $filePath")))
+        filePath => {
+          BucketingUtils.getBucketId(filePath.getName) match {
+            case Some(id) => bucketSet.get(id)
+            case None =>
+              if (ignoreCorruptFiles) {
+                // If ignoring corrupt file, do not prune when bucket file name is invalid
+                true
+              } else {
+                throw new IllegalStateException(
+                  s"Invalid bucket file $filePath when doing bucket pruning. " +
+                  s"Enable ${SQLConf.IGNORE_CORRUPT_FILES.key} to disable exception " +
+                    "and read the file.")
+              }
+          }
+        }
       case None =>
         _ => true
     }
@@ -604,7 +618,7 @@ case class FileSourceScanExec(
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
 
-        if (filePruning(filePath)) {
+        if (canPrune(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
             relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
