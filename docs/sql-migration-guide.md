@@ -49,7 +49,7 @@ license: |
     * and the method `spark.catalog.refreshTable`
   In Spark 3.1 and earlier, table refreshing leaves dependents uncached.
 
-  - In Spark 3.2, the usage of `count(table.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(table.*)` will output differently if there is any null values. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.allowStarWithSingleTableIdentifierInCount` to `true`.
+  - In Spark 3.2, the usage of `count(tblName.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(tblName.*)` will output differently if there is any null values. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.allowStarWithSingleTableIdentifierInCount` to `true`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 

@@ -1562,7 +1562,7 @@ object SQLConf {
   val ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT =
     buildConf("spark.sql.legacy.allowStarWithSingleTableIdentifierInCount")
       .internal()
-      .doc("When true, the SQL function 'count' is allowed to take single 'table.*' as parameter")
+      .doc("When true, the SQL function 'count' is allowed to take single 'tblName.*' as parameter")
       .version("3.2")
       .booleanConf
       .createWithDefault(false)

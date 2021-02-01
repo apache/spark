@@ -1763,7 +1763,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
       expr.transformUp {
         case f1: UnresolvedFunction if containsStar(f1.arguments) =>
-          // SPECIAL CASE: We want to block count(table.*) because in spark, count(table.*) will
+          // SPECIAL CASE: We want to block count(tblName.*) because in spark, count(tblName.*) will
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
