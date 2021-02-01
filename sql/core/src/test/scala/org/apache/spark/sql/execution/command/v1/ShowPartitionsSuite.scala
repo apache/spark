@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `SHOW PARTITIONS` command that check V1
@@ -79,6 +80,18 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       checkAnswer(
         sql(s"SHOW PARTITIONS $t PARTITION (p1 = null)"),
         Row("p1=__HIVE_DEFAULT_PARTITION__"))
+    }
+  }
+
+  test("SPARK-33591: null as string partition literal value 'null' after setting legacy conf") {
+    val t = "part_table"
+    withSQLConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      withTable(t) {
+        sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+        sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+        checkAnswer(sql(s"SHOW PARTITIONS $t"), Row("p1=__HIVE_DEFAULT_PARTITION__"))
+        checkAnswer(sql(s"SHOW PARTITIONS $t PARTITION (p1 = null)"), Row("p1=null"))
+      }
     }
   }
 }

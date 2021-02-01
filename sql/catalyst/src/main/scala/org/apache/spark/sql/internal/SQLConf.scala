@@ -2472,6 +2472,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.parseNullPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true, Spark SQL parses the word `NULL` as the string literal 'NULL' " +
+        "in a partition specification, instead of a null partition value.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
       .internal()
