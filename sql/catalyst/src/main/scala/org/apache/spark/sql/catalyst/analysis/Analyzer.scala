@@ -1767,7 +1767,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           // be expanded while count(*) will be converted to count(1). They will produce different
           // results and confuse users if there is any null values. For count(t1.*, t2.*), it is
           // still allowed, since it's well-defined in spark.
-          if (!conf.allowSingleTableStarInCount &&
+          if (!conf.allowStarWithSingleTableIdentifierInCount &&
               f1.name.database.isEmpty &&
               f1.name.funcName == "count" &&
               f1.arguments.length == 1) {
