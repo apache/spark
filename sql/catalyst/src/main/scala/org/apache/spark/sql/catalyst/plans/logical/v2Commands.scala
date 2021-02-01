@@ -736,6 +736,10 @@ case class ShowColumns(
     child: LogicalPlan,
     namespace: Option[Seq[String]]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+
+  override val output: Seq[Attribute] = {
+    AttributeReference("col_name", StringType, nullable = false)() :: Nil
+  }
 }
 
 /**
