@@ -413,9 +413,10 @@ case class DataSource(
         } else {
           val globbedPaths = checkAndGlobPathIfNecessary(
             checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-          val index = createInMemoryFileIndex(globbedPaths)
+          val indexInSchemaInferring = createInMemoryFileIndex(globbedPaths)
           val (resultDataSchema, resultPartitionSchema) =
-            getOrInferFileFormatSchema(format, () => index)
+            getOrInferFileFormatSchema(format, () => indexInSchemaInferring)
+          val index = createInMemoryFileIndex(globbedPaths, Some(resultPartitionSchema))
           (index, resultDataSchema, resultPartitionSchema)
         }
 
@@ -573,10 +574,12 @@ case class DataSource(
   }
 
   /** Returns an [[InMemoryFileIndex]] that can be used to get partition schema and file list. */
-  private def createInMemoryFileIndex(globbedPaths: Seq[Path]): InMemoryFileIndex = {
+  private def createInMemoryFileIndex(
+      globbedPaths: Seq[Path],
+      partitionSchema: Option[StructType] = userSpecifiedSchema): InMemoryFileIndex = {
     val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
     new InMemoryFileIndex(
-      sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache)
+      sparkSession, globbedPaths, options, partitionSchema, fileStatusCache)
   }
 
   /**
