@@ -27,22 +27,23 @@ object RandomRanges {
 
   val rnd = new scala.util.Random
 
-  def randomBigInt0To(diff: BigInt): BigInt = {
-    var randVal = BigInt(diff.bitLength, rnd)
-    while (randVal > diff) {
-      randVal = BigInt(diff.bitLength, rnd)
+  private[tuning] def randomBigInt0To(x: BigInt): BigInt = {
+    var randVal = BigInt(x.bitLength, rnd)
+    while (randVal > x) {
+      randVal = BigInt(x.bitLength, rnd)
     }
     randVal
+  }
+
+  def bigIntBetween(lower: BigInt, upper: BigInt): BigInt = {
+    val diff: BigInt = upper - lower
+    randomBigInt0To(diff.bitLength) + lower
   }
 
   implicit class RandomInt(limits: Limits[Int]) extends RandomT[Int] {
     def randomT(): Int = {
       import limits._
-      val lower = BigInt(math.min(x, y))
-      val upper = BigInt(math.max(x, y))
-      val diff: BigInt  = upper - lower
-      val randVal: BigInt = randomBigInt0To(diff.bitLength) + lower
-      randVal.intValue()
+      bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).intValue()
     }
   }
 }
@@ -50,7 +51,15 @@ object RandomRanges {
 
 case class Limits[T: Numeric](x: T, y: T)
 
+/**
+ * "For any distribution over a sample space with a finite maximum, the maximum of 60 random
+ * observations lies within the top 5% of the true maximum, with 95% probability"
+ * - Evaluating Machine Learning Models by Alice Zheng
+ * https://www.oreilly.com/library/view/evaluating-machine-learning/9781492048756/ch04.html
+ */
 class ParamRandomBuilder {
+
+  // Java interface
 
   def addGrid(param: DoubleParam, values: Array[Double]): this.type = ???
 
@@ -59,6 +68,12 @@ class ParamRandomBuilder {
   def addGrid(param: FloatParam, values: Array[Float]): this.type = ???
 
   def addGrid(param: LongParam, values: Array[Long]): this.type = ???
+
+  // Scala interface
+
+  def addGrid[T: RandomT](param: Param[T], values: Iterable[T]): this.type = {
+    ???
+  }
 
   def addGrid[T](param: Param[T], values: Iterable[T]): this.type = ???
 
