@@ -101,7 +101,7 @@
 | org.apache.spark.sql.catalyst.expressions.DayOfWeek | dayofweek | SELECT dayofweek('2009-07-30') | struct<dayofweek(2009-07-30):int> |
 | org.apache.spark.sql.catalyst.expressions.DayOfYear | dayofyear | SELECT dayofyear('2016-04-09') | struct<dayofyear(2016-04-09):int> |
 | org.apache.spark.sql.catalyst.expressions.Decode | decode | SELECT decode(encode('abc', 'utf-8'), 'utf-8') | struct<decode(encode(abc, utf-8), utf-8):string> |
-| org.apache.spark.sql.catalyst.expressions.DenseRank | dense_rank | SELECT a, b, dense_rank(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,DENSE_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
+| org.apache.spark.sql.catalyst.expressions.DenseRank | dense_rank | SELECT a, b, dense_rank(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,DENSE_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):int> |
 | org.apache.spark.sql.catalyst.expressions.Divide | / | SELECT 3 / 2 | struct<(3 / 2):double> |
 | org.apache.spark.sql.catalyst.expressions.ElementAt | element_at | SELECT element_at(array(1, 2, 3), 2) | struct<element_at(array(1, 2, 3), 2):int> |
 | org.apache.spark.sql.catalyst.expressions.Elt | elt | SELECT elt(1, 'scala', 'java') | struct<elt(1, scala, java):string> |
