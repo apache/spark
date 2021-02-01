@@ -889,6 +889,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case UnresolvedRelation(ident, _, false) =>
             lookupTempView(ident)
               .map(EliminateSubqueryAliases(_))
+              .map(EliminateDataFrameTempViews(_))
               .map {
                 case r: DataSourceV2Relation => write.withNewTable(r)
                 case _ =>
@@ -1104,7 +1105,10 @@ class Analyzer(override val catalogManager: CatalogManager)
           case other => other
         }
 
-        EliminateSubqueryAliases(relation) match {
+        // Inserting into a file-based temporary view is allowed.
+        // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
+        // Thus, apply EliminateDataFrameTempViews rule to remove any dataframe temp views.
+        EliminateDataFrameTempViews(EliminateSubqueryAliases(relation)) match {
           case v: View if v.desc.isDefined =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.get.identifier, table)
           case other => i.copy(table = other)
@@ -3677,8 +3681,10 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
  * Removes [[View]] operators from the plan if they are temp views created from dataframes.
  */
 object EliminateDataFrameTempViews extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case v: View if v.desc.isEmpty => v.child
+  def apply(plan: LogicalPlan): LogicalPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
+    plan transformUp {
+      case v: View if v.isDataFrameTempView => v.child
+    }
   }
 }
 

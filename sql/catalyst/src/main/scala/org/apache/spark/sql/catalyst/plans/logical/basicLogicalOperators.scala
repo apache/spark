@@ -473,6 +473,8 @@ case class View(
     case _ => child.canonicalized
   }
 
+  def isDataFrameTempView: Boolean = desc.isEmpty && isTempView
+
   // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
   // output schema doesn't change even if the table referenced by the view is changed after view
   // creation. We should remove this extra Project during canonicalize if it does nothing.
