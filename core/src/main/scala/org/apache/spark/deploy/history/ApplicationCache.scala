@@ -87,7 +87,7 @@ private[history] class ApplicationCache(
 
   def get(appId: String, attemptId: Option[String] = None): CacheEntry = {
     try {
-      appCache.get(CacheKey(appId, attemptId))
+      appCache.get(new CacheKey(appId, attemptId))
     } catch {
       case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
         throw Option(e.getCause()).getOrElse(e)
