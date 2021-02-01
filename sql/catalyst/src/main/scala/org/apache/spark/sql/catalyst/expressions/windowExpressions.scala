@@ -517,11 +517,9 @@ abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowF
     throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
 }
 
-abstract class SpecifiedFrameAggregateWindowFunction extends AggregateWindowFunction {
-  override val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
-}
-
-abstract class RowNumberLike extends SpecifiedFrameAggregateWindowFunction {
+abstract class RowNumberLike
+    extends AggregateWindowFunction
+    with SpecifiedFrameAggregateWindowFunction {
   override def children: Seq[Expression] = Nil
   protected val zero = Literal(0)
   protected val one = Literal(1)
@@ -529,6 +527,10 @@ abstract class RowNumberLike extends SpecifiedFrameAggregateWindowFunction {
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
   override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
+}
+
+trait SpecifiedFrameAggregateWindowFunction extends AggregateWindowFunction {
+  override val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
 }
 
 /**
@@ -636,7 +638,8 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
-    extends SpecifiedFrameAggregateWindowFunction
+    extends AggregateWindowFunction
+    with SpecifiedFrameAggregateWindowFunction
     with OffsetWindowFunction
     with ImplicitCastInputTypes {
 
