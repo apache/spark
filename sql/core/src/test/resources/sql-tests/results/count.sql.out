@@ -153,11 +153,11 @@ cannot resolve 'count()' due to data type mismatch: count requires at least one 
 
 
 -- !query
-set spark.sql.legacy.allowSingleTableStarInCount=true
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=true
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.allowSingleTableStarInCount	true
+spark.sql.legacy.allowStarWithSingleTableIdentifierInCount	true
 
 
 -- !query
@@ -169,11 +169,11 @@ struct<count(a, b):bigint>
 
 
 -- !query
-set spark.sql.legacy.allowSingleTableStarInCount=false
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false
 -- !query schema
 struct<key:string,value:string>
 -- !query output
-spark.sql.legacy.allowSingleTableStarInCount	false
+spark.sql.legacy.allowStarWithSingleTableIdentifierInCount	false
 
 
 -- !query

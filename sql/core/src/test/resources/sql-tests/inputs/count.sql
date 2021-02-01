@@ -45,9 +45,9 @@ set spark.sql.legacy.allowParameterlessCount=false;
 SELECT count() FROM testData;
 
 -- legacy behavior: allow count(testData.*)
-set spark.sql.legacy.allowSingleTableStarInCount=true;
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=true;
 SELECT count(testData.*) FROM testData;
 
 -- count with a single table.* as parameter
-set spark.sql.legacy.allowSingleTableStarInCount=false;
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false;
 SELECT count(testData.*) FROM testData;
