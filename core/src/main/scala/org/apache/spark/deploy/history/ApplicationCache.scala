@@ -25,7 +25,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
+import com.github.benmanes.caffeine.cache.{CacheLoader, CacheWriter, Caffeine, LoadingCache, RemovalCause, RemovalListener}
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
@@ -73,10 +73,21 @@ private[history] class ApplicationCache(
     }
   }
 
+  private val cacheWriter = new CacheWriter[CacheKey, CacheEntry] {
+    override def write(key: CacheKey, value: CacheEntry): Unit = {}
+
+    override def delete(key: CacheKey, value: CacheEntry,
+        cause: RemovalCause): Unit = {
+      metrics.evictionCount.inc()
+      logDebug(s"Evicting entry $key")
+      operations.detachSparkUI(key.appId, key.attemptId, value.loadedUI.ui)
+    }
+  }
+
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
     Caffeine.newBuilder()
         .maximumSize(retainedApplications)
-        .removalListener(removalListener)
+        .writer(cacheWriter)
         .build(appLoader)
   }
 
