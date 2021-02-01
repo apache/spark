@@ -521,7 +521,7 @@ class FileIndexSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-34314: rebuild file index after inferring of partition") {
+  test("SPARK-34314: rebuild the file index after partition schema inferring") {
     import testImplicits._
     withTempPath { file =>
       val path = file.getCanonicalPath
