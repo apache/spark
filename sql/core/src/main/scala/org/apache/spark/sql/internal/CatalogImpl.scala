@@ -515,14 +515,21 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Invalidates and refreshes all the cached data and metadata of the given table or view.
-   * For Hive metastore table, the metadata is refreshed. For data source tables, the schema will
-   * not be inferred and refreshed.
+   * The method fully refreshes a table or view with the given name including:
+   *   1. The relation cache in the session catalog. The method removes table entry from the cache.
+   *   2. The file indexes of all relations used by the given view.
+   *   3. Table/View schema in the Hive Metastore if the SQL config
+   *      `spark.sql.hive.caseSensitiveInferenceMode` is set to `INFER_AND_SAVE`.
+   *   4. Cached data of the given table or view, and all its dependents that refer to it.
+   *      Existing cached data will be cleared and the cache will be lazily filled when
+   *      the next time the table/view or the dependents are accessed.
    *
-   * If this table is cached as an InMemoryRelation, re-cache the table and its dependents lazily.
+   * The method does not do:
+   *   - schema inference for file source tables
+   *   - statistics update
    *
-   * In addition, refreshing a table also clear all caches that have reference to the table
-   * in a cascading manner. This is to prevent incorrect result from the otherwise staled caches.
+   * The method is supposed to be used in all cases when need to refresh table/view data
+   * and meta-data.
    *
    * @group cachemgmt
    * @since 2.0.0
