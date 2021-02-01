@@ -19,8 +19,14 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.ml.param._
 
+case class Limits[T: Numeric](x: T, y: T)
+
 abstract class RandomT[T: Numeric] {
   def randomT(): T
+}
+
+abstract class Generator[T: Numeric] {
+  def apply(lim: Limits[T]): RandomT[T]
 }
 
 object RandomRanges {
@@ -40,24 +46,27 @@ object RandomRanges {
     randomBigInt0To(diff.bitLength) + lower
   }
 
-  implicit class RandomInt(limits: Limits[Int]) extends RandomT[Int] {
-    def randomT(): Int = {
-      import limits._
-      bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).intValue()
+  implicit object IntGenerator extends Generator[Int] {
+    def apply(limits: Limits[Int]): RandomT[Int] = new RandomT[Int] {
+      override def randomT(): Int = {
+        import limits._
+        bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).intValue()
+      }
     }
   }
 
-  implicit class RandomLong(limits: Limits[Long]) extends RandomT[Long] {
-    def randomT(): Long = {
-      import limits._
-      bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).longValue()
+  implicit object LongGenerator extends Generator[Long] {
+    def apply(limits: Limits[Long]): RandomT[Long] = new RandomT[Long] {
+      override def randomT(): Long = {
+        import limits._
+        bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).longValue()
+      }
     }
   }
+
+  def apply[T: Generator](lim: Limits[T])(implicit t: Generator[T]): RandomT[T] = t(lim)
 
 }
-
-
-case class Limits[T: Numeric](x: T, y: T)
 
 /**
  * "For any distribution over a sample space with a finite maximum, the maximum of 60 random
