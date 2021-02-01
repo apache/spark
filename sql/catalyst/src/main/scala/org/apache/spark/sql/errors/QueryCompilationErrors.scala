@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
+import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -727,7 +728,12 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(errorMsg)
   }
 
-  def unexpectedColumnExpressionError(column: Expression): Throwable = {
+  def noHandlerForUDAFError(name: String): Throwable = {
+    new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
+      "Use sparkSession.udf.register(...) instead.")
+  }
+  
+   def unexpectedColumnExpressionError(column: Expression): Throwable = {
     new AnalysisException(s"[BUG] unexpected column expression: $column")
   }
 

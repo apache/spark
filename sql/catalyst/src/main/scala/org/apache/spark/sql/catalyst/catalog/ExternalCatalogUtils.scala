@@ -180,7 +180,7 @@ object ExternalCatalogUtils {
   }
 
   def convertNullPartitionValues(spec: TablePartitionSpec): TablePartitionSpec = {
-    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).toMap
+    spec.mapValues(v => if (v == null) DEFAULT_PARTITION_NAME else v).map(identity).toMap
   }
 }
 

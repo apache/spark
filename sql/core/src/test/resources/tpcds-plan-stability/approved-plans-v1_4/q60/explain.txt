@@ -163,7 +163,7 @@ Condition : isnotnull(i_item_sk#13)
 Output [2]: [i_item_id#14, i_category#15]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Music)]
+PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Music                                             )]
 ReadSchema: struct<i_item_id:string,i_category:string>
 
 (22) ColumnarToRow [codegen id : 3]
@@ -171,7 +171,7 @@ Input [2]: [i_item_id#14, i_category#15]
 
 (23) Filter [codegen id : 3]
 Input [2]: [i_item_id#14, i_category#15]
-Condition : (isnotnull(i_category#15) AND (i_category#15 = Music))
+Condition : (isnotnull(i_category#15) AND (i_category#15 = Music                                             ))
 
 (24) Project [codegen id : 3]
 Output [1]: [i_item_id#14 AS i_item_id#14#16]

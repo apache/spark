@@ -830,6 +830,15 @@ class DataFrameSuite extends QueryTest
     ("David", 60, 192),
     ("Amy", 24, 180)).toDF("name", "age", "height")
 
+  private lazy val person3: DataFrame = Seq(
+    ("Luis", 1, 99),
+    ("Luis", 16, 99),
+    ("Luis", 16, 176),
+    ("Fernando", 32, 99),
+    ("Fernando", 32, 164),
+    ("David", 60, 99),
+    ("Amy", 24, 99)).toDF("name", "age", "height")
+
   test("describe") {
     val describeResult = Seq(
       Row("count", "4", "4", "4"),
@@ -919,6 +928,25 @@ class DataFrameSuite extends QueryTest
     val emptyDescription = person2.limit(0).summary()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptySummaryResult)
+  }
+
+  test("SPARK-34165: Add count_distinct to summary") {
+    val summaryDF = person3.summary("count", "count_distinct")
+
+    val summaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("count_distinct", "4", "5", "3"))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(summaryDF, summaryResult)
+
+    val approxSummaryDF = person3.summary("count", "approx_count_distinct")
+    val approxSummaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("approx_count_distinct", "4", "5", "3"))
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
   test("summary advanced") {

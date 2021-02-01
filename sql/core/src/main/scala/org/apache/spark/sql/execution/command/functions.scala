@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionE
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -77,6 +78,9 @@ case class CreateFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
+      if (!replace && catalog.isRegisteredFunction(func.identifier)) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(func.identifier)
+      }
       // We first load resources and then put the builder in the function registry.
       catalog.loadFunctionResources(resources)
       catalog.registerFunction(func, overrideIfExists = replace)

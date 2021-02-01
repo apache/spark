@@ -39,10 +39,7 @@ import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
  *
  * We can remove this rule once we implement all the catalog functionality in `V2SessionCatalog`.
  */
-class ResolveSessionCatalog(
-    val catalogManager: CatalogManager,
-    isTempView: Seq[String] => Boolean,
-    isTempFunction: String => Boolean)
+class ResolveSessionCatalog(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
@@ -414,11 +411,12 @@ class ResolveSessionCatalog(
         ident.asTableIdentifier,
         partitionSpec)
 
-    case ShowPartitions(
+    case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
         pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
       ShowPartitionsCommand(
         ident.asTableIdentifier,
+        s.output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     case ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>
