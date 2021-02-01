@@ -1187,18 +1187,26 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
   }
 
   test("SPARK-34167: read LongDecimals with precision < 10, VectorizedReader off") {
+    // decimal32-written-as-64-bit.snappy.parquet was generated using a 3rd-party library. It has
+    // 10 rows of Decimal(9, 1) written as LongDecimal instead of an IntDecimal
     readParquetFile(testFile("test-data/decimal32-written-as-64-bit.snappy.parquet"), false) {
       df => assert(10 == df.collect().length)
     }
+    // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
+    // has 2048 rows of Decimal(3, 1) written as LongDecimal instead of an IntDecimal
     readParquetFile(testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
       df => assert(2048 == df.collect().length)
     }
   }
 
   test("SPARK-34167: read LongDecimals with precision < 10, VectorizedReader on") {
+    // decimal32-written-as-64-bit.snappy.parquet was generated using a 3rd-party library. It has
+    // 10 rows of Decimal(9, 1) written as LongDecimal instead of an IntDecimal
     readParquetFile(testFile("test-data/decimal32-written-as-64-bit.snappy.parquet")) { df =>
       assert(10 == df.collect().length)
     }
+    // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
+    // has 2048 rows of Decimal(3, 1) written as LongDecimal instead of an IntDecimal
     readParquetFile(testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet")) { df =>
       assert(2048 == df.collect().length)
     }
