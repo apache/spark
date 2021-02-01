@@ -48,6 +48,6 @@ SELECT count() FROM testData;
 set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=true;
 SELECT count(testData.*) FROM testData;
 
--- count with a single table.* as parameter
+-- count with a single tblName.* as parameter
 set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false;
 SELECT count(testData.*) FROM testData;
