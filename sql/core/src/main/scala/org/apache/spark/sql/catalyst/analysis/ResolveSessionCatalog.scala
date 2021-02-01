@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableCatalog, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableChange, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -187,19 +187,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
             tbl.asTableIdentifier, keys, ifExists, isView = false)
       }.getOrElse {
         val changes = keys.map(key => TableChange.removeProperty(key))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
-
-    case AlterTableSetLocationStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          AlterTableSetLocationCommand(tbl.asTableIdentifier, partitionSpec, newLoc)
-      }.getOrElse {
-        if (partitionSpec.nonEmpty) {
-          throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
-        }
-        val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
@@ -465,6 +452,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeClassName,
         serdeProperties,
         partitionSpec)
+
+    case AlterTableSetLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
+      AlterTableSetLocationCommand(ident.asTableIdentifier, partitionSpec, location)
 
     case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
       AlterViewAsCommand(
