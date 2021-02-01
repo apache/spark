@@ -41,6 +41,8 @@ import org.apache.spark.sql.types.StructType;
  *     even if it is supported.
  * ${@link #replacePartitionMetadata}:
  *     point a partition to a new location, which will swap one location's data for the other
+ * ${@link #truncatePartition}:
+ *     remove partition data from the table
  *
  * @since 3.1.0
  */
