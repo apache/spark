@@ -3983,7 +3983,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
 
   # recoverPartitions does not work with temporary view
   expect_error(recoverPartitions("cars"),
-               "no such table - Table or view 'cars' not found in database 'default'")
+               paste("Error in recoverPartitions : analysis error - cars is a temp view.",
+                     "'recoverPartitions()' expects a table"), fixed = TRUE)
   expect_error(refreshTable("cars"), NA)
   expect_error(refreshByPath("/"), NA)
 
