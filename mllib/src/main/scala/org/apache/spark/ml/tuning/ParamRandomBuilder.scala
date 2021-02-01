@@ -43,7 +43,7 @@ object RandomRanges {
 
   def bigIntBetween(lower: BigInt, upper: BigInt): BigInt = {
     val diff: BigInt = upper - lower
-    randomBigInt0To(diff.bitLength) + lower
+    randomBigInt0To(diff) + lower
   }
 
   implicit object IntGenerator extends Generator[Int] {
