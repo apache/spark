@@ -19,7 +19,7 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.ml.param._
 
-trait RandomT[T] {
+abstract class RandomT[T: Numeric] {
   def randomT(): T
 }
 
@@ -46,6 +46,14 @@ object RandomRanges {
       bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).intValue()
     }
   }
+
+  implicit class RandomLong(limits: Limits[Long]) extends RandomT[Long] {
+    def randomT(): Long = {
+      import limits._
+      bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).longValue()
+    }
+  }
+
 }
 
 

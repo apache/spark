@@ -21,4 +21,12 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     }
   }
 
+  test("random longs") {
+    forAll { (x: Long, y: Long) =>
+      val longLimit: Limits[Long] = Limits(x, y)
+      val result:    Long         = longLimit.randomT()
+      assert(result >= math.min(x, y) && result <= math.max(x, y))
+    }
+  }
+
 }
