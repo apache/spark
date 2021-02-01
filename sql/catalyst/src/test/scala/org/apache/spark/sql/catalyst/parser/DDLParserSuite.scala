@@ -766,16 +766,21 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1_table),
-      AlterTableSetPropertiesStatement(
-        Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+      AlterTableSetProperties(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET TBLPROPERTIES"),
+        Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(
       parsePlan(sql2_table),
-      AlterTableUnsetPropertiesStatement(
-        Seq("table_name"), Seq("comment", "test"), ifExists = false))
+      AlterTableUnsetProperties(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES"),
+        Seq("comment", "test"),
+        ifExists = false))
     comparePlans(
       parsePlan(sql3_table),
-      AlterTableUnsetPropertiesStatement(
-        Seq("table_name"), Seq("comment", "test"), ifExists = true))
+      AlterTableUnsetProperties(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES"),
+        Seq("comment", "test"),
+        ifExists = true))
   }
 
   test("alter table: add column") {

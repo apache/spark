@@ -861,14 +861,18 @@ class HiveDDLSuite
           s"$tabName is a table. 'ALTER VIEW ... SET TBLPROPERTIES' expects a view. " +
             "Please use ALTER TABLE instead.")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')",
+          s"$oldViewName is a view. 'ALTER TABLE ... SET TBLPROPERTIES' expects a table.")
 
         assertAnalysisError(
           s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
           s"$tabName is a table. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a view. " +
             "Please use ALTER TABLE instead.")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')",
+          s"$oldViewName is a view. 'ALTER TABLE ... UNSET TBLPROPERTIES' expects a table.")
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",

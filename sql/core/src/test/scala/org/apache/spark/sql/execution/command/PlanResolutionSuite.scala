@@ -26,11 +26,11 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedV2Relation}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableSetLocation, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableSetLocation, AlterTableSetProperties, AlterTableUnsetProperties, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
@@ -771,27 +771,23 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed1 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.setProperty("test", "test"),
-                TableChange.setProperty("comment", "new_comment")))
-            case _ => fail("expect AlterTable")
+            case AlterTableSetProperties(_: ResolvedTable, properties) =>
+              assert(properties == Map(("test", "test"), ("comment", "new_comment")))
+            case _ => fail("expect AlterTableSetProperties")
           }
 
           parsed2 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.removeProperty("comment"),
-                TableChange.removeProperty("test")))
-            case _ => fail("expect AlterTable")
+            case AlterTableUnsetProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+              assert(propertyKeys == Seq("comment", "test"))
+              assert(!ifExists)
+            case _ => fail("expect AlterTableUnsetProperties")
           }
 
           parsed3 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.removeProperty("comment"),
-                TableChange.removeProperty("test")))
-            case _ => fail("expect AlterTable")
+            case AlterTableUnsetProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+              assert(propertyKeys == Seq("comment", "test"))
+              assert(ifExists)
+            case _ => fail("expect AlterTableUnsetProperties")
           }
         }
     }
@@ -803,12 +799,12 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
     parsed4 match {
-      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("Expect AlterTable, but got:\n" + parsed4.treeString)
+      case AlterTableSetProperties(_: UnresolvedTable, _) => // OK
+      case _ => fail("Expect AlterTableSetProperties, but got:\n" + parsed4.treeString)
     }
     parsed5 match {
-      case AlterTable(_, _, _: UnresolvedV2Relation, _) => // OK
-      case _ => fail("Expect AlterTable, but got:\n" + parsed5.treeString)
+      case AlterTableUnsetProperties(_: UnresolvedTable, _, _) => // OK
+      case _ => fail("Expect AlterTableUnsetProperties, but got:\n" + parsed5.treeString)
     }
   }
 
@@ -830,11 +826,8 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.setProperty("a", "1"),
-                TableChange.setProperty("b", "0.1"),
-                TableChange.setProperty("c", "true")))
+            case AlterTableSetProperties(_: ResolvedTable, changes) =>
+              assert(changes == Map(("a", "1"), ("b", "0.1"), ("c", "true")))
             case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
         }
