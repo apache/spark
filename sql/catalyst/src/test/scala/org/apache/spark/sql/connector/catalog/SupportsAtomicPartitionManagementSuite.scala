@@ -21,7 +21,7 @@ import java.util
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, PartitionsAlreadyExistException}
 import org.apache.spark.sql.connector.{BufferedRows, InMemoryAtomicPartitionTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -161,6 +161,13 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
 
     partTable.truncatePartitions(Array(InternalRow("3"), InternalRow("4")))
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 3)
+    assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
+
+    // Truncate non-existing partition
+    val errMsg = intercept[NoSuchPartitionException] {
+      partTable.truncatePartitions(Array(InternalRow("5"), InternalRow("6")))
+    }.getMessage
+    assert(errMsg.contains("Partition not found in table test.ns.test_table: 6 -> dt"))
     assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
   }
 }
