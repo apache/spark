@@ -158,4 +158,19 @@ public interface SupportsPartitionManagement extends Table {
                NoSuchPartitionException {
       throw new UnsupportedOperationException("Partition renaming is not supported");
     }
+
+    /**
+     * Truncate a partition in the table by completely removing partition data.
+     *
+     * @param ident a partition identifier
+     * @return true if the partition was truncated successfully otherwise false
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
+     * @throws UnsupportedOperationException If partition truncation is not supported
+     *
+     * @since 3.2.0
+     */
+    default boolean truncatePartition(InternalRow ident)
+        throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition truncate is not supported");
+    }
 }
