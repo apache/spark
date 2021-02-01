@@ -1331,4 +1331,18 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       }
     }
   }
+
+  test("SPARK-XXXXX: ") {
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      val df = Seq((0, "maybe"), (1, "now")).toDF("id", "part")
+      df.write
+        .partitionBy("part")
+        .format(dataSourceName)
+        .save(path)
+      val readback = spark.read.parquet(path)
+      assert(readback.schema("part").dataType === StringType)
+      checkAnswer(readback, Row(0, "maybe") :: Row(1, "now") :: Nil)
+    }
+  }
 }
