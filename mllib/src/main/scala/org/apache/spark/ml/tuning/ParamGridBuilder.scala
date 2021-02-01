@@ -27,7 +27,7 @@ import org.apache.spark.ml.param._
  * Builder for a param grid used in grid search-based model selection.
  */
 @Since("1.2.0")
-class ParamGridBuilder @Since("1.2.0") {
+class ParamGridBuilder {
 
   private val paramGrid = mutable.Map.empty[Param[_], Iterable[_]]
 
