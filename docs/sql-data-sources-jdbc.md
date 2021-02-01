@@ -202,13 +202,6 @@ the following case-insensitive options:
     <td><code>keytab</code></td>
     <td>
      Location of the kerberos keytab file (which must be pre-uploaded to all nodes either by <code>--files</code> option of spark-submit or manually) for the JDBC client. When path information found then Spark considers the keytab distributed manually, otherwise <code>--files</code> assumed. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
-     It worth to mention that kerberos authentication with keytab is not always supported by the JDBC driver.<br><br>
-     Before using this feature please make sure the following requirements met:
-      <ol>
-         <li> The included JDBC driver version supports kerberos authentication with keytab. </li>
-         <li> There is an embedded connection provider which supports the used database (many database support already added, but since it's changing please double check the list). </li> 
-      </ol>
-     If any other kind of custom authentication is needed <code>JdbcConnectionProvider</code> developer API is added which allows developers to implement it.
     </td>
   </tr>
 
@@ -216,16 +209,17 @@ the following case-insensitive options:
     <td><code>principal</code></td>
     <td>
      Specifies kerberos principal name for the JDBC client. If both <code>keytab</code> and <code>principal</code> are defined then Spark tries to do kerberos authentication.
-     It worth to mention that kerberos authentication with keytab is not always supported by the JDBC driver.<br><br>
-     Before using this feature please make sure the following requirements met:
-      <ol>
-         <li> The included JDBC driver version supports kerberos authentication with keytab. </li>
-         <li> There is an embedded connection provider which supports the used database (many database support already added, but since it's changing please double check the list). </li> 
-      </ol>
-     If any other kind of custom authentication is needed <code>JdbcConnectionProvider</code> developer API is added which allows developers to implement it.
     </td>
   </tr>
 </table>
+
+It worth to mention that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
+Before using <code>keytab</code> and <code>principal</code> configuration options please make sure the following requirements met:
+<ol>
+   <li> The included JDBC driver version supports kerberos authentication with keytab. </li>
+   <li> There is an embedded connection provider which supports the used database (many database support already added, but since it's changing please double check the list). </li> 
+</ol>
+If any other kind of custom authentication is needed <code>JdbcConnectionProvider</code> developer API is added which allows developers to implement it.
 
 <div class="codetabs">
 
