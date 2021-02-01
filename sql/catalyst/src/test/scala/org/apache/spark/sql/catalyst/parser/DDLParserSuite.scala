@@ -869,12 +869,15 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: set location") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
-      AlterTableSetLocationStatement(Seq("a", "b", "c"), None, "new location"))
+      AlterTableSetLocation(
+        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ..."),
+        None,
+        "new location"))
 
     comparePlans(
       parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
-      AlterTableSetLocationStatement(
-        Seq("a", "b", "c"),
+      AlterTableSetLocation(
+        UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ..."),
         Some(Map("ds" -> "2017-06-10")),
         "new location"))
   }
