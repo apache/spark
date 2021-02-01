@@ -562,20 +562,19 @@ object ViewHelper {
       child.collect {
         case s @ SubqueryAlias(_, view: View) if view.isTempView =>
           Seq(s.identifier.qualifier :+ s.identifier.name)
-        case plan if plan.resolved => plan.expressions.flatMap(_.collect {
+        case plan => plan.expressions.flatMap(_.collect {
           case e: SubqueryExpression => collectTempViews(e.plan)
         }).flatten
       }.flatten.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
-      def isTemporaryFunction(name: String): Boolean = {
-        catalog.isTemporaryFunction(FunctionIdentifier(name))
-      }
       child.collect {
-        case plan if plan.resolved => plan.expressions.flatMap(_.collect {
+        case plan => plan.expressions.flatMap(_.collect {
           case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: UserDefinedExpression if isTemporaryFunction(e.name) => Seq(e.name)
+          case e: UserDefinedExpression
+              if catalog.isTemporaryFunction(FunctionIdentifier(e.name)) =>
+            Seq(e.name)
         }).flatten
       }.flatten.distinct
     }

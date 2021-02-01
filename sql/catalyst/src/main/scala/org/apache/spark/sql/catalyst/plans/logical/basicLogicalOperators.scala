@@ -443,27 +443,28 @@ case class InsertIntoDir(
 }
 
 /**
- * A container for holding the view description(CatalogTable), and the output of the view. The
- * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
- * if the `viewText` is not defined.
+ * A container for holding the view description(CatalogTable) and info whether the view is temporary
+ * or not. If the view description is available, the child should be a logical plan parsed from the
+ * `CatalogTable.viewText`. Otherwise, the view is a temporary one created from a dataframe; in this
+ * case, the child must be already resolved.
  * This operator will be removed at the end of analysis stage.
  *
- * @param desc A view description(CatalogTable) that provides necessary information to resolve the
- *             view.
- *               we are able to decouple the output from the underlying structure.
- * @param child The logical plan of a view operator, it should be a logical plan parsed from the
- *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
+ * @param desc An optional view description(CatalogTable) that provides necessary information to
+ *             resolve the view.
+ * @param isTempView A flag to indicate whether the view is temporary or not.
+ * @param child The logical plan of a view operator. If the view description is available, it should
+ *              be a logical plan parsed from the `CatalogTable.viewText`.
  */
 case class View(
     desc: Option[CatalogTable],
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  require(desc.isDefined || isTempView)
+  require(desc.isDefined || (isTempView && child.resolved))
 
   override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
-    val viewIdent = desc.map{ d => s"${d.identifier}, "}.getOrElse("")
+    val viewIdent = desc.map(d => s"${d.identifier}, ").getOrElse("")
     s"View ($viewIdent${output.mkString("[", ",", "]")})"
   }
 
