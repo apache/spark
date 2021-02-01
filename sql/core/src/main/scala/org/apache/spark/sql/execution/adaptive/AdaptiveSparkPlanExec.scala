@@ -88,13 +88,13 @@ case class AdaptiveSparkPlanExec(
     RemoveRedundantProjects,
     EnsureRequirements,
     RemoveRedundantSorts,
-    DisableUnnecessaryBucketedScan,
-    InsertDynamicPruningFilters(context.stageCache)
+    DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    PlanAdaptiveDynamicPruningFilters(context.stageCache),
     ReuseAdaptiveSubquery(context.subqueryCache),
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
@@ -141,10 +141,6 @@ case class AdaptiveSparkPlanExec(
   private var currentStageId = 0
 
   def stageId: Int = currentStageId
-
-  def setStageId(newStageId: Int): Unit = {
-    currentStageId = newStageId
-  }
 
   /**
    * Return type for `createQueryStages`

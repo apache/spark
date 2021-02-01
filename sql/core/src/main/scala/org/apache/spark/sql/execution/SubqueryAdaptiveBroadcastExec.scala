@@ -20,14 +20,20 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 
+/**
+ * Similar with [[SubqueryBroadcastExec]], which is to used to store the
+ * initial physical plan in subquery expression when both enable AQE and DPP.
+ * It is intermediate physical plan and not executed.
+ * After the build side is executed, this node will be replaced with the
+ * [[SubqueryBroadcastExec]] and the child will be optimized with the ReusedExchange
+ * from the build side.
+ */
 case class SubqueryAdaptiveBroadcastExec(
     name: String,
     index: Int,
     buildKeys: Seq[Expression],
-    child: SparkPlan,
-    exchange: BroadcastExchangeExec) extends BaseSubqueryExec with UnaryExecNode {
+    child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
   protected override def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException(

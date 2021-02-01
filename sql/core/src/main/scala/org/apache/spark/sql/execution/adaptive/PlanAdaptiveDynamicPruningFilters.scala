@@ -19,11 +19,16 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.concurrent.TrieMap
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
+import org.apache.spark.sql.execution.joins.{HashedRelationBroadcastMode, HashJoin}
 
-case class InsertDynamicPruningFilters(
+/**
+ * A rule to insert dynamic pruning predicates in order to reuse the results of broadcast.
+ */
+case class PlanAdaptiveDynamicPruningFilters(
     stageCache: TrieMap[SparkPlan, QueryStageExec]) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.dynamicPartitionPruningEnabled) {
@@ -32,27 +37,18 @@ case class InsertDynamicPruningFilters(
 
     plan transformAllExpressions {
       case DynamicPruningExpression(InSubqueryExec(
-      value, SubqueryAdaptiveBroadcastExec(
-      name, index, buildKeys, adaptivePlan: AdaptiveSparkPlanExec, exchange), exprId, _)) =>
-
+          value, SubqueryAdaptiveBroadcastExec(name, index, buildKeys,
+          adaptivePlan: AdaptiveSparkPlanExec), exprId, _)) =>
+        val packedKeys = BindReferences.bindReferences(
+          HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
+        val mode = HashedRelationBroadcastMode(packedKeys)
+        // plan a broadcast exchange of the build side of the join
+        val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
         val existingStage = stageCache.get(exchange.canonicalized)
         if (existingStage.nonEmpty && conf.exchangeReuseEnabled) {
           val name = s"dynamicpruning#${exprId.id}"
-
           val reuseQueryStage = existingStage.get.newReuseInstance(
             adaptivePlan.stageId, exchange.output)
-          adaptivePlan.setStageId(adaptivePlan.stageId + 1)
-
-          // Set the logical link for the reuse query stage.
-          val link = exchange.getTagValue(AdaptiveSparkPlanExec.TEMP_LOGICAL_PLAN_TAG).orElse(
-            exchange.logicalLink.orElse(exchange.collectFirst {
-              case p if p.getTagValue(AdaptiveSparkPlanExec.TEMP_LOGICAL_PLAN_TAG).isDefined =>
-                p.getTagValue(AdaptiveSparkPlanExec.TEMP_LOGICAL_PLAN_TAG).get
-              case p if p.logicalLink.isDefined => p.logicalLink.get
-            }))
-          assert(link.isDefined)
-          reuseQueryStage.setLogicalLink(link.get)
-
           val broadcastValues =
             SubqueryBroadcastExec(name, index, buildKeys, reuseQueryStage)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))
