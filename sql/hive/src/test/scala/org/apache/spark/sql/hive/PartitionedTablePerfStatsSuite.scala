@@ -370,7 +370,7 @@ class PartitionedTablePerfStatsSuite
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
 
           // reads and caches all the files initially
-          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 10)
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 < 2").count() == 2)
@@ -419,7 +419,7 @@ class PartitionedTablePerfStatsSuite
       HiveCatalogMetrics.reset()
       spark.read.load(dir.getAbsolutePath)
       assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 1)
-      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
+      assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 1)
     }
   }
 }
