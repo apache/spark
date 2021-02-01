@@ -108,10 +108,10 @@ class ParserUtilsSuite extends SparkFunSuite {
 
     // String including escaped normal characters.
     assert(unescapeSQLString(
-      """|"ab\
-         |cd\ef"""".stripMargin) ==
-      """|ab
-         |cdef""".stripMargin)
+      """"ab\
+        |cd\ef"""".stripMargin) ==
+      """ab
+        |cdef""".stripMargin)
     // scalastyle:on nonascii
   }
 
