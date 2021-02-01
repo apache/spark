@@ -22,7 +22,7 @@ import java.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
-import org.apache.spark.sql.connector.{InMemoryAtomicPartitionTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.{BufferedRows, InMemoryAtomicPartitionTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -140,5 +140,27 @@ class SupportsAtomicPartitionManagementSuite extends SparkFunSuite {
 
     partTable.dropPartition(partIdent)
     assert(!hasPartitions(partTable))
+  }
+
+  test("truncatePartitions") {
+    val table = catalog.loadTable(ident)
+    val partTable = new InMemoryAtomicPartitionTable(
+      table.name(), table.schema(), table.partitioning(), table.properties())
+    assert(!hasPartitions(partTable))
+
+    partTable.createPartitions(
+      Array(InternalRow("3"), InternalRow("4"), InternalRow("5")),
+      Array.tabulate(3)(_ => new util.HashMap[String, String]()))
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 3)
+
+    partTable.withData(Array(
+      new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
+      new BufferedRows("4").withRow(InternalRow(1, "def", "4")),
+      new BufferedRows("5").withRow(InternalRow(2, "zyx", "5"))
+    ))
+
+    partTable.truncatePartitions(Array(InternalRow("3"), InternalRow("4")))
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 3)
+    assert(partTable.rows === InternalRow(2, "zyx", "5") :: Nil)
   }
 }
