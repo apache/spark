@@ -1275,7 +1275,7 @@ class DataFrameSuite extends QueryTest
         |""".stripMargin)
   }
 
-  test("SPARK-XXXX: printSchema: escape meta-characters") {
+  test("SPARK-34308: printSchema: escape meta-characters") {
     val captured = new ByteArrayOutputStream()
 
     val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
