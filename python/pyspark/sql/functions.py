@@ -206,8 +206,20 @@ def mean(col):
 def sumDistinct(col):
     """
     Aggregate function: returns the sum of distinct values in the expression.
+
+    .. deprecated:: 3.2.0
+        Use :func:`sum_distinct` instead.
     """
-    return _invoke_function_over_column("sumDistinct", col)
+    warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
+    return sum_distinct(col)
+
+
+@since(3.2)
+def sum_distinct(col):
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+    """
+    return _invoke_function_over_column("sum_distinct", col)
 
 
 def acos(col):
@@ -494,8 +506,20 @@ def toRadians(col):
 def bitwiseNOT(col):
     """
     Computes bitwise not.
+
+    .. deprecated:: 3.2.0
+        Use :func:`bitwise_not` instead.
     """
-    return _invoke_function_over_column("bitwiseNOT", col)
+    warnings.warn("Deprecated in 3.2, use bitwise_not instead.", FutureWarning)
+    return bitwise_not(col)
+
+
+@since(3.2)
+def bitwise_not(col):
+    """
+    Computes bitwise not.
+    """
+    return _invoke_function_over_column("bitwise_not", col)
 
 
 @since(2.4)
@@ -810,7 +834,7 @@ def approx_count_distinct(col, rsd=None):
     col : :class:`Column` or str
     rsd : float, optional
         maximum relative standard deviation allowed (default = 0.05).
-        For rsd < 0.01, it is more efficient to use :func:`countDistinct`
+        For rsd < 0.01, it is more efficient to use :func:`count_distinct`
 
     Examples
     --------
@@ -928,18 +952,29 @@ def covar_samp(col1, col2):
 def countDistinct(col, *cols):
     """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
 
+    An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
+    directly.
+
     .. versionadded:: 1.3.0
+    """
+    return count_distinct(col, *cols)
+
+
+def count_distinct(col, *cols):
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    .. versionadded:: 3.2.0
 
     Examples
     --------
-    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
+    >>> df.agg(count_distinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
 
-    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
+    >>> df.agg(count_distinct("age", "name").alias('c')).collect()
     [Row(c=2)]
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
+    jc = sc._jvm.functions.count_distinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
@@ -1255,13 +1290,25 @@ def shiftLeft(col, numBits):
 
     .. versionadded:: 1.5.0
 
+    .. deprecated:: 3.2.0
+        Use :func:`shiftleft` instead.
+    """
+    warnings.warn("Deprecated in 3.2, use shiftleft instead.", FutureWarning)
+    return shiftleft(col, numBits)
+
+
+def shiftleft(col, numBits):
+    """Shift the given value numBits left.
+
+    .. versionadded:: 3.2.0
+
     Examples
     --------
-    >>> spark.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
+    >>> spark.createDataFrame([(21,)], ['a']).select(shiftleft('a', 1).alias('r')).collect()
     [Row(r=42)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.shiftLeft(_to_java_column(col), numBits))
+    return Column(sc._jvm.functions.shiftleft(_to_java_column(col), numBits))
 
 
 def shiftRight(col, numBits):
@@ -1269,9 +1316,21 @@ def shiftRight(col, numBits):
 
     .. versionadded:: 1.5.0
 
+    .. deprecated:: 3.2.0
+        Use :func:`shiftright` instead.
+    """
+    warnings.warn("Deprecated in 3.2, use shiftright instead.", FutureWarning)
+    return shiftright(col, numBits)
+
+
+def shiftright(col, numBits):
+    """(Signed) shift the given value numBits right.
+
+    .. versionadded:: 3.2.0
+
     Examples
     --------
-    >>> spark.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
+    >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
     [Row(r=21)]
     """
     sc = SparkContext._active_spark_context
@@ -1284,10 +1343,22 @@ def shiftRightUnsigned(col, numBits):
 
     .. versionadded:: 1.5.0
 
+    .. deprecated:: 3.2.0
+        Use :func:`shiftrightunsigned` instead.
+    """
+    warnings.warn("Deprecated in 3.2, use shiftrightunsigned instead.", FutureWarning)
+    return shiftrightunsigned(col, numBits)
+
+
+def shiftrightunsigned(col, numBits):
+    """Unsigned shift the given value numBits right.
+
+    .. versionadded:: 3.2.0
+
     Examples
     --------
     >>> df = spark.createDataFrame([(-42,)], ['a'])
-    >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
+    >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
     [Row(r=9223372036854775787)]
     """
     sc = SparkContext._active_spark_context
