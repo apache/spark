@@ -52,16 +52,21 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
     SQLShuffleReadMetricsReporter.createShuffleReadMetrics(sparkContext)
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
-    val locallyLimited = child.execute().mapPartitionsInternal(_.take(limit))
-    val shuffled = new ShuffledRowRDD(
-      ShuffleExchangeExec.prepareShuffleDependency(
-        locallyLimited,
-        child.output,
-        SinglePartition,
-        serializer,
-        writeMetrics),
-      readMetrics)
-    shuffled.mapPartitionsInternal(_.take(limit))
+    val childRDD = child.execute()
+    val singlePartitionRDD = if (childRDD.getNumPartitions > 1) {
+      val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
+      new ShuffledRowRDD(
+        ShuffleExchangeExec.prepareShuffleDependency(
+          locallyLimited,
+          child.output,
+          SinglePartition,
+          serializer,
+          writeMetrics),
+        readMetrics)
+    } else {
+      childRDD
+    }
+    singlePartitionRDD.mapPartitionsInternal(_.take(limit))
   }
 }
 
