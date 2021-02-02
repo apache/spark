@@ -57,7 +57,7 @@ license: |
 
   - In Spark 3.2, the usage of `count(tblName.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(tblName.*)` will output differently if there is any null values. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.allowStarWithSingleTableIdentifierInCount` to `true`.
  
-  - In Spark 3.2, `ShowTablePropertiesCommand`'s output both show `key` and `value` columns whether `propertyKey` is defined. In Spark 3.1 and earlier, `ShowTablePropertiesCommand`'s output only show `value` column.
+  - In Spark 3.2, `ShowTablePropertiesCommand`'s output both show `key` and `value` columns whether `propertyKey` is defined. In Spark 3.1 and earlier, `ShowTablePropertiesCommand`'s output only show `value` column when `propertyKey` is defined.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
