@@ -591,7 +591,7 @@ case class FileSourceScanExec(
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     // Filter files with bucket pruning if possible
-    val ignoreCorruptFiles = fsRelation.sparkSession.sessionState.conf.ignoreCorruptFiles
+    lazy val ignoreCorruptFiles = fsRelation.sparkSession.sessionState.conf.ignoreCorruptFiles
     val canPrune: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) =>
         filePath => {
@@ -604,8 +604,8 @@ case class FileSourceScanExec(
               } else {
                 throw new IllegalStateException(
                   s"Invalid bucket file $filePath when doing bucket pruning. " +
-                  s"Enable ${SQLConf.IGNORE_CORRUPT_FILES.key} to disable exception " +
-                    "and read the file.")
+                  s"Enable ${SQLConf.IGNORE_CORRUPT_FILES.key} to ignore exception " +
+                  "and read the file.")
               }
           }
         }
