@@ -24,6 +24,8 @@ license: |
 
 ## Upgrading from Spark SQL 3.1 to 3.2
 
+  - In Spark 3.2, money type in PostgreSQL table is converted to `StringType` and money[] type is not supported due to the JDBC driver for PostgreSQL can't handle those types properly.
+
   - In Spark 3.2, `spark.sql.adaptive.enabled` is enabled by default. To restore the behavior before Spark 3.2, you can set `spark.sql.adaptive.enabled` to `false`.
 
   - In Spark 3.2, the following meta-characters are escaped in the `show()` action. In Spark 3.1 or earlier, the following metacharacters are output as it is.
