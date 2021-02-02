@@ -2319,7 +2319,7 @@ class Dataset[T] private[sql](
    *
    *   val allWords = ds.select('title, explode(split('words, " ")).as("word"))
    *
-   *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   *   val bookCountPerWord = allWords.groupBy("word").agg(count_distinct("title"))
    * }}}
    *
    * Using `flatMap()` this can similarly be exploded as:

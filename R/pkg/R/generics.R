@@ -886,6 +886,10 @@ setGeneric("bin", function(x) { standardGeneric("bin") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
+setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
 setGeneric("bitwiseNOT", function(x) { standardGeneric("bitwiseNOT") })
 
 #' @rdname column_math_functions
@@ -922,6 +926,10 @@ setGeneric("concat_ws", function(sep, x, ...) { standardGeneric("concat_ws") })
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("count_distinct", function(x, ...) { standardGeneric("count_distinct") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
@@ -1326,11 +1334,23 @@ setGeneric("shiftLeft", function(y, x) { standardGeneric("shiftLeft") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("shiftleft", function(y, x) { standardGeneric("shiftleft") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("shiftright", function(y, x) { standardGeneric("shiftright") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("shiftrightunsigned", function(y, x) { standardGeneric("shiftrightunsigned") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1387,6 +1407,10 @@ setGeneric("struct", function(x, ...) { standardGeneric("struct") })
 #' @rdname column_string_functions
 #' @name NULL
 setGeneric("substring_index", function(x, delim, count) { standardGeneric("substring_index") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("sum_distinct", function(x) { standardGeneric("sum_distinct") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL

@@ -133,7 +133,7 @@ class DataFrameSuite extends QueryTest
       df2
         .select('_1 as 'letter, 'number)
         .groupBy('letter)
-        .agg(countDistinct('number)),
+        .agg(count_distinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }
@@ -513,7 +513,7 @@ class DataFrameSuite extends QueryTest
         Row(5, false)))
 
     checkAnswer(
-      testData2.select(sumDistinct($"a")),
+      testData2.select(sum_distinct($"a")),
       Row(6))
   }
 
@@ -607,7 +607,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
     checkAnswer(
-      df.select($"id", callUDF("simpleUDF", $"value")),
+      df.select($"id", callUDF("simpleUDF", $"value")), // test deprecated one
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
