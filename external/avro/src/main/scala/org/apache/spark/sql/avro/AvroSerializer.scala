@@ -81,7 +81,7 @@ private[sql] class AvroSerializer(
       }
     } catch {
       case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-        s"Cannot convert Catalyst type ${rootCatalystType.sql} to Avro type $rootAvroType.", ise)
+        s"Cannot convert SQL type ${rootCatalystType.sql} to Avro type $rootAvroType.", ise)
     }
     if (nullable) {
       (data: Any) =>
@@ -99,9 +99,12 @@ private[sql] class AvroSerializer(
 
   private lazy val decimalConversions = new DecimalConversion()
 
-  private def newConverter(catalystType: DataType, avroType: Schema,
-    catalystPath: Seq[String], avroPath: Seq[String]): Converter = {
-    val errorPrefix = s"Cannot convert Catalyst ${toFieldStr(catalystPath)} " +
+  private def newConverter(
+      catalystType: DataType,
+      avroType: Schema,
+      catalystPath: Seq[String],
+      avroPath: Seq[String]): Converter = {
+    val errorPrefix = s"Cannot convert SQL ${toFieldStr(catalystPath)} " +
       s"to Avro ${toFieldStr(avroPath)} because "
     (catalystType, avroType.getType) match {
       case (NullType, NULL) =>
@@ -173,7 +176,7 @@ private[sql] class AvroSerializer(
           case _: TimestampMicros => (getter, ordinal) =>
             timestampRebaseFunc(getter.getLong(ordinal))
           case other => throw new IncompatibleSchemaException(errorPrefix +
-            s"Catalyst Timestamp type cannot be converted to Avro logical type $other")
+            s"SQL type ${TimestampType.sql} cannot be converted to Avro logical type $other")
         }
 
       case (ArrayType(et, containsNull), ARRAY) =>
@@ -245,7 +248,7 @@ private[sql] class AvroSerializer(
     if (avroFields.size != catalystStruct.length) {
       throw new IncompatibleSchemaException(
         s"Avro $avroPathStr schema length (${avroFields.size}) doesn't match " +
-        s"Catalyst ${toFieldStr(catalystPath)} schema length (${catalystStruct.length})")
+        s"SQL ${toFieldStr(catalystPath)} schema length (${catalystStruct.length})")
     }
 
     val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =

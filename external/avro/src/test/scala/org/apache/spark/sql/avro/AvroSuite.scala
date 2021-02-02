@@ -1131,7 +1131,7 @@ abstract class AvroSuite
       val message = intercept[org.apache.spark.sql.avro.IncompatibleSchemaException] {
         f()
       }.getMessage
-      assert(message.contains("Cannot convert Catalyst type"))
+      assert(message.contains("Cannot convert SQL type"))
     }
 
     def resolveNullable(schema: Schema, nullable: Boolean): Schema = {

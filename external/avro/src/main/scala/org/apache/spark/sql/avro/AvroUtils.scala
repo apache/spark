@@ -240,10 +240,8 @@ private[sql] object AvroUtils extends Logging {
    * string representing the field, like "field 'foo.bar'". If `names` is empty, the string
    * "top-level record" is returned.
    */
-  private[avro] def toFieldStr(names: Seq[String]): String = {
-    names match {
-      case Seq() => "top-level record"
-      case n => s"field '${n.mkString(".")}'"
-    }
+  private[avro] def toFieldStr(names: Seq[String]): String = names match {
+    case Seq() => "top-level record"
+    case n => s"field '${n.mkString(".")}'"
   }
 }
