@@ -40,6 +40,8 @@ private[sql] class AvroOutputWriterFactory(
       path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
+    context.getConfiguration.set("avro.serialization.data.model",
+      "org.apache.avro.generic.GenericData")
     new AvroOutputWriter(path, context, catalystSchema, avroSchema)
   }
 }
