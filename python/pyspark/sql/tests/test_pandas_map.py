@@ -118,7 +118,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         df2 = df1.mapInPandas(lambda iter: iter, 'id long')
         actual = df2.join(df2).collect()
         expected = df1.join(df1).collect()
-        self.assertEqual(actual, expected)
+        self.assertEqual(sorted(actual), sorted(expected))
 
 
 if __name__ == "__main__":
