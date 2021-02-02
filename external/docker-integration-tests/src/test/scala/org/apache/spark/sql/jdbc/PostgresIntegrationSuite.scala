@@ -76,7 +76,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("CREATE TABLE st_with_array (c0 uuid, c1 inet, c2 cidr," +
       "c3 json, c4 jsonb, c5 uuid[], c6 inet[], c7 cidr[], c8 json[], c9 jsonb[], c10 xml[], " +
       "c11 tsvector[], c12 tsquery[], c13 macaddr[], c14 txid_snapshot[], c15 point[], " +
-      "c16 line[], c17 lseg[], c18 box[], c19 path[], c20 polygon[], c21 circle[], c22 pg_lsn[])")
+      "c16 line[], c17 lseg[], c18 box[], c19 path[], c20 polygon[], c21 circle[], c22 pg_lsn[], " +
+      "c23 bit varying(6)[], c24 interval[], c25 macaddr8[], c26 pg_snapshot[])")
       .executeUpdate()
     conn.prepareStatement("INSERT INTO st_with_array VALUES ( " +
       "'0a532531-cdf1-45e3-963d-5de90b6a30f1', '172.168.22.1', '192.168.100.128/25', " +
@@ -92,13 +93,17 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       """ARRAY['12:34:56:78:90:ab', 'cd-ef-12-34-56-78']::macaddr[], """ +
       """ARRAY['10:20:10,14,15']::txid_snapshot[], """ +
       """ARRAY['(800, 600)', '83.24, 5.10']::point[], """ +
-      """ARRAY['(23.8, 56.2) , (16.23, 89.2)', '{23.85, 10.87, 5.92}']::line[], """ +
+      """ARRAY['(23.8, 56.2), (16.23, 89.2)', '{23.85, 10.87, 5.92}']::line[], """ +
       """ARRAY['[(80.12, 131.24), (201.5, 503.33)]']::lseg[], """ +
       """ARRAY['(19.84, 11.23), (20.21, 2.1)']::box[], """ +
       """ARRAY['(10.2, 30.4), (50.6, 70.8), (90.1, 11.3)']::path[], """ +
       """ARRAY['((100.3, 40.2), (20.198, 83.1), (500.821, 311.38))']::polygon[], """ +
       """ARRAY['<500, 200, 100>']::circle[], """ +
-      """ARRAY['16/B374D848']::pg_lsn[])"""
+      """ARRAY['16/B374D848']::pg_lsn[], """ +
+      """ARRAY[B'101010']::bit varying(6)[], """ +
+      """ARRAY['1 day', '2 minutes']::interval[], """ +
+      """ARRAY['08:00:2b:01:02:03:04:05']::macaddr8[], """ +
+      """ARRAY['10:20:10,14,15']::pg_snapshot[])"""
     ).executeUpdate()
 
     conn.prepareStatement("CREATE TABLE char_types (" +
@@ -230,6 +235,11 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(20) == Seq("((100.3,40.2),(20.198,83.1),(500.821,311.38))"))
     assert(rows(0).getSeq(21) == Seq("<(500.0,200.0),100.0>"))
     assert(rows(0).getSeq(22) == Seq("16/B374D848"))
+    assert(rows(0).getSeq(23) == Seq("101010"))
+    assert(rows(0).getSeq(24) == Seq("0 years 0 mons 1 days 0 hours 0 mins 0.00 secs",
+      "0 years 0 mons 0 days 0 hours 2 mins 0.00 secs"))
+    assert(rows(0).getSeq(25) == Seq("08:00:2b:01:02:03:04:05"))
+    assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
   }
 
   test("query JDBC option") {
