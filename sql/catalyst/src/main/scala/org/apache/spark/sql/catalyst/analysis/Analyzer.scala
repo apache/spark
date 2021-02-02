@@ -3170,7 +3170,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         WindowExpression(wf, s.copy(frameSpecification = wf.frame))
       case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if e.resolved =>
-        val frame = if (o.nonEmpty) {
+        val frame = if (o.nonEmpty && !e.isInstanceOf[RankLike]) {
           SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
         } else {
           SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)

@@ -511,15 +511,14 @@ case class Lag(
 
 abstract class AggregateWindowFunction extends DeclarativeAggregate with WindowFunction {
   self: Product =>
+  override val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
   override def dataType: DataType = IntegerType
   override def nullable: Boolean = true
   override lazy val mergeExpressions =
     throw QueryExecutionErrors.mergeUnsupportedByWindowFunctionError
 }
 
-abstract class RowNumberLike
-    extends AggregateWindowFunction
-    with SpecifiedFrameAggregateWindowFunction {
+abstract class RowNumberLike extends AggregateWindowFunction {
   override def children: Seq[Expression] = Nil
   protected val zero = Literal(0)
   protected val one = Literal(1)
@@ -527,10 +526,6 @@ abstract class RowNumberLike
   override val aggBufferAttributes: Seq[AttributeReference] = rowNumber :: Nil
   override val initialValues: Seq[Expression] = zero :: Nil
   override val updateExpressions: Seq[Expression] = rowNumber + one :: Nil
-}
-
-trait SpecifiedFrameAggregateWindowFunction extends AggregateWindowFunction {
-  override val frame: WindowFrame = SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow)
 }
 
 /**
@@ -639,7 +634,6 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
     extends AggregateWindowFunction
-    with SpecifiedFrameAggregateWindowFunction
     with OffsetWindowFunction
     with ImplicitCastInputTypes {
 
@@ -809,6 +803,8 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
  * This documentation has been based upon similar documentation for the Hive and Presto projects.
  */
 abstract class RankLike extends AggregateWindowFunction {
+
+  override val frame: WindowFrame = UnspecifiedFrame
 
   /** Store the values of the window 'order' expressions. */
   protected val orderAttrs = children.map { expr =>
