@@ -333,7 +333,7 @@ object QueryExecutionErrors {
     new CompileException(failedToCompileMsg(e), e.getLocation)
   }
 
-  def invalidPartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
     new IllegalArgumentException(s"Invalid partitionExprs specified: $sortOrders For range " +
       "partitioning use REPARTITION_BY_RANGE instead.")
   }

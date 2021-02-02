@@ -188,7 +188,7 @@ object ResolveHints {
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
         if (sortOrders.nonEmpty) {
-          throw QueryExecutionErrors.invalidPartitionExpressionsError(sortOrders)
+          throw QueryExecutionErrors.invalidRepartitionExpressionsError(sortOrders)
         }
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {

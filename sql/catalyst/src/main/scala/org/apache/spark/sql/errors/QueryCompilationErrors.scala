@@ -733,7 +733,7 @@ private[spark] object QueryCompilationErrors {
       "Use sparkSession.udf.register(...) instead.")
   }
 
-   def unexpectedColumnExpressionError(column: Expression): Throwable = {
+  def unexpectedColumnExpressionError(column: Expression): Throwable = {
     new AnalysisException(s"[BUG] unexpected column expression: $column")
   }
 
