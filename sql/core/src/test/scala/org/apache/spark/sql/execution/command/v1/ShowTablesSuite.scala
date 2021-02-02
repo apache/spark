@@ -48,7 +48,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
-        Seq(ShowRow("", "source", true), ShowRow("", "source2", true)))
+        Seq(Row("", "source", true), Row("", "source2", true)))
     }
   }
 

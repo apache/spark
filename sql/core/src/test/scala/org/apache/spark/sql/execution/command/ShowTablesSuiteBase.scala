@@ -35,22 +35,16 @@ import org.apache.spark.sql.internal.SQLConf
 trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW TABLES"
   protected def defaultNamespace: Seq[String]
-  case class ShowRow(namespace: String, table: String, isTemporary: Boolean)
-  protected def getRows(showRows: Seq[ShowRow]): Seq[Row] = {
-    showRows.map {
-      case ShowRow(namespace, table, isTemporary) => Row(namespace, table, isTemporary)
-    }
-  }
 
-  protected def runShowTablesSql(sqlText: String, expected: Seq[ShowRow]): Unit = {
+  protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
-    checkAnswer(df, getRows(expected))
+    checkAnswer(df, expected)
   }
 
   test("show an existing table") {
     withNamespaceAndTable("ns", "table") { t =>
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
-      runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(ShowRow("ns", "table", false)))
+      runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(Row("ns", "table", false)))
     }
   }
 
@@ -78,25 +72,25 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1",
           Seq(
-            ShowRow("ns1", "table", false),
-            ShowRow("ns1", "table_name_1a", false),
-            ShowRow("ns1", "table_name_2b", false)))
+            Row("ns1", "table", false),
+            Row("ns1", "table_name_1a", false),
+            Row("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE '*name*'",
           Seq(
-            ShowRow("ns1", "table_name_1a", false),
-            ShowRow("ns1", "table_name_2b", false)))
+            Row("ns1", "table_name_1a", false),
+            Row("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE 'table_name_1*|table_name_2*'",
           Seq(
-            ShowRow("ns1", "table_name_1a", false),
-            ShowRow("ns1", "table_name_2b", false)))
+            Row("ns1", "table_name_1a", false),
+            Row("ns1", "table_name_2b", false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE '*2b'",
-          Seq(ShowRow("ns1", "table_name_2b", false)))
+          Seq(Row("ns1", "table_name_2b", false)))
       }
     }
   }
@@ -107,7 +101,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       withTable(tblName) {
         sql(s"CREATE TABLE $tblName (name STRING, id INT) $defaultUsing")
         val ns = defaultNamespace.mkString(".")
-        runShowTablesSql("SHOW TABLES", Seq(ShowRow(ns, "table", false)))
+        runShowTablesSql("SHOW TABLES", Seq(Row(ns, "table", false)))
       }
     }
   }
@@ -123,7 +117,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       // Update the current namespace to match "ns.tbl".
       sql(s"USE $catalog.ns")
-      runShowTablesSql("SHOW TABLES", Seq(ShowRow("ns", "table", false)))
+      runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
     }
   }
 }
