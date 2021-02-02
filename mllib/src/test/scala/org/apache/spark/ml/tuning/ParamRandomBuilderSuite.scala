@@ -27,26 +27,8 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
 
   test("random int distribution") {
     val range = 1000
-    val gen = for {
-      x <- Gen.choose(-range, range)
-      y <- Gen.choose(-range, range)
-    } yield (x, y)
-    forAll(gen) { case (x, y) =>
-      assertEvenDistribution(10000, Limits(x, y + 2 * range))
-    }
-  }
-
-  def assertEvenDistribution[T: Numeric: Generator](n: Int, lim: Limits[T]): Assertion = {
-    val gen         = RandomRanges(lim)
-    val ops         = implicitly[Numeric[T]]
-    val xs          = (0 to n).map(_ => gen.randomT())
-    val mean        = ops.toDouble(xs.sum) / xs.length
-    val squaredDiff = xs.map(x => math.pow(ops.toDouble(x) - mean, 2))
-    val stdDev      = math.pow(squaredDiff.sum / n - 1, 0.5)
-    val halfWay     = ops.toDouble(lim.x) + ops.toDouble(lim.y) / 2
-    println(s"halfWay = $halfWay, stdDev = $stdDev, squaredDiff = ${squaredDiff.sum}, lim = $lim, mean = $mean, xs = ${xs.take(10).mkString(", ")}")
-    val tolerance   = 5 * stdDev
-    assert(mean > halfWay - tolerance && mean < halfWay + tolerance)
+    val fn: RangeToLimitsFn[Int] = { case (x, y) => Limits(x, y + 2 * range) }
+    checkDistributionOf(range, fn)
   }
 
   test("random longs") {
@@ -56,6 +38,37 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
       val result: Long         = gen.randomT()
       assert(result >= math.min(x, y) && result <= math.max(x, y))
     }
+  }
+
+  test("random long distribution") {
+    val range = 1000L
+    val fn: RangeToLimitsFn[Long] = { case (x, y) => Limits(x, y + 2 * range) }
+    checkDistributionOf(range, fn)
+  }
+
+  type RangeToLimitsFn[T] = (T, T) => Limits[T]
+
+  def checkDistributionOf[T: Numeric: Generator: Choose](range: T, limFn: RangeToLimitsFn[T]): Unit = {
+    val ops: Numeric[T] = implicitly[Numeric[T]]
+    val gen: Gen[(T, T)] = for {
+      x <- Gen.choose(ops.negate(range), range)
+      y <- Gen.choose(ops.negate(range), range)
+    } yield (x, y)
+    forAll(gen) { case (x, y) =>
+      assertEvenDistribution(10000, limFn(x, y))
+    }
+  }
+
+  def assertEvenDistribution[T: Numeric: Generator](n: Int, lim: Limits[T]): Assertion = {
+    val gen:          RandomT[T]  = RandomRanges(lim)
+    val ops:          Numeric[T]  = implicitly[Numeric[T]]
+    val xs:           Seq[T]      = (0 to n).map(_ => gen.randomT())
+    val mean:         Double      = ops.toDouble(xs.sum) / xs.length
+    val squaredDiff:  Seq[Double] = xs.map(x => math.pow(ops.toDouble(x) - mean, 2))
+    val stdDev:       Double      = math.pow(squaredDiff.sum / n - 1, 0.5)
+    val halfWay:      Double      = ops.toDouble(lim.x) + ops.toDouble(lim.y) / 2
+    val tolerance:    Double      = 5 * stdDev
+    assert(mean > halfWay - tolerance && mean < halfWay + tolerance)
   }
 
 }
