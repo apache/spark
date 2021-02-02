@@ -27,14 +27,14 @@ class TruncateTableParserSuite extends AnalysisTest with SharedSparkSession {
   test("truncate table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"), None))
+      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None), None))
   }
 
   test("truncate a single part partition") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
       TruncateTable(
-        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE"),
+        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None),
         Some(Map("ds" -> "2017-06-10"))))
   }
 
@@ -42,7 +42,7 @@ class TruncateTableParserSuite extends AnalysisTest with SharedSparkSession {
     comparePlans(
       parsePlan("TRUNCATE TABLE ns.tbl PARTITION(a = 1, B = 'ABC')"),
       TruncateTable(
-        UnresolvedTable(Seq("ns", "tbl"), "TRUNCATE TABLE"),
+        UnresolvedTable(Seq("ns", "tbl"), "TRUNCATE TABLE", None),
         Some(Map("a" -> "1", "B" -> "ABC"))))
   }
 
