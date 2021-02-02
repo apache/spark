@@ -2674,6 +2674,15 @@ class DataFrameSuite extends QueryTest
       assert(sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
     }
   }
+
+  test("SPARK-34318: colRegex should work with column names & qualifiers which contain newlines") {
+    val df = Seq(1, 2, 3).toDF("test\n_column").as("test\n_table")
+    val col1 = df.colRegex("`tes.*\n.*mn`")
+    checkAnswer(df.select(col1), Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
+    checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
