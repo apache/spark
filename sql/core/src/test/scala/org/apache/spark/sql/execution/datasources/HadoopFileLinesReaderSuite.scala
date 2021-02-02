@@ -36,13 +36,13 @@ class HadoopFileLinesReaderSuite extends SharedSQLContext {
     val delimOpt = delimiter.map(_.getBytes(StandardCharsets.UTF_8))
     Files.write(path.toPath, text.getBytes(StandardCharsets.UTF_8))
 
-    val lines = ranges.map { case (start, length) =>
+    val lines = ranges.flatMap { case (start, length) =>
       val file = PartitionedFile(InternalRow.empty, path.getCanonicalPath, start, length)
       val hadoopConf = conf.getOrElse(spark.sessionState.newHadoopConf())
       val reader = new HadoopFileLinesReader(file, delimOpt, hadoopConf)
 
       reader.map(_.toString)
-    }.flatten
+    }
 
     lines
   }
