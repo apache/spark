@@ -743,6 +743,11 @@ select * from a left join b on i = x and i = y and x = i;
 --
 -- test NULL behavior of whole-row Vars, per bug #5025
 --
+--- [SPARK-34199] changed the `count(t2.*)` to `count(t2.q1, t2.q2)` since we have
+--- blocked `count(tblName.*)`. Besides this, in pgsql, `count(t2.*)` of outter join
+--- means how many matching rows produced by t2 while Spark SQL doesn't have this semantic.
+--- So here we use `count(t2.q1, t2.q2)` instead of `count(1)` to keep the query output
+--- unchanged.
 select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join int8_tbl t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
