@@ -30,6 +30,8 @@ license: |
     * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
     * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
 
+  - In Spark 3.0.2, `PARTITION(col=null)` is always parsed as a null literal in the partition spec. In Spark 3.0.1 or earlier, it is parsed as a string literal of its text representation, e.g., string "null", if the partition column is string type. To restore the legacy behavior, you can set `spark.sql.legacy.parseNullPartitionSpecAsStringLiteral` as true.
+
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
