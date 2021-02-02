@@ -2478,7 +2478,7 @@ object SQLConf {
       .doc("If it is set to true, a null partition value is parsed as a string literal of its " +
         "text representation, e.g., string 'null'. Otherwise, null partition values are parsed " +
         "as they are.")
-      .version("3.2.0")
+      .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
 
