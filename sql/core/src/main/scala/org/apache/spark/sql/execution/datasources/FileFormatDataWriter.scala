@@ -257,7 +257,7 @@ class DynamicPartitionDataWriter(
           val value = if (attrRow.isNullAt(0)) {
             null
           } else {
-            attrRow.getString(0)
+            Cast(Literal(attrRow.get(0, attr.dataType)), StringType).eval().toString
           }
           attr.name -> value
         }).toMap

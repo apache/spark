@@ -918,7 +918,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           // insert into command
           sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
           if (autoUpdate) {
-            val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
+            val fetched2 =
+              checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1))
             assert(fetched2.get.sizeInBytes > 0)
             assert(fetched2.get.colStats.isEmpty)
             val statsProp = getStatsProperties(table)
