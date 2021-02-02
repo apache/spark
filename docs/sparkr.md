@@ -782,6 +782,25 @@ packages every time the daemon forks by having the daemon pre-load
 packages. You do this by providing R code to initialize the daemon for
 your application.
 
+
+## Time Saved
+
+The amount of time saved per call to gapply is thus
+
+yourInitialization * (partitions - executors)
+
+A real-world example:
+
+(5 seconds to load libraries) * ( (40,000 partitions) - (700 executors) ) / 60 / 60
+
+55 hours saved in total. 55 hours / 700 executors ~= 5 minutes per executor.
+
+## Warning
+
+If your initialization takes longer than 10 seconds, consider increasing
+the configuration spark.r.daemonTimeout.
+
+
 ## Examples
 
 Suppose we want library(wow) to be pre-loaded for our workers.
@@ -806,7 +825,3 @@ YARN creates a directory for the new executor, unzips 'wow.zip' in some
 other directory, and then provides a symlink to it called
 ./wowTarget. When the executor starts the daemon, the daemon loads
 library(wow) from the newly created wowTarget.
-
-
-Warning: if your initialization takes longer than 10 seconds, consider
-increasing the configuration spark.r.daemonTimeout.
