@@ -1414,7 +1414,7 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
         val db = if (multipartIdentifier.size == 1) {
           None
         } else {
-          Some(multipartIdentifier.apply(0))
+          Some(multipartIdentifier.takeRight(2).apply(0))
         }
         val tableIdentifier = new TableIdentifier(table, db)
         if (conf.caseSensitiveAnalysis) {
