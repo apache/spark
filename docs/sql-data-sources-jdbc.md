@@ -213,13 +213,19 @@ the following case-insensitive options:
   </tr>
 </table>
 
-It worth to mention that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
-Before using <code>keytab</code> and <code>principal</code> configuration options please make sure the following requirements met:
-<ol>
-   <li> The included JDBC driver version supports kerberos authentication with keytab. </li>
-   <li> There is an embedded connection provider which supports the used database (many database support already added, but since it's changing please double check the list). </li> 
-</ol>
-If any other kind of custom authentication is needed <code>JdbcConnectionProvider</code> developer API is added which allows developers to implement it.
+Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
+Before using <code>keytab</code> and <code>principal</code> configuration options, please make sure the following requirements are met:
+* The included JDBC driver version supports kerberos authentication with keytab. 
+* There is a built-in connection provider which supports the used database.
+
+There is a built-in connection provider for the following databases:
+* DB2
+* MariaDB
+* MS Sql
+* Oracle
+* PostgreSQL
+
+If the requirements are not met, please consider using the <code>JdbcConnectionProvider</code> developer API to handle custom authentication.
 
 <div class="codetabs">
 
