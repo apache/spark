@@ -111,7 +111,7 @@ public class VectorizedColumnReader {
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
     DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
-    return dm != null && dm.getPrecision() == d.precision() && dm.getScale() == d.scale();
+    return dm != null && dm.getPrecision() <= d.precision() && dm.getScale() == d.scale();
   }
 
   private boolean canReadAsIntDecimal(DataType dt) {
