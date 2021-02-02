@@ -592,7 +592,7 @@ case class FileSourceScanExec(
 
     // Filter files with bucket pruning if possible
     lazy val ignoreCorruptFiles = fsRelation.sparkSession.sessionState.conf.ignoreCorruptFiles
-    val canPrune: Path => Boolean = optionalBucketSet match {
+    val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) =>
         filePath => {
           BucketingUtils.getBucketId(filePath.getName) match {
@@ -618,7 +618,7 @@ case class FileSourceScanExec(
         // getPath() is very expensive so we only want to call it once in this block:
         val filePath = file.getPath
 
-        if (canPrune(filePath)) {
+        if (shouldProcess(filePath)) {
           val isSplitable = relation.fileFormat.isSplitable(
             relation.sparkSession, relation.options, filePath)
           PartitionedFileUtil.splitFiles(
