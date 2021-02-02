@@ -39,7 +39,7 @@ private object PostgresDialect extends JdbcDialect {
       Some(BinaryType)
     } else if (sqlType == Types.DOUBLE && typeName == "money") {
       // money type seems to be broken but one workaround is to handle it as string.
-      // See SPARK- and https://github.com/pgjdbc/pgjdbc/issues/100
+      // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/100
       Some(StringType)
     } else if (sqlType == Types.OTHER) {
       Some(StringType)
@@ -73,7 +73,7 @@ private object PostgresDialect extends JdbcDialect {
     case "money" =>
       // money[] type seems to be broken and difficult to handle.
       // So this method returns None for now.
-      // See SPARK- and https://github.com/pgjdbc/pgjdbc/issues/1405
+      // See SPARK-34333 and https://github.com/pgjdbc/pgjdbc/issues/1405
       None
     case _ => None
   }

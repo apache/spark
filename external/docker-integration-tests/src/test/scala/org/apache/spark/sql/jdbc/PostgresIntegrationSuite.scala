@@ -268,7 +268,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row(0).getSeq[String](4) === Seq("q", "r"))
   }
 
-  test("SPARK-XXXX: money type tests") {
+  test("SPARK-34333: money type tests") {
     val df = sqlContext.read.jdbc(jdbcUrl, "money_types", new Properties)
     val row = df.collect()
     assert(row.length === 1)
