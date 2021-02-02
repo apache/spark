@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.security.PrivilegedExceptionAction
 import java.sql.{Connection, Driver}
 import java.util.Properties
+import javax.security.auth.login.Configuration
 
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -34,15 +35,22 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
-      .doAs(
-        new PrivilegedExceptionAction[Connection]() {
-          override def run(): Connection = {
-            OracleConnectionProvider.super.getConnection(driver, options)
+    val parent = Configuration.getConfiguration
+    try {
+      setAuthenticationConfig(parent, driver, jdbcOptions)
+      UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal,
+        jdbcOptions.keytab)
+        .doAs(
+          new PrivilegedExceptionAction[Connection]() {
+            override def run(): Connection = {
+              OracleConnectionProvider.super.getConnection(driver, options)
+            }
           }
-        }
-      )
+        )
+    } finally {
+      logDebug("Restoring original security configuration")
+      Configuration.setConfiguration(parent)
+    }
   }
 
   override def getAdditionalProperties(options: JDBCOptions): Properties = {
@@ -52,12 +60,5 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
     // The value is coming from AUTHENTICATION_KERBEROS5 final String in driver version 19.6.0.0
     result.put("oracle.net.authentication_services", "(KERBEROS5)");
     result
-  }
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent, driver, options)
-    }
   }
 }

@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.security.PrivilegedExceptionAction
 import java.sql.{Connection, Driver}
 import java.util.Properties
+import javax.security.auth.login.Configuration
 
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -61,15 +62,22 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
-      .doAs(
-        new PrivilegedExceptionAction[Connection]() {
-          override def run(): Connection = {
-            MSSQLConnectionProvider.super.getConnection(driver, options)
+    val parent = Configuration.getConfiguration
+    try {
+      setAuthenticationConfig(parent, driver, jdbcOptions)
+      UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal,
+        jdbcOptions.keytab)
+        .doAs(
+          new PrivilegedExceptionAction[Connection]() {
+            override def run(): Connection = {
+              MSSQLConnectionProvider.super.getConnection(driver, options)
+            }
           }
-        }
-      )
+        )
+    } finally {
+      logDebug("Restoring original security configuration")
+      Configuration.setConfiguration(parent)
+    }
   }
 
   override def getAdditionalProperties(options: JDBCOptions): Properties = {
@@ -78,19 +86,5 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     result.put("integratedSecurity", "true")
     result.put("authenticationScheme", "JavaKerberos")
     result
-  }
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    /**
-     * Couple of things to mention here (v8.2.2 client):
-     * 1. MS SQL supports JAAS application name configuration
-     * 2. MS SQL sets a default JAAS config if "java.security.auth.login.config" is not set
-     */
-    val entryUsesKeytab = configEntry != null &&
-      configEntry.exists(_.getOptions().get("useKeyTab") == "true")
-    if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
-      setAuthenticationConfig(parent, driver, options)
-    }
   }
 }
