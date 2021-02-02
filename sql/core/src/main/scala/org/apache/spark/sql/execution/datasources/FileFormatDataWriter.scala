@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -257,7 +258,8 @@ class DynamicPartitionDataWriter(
           val value = if (attrRow.isNullAt(0)) {
             null
           } else {
-            Cast(Literal(attrRow.get(0, attr.dataType)), StringType).eval().toString
+            Cast(Literal(attrRow.get(0, attr.dataType), attr.dataType),
+              StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
           }
           attr.name -> value
         }).toMap
