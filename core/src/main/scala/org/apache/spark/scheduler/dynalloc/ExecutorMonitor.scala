@@ -92,6 +92,11 @@ private[spark] class ExecutorMonitor(
   private val stageToShuffleID = new mutable.HashMap[Int, Int]()
   private val jobToStageIDs = new mutable.HashMap[Int, Seq[Int]]()
 
+  var numExecutorsGracefullyDecommissioned: Int = 0
+  var numExecutorsDecommissionUnfinished: Int = 0
+  var numExecutorsKilledByDriver: Int = 0
+  var numExecutorsExitedUnexpectedly: Int = 0
+
   def reset(): Unit = {
     executors.clear()
     execResourceProfileCount.clear()
@@ -352,6 +357,22 @@ private[spark] class ExecutorMonitor(
     val removed = executors.remove(event.executorId)
     if (removed != null) {
       decrementExecResourceProfileCount(removed.resourceProfileId)
+      if (removed.decommissioning) {
+        if (event.reason == ExecutorLossMessage.decommissionFinished) {
+          numExecutorsGracefullyDecommissioned += 1
+        } else {
+          numExecutorsDecommissionUnfinished += 1
+        }
+      } else if (removed.pendingRemoval) {
+        numExecutorsKilledByDriver += 1
+      } else {
+        numExecutorsExitedUnexpectedly += 1
+      }
+      logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
+        s"gracefully decommissioned: $numExecutorsGracefullyDecommissioned, " +
+        s"decommision unfinished: $numExecutorsDecommissionUnfinished, " +
+        s"driver killed: $numExecutorsKilledByDriver, " +
+        s"unexpectedly exited: $numExecutorsExitedUnexpectedly).")
       if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }

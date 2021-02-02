@@ -989,6 +989,14 @@ private[spark] class ExecutorAllocationManager(
     registerGauge("numberExecutorsToAdd",
       numExecutorsToAddPerResourceProfileId.values.sum, 0)
     registerGauge("numberExecutorsPendingToRemove", executorMonitor.pendingRemovalCount, 0)
+    registerGauge("numberExecutorsGracefullyDecommissioned",
+      executorMonitor.numExecutorsGracefullyDecommissioned, 0)
+    registerGauge("numberExecutorsDecommissionUnfinished",
+      executorMonitor.numExecutorsDecommissionUnfinished, 0)
+    registerGauge("numberExecutorsKilledByDriver",
+      executorMonitor.numExecutorsKilledByDriver, 0)
+    registerGauge("numberExecutorsExitedUnexpectedly",
+      executorMonitor.numExecutorsExitedUnexpectedly, 0)
     registerGauge("numberAllExecutors", executorMonitor.executorCount, 0)
     registerGauge("numberTargetExecutors",
       numExecutorsTargetPerResourceProfileId.values.sum, 0)
