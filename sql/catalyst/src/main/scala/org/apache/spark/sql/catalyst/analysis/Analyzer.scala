@@ -893,7 +893,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-      case u @ UnresolvedTable(ident, cmd) =>
+      case u @ UnresolvedTable(ident, cmd, _) =>
         lookupTempView(ident).foreach { _ =>
           throw QueryCompilationErrors.expectTableNotTempViewError(ident.quoted, cmd, u)
         }
@@ -990,7 +990,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             SubqueryAlias(catalog.get.name +: ident.namespace :+ ident.name, relation)
           }.getOrElse(u)
 
-      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _) =>
+      case u @ UnresolvedTable(NonSessionCatalogAndIdentifier(catalog, ident), _, _) =>
         CatalogV2Util.loadTable(catalog, ident)
           .map(table => ResolvedTable.create(catalog.asTableCatalog, ident, table))
           .getOrElse(u)
@@ -1144,18 +1144,20 @@ class Analyzer(override val catalogManager: CatalogManager)
         lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
           .map(resolveViews).getOrElse(u)
 
-      case u @ UnresolvedTable(identifier, cmd) =>
+      case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView => throw QueryCompilationErrors.expectTableNotViewError(v, cmd, u)
+          case v: ResolvedView =>
+            throw QueryCompilationErrors.expectTableNotViewError(
+              v, cmd, relationTypeMismatchHint, u)
           case table => table
         }.getOrElse(u)
 
       case u @ UnresolvedView(identifier, cmd, _, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
-          case v: ResolvedView => v
-          case _ =>
-            u.failAnalysis(s"${identifier.quoted} is a table. '$cmd' expects a view." +
-              relationTypeMismatchHint.map(" " + _).getOrElse(""))
+          case t: ResolvedTable =>
+            throw QueryCompilationErrors.expectViewNotTableError(
+              t, cmd, relationTypeMismatchHint, u)
+          case view => view
         }.getOrElse(u)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>

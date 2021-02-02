@@ -448,7 +448,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def recoverPartitions(tableName: String): Unit = {
     val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     sparkSession.sessionState.executePlan(
-      AlterTableRecoverPartitions(UnresolvedTable(multiPartIdent, "recoverPartitions()"))).toRdd
+      AlterTableRecoverPartitions(
+        UnresolvedTable(multiPartIdent, "recoverPartitions()", None))).toRdd
   }
 
   /**

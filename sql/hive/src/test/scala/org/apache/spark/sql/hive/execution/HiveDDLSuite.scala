@@ -808,6 +808,20 @@ class HiveDDLSuite
     assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
+  private def assertErrorForAlterTableOnView(
+      sqlText: String, viewName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$viewName is a view. '$cmdName' expects a table. Please use ALTER VIEW instead.")
+  }
+
+  private def assertErrorForAlterViewOnTable(
+      sqlText: String, tableName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$tableName is a table. '$cmdName' expects a view. Please use ALTER TABLE instead.")
+  }
+
   test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
@@ -856,50 +870,59 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        assertAnalysisError(
+        assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
-          s"$tabName is a table. 'ALTER VIEW ... SET TBLPROPERTIES' expects a view. " +
-            "Please use ALTER TABLE instead.")
+          tabName,
+          "ALTER VIEW ... SET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        assertAnalysisError(
+        assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
-          s"$tabName is a table. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a view. " +
-            "Please use ALTER TABLE instead.")
+          tabName,
+          "ALTER VIEW ... UNSET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET LOCATION ...' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET LOCATION ...")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET SERDE 'whatever'",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
-          s"$oldViewName is a view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... RECOVER PARTITIONS")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')",
-          s"$oldViewName is a view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... RENAME TO PARTITION")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
-          s"$oldViewName is a view. 'ALTER TABLE ... ADD PARTITION ...' expects a table.")
-        assertAnalysisError(
+          oldViewName,
+          "ALTER TABLE ... ADD PARTITION ...")
+
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
-          s"$oldViewName is a view. 'ALTER TABLE ... DROP PARTITION ...' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... DROP PARTITION ...")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
