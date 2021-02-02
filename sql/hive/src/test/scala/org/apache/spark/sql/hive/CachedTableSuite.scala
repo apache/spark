@@ -506,19 +506,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("SPARK-34215: keep table cached after truncation") {
-    withTable("tbl") {
-      sql("CREATE TABLE tbl (c0 int)")
-      sql("INSERT INTO tbl SELECT 0")
-      sql("CACHE TABLE tbl")
-      assert(spark.catalog.isCached("tbl"))
-      checkAnswer(sql("SELECT * FROM tbl"), Row(0))
-      sql("TRUNCATE TABLE tbl")
-      assert(spark.catalog.isCached("tbl"))
-      checkAnswer(sql("SELECT * FROM tbl"), Seq.empty)
-    }
-  }
-
   test("SPARK-34262: ALTER TABLE .. SET LOCATION refreshes cached table") {
     withTable("src_tbl") {
       withTable("dst_tbl") {

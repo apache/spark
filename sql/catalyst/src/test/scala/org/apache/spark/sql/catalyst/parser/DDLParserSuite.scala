@@ -2016,18 +2016,6 @@ class DDLParserSuite extends AnalysisTest {
       UncacheTable(UnresolvedRelation(Seq("a", "b", "c")), ifExists = true))
   }
 
-  test("TRUNCATE table") {
-    comparePlans(
-      parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None), None))
-
-    comparePlans(
-      parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTable(
-        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None),
-        Some(Map("ds" -> "2017-06-10"))))
-  }
-
   test("REFRESH TABLE") {
     comparePlans(
       parsePlan("REFRESH TABLE a.b.c"),
