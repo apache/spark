@@ -3501,7 +3501,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       AlterTableSetProperties(
         createUnresolvedTable(
           ctx.multipartIdentifier,
-          "ALTER TABLE ... SET TBLPROPERTIES"),
+          "ALTER TABLE ... SET TBLPROPERTIES",
+          alterTableTypeMismatchHint),
         cleanedTableProperties)
     }
   }
@@ -3534,7 +3535,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       AlterTableUnsetProperties(
         createUnresolvedTable(
           ctx.multipartIdentifier,
-          "ALTER TABLE ... UNSET TBLPROPERTIES"),
+          "ALTER TABLE ... UNSET TBLPROPERTIES",
+          alterTableTypeMismatchHint),
         cleanedProperties,
         ifExists)
     }
