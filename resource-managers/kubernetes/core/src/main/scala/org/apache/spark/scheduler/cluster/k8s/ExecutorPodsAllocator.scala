@@ -223,14 +223,15 @@ private[spark] class ExecutorPodsAllocator(
 
       if (knownPodCount > targetNum) {
         val excess = knownPodCount - targetNum
+        val timedOutNewlyCreated = newlyCreatedExecutorsForRpId
+          .filter { case (_, (_, createTime)) =>
+            currentTime - createTime > executorIdleTimeout
+          }.keys.take(excess).toList
         val knownPendingToDelete = currentPendingExecutors
           .filter(x => isExecutorIdleTimedOut(x._2, currentTime))
           .map { case (id, _) => id }
-          .take(excess - newlyCreatedExecutorsForRpId.size)
-        val toDelete = newlyCreatedExecutorsForRpId
-          .filter { case (_, (_, createTime)) =>
-            currentTime - createTime > executorIdleTimeout
-          }.keys.take(excess).toList ++ knownPendingToDelete
+          .take(excess - timedOutNewlyCreated.size)
+        val toDelete = timedOutNewlyCreated ++ knownPendingToDelete
 
         if (toDelete.nonEmpty) {
           logInfo(s"Deleting ${toDelete.size} excess pod requests (${toDelete.mkString(",")}).")

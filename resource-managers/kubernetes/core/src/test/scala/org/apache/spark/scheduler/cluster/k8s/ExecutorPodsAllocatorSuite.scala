@@ -216,6 +216,51 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!podsAllocatorUnderTest.isDeleted("4"))
   }
 
+  test("SPARK-34334: correctly identify timed out pending pod requests as excess") {
+    when(podOperations
+      .withField("status.phase", "Pending"))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(podOperations)
+    when(podOperations
+      .withLabelIn(meq(SPARK_EXECUTOR_ID_LABEL), any()))
+      .thenReturn(podOperations)
+
+    val startTime = Instant.now.toEpochMilli
+    waitForExecutorPodsClock.setTime(startTime)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(podOperations).create(podWithAttachedContainerForId(1))
+    verify(podOperations).create(any())
+
+    snapshotsStore.updatePod(pendingExecutor(1))
+    snapshotsStore.notifySubscribers()
+
+    waitForExecutorPodsClock.advance(executorIdleTimeout)
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    snapshotsStore.notifySubscribers()
+    verify(podOperations).create(podWithAttachedContainerForId(2))
+
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    snapshotsStore.notifySubscribers()
+
+    verify(podOperations, never()).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1")
+    verify(podOperations, never()).delete()
+
+    waitForExecutorPodsClock.advance(executorIdleTimeout)
+    snapshotsStore.notifySubscribers()
+
+    // before SPARK-34334 this verify() call failed as the non-timed out newly created request
+    // decreased the number of requests taken from timed out pending pod requests
+    verify(podOperations).withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1")
+    verify(podOperations).delete()
+  }
+
   test("SPARK-33099: Respect executor idle timeout configuration") {
     when(podOperations
       .withField("status.phase", "Pending"))
