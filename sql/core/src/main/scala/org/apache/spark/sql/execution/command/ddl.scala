@@ -817,7 +817,6 @@ case class AlterTableSetLocationCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val locUri = CatalogUtils.stringToURI(location)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     partitionSpec match {
       case Some(spec) =>
         DDLUtils.verifyPartitionProviderIsHive(
