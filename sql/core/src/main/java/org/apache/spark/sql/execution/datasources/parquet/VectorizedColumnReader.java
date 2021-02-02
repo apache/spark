@@ -111,6 +111,8 @@ public class VectorizedColumnReader {
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
     DecimalMetadata dm = descriptor.getPrimitiveType().getDecimalMetadata();
+    // It's OK if the required decimal precision is larger than or equal to the physical decimal
+    // precision in the Parquet metadata, as long as the decimal scale is the same.
     return dm != null && dm.getPrecision() <= d.precision() && dm.getScale() == d.scale();
   }
 
