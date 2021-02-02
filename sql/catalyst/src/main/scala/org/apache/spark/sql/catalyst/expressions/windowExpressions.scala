@@ -802,8 +802,6 @@ case class NTile(buckets: Expression) extends RowNumberLike with SizeBasedWindow
  */
 abstract class RankLike extends AggregateWindowFunction {
 
-  override val frame: WindowFrame = UnspecifiedFrame
-
   /** Store the values of the window 'order' expressions. */
   protected val orderAttrs = children.map { expr =>
     AttributeReference(expr.sql, expr.dataType)()

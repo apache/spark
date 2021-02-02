@@ -3162,16 +3162,15 @@ class Analyzer(override val catalogManager: CatalogManager)
       case WindowExpression(wf: FrameLessOffsetWindowFunction,
         WindowSpecDefinition(_, _, f: SpecifiedWindowFrame)) if wf.frame != f =>
         throw QueryCompilationErrors.cannotSpecifyWindowFrameError(wf.prettyName)
+      case WindowExpression(wf: AggregateWindowFunction, s: WindowSpecDefinition)
+        if wf.frame != UnspecifiedFrame =>
+        WindowExpression(wf, s.copy(frameSpecification = wf.frame))
       case WindowExpression(wf: WindowFunction, WindowSpecDefinition(_, _, f: SpecifiedWindowFrame))
           if wf.frame != UnspecifiedFrame && wf.frame != f =>
         throw QueryCompilationErrors.windowFrameNotMatchRequiredFrameError(f, wf.frame)
       case WindowExpression(wf: WindowFunction, s @ WindowSpecDefinition(_, _, UnspecifiedFrame))
           if wf.frame != UnspecifiedFrame =>
         WindowExpression(wf, s.copy(frameSpecification = wf.frame))
-      case WindowExpression(e: RankLike, s @ WindowSpecDefinition(p, o, f))
-        if e.resolved =>
-        WindowExpression(e, s.copy(frameSpecification =
-          SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow) ))
       case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if e.resolved =>
         val frame = if (o.nonEmpty) {
