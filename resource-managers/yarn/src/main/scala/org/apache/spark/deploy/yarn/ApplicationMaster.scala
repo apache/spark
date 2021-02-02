@@ -35,7 +35,6 @@ import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
@@ -578,11 +577,6 @@ private[spark] class ApplicationMaster(
         failureCount = 0
       } catch {
         case i: InterruptedException => // do nothing
-        case e: ApplicationAttemptNotFoundException =>
-          failureCount += 1
-          logError("Exception from Reporter thread.", e)
-          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
-            e.getMessage)
         case e: Throwable =>
           failureCount += 1
           if (!NonFatal(e)) {
