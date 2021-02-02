@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.net.{URI, URISyntaxException}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -28,7 +29,7 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, F
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -1374,7 +1375,55 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
     // drop the original cached version and make the new version cached lazily.
-    sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    // If this table is a view, also refresh its underlying tables.
+    refreshAllUnderlyingTables(tableIdent, sparkSession)
     Seq.empty[Row]
+  }
+
+  private def refreshAllUnderlyingTables(
+      tableIdent: TableIdentifier, sparkSession: SparkSession): Unit = {
+    val tableName = tableIdent.unquotedString
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
+    sparkSession.catalog.refreshTable(tableName)
+
+    if (table.tableType == CatalogTableType.VIEW) {
+      if (table.viewText.isDefined) {
+        val parser = sparkSession.sessionState.sqlParser
+        val unresolvedPlan = parser.parsePlan(table.viewText.get)
+        findOutUnderlyingTables(unresolvedPlan).foreach { t =>
+          refreshAllUnderlyingTables(t, sparkSession)
+        }
+      } else {
+        catalog.getTempView(tableName)
+          .orElse(catalog.getGlobalTempView(tableName))
+          .map(findOutUnderlyingTables).foreach { tables =>
+          tables.foreach { t =>
+            refreshAllUnderlyingTables(t, sparkSession)
+          }
+        }
+      }
+    }
+  }
+
+  private def findOutUnderlyingTables(unresolvedPlan: LogicalPlan): Set[TableIdentifier] = {
+    val underlyingTables = mutable.Set[TableIdentifier]()
+    unresolvedPlan transformUp {
+      case u@UnresolvedRelation(multipartIdentifier, _, _) =>
+        val table = multipartIdentifier.last
+        val db = if (multipartIdentifier.size == 1) {
+          None
+        } else {
+          Some(multipartIdentifier.apply(0))
+        }
+        val tableIdentifier = new TableIdentifier(table, db)
+        if (conf.caseSensitiveAnalysis) {
+          underlyingTables += tableIdentifier
+        } else if (!underlyingTables.exists(_.quotedString.equalsIgnoreCase(u.tableName))) {
+          underlyingTables += tableIdentifier
+        }
+        u
+    }
+    underlyingTables.toSet
   }
 }
