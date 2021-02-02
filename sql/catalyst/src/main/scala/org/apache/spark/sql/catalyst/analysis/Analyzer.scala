@@ -1406,7 +1406,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
         case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
-          if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+        case oldVersion @ MapInPandas(_, output, _)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
         case oldVersion: Generate
