@@ -204,6 +204,11 @@ class InMemoryTable(
     }
   }
 
+  protected def clearPartition(key: Seq[Any]): Unit = dataMap.synchronized {
+    assert(dataMap.contains(key))
+    dataMap(key).clear()
+  }
+
   def withData(data: Array[BufferedRows]): InMemoryTable = dataMap.synchronized {
     data.foreach(_.rows.foreach { row =>
       val key = getKey(row)
@@ -464,6 +469,8 @@ class BufferedRows(
     rows.append(row)
     this
   }
+
+  def clear(): Unit = rows.clear()
 }
 
 private class BufferedRowsReaderFactory(

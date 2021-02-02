@@ -30,7 +30,10 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
       |(dt='2008-08-08', country='us'), PARTITION (dt='2009-09-09', country='uk')
       """.stripMargin
     val expected = AlterTableDropPartition(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
+      UnresolvedTable(
+        Seq("table_name"),
+        "ALTER TABLE ... DROP PARTITION ...",
+        Some("Please use ALTER VIEW instead.")),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -47,7 +50,10 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
       |PARTITION (dt='2009-09-09', country='uk')
       """.stripMargin
     val expected = AlterTableDropPartition(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
+      UnresolvedTable(
+        Seq("table_name"),
+        "ALTER TABLE ... DROP PARTITION ...",
+        Some("Please use ALTER VIEW instead.")),
       Seq(
         UnresolvedPartitionSpec(Map("dt" -> "2008-08-08", "country" -> "us")),
         UnresolvedPartitionSpec(Map("dt" -> "2009-09-09", "country" -> "uk"))),
@@ -59,7 +65,10 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
   test("drop partition in a table with multi-part identifier") {
     val sql = "ALTER TABLE a.b.c DROP IF EXISTS PARTITION (ds='2017-06-10')"
     val expected = AlterTableDropPartition(
-      UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... DROP PARTITION ..."),
+      UnresolvedTable(
+        Seq("a", "b", "c"),
+        "ALTER TABLE ... DROP PARTITION ...",
+        Some("Please use ALTER VIEW instead.")),
       Seq(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"))),
       ifExists = true,
       purge = false)
@@ -70,7 +79,10 @@ class AlterTableDropPartitionParserSuite extends AnalysisTest with SharedSparkSe
   test("drop partition with PURGE") {
     val sql = "ALTER TABLE table_name DROP PARTITION (p=1) PURGE"
     val expected = AlterTableDropPartition(
-      UnresolvedTable(Seq("table_name"), "ALTER TABLE ... DROP PARTITION ..."),
+      UnresolvedTable(
+        Seq("table_name"),
+        "ALTER TABLE ... DROP PARTITION ...",
+        Some("Please use ALTER VIEW instead.")),
       Seq(UnresolvedPartitionSpec(Map("p" -> "1"))),
       ifExists = false,
       purge = true)

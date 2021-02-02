@@ -39,8 +39,8 @@ import org.apache.spark.sql.types.IntegerType
  *
  *   val agg = data.groupBy($"key")
  *     .agg(
- *       countDistinct($"cat1").as("cat1_cnt"),
- *       countDistinct($"cat2").as("cat2_cnt"),
+ *       count_distinct($"cat1").as("cat1_cnt"),
+ *       count_distinct($"cat2").as("cat2_cnt"),
  *       sum($"value").as("total"))
  * }}}
  *

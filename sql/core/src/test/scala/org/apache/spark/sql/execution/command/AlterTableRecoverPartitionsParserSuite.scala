@@ -36,21 +36,30 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
     comparePlans(
       parsePlan("ALTER TABLE tbl RECOVER PARTITIONS"),
       AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("tbl"), "ALTER TABLE ... RECOVER PARTITIONS")))
+        UnresolvedTable(
+          Seq("tbl"),
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 
   test("recover partitions of a table in a database") {
     comparePlans(
       parsePlan("alter table db.tbl recover partitions"),
       AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("db", "tbl"), "ALTER TABLE ... RECOVER PARTITIONS")))
+        UnresolvedTable(
+          Seq("db", "tbl"),
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 
   test("recover partitions of a table spark_catalog") {
     comparePlans(
       parsePlan("alter table spark_catalog.db.TBL recover partitions"),
       AlterTableRecoverPartitions(
-        UnresolvedTable(Seq("spark_catalog", "db", "TBL"), "ALTER TABLE ... RECOVER PARTITIONS")))
+        UnresolvedTable(
+          Seq("spark_catalog", "db", "TBL"),
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 
   test("recover partitions of a table in nested namespaces") {
@@ -59,6 +68,7 @@ class AlterTableRecoverPartitionsParserSuite extends AnalysisTest with SharedSpa
       AlterTableRecoverPartitions(
         UnresolvedTable(
           Seq("ns1", "ns2", "ns3", "ns4", "ns5", "ns6", "ns7", "ns8", "t"),
-          "ALTER TABLE ... RECOVER PARTITIONS")))
+          "ALTER TABLE ... RECOVER PARTITIONS",
+          Some("Please use ALTER VIEW instead."))))
   }
 }
