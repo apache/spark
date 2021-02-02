@@ -211,9 +211,9 @@ private[spark] class BasicExecutorFeatureStep(
     } else {
       new ContainerBuilder(executorContainer)
         .addNewVolumeMount()
-        .withName(SPARK_CONF_VOLUME_EXEC)
-        .withMountPath(SPARK_CONF_DIR_INTERNAL)
-        .endVolumeMount()
+          .withName(SPARK_CONF_VOLUME_EXEC)
+          .withMountPath(SPARK_CONF_DIR_INTERNAL)
+          .endVolumeMount()
         .build()
     }
     val containerWithLimitCores = if (isDefaultProfile) {
