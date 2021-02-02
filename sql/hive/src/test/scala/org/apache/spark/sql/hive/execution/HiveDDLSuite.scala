@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -808,6 +808,20 @@ class HiveDDLSuite
     assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
+  private def assertErrorForAlterTableOnView(
+      sqlText: String, viewName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$viewName is a view. '$cmdName' expects a table. Please use ALTER VIEW instead.")
+  }
+
+  private def assertErrorForAlterViewOnTable(
+      sqlText: String, tableName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$tableName is a table. '$cmdName' expects a view. Please use ALTER TABLE instead.")
+  }
+
   test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
@@ -856,54 +870,63 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        assertAnalysisError(
+        assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
-          s"$tabName is a table. 'ALTER VIEW ... SET TBLPROPERTIES' expects a view. " +
-            "Please use ALTER TABLE instead.")
+          tabName,
+          "ALTER VIEW ... SET TBLPROPERTIES")
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')",
           s"$oldViewName is a view. 'ALTER TABLE ... SET TBLPROPERTIES' expects a table.")
 
-        assertAnalysisError(
+        assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
-          s"$tabName is a table. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a view. " +
-            "Please use ALTER TABLE instead.")
+          tabName,
+          "ALTER VIEW ... UNSET TBLPROPERTIES")
 
         assertAnalysisError(
           s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')",
           s"$oldViewName is a view. 'ALTER TABLE ... UNSET TBLPROPERTIES' expects a table.")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET LOCATION ...' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET LOCATION ...")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET SERDE 'whatever'",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
-          s"$oldViewName is a view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... RECOVER PARTITIONS")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')",
-          s"$oldViewName is a view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... RENAME TO PARTITION")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
-          s"$oldViewName is a view. 'ALTER TABLE ... ADD PARTITION ...' expects a table.")
-        assertAnalysisError(
+          oldViewName,
+          "ALTER TABLE ... ADD PARTITION ...")
+
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
-          s"$oldViewName is a view. 'ALTER TABLE ... DROP PARTITION ...' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... DROP PARTITION ...")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -1722,67 +1745,6 @@ class HiveDDLSuite
           s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')",
           s"${forbiddenPrefix}foo")
       }
-    }
-  }
-
-  test("truncate table - datasource table") {
-    import testImplicits._
-
-    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
-    // Test both a Hive compatible and incompatible code path.
-    Seq("json", "parquet").foreach { format =>
-      withTable("rectangles") {
-        data.write.format(format).saveAsTable("rectangles")
-        assert(spark.table("rectangles").collect().nonEmpty,
-          "bad test; table was empty to begin with")
-
-        sql("TRUNCATE TABLE rectangles")
-        assert(spark.table("rectangles").collect().isEmpty)
-
-        // not supported since the table is not partitioned
-        assertAnalysisError(
-          "TRUNCATE TABLE rectangles PARTITION (width=1)",
-          "Operation not allowed")
-      }
-    }
-  }
-
-  test("truncate partitioned table - datasource table") {
-    import testImplicits._
-
-    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // supported since partitions are stored in the metastore
-      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
-      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
-    }
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // support partial partition spec
-      sql("TRUNCATE TABLE partTable PARTITION (width=1)")
-      assert(spark.table("partTable").collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
-    }
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // do nothing if no partition is matched for the given partial partition spec
-      sql("TRUNCATE TABLE partTable PARTITION (width=100)")
-      assert(spark.table("partTable").count() == data.count())
-
-      // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
-        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
-      }
-
-      // throw exception if the column in partition spec is not a partition column.
-      assertAnalysisError(
-        "TRUNCATE TABLE partTable PARTITION (unknown=1)",
-        "unknown is not a valid partition column")
     }
   }
 

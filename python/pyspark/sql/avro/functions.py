@@ -37,7 +37,7 @@ def from_avro(data, jsonFormatSchema, options=None):
 
     Parameters
     ----------
-    data : :class:`Column` or str
+    data : :class:`~pyspark.sql.Column` or str
         the binary column.
     jsonFormatSchema : str
         the avro schema in JSON string format.
@@ -86,7 +86,7 @@ def to_avro(data, jsonFormatSchema=""):
 
     Parameters
     ----------
-    data : :class:`Column` or str
+    data : :class:`~pyspark.sql.Column` or str
         the data column.
     jsonFormatSchema : str, optional
         user-specified output avro schema in JSON string format.

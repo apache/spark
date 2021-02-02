@@ -96,7 +96,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
+        throw new IllegalStateException(
+          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")

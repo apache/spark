@@ -472,9 +472,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
+    val legacyNullAsString =
+      conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
-      val value = Option(pVal.constant).map(visitStringConstant)
+      val value = Option(pVal.constant).map(v => visitStringConstant(v, legacyNullAsString))
       name -> value
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
@@ -500,9 +502,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.
    */
-  protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
+  protected def visitStringConstant(
+      ctx: ConstantContext,
+      legacyNullAsString: Boolean): String = withOrigin(ctx) {
     ctx match {
-      case _: NullLiteralContext => null
+      case _: NullLiteralContext if !legacyNullAsString => null
       case s: StringLiteralContext => createString(s)
       case o => o.getText
     }
@@ -2166,8 +2170,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   private def createUnresolvedTable(
       ctx: MultipartIdentifierContext,
-      commandName: String): UnresolvedTable = withOrigin(ctx) {
-    UnresolvedTable(visitMultipartIdentifier(ctx), commandName)
+      commandName: String,
+      relationTypeMismatchHint: Option[String] = None): UnresolvedTable = withOrigin(ctx) {
+    UnresolvedTable(visitMultipartIdentifier(ctx), commandName, relationTypeMismatchHint)
   }
 
   /**
@@ -3490,7 +3495,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
           allowTemp = false,
-          relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
+          relationTypeMismatchHint = alterViewTypeMismatchHint),
         cleanedTableProperties)
     } else {
       AlterTableSetProperties(
@@ -3522,7 +3527,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
           allowTemp = false,
-          relationTypeMismatchHint = Some("Please use ALTER TABLE instead.")),
+          relationTypeMismatchHint = alterViewTypeMismatchHint),
         cleanedProperties,
         ifExists)
     } else {
@@ -3547,7 +3552,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableSetLocation(
       createUnresolvedTable(
         ctx.multipartIdentifier,
-        "ALTER TABLE ... SET LOCATION ..."),
+        "ALTER TABLE ... SET LOCATION ...",
+        alterTableTypeMismatchHint),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
   }
@@ -3814,7 +3820,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableRecoverPartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
-        "ALTER TABLE ... RECOVER PARTITIONS"))
+        "ALTER TABLE ... RECOVER PARTITIONS",
+        alterTableTypeMismatchHint))
   }
 
   /**
@@ -3843,7 +3850,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableAddPartition(
       createUnresolvedTable(
         ctx.multipartIdentifier,
-        "ALTER TABLE ... ADD PARTITION ..."),
+        "ALTER TABLE ... ADD PARTITION ...",
+        alterTableTypeMismatchHint),
       specsAndLocs.toSeq,
       ctx.EXISTS != null)
   }
@@ -3861,7 +3869,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableRenamePartition(
       createUnresolvedTable(
         ctx.multipartIdentifier,
-        "ALTER TABLE ... RENAME TO PARTITION"),
+        "ALTER TABLE ... RENAME TO PARTITION",
+        alterTableTypeMismatchHint),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.from)),
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(ctx.to)))
   }
@@ -3889,7 +3898,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableDropPartition(
       createUnresolvedTable(
         ctx.multipartIdentifier,
-        "ALTER TABLE ... DROP PARTITION ..."),
+        "ALTER TABLE ... DROP PARTITION ...",
+        alterTableTypeMismatchHint),
       partSpecs.toSeq,
       ifExists = ctx.EXISTS != null,
       purge = ctx.PURGE != null)
@@ -3909,7 +3919,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     AlterTableSerDeProperties(
       createUnresolvedTable(
         ctx.multipartIdentifier,
-        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]"),
+        "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
+        alterTableTypeMismatchHint),
       Option(ctx.STRING).map(string),
       Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
@@ -4122,4 +4133,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     CommentOnTable(createUnresolvedTable(ctx.multipartIdentifier, "COMMENT ON TABLE"), comment)
   }
+
+  private def alterViewTypeMismatchHint: Option[String] = Some("Please use ALTER TABLE instead.")
+
+  private def alterTableTypeMismatchHint: Option[String] = Some("Please use ALTER VIEW instead.")
 }

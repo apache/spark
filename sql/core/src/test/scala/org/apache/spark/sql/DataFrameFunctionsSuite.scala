@@ -171,10 +171,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("bitwiseNOT") {
+  test("bitwise_not") {
     checkAnswer(
-      testData2.select(bitwiseNOT($"a")),
-      testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
+      testData2.select(bitwiseNOT($"a"), bitwise_not($"a")),
+      testData2.collect().toSeq.map(r => Row(~r.getInt(0), ~r.getInt(0))))
   }
 
   test("bin") {
