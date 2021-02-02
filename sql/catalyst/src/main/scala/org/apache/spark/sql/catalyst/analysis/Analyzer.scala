@@ -1022,8 +1022,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u: UnresolvedRelation if !u.isStreaming =>
             lookupV2Relation(u.multipartIdentifier, u.options, false).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case other =>
-                throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupV2Relation")
+              case other => throw new IllegalStateException(
+                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
             }.getOrElse(write)
           case _ => write
         }
@@ -1134,8 +1134,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
                 case r: DataSourceV2Relation => write.withNewTable(r)
-                case other =>
-                  throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupRelation")
+                case other => throw new IllegalStateException(
+                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
               }.getOrElse(write)
           case _ => write
         }
