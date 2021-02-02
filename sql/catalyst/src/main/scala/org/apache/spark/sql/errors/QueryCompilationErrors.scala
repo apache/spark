@@ -251,6 +251,11 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Invalid usage of '*' in $prettyName")
   }
 
+  def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
+    new AnalysisException(s"count($targetString.*) is not allowed. " +
+      "Please use count(*) or expand the columns manually, e.g. count(col1, col2)")
+  }
+
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"ORDER BY position $index is not in select list " +
       s"(valid range is [1, $size])", t.origin.line, t.origin.startPosition)
