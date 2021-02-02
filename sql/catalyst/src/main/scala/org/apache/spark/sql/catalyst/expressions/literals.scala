@@ -62,6 +62,7 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
+    case s: UTF8String => Literal(s, StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
     case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
     case b: Boolean => Literal(b, BooleanType)
@@ -291,7 +292,7 @@ object DecimalLiteral {
 /**
  * In order to do type checking, use Literal.create() instead of constructor
  */
-case class Literal (value: Any, dataType: DataType) extends LeafExpression {
+case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 
   Literal.validateLiteralValue(value, dataType)
 
