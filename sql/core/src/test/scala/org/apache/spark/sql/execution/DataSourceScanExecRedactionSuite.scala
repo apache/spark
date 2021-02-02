@@ -137,9 +137,24 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(location.isDefined)
       // The location metadata should at least contain one path
       assert(location.get.contains(paths.head))
-      // If the temp path length is larger than 100, the metadata length should not exceed
-      // twice of the length; otherwise, the metadata length should be controlled within 200.
-      assert(location.get.length < Math.max(paths.head.length, 100) * 2)
+
+      // The location metadata should have bracket wrapping paths
+      assert(location.get.indexOf('[') > -1)
+      assert(location.get.indexOf(']') > -1)
+
+      // extract paths in location metadata (removing classname, brackets, separators)
+      val pathsInLocation = location.get.substring(
+        location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
+
+      // If the temp path length is less than (stop appending threshold - 1), say, 100 - 1 = 99,
+      // location should include more than one paths. Otherwise location should include only one
+      // path.
+      // (Note we apply subtraction with 1 to count start bracket '['.)
+      if (paths.head.length < 99) {
+        assert(pathsInLocation.size >= 2)
+      } else {
+        assert(pathsInLocation.size == 1)
+      }
     }
   }
 }
