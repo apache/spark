@@ -161,7 +161,7 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
         sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
         sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
         runShowPartitionsSql(s"SHOW PARTITIONS $t", Row("p1=null") :: Nil)
-        runShowPartitionsSql(s"SHOW PARTITIONS $t PARTITION (p1 = null)", Row("p1=null") :: Nil)
+        checkAnswer(spark.sql(s"SELECT * FROM $t"), Row(0, "null"))
       }
     }
   }
