@@ -44,11 +44,11 @@ class AvroSerdeSuite extends SparkFunSuite {
 
     assertFailedConversionMessage(avro, deserialize = true,
       "Cannot convert Avro field 'foo' to Catalyst field 'foo' because schema is incompatible " +
-          s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType})""")
+          s"""(avroType = "int", sqlType = ${CATALYST_STRUCT.head.dataType.sql})""")
 
     assertFailedConversionMessage(avro, deserialize = false,
       s"Cannot convert Catalyst field 'foo' to Avro field 'foo' because schema is incompatible " +
-          s"""(sqlType = ${CATALYST_STRUCT.head.dataType}, avroType = "int")""")
+          s"""(sqlType = ${CATALYST_STRUCT.head.dataType.sql}, avroType = "int")""")
   }
 
   test("Fail to convert with nested field type mismatch") {
@@ -56,11 +56,11 @@ class AvroSerdeSuite extends SparkFunSuite {
 
     assertFailedConversionMessage(avro, deserialize = true,
       "Cannot convert Avro field 'foo.bar' to Catalyst field 'foo.bar' because schema is " +
-          """incompatible (avroType = "float", sqlType = IntegerType)""")
+          """incompatible (avroType = "float", sqlType = INT)""")
 
     assertFailedConversionMessage(avro, deserialize = false,
       "Cannot convert Catalyst field 'foo.bar' to Avro field 'foo.bar' because " +
-        """schema is incompatible (sqlType = IntegerType, avroType = "float")""")
+        """schema is incompatible (sqlType = INT, avroType = "float")""")
   }
 
   test("Fail to convert with nested field name mismatch") {
@@ -88,12 +88,12 @@ class AvroSerdeSuite extends SparkFunSuite {
 
     assertFailedConversionMessage(avro, deserialize = true,
       "Cannot convert Avro field 'top.foo.bar' to Catalyst field 'top.foo.bar' because schema " +
-        """is incompatible (avroType = "float", sqlType = IntegerType)""",
+        """is incompatible (avroType = "float", sqlType = INT)""",
       catalyst)
 
     assertFailedConversionMessage(avro, deserialize = false,
       "Cannot convert Catalyst field 'top.foo.bar' to Avro field 'top.foo.bar' because schema is " +
-          """incompatible (sqlType = IntegerType, avroType = "float")""",
+          """incompatible (sqlType = INT, avroType = "float")""",
       catalyst)
   }
 
@@ -126,9 +126,9 @@ class AvroSerdeSuite extends SparkFunSuite {
       }
     }
     val expectMsg = if (deserialize) {
-      s"Cannot convert Avro type $avroSchema to Catalyst type $catalystSchema."
+      s"Cannot convert Avro type $avroSchema to Catalyst type ${catalystSchema.sql}."
     } else {
-      s"Cannot convert Catalyst type $catalystSchema to Avro type $avroSchema."
+      s"Cannot convert Catalyst type ${catalystSchema.sql} to Avro type $avroSchema."
     }
     assert(e.getMessage === expectMsg)
     assert(e.getCause.getMessage === expectedCauseMessage)

@@ -228,9 +228,9 @@ private[spark] object TestUtils {
    * that the exception is a subtype of the exception provided in the type parameter.
    */
   def assertExceptionMsg[E <: Throwable : ClassTag](
-    exception: Throwable,
-    msg: String,
-    ignoreCase: Boolean = false): Unit = {
+      exception: Throwable,
+      msg: String,
+      ignoreCase: Boolean = false): Unit = {
 
     val (typeMsg, typeCheck) = if (classTag[E] == classTag[Nothing]) {
       ("", (_: Throwable) => true)

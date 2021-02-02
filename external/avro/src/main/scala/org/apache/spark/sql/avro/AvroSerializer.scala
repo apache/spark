@@ -81,7 +81,7 @@ private[sql] class AvroSerializer(
       }
     } catch {
       case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-        s"Cannot convert Catalyst type $rootCatalystType to Avro type $rootAvroType.", ise)
+        s"Cannot convert Catalyst type ${rootCatalystType.sql} to Avro type $rootAvroType.", ise)
     }
     if (nullable) {
       (data: Any) =>
@@ -227,7 +227,7 @@ private[sql] class AvroSerializer(
 
       case _ =>
         throw new IncompatibleSchemaException(errorPrefix +
-          s"schema is incompatible (sqlType = $catalystType, avroType = $avroType)")
+          s"schema is incompatible (sqlType = ${catalystType.sql}, avroType = $avroType)")
     }
   }
 

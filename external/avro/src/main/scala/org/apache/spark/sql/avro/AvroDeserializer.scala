@@ -93,7 +93,7 @@ private[sql] class AvroDeserializer(
     }
   } catch {
     case ise: IncompatibleSchemaException => throw new IncompatibleSchemaException(
-      s"Cannot convert Avro type $rootAvroType to Catalyst type $rootCatalystType.", ise)
+      s"Cannot convert Avro type $rootAvroType to Catalyst type ${rootCatalystType.sql}.", ise)
   }
 
   def deserialize(data: Any): Option[Any] = converter(data)
@@ -110,7 +110,7 @@ private[sql] class AvroDeserializer(
     val errorPrefix = s"Cannot convert Avro ${toFieldStr(avroPath)} to " +
         s"Catalyst ${toFieldStr(sqlPath)} because "
     val incompatibleMsg = errorPrefix +
-        s"schema is incompatible (avroType = $avroType, sqlType = $catalystType)"
+        s"schema is incompatible (avroType = $avroType, sqlType = ${catalystType.sql})"
 
     (avroType.getType, catalystType) match {
       case (NULL, NullType) => (updater, ordinal, _) =>
