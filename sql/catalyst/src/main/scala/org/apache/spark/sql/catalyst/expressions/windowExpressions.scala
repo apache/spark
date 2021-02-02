@@ -633,9 +633,7 @@ case class CumeDist() extends RowNumberLike with SizeBasedWindowFunction {
   group = "window_funcs")
 // scalastyle:on line.size.limit line.contains.tab
 case class NthValue(input: Expression, offset: Expression, ignoreNulls: Boolean)
-    extends AggregateWindowFunction
-    with OffsetWindowFunction
-    with ImplicitCastInputTypes {
+    extends AggregateWindowFunction with OffsetWindowFunction with ImplicitCastInputTypes {
 
   def this(child: Expression, offset: Expression) = this(child, offset, false)
 

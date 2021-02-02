@@ -1119,22 +1119,22 @@ FROM basic_pays
 struct<DENSE_RANK() OVER (ORDER BY salary ASC NULLS FIRST ROWS BETWEEN 5 PRECEDING AND CURRENT ROW):int>
 -- !query output
 1
+10
+11
+12
+13
+14
+15
+16
+17
 2
 3
 4
 5
 6
-6
-6
-6
-6
-6
-6
-6
-6
-6
-6
-6
+7
+8
+9
 
 
 -- !query
@@ -1145,23 +1145,23 @@ FROM basic_pays
 -- !query schema
 struct<DENSE_RANK() OVER (ORDER BY salary ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
 -- !query output
+1
+10
+11
+12
+13
+14
+15
+16
 17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
+2
+3
+4
+5
+6
+7
+8
+9
 
 
 -- !query
@@ -1201,19 +1201,19 @@ struct<DENSE_RANK() OVER (ORDER BY salary ASC NULLS FIRST RANGE BETWEEN 2000 PRE
 -- !query output
 1
 10
-10
-10
+11
+12
+13
+14
+15
+16
+17
+2
+3
 4
-4
-4
+5
 6
 7
-7
-7
-7
-7
-7
-8
 8
 9
 
@@ -1253,20 +1253,20 @@ FROM basic_pays
 -- !query schema
 struct<DENSE_RANK() OVER (ORDER BY salary ASC NULLS FIRST RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):int>
 -- !query output
+1
+10
+11
+12
+13
+14
+15
+16
 17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
-17
+2
+3
+4
+5
+6
+7
+8
+9
