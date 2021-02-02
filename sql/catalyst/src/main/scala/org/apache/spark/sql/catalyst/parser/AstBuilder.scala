@@ -490,9 +490,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
+    val processNullLiteral =
+      !conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
-      val value = Option(pVal.constant).map(visitStringConstant)
+      val value = Option(pVal.constant).map(v => visitStringConstant(v, processNullLiteral))
       name -> value
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
@@ -518,9 +520,11 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.
    */
-  protected def visitStringConstant(ctx: ConstantContext): String = withOrigin(ctx) {
+  protected def visitStringConstant(
+    ctx: ConstantContext,
+    processNullLiteral: Boolean): String = withOrigin(ctx) {
     ctx match {
-      case _: NullLiteralContext => null
+      case _: NullLiteralContext if processNullLiteral => null
       case s: StringLiteralContext => createString(s)
       case o => o.getText
     }
