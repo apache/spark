@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableCatalog, TableChange}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog, TableChange}
 
 /**
  * Resolves catalogs from the multi-part identifiers in SQL statements, and convert the statements
@@ -110,14 +109,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case AlterTableUnsetPropertiesStatement(
          nameParts @ NonSessionCatalogAndTable(catalog, tbl), keys, _) =>
       val changes = keys.map(key => TableChange.removeProperty(key))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableSetLocationStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), partitionSpec, newLoc) =>
-      if (partitionSpec.nonEmpty) {
-        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, newLoc))
       createAlterTable(nameParts, catalog, tbl, changes)
 
     case c @ CreateTableStatement(

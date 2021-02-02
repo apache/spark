@@ -41,7 +41,9 @@ class ObjectAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     inputRows: Iterator[InternalRow],
     fallbackCountThreshold: Int,
-    numOutputRows: SQLMetric)
+    numOutputRows: SQLMetric,
+    spillSize: SQLMetric,
+    numTasksFallBacked: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -56,6 +58,10 @@ class ObjectAggregationIterator(
   private[this] var sortBased: Boolean = false
 
   private[this] var aggBufferIterator: Iterator[AggregationBufferEntry] = _
+
+  // Remember spill data size of this task before execute this operator so that we can
+  // figure out how many bytes we spilled for this operator.
+  private val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
 
   // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
   private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
@@ -75,6 +81,11 @@ class ObjectAggregationIterator(
    * Start processing input rows.
    */
   processInputs()
+
+  TaskContext.get().addTaskCompletionListener[Unit](_ => {
+    // At the end of the task, update the task's spill size.
+    spillSize.set(TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore)
+  })
 
   override final def hasNext: Boolean = {
     aggBufferIterator.hasNext
@@ -168,7 +179,7 @@ class ObjectAggregationIterator(
 
           // Falls back to sort-based aggregation
           sortBased = true
-
+          numTasksFallBacked += 1
         }
       }
 

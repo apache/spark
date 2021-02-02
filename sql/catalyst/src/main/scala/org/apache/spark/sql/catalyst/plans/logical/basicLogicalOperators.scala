@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.AliasIdentifier
-import org.apache.spark.sql.catalyst.analysis.{EliminateView, MultiInstanceRelation}
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -450,7 +450,6 @@ case class InsertIntoDir(
  *
  * @param desc A view description(CatalogTable) that provides necessary information to resolve the
  *             view.
- * @param output The output of a view operator, this is generated during planning the view, so that
  *               we are able to decouple the output from the underlying structure.
  * @param child The logical plan of a view operator, it should be a logical plan parsed from the
  *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
@@ -458,37 +457,33 @@ case class InsertIntoDir(
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
-    output: Seq[Attribute],
-    child: LogicalPlan) extends LogicalPlan with MultiInstanceRelation {
+    child: LogicalPlan) extends UnaryNode {
 
-  override def producedAttributes: AttributeSet = outputSet
-
-  override lazy val resolved: Boolean = child.resolved
-
-  override def children: Seq[LogicalPlan] = child :: Nil
-
-  override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+  override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 
-  override def doCanonicalize(): LogicalPlan = {
-    def sameOutput(
-      outerProject: Seq[NamedExpression], innerProject: Seq[NamedExpression]): Boolean = {
-      outerProject.length == innerProject.length &&
-        outerProject.zip(innerProject).forall {
-          case(outer, inner) => outer.name == inner.name && outer.dataType == inner.dataType
-        }
-    }
+  override def doCanonicalize(): LogicalPlan = child match {
+    case p: Project if p.resolved && canRemoveProject(p) => p.child.canonicalized
+    case _ => child.canonicalized
+  }
 
-    val eliminated = EliminateView(this) match {
-      case Project(viewProjectList, child @ Project(queryProjectList, _))
-        if sameOutput(viewProjectList, queryProjectList) =>
-        child
-      case other => other
+  // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
+  // output schema doesn't change even if the table referenced by the view is changed after view
+  // creation. We should remove this extra Project during canonicalize if it does nothing.
+  // See more details in `SessionCatalog.fromCatalogTable`.
+  private def canRemoveProject(p: Project): Boolean = {
+    p.output.length == p.child.output.length && p.projectList.zip(p.child.output).forall {
+      case (Alias(cast: CastBase, name), childAttr) =>
+        cast.child match {
+          case a: AttributeReference =>
+            a.dataType == cast.dataType && a.name == name && childAttr.semanticEquals(a)
+          case _ => false
+        }
+      case _ => false
     }
-    eliminated.canonicalized
   }
 }
 
