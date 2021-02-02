@@ -47,7 +47,7 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("function current_timestamp and now") {
     val df1 = Seq((1, 2), (3, 1)).toDF("a", "b")
-    checkAnswer(df1.select(countDistinct(current_timestamp())), Row(1))
+    checkAnswer(df1.select(count_distinct(current_timestamp())), Row(1))
 
     // Execution in one query should return the same value
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = CURRENT_TIMESTAMP()"""), Row(true))

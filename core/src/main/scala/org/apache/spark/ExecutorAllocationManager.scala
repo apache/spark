@@ -908,7 +908,7 @@ private[spark] class ExecutorAllocationManager(
      */
     def pendingUnschedulableTaskSetsPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
-      attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
+      attempts.count(attempt => unschedulableTaskSets.contains(attempt))
     }
 
     def hasPendingTasks: Boolean = {

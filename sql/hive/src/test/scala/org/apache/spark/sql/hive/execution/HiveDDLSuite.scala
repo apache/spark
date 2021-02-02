@@ -40,7 +40,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
@@ -808,6 +808,20 @@ class HiveDDLSuite
     assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
+  private def assertErrorForAlterTableOnView(
+      sqlText: String, viewName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$viewName is a view. '$cmdName' expects a table. Please use ALTER VIEW instead.")
+  }
+
+  private def assertErrorForAlterViewOnTable(
+      sqlText: String, tableName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$tableName is a table. '$cmdName' expects a view. Please use ALTER TABLE instead.")
+  }
+
   test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
@@ -856,48 +870,59 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        assertAnalysisError(
+        assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
-          s"$tabName is a table. 'ALTER VIEW ... SET TBLPROPERTIES' expects a view. " +
-            "Please use ALTER TABLE instead.")
+          tabName,
+          "ALTER VIEW ... SET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
 
-        assertAnalysisError(
+        assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
-          s"$tabName is a table. 'ALTER VIEW ... UNSET TBLPROPERTIES' expects a view. " +
-            "Please use ALTER TABLE instead.")
+          tabName,
+          "ALTER VIEW ... UNSET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",
+          oldViewName,
+          "ALTER TABLE ... SET LOCATION ...")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET SERDE 'whatever'",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
-          s"$oldViewName is a view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
-          s"$oldViewName is a view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... RECOVER PARTITIONS")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')",
-          s"$oldViewName is a view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... RENAME TO PARTITION")
 
-        assertAnalysisError(
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
-          s"$oldViewName is a view. 'ALTER TABLE ... ADD PARTITION ...' expects a table.")
-        assertAnalysisError(
+          oldViewName,
+          "ALTER TABLE ... ADD PARTITION ...")
+
+        assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
-          s"$oldViewName is a view. 'ALTER TABLE ... DROP PARTITION ...' expects a table.")
+          oldViewName,
+          "ALTER TABLE ... DROP PARTITION ...")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -2903,6 +2928,28 @@ class HiveDDLSuite
         assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
           " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
       }
+    }
+  }
+
+  test("SPARK-34261: Avoid side effect if create exists temporary function") {
+    withUserDefinedFunction("f1" -> true) {
+      sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
+
+      val jarName = "TestUDTF.jar"
+      val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
+      spark.sparkContext.addedJars.keys.find(_.contains(jarName))
+        .foreach(spark.sparkContext.addedJars.remove)
+      assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
+      val msg = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY FUNCTION f1 AS " +
+          s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
+      }.getMessage
+      assert(msg.contains("Function f1 already exists"))
+      assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
+
+      sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +
+        s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
+      assert(spark.sparkContext.listJars().exists(_.contains(jarName)))
     }
   }
 }

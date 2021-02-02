@@ -484,7 +484,7 @@ setMethod("acosh",
 #' \dontrun{
 #' head(select(df, approx_count_distinct(df$gear)))
 #' head(select(df, approx_count_distinct(df$gear, 0.02)))
-#' head(select(df, countDistinct(df$gear, df$cyl)))
+#' head(select(df, count_distinct(df$gear, df$cyl)))
 #' head(select(df, n_distinct(df$gear)))
 #' head(distinct(select(df, "gear")))}
 #' @note approx_count_distinct(Column) since 3.0.0
@@ -636,20 +636,33 @@ setMethod("bin",
           })
 
 #' @details
+#' \code{bitwise_not}: Computes bitwise NOT.
+#'
+#' @rdname column_nonaggregate_functions
+#' @aliases bitwise_not bitwise_not,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, bitwise_not(cast(df$vs, "int"))))}
+#' @note bitwise_not since 3.2.0
+setMethod("bitwise_not",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bitwise_not", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{bitwiseNOT}: Computes bitwise NOT.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases bitwiseNOT bitwiseNOT,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, bitwiseNOT(cast(df$vs, "int"))))}
 #' @note bitwiseNOT since 1.5.0
 setMethod("bitwiseNOT",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "bitwiseNOT", x@jc)
-            column(jc)
+            .Deprecated("bitwise_not")
+            bitwise_not(x)
           })
 
 #' @details
@@ -1937,21 +1950,34 @@ setMethod("sum",
           })
 
 #' @details
+#' \code{sum_distinct}: Returns the sum of distinct values in the expression.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases sum_distinct sum_distinct,Column-method
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, sum_distinct(df$gear)))
+#' head(distinct(select(df, "gear")))}
+#' @note sum_distinct since 3.2.0
+setMethod("sum_distinct",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "sum_distinct", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{sumDistinct}: Returns the sum of distinct values in the expression.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases sumDistinct sumDistinct,Column-method
-#' @examples
-#'
-#' \dontrun{
-#' head(select(df, sumDistinct(df$gear)))
-#' head(distinct(select(df, "gear")))}
 #' @note sumDistinct since 1.4.0
 setMethod("sumDistinct",
           signature(x = "Column"),
           function(x) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "sumDistinct", x@jc)
-            column(jc)
+            .Deprecated("sum_distinct")
+            sum_distinct(x)
           })
 
 #' @details
@@ -2469,7 +2495,27 @@ setMethod("approxCountDistinct",
           })
 
 #' @details
+#' \code{count_distinct}: Returns the number of distinct items in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases count_distinct count_distinct,Column-method
+#' @note count_distinct since 3.2.0
+setMethod("count_distinct",
+          signature(x = "Column"),
+          function(x, ...) {
+            jcols <- lapply(list(...), function(x) {
+              stopifnot(class(x) == "Column")
+              x@jc
+            })
+            jc <- callJStatic("org.apache.spark.sql.functions", "count_distinct", x@jc,
+                              jcols)
+            column(jc)
+          })
+
+#' @details
 #' \code{countDistinct}: Returns the number of distinct items in a group.
+#'
+#' An alias of \code{count_distinct}, and it is encouraged to use \code{count_distinct} directly.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases countDistinct countDistinct,Column-method
@@ -2477,13 +2523,7 @@ setMethod("approxCountDistinct",
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(...), function(x) {
-              stopifnot(class(x) == "Column")
-              x@jc
-            })
-            jc <- callJStatic("org.apache.spark.sql.functions", "countDistinct", x@jc,
-                              jcols)
-            column(jc)
+            count_distinct(x, ...)
           })
 
 #' @details
@@ -2550,7 +2590,7 @@ setMethod("least",
 #' @note n_distinct since 1.4.0
 setMethod("n_distinct", signature(x = "Column"),
           function(x, ...) {
-            countDistinct(x, ...)
+            count_distinct(x, ...)
           })
 
 #' @rdname count
@@ -2894,6 +2934,21 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
+#' \code{shiftleft}: Shifts the given value numBits left. If the given value is a long value,
+#' this function will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftleft shiftleft,Column,numeric-method
+#' @note shiftleft since 3.2.0
+setMethod("shiftleft", signature(y = "Column", x = "numeric"),
+          function(y, x) {
+            jc <- callJStatic("org.apache.spark.sql.functions",
+                              "shiftleft",
+                              y@jc, as.integer(x))
+            column(jc)
+          })
+
+#' @details
 #' \code{shiftLeft}: Shifts the given value numBits left. If the given value is a long value,
 #' this function will return a long value else it will return an integer value.
 #'
@@ -2902,8 +2957,21 @@ setMethod("sha2", signature(y = "Column", x = "numeric"),
 #' @note shiftLeft since 1.5.0
 setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           function(y, x) {
+            .Deprecated("shiftleft")
+            shiftleft(y, x)
+          })
+
+#' @details
+#' \code{shiftright}: (Signed) shifts the given value numBits right. If the given value is a long
+#' value, it will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftright shiftright,Column,numeric-method
+#' @note shiftright since 3.2.0
+setMethod("shiftright", signature(y = "Column", x = "numeric"),
+          function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftLeft",
+                              "shiftright",
                               y@jc, as.integer(x))
             column(jc)
           })
@@ -2917,8 +2985,21 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
 #' @note shiftRight since 1.5.0
 setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           function(y, x) {
+            .Deprecated("shiftright")
+            shiftright(y, x)
+          })
+
+#' @details
+#' \code{shiftrightunsigned}: (Unsigned) shifts the given value numBits right. If the given value is
+#' a long value, it will return a long value else it will return an integer value.
+#'
+#' @rdname column_math_functions
+#' @aliases shiftrightunsigned shiftrightunsigned,Column,numeric-method
+#' @note shiftrightunsigned since 3.2.0
+setMethod("shiftrightunsigned", signature(y = "Column", x = "numeric"),
+          function(y, x) {
             jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftRight",
+                              "shiftrightunsigned",
                               y@jc, as.integer(x))
             column(jc)
           })
@@ -2932,10 +3013,8 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
 #' @note shiftRightUnsigned since 1.5.0
 setMethod("shiftRightUnsigned", signature(y = "Column", x = "numeric"),
           function(y, x) {
-            jc <- callJStatic("org.apache.spark.sql.functions",
-                              "shiftRightUnsigned",
-                              y@jc, as.integer(x))
-            column(jc)
+            .Deprecated("shiftrightunsigned")
+            shiftrightunsigned(y, x)
           })
 
 #' @details

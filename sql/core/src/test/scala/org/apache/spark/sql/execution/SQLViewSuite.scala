@@ -155,23 +155,18 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertAnalysisError(
         s"ALTER TABLE $viewName RECOVER PARTITIONS",
         s"$viewName is a temp view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table")
-
-      // For v2 ALTER TABLE statements, we have better error message saying view is not supported.
       assertAnalysisError(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
-        s"'$viewName' is a view not a table")
+        s"$viewName is a temp view. 'ALTER TABLE ... SET LOCATION ...' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
+        "testView is a temp view. 'ALTER TABLE ... SET LOCATION ...' expects a table")
       assertAnalysisError(
         s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
         s"$viewName is a temp view. 'ALTER TABLE ... ADD PARTITION ...' expects a table")
       assertAnalysisError(
         s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
         s"$viewName is a temp view. 'ALTER TABLE ... DROP PARTITION ...' expects a table")
-
-      // For the following v2 ALERT TABLE statements, unsupported operations are checked first
-      // before resolving the relations.
-      assertAnalysisError(
-        s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
-        "ALTER TABLE SET LOCATION does not support partition for v2 tables")
     }
   }
 
