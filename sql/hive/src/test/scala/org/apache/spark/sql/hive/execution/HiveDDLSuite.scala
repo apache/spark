@@ -875,14 +875,20 @@ class HiveDDLSuite
           tabName,
           "ALTER VIEW ... SET TBLPROPERTIES")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')",
+          oldViewName,
+          "ALTER TABLE ... SET TBLPROPERTIES")
 
         assertErrorForAlterViewOnTable(
           s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
           tabName,
           "ALTER VIEW ... UNSET TBLPROPERTIES")
 
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')",
+          oldViewName,
+          "ALTER TABLE ... UNSET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",

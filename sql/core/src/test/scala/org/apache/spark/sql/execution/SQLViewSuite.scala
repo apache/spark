@@ -167,6 +167,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertAnalysisError(
         s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
         s"$viewName is a temp view. 'ALTER TABLE ... DROP PARTITION ...' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')",
+        s"$viewName is a temp view. 'ALTER TABLE ... SET TBLPROPERTIES' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')",
+        s"$viewName is a temp view. 'ALTER TABLE ... UNSET TBLPROPERTIES' expects a table")
     }
   }
 
