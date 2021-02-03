@@ -424,6 +424,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: UncacheTable =>
       UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
 
+    case AlterTableSetLocation(table: ResolvedTable, partitionSpec, location) =>
+      if (partitionSpec.nonEmpty) {
+        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
+      }
+      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, location))
+      AlterTableExec(table.catalog, table.identifier, changes) :: Nil
+
     case _ => Nil
   }
 }

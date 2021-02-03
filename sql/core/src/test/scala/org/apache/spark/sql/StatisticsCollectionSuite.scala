@@ -257,24 +257,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("change stats after truncate command") {
-    val table = "change_stats_truncate_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
-
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
-    }
-  }
-
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
     val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
@@ -380,22 +362,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
           spark.table(table)
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
-        }
-      }
-    }
-  }
-
-  test("invalidation of tableRelationCache after table truncation") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          sql(s"TRUNCATE TABLE $table")
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
         }
       }
     }

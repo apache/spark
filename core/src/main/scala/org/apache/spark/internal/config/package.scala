@@ -506,6 +506,13 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
+  private[spark] val STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerMasterDriverHeartbeatTimeoutMs")
+      .doc("A timeout used for block manager master's driver heartbeat endpoint.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10m")
+
   private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
     ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
       .version("0.7.0")

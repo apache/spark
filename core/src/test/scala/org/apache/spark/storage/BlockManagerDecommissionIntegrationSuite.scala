@@ -288,14 +288,14 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       // If we're migrating shuffles we look for any shuffle block updates
       // as there is no block update on the initial shuffle block write.
       if (shuffle) {
-        val numDataLocs = blocksUpdated.filter { update =>
+        val numDataLocs = blocksUpdated.count { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleDataBlockId]
-        }.size
-        val numIndexLocs = blocksUpdated.filter { update =>
+        }
+        val numIndexLocs = blocksUpdated.count { update =>
           val blockId = update.blockUpdatedInfo.blockId
           blockId.isInstanceOf[ShuffleIndexBlockId]
-        }.size
+        }
         assert(numDataLocs === 1, s"Expect shuffle data block updates in ${blocksUpdated}")
         assert(numIndexLocs === 1, s"Expect shuffle index block updates in ${blocksUpdated}")
       }
