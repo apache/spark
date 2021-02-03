@@ -415,7 +415,6 @@ case class AlterTableSerDePropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     // For datasource tables, disallow setting serde or specifying partition
     if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
@@ -464,7 +463,6 @@ case class AlterTableAddPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE ADD PARTITION")
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
@@ -520,7 +518,6 @@ case class AlterTableRenamePartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE RENAME PARTITION")
 
     val normalizedOldPartition = PartitioningUtils.normalizePartitionSpec(
@@ -568,7 +565,6 @@ case class AlterTableDropPartitionCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
     val normalizedSpecs = specs.map { spec =>
@@ -634,7 +630,6 @@ case class AlterTableRecoverPartitionsCommand(
     val catalog = spark.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     if (table.partitionColumnNames.isEmpty) {
       throw new AnalysisException(
         s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
@@ -820,7 +815,6 @@ case class AlterTableSetLocationCommand(
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     val locUri = CatalogUtils.stringToURI(location)
-    DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     partitionSpec match {
       case Some(spec) =>
         DDLUtils.verifyPartitionProviderIsHive(
