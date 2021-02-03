@@ -1308,12 +1308,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
     assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
     assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
-
-    // edge-case: we should consider the fact non-path chars including '[' and ", " are accounted
-    // 1. second path is not added due to the addition of '['
-    assert(Utils.buildLocationMetadata(paths, 6) == "[path0]")
-    // 2. third path is not added due to the addition of ", "
-    assert(Utils.buildLocationMetadata(paths, 13) == "[path0, path1]")
   }
 
   test("checkHost supports both IPV4 and IPV6") {
