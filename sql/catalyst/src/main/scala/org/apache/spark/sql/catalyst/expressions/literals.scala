@@ -302,7 +302,15 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
     case d: ArrayBasedMapData => s"map(${d.toString})"
-    case other => other.toString
+    case other =>
+      dataType match {
+        case DateType =>
+          DateTimeUtils.toJavaDate(value.asInstanceOf[Int]).toString
+        case TimestampType =>
+          DateTimeUtils.toJavaTimestamp(value.asInstanceOf[Long]).toString
+        case _ =>
+          other.toString
+      }
   }
 
   override def hashCode(): Int = {
