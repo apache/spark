@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -2578,48 +2578,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
           sql(s"SELECT $udf(2, 'A', 10, date '2015-01-01', 'B', 20, date '2016-01-01')"),
           Seq(Row("A", 10, Date.valueOf("2015-01-01")),
             Row("B", 20, Date.valueOf("2016-01-01"))))
-      }
-    }
-  }
-
-  test("SPARK-34322: When refreshing a view, also refresh its underlying tables") {
-    withTempDir { dir1 =>
-      withTempDir { dir2 =>
-        withTable("ta", "tb") {
-          withView("v") {
-            withTempView("tv1", "tv2") {
-              sql(s"create table ta(id int) using parquet")
-              sql(s"create table tb(id int) using parquet")
-              sql("create view v as select * from ta")
-              sql("create temporary view tv1 as select * from tb")
-              sql("create temporary view tv2 as select * from tv1")
-              sql("insert into table ta values(1)")
-              sql("cache table ta")
-              sql("insert into table tb values(1)")
-              sql("cache table tb")
-
-              val qualifiedTaName = QualifiedTableName("default", "ta")
-              val cachedTa = spark.sessionState.catalog.getCachedTable(qualifiedTaName)
-
-              val qualifiedTbName = QualifiedTableName("default", "tb")
-              val cachedTb = spark.sessionState.catalog.getCachedTable(qualifiedTaName)
-
-              val newSession = spark.newSession()
-              newSession.sql(s"alter table ta set location '${dir1.getAbsolutePath}'")
-              newSession.sql("insert into table ta values(2)")
-              newSession.sql(s"alter table tb set location '${dir2.getAbsolutePath}'")
-              newSession.sql("insert into table tb values(2)")
-              newSession.sessionState.catalog.cacheTable(qualifiedTaName, cachedTa)
-              newSession.sessionState.catalog.cacheTable(qualifiedTbName, cachedTb)
-
-              sql("refresh table v")
-              checkAnswer(sql("select * from v"), Row(2))
-
-              sql("refresh table tv2")
-              checkAnswer(sql("select * from tv2"), Row(2))
-            }
-          }
-        }
       }
     }
   }

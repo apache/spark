@@ -33,9 +33,10 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, Unresol
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.DataSource
@@ -1371,6 +1372,7 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
  */
 case class RefreshTableCommand(tableIdent: TableIdentifier)
   extends RunnableCommand {
+  import RefreshTableCommand._
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
@@ -1391,13 +1393,15 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
       if (table.viewText.isDefined) {
         val parser = sparkSession.sessionState.sqlParser
         val unresolvedPlan = parser.parsePlan(table.viewText.get)
-        findOutUnderlyingTables(unresolvedPlan).foreach { t =>
-          refreshAllUnderlyingTables(t, sparkSession)
-        }
+        findOutUnderlyingTablesForViewPlan(unresolvedPlan, conf.caseSensitiveAnalysis)
+          .foreach { t =>
+            refreshAllUnderlyingTables(t, sparkSession)
+          }
       } else {
         catalog.getTempView(tableName)
           .orElse(catalog.getGlobalTempView(tableName))
-          .map(findOutUnderlyingTables).foreach { tables =>
+          .map(l => findOutUnderlyingTablesForViewPlan(l, conf.caseSensitiveAnalysis))
+          .foreach { tables =>
           tables.foreach { t =>
             refreshAllUnderlyingTables(t, sparkSession)
           }
@@ -1405,10 +1409,51 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
       }
     }
   }
+}
 
-  private def findOutUnderlyingTables(unresolvedPlan: LogicalPlan): Set[TableIdentifier] = {
+object RefreshTableCommand {
+  /**
+   * Returns the underlying tables of view logical plan.
+   * @param unresolvedPlan unresolved logical plan of view
+   * @param caseSensitive case sensitive analysis
+   * @return underlying tables
+   */
+  private[sql] def findOutUnderlyingTablesForViewPlan(
+      unresolvedPlan: LogicalPlan, caseSensitive: Boolean): Set[TableIdentifier] = {
+    val unresolvedRelations = mutable.Set[UnresolvedRelation]()
     val underlyingTables = mutable.Set[TableIdentifier]()
-    unresolvedPlan transformUp {
+
+    def traversal(treeNode: TreeNode[_]): Unit = {
+      val otherBranches = treeNode match {
+        case u: UnresolvedRelation =>
+          unresolvedRelations += u
+          Nil
+        case Project(pl, _) => pl.toList
+        case sq: SubqueryExpression => sq.plan :: Nil
+        case Expand(projections, _, _) => projections.flatMap(e => e)
+        case Generate(generator, _, _, _, _, _) => generator :: Nil
+        case ScriptTransformation(input, _, _, _, _) => input.toList
+        case Filter(condition, _) => condition :: Nil
+        case Aggregate(g, agg, _) => g :: agg :: Nil
+        case j: Join => j.condition.getOrElse(Nil) :: Nil
+        case Window(w, p, ord, _) => w :: p :: ord :: Nil
+        case Sort(order, _, _) => order :: Nil
+        case GroupingSets(s, g, _, agg) => s.flatMap(el => el) :: g :: agg :: Nil
+        case Pivot(g, p, pv, agg, _) => g :: p :: pv :: agg :: Nil
+        case LocalLimit(le, _) => le :: Nil
+        case GlobalLimit(le, _) => le :: Nil
+        case RepartitionByExpression(e, _, _) => e :: Nil
+        case _ => Nil
+      }
+      val allBranches = otherBranches.union(treeNode.children)
+        .filter(_.isInstanceOf[TreeNode[_]])
+        .map(_.asInstanceOf[TreeNode[_]])
+      allBranches.foreach(traversal)
+    }
+
+    traversal(unresolvedPlan)
+
+    unresolvedRelations.foreach {
       case u@UnresolvedRelation(multipartIdentifier, _, _) =>
         val table = multipartIdentifier.last
         val db = if (multipartIdentifier.size == 1) {
@@ -1417,13 +1462,13 @@ case class RefreshTableCommand(tableIdent: TableIdentifier)
           Some(multipartIdentifier.takeRight(2).apply(0))
         }
         val tableIdentifier = new TableIdentifier(table, db)
-        if (conf.caseSensitiveAnalysis) {
+        if (caseSensitive) {
           underlyingTables += tableIdentifier
         } else if (!underlyingTables.exists(_.quotedString.equalsIgnoreCase(u.tableName))) {
           underlyingTables += tableIdentifier
         }
-        u
     }
+
     underlyingTables.toSet
   }
 }

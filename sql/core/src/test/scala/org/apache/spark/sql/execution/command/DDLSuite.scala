@@ -223,6 +223,23 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-34322: finding out underlying tables of view plan") {
+    val parser = spark.sessionState.sqlParser
+    val viewTextAndExpectedAnswer = Map (
+      "select * from ta" -> Seq(TableIdentifier("ta")),
+      "select a.* from ta a join tb b on a.id=b.id" ->
+        Seq(TableIdentifier("ta"), TableIdentifier("tb")),
+      "select (select count(*) from ta) count_a" -> Seq(TableIdentifier("ta")),
+      "select * from (select * from ta) a" -> Seq(TableIdentifier("ta"))
+    )
+
+    viewTextAndExpectedAnswer.foreach { case (vt, answer) =>
+      val underlyingTables = RefreshTableCommand.findOutUnderlyingTablesForViewPlan(
+        parser.parsePlan(vt), false)
+      assert(underlyingTables == answer.toSet)
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
@@ -2815,6 +2832,48 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       assert(!spark.sessionState.catalog.isRegisteredFunction(rand))
       sql("REFRESH FUNCTION default.rand")
       assert(spark.sessionState.catalog.isRegisteredFunction(rand))
+    }
+  }
+
+  test("SPARK-34322: When refreshing a view, also refresh its underlying tables") {
+    withTempDir { dir1 =>
+      withTempDir { dir2 =>
+        withTable("ta", "tb") {
+          withView("v") {
+            withTempView("tv1", "tv2") {
+              sql(s"create table ta(id int) using parquet")
+              sql(s"create table tb(id int) using parquet")
+              sql("create view v as select * from ta")
+              sql("create temporary view tv1 as select * from tb")
+              sql("create temporary view tv2 as select * from tv1")
+              sql("insert into table ta values(1)")
+              sql("cache table ta")
+              sql("insert into table tb values(1)")
+              sql("cache table tb")
+
+              val catalog = spark.sessionState.catalog
+              val qualifiedTaName = QualifiedTableName("default", "ta")
+              val cachedTa = catalog.getCachedTable(qualifiedTaName)
+
+              val qualifiedTbName = QualifiedTableName("default", "tb")
+              val cachedTb = catalog.getCachedTable(qualifiedTaName)
+
+              sql(s"alter table ta set location '${dir1.getAbsolutePath}'")
+              sql("insert into table ta values(2)")
+              sql(s"alter table tb set location '${dir2.getAbsolutePath}'")
+              sql("insert into table tb values(2)")
+              catalog.cacheTable(qualifiedTaName, cachedTa)
+              catalog.cacheTable(qualifiedTbName, cachedTb)
+
+              sql("refresh table v")
+              checkAnswer(sql("select * from v"), Row(2))
+
+              sql("refresh table tv2")
+              checkAnswer(sql("select * from tv2"), Row(2))
+            }
+          }
+        }
+      }
     }
   }
 }
