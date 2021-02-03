@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.BigDecimal
 import java.net.{URI, URISyntaxException}
-import java.text._
+import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols, NumberFormat, ParsePosition}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
 
