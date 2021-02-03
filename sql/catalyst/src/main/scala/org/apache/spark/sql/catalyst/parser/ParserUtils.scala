@@ -187,10 +187,10 @@ object ParserUtils {
   }
 
   /** the column name pattern in quoted regex without qualifier */
-  val escapedIdentifier = "`(.+)`".r
+  val escapedIdentifier = "`((?s).+)`".r
 
   /** the column name pattern in quoted regex with qualifier */
-  val qualifiedEscapedIdentifier = ("(.+)" + """.""" + "`(.+)`").r
+  val qualifiedEscapedIdentifier = ("((?s).+)" + """.""" + "`((?s).+)`").r
 
   /** Some syntactic sugar which makes it easier to work with optional clauses for LogicalPlans. */
   implicit class EnhancedLogicalPlan(val plan: LogicalPlan) extends AnyVal {
