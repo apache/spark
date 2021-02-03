@@ -414,10 +414,10 @@ case class DataSource(
           val globbedPaths = checkAndGlobPathIfNecessary(
             checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
           val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-          val indexInSchemaInferring = new InMemoryFileIndex(
+          val indexForSchemaInference = new InMemoryFileIndex(
             sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache)
           val (resultDataSchema, resultPartitionSchema) =
-            getOrInferFileFormatSchema(format, () => indexInSchemaInferring)
+            getOrInferFileFormatSchema(format, () => indexForSchemaInference)
           val index = new InMemoryFileIndex(
             sparkSession, globbedPaths, options, Some(resultPartitionSchema), fileStatusCache)
           (index, resultDataSchema, resultPartitionSchema)
