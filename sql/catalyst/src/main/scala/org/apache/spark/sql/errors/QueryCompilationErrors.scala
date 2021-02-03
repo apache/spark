@@ -192,11 +192,6 @@ private[spark] object QueryCompilationErrors {
       s"$quoted as it's not a data source v2 relation.")
   }
 
-  def expectTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table",
-      t.origin.line, t.origin.startPosition)
-  }
-
   def expectTableOrPermanentViewNotTempViewError(
       quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
