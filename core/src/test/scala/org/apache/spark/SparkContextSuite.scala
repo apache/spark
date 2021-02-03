@@ -1162,12 +1162,14 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(hadoopConf0.get(testKey) === "/tmp/hive_one")
     assert(hadoopConf0.get(bufferKey) === "201811")
 
-    val sparkConf = new SparkConf().setAppName("test").setMaster("local")
-    val bufferSize = sparkConf.get(BUFFER_SIZE).toString
+    val sparkConf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(BUFFER_SIZE, 65536)
     sc = new SparkContext(sparkConf)
     assert(sc.hadoopConfiguration.get(testKey) === "/tmp/hive_one",
       "hive configs have higher priority than hadoop ones ")
-    assert(sc.hadoopConfiguration.get(bufferKey) === bufferSize,
+    assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
       "spark configs have higher priority than hive ones")
 
     resetSparkContext()
@@ -1178,7 +1180,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc = new SparkContext(sparkConf)
     assert(sc.hadoopConfiguration.get(testKey) === "/tmp/hive_two",
       "spark.hadoop configs have higher priority than hive/hadoop ones")
-    assert(sc.hadoopConfiguration.get(bufferKey) === bufferSize,
+    assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
       "spark configs have higher priority than spark.hadoop configs")
   }
 }
