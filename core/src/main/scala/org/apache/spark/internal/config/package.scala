@@ -237,8 +237,6 @@ package object config {
         " to be rolled over.")
       .version("3.0.0")
       .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
-        "configured to be at least 10 MiB.")
       .createWithDefaultString("128m")
 
   private[spark] val EXECUTOR_ID =
