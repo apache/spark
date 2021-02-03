@@ -895,7 +895,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
       case u @ UnresolvedTable(ident, cmd, _) =>
         lookupTempView(ident).foreach { _ =>
-          throw QueryCompilationErrors.expectTableNotTempViewError(ident.quoted, cmd, u)
+          throw QueryCompilationErrors.expectTableNotViewError(
+            ResolvedView(ident.asIdentifier, isTemp = true), cmd, u.relationTypeMismatchHint, u)
         }
         u
       case u @ UnresolvedView(ident, cmd, allowTemp, _) =>
