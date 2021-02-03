@@ -2582,7 +2582,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("xxx") {
+  test("SPARK-34113: Use metric data update metadata statistic's size and rowCount") {
     withSQLConf("hive.exec.dynamic.partition.mode"->"nonstrict",
       HiveUtils.CONVERT_METASTORE_ORC.key -> "false",
       HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> "false",
