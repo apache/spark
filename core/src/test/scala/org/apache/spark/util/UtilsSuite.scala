@@ -1304,16 +1304,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("pathsToMetadata") {
     val paths = (0 to 4).map(i => new Path(s"path$i"))
-    assert(Utils.buildLocationMetadata(paths, 5) == "[path0]")
-    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
-    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
-    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
+    assert(Utils.buildLocationMetadata(paths, 5) == "[path0, ... 4 more]")
+    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1, ... 3 more]")
+    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2, ... 2 more]")
+    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3, ... 1 more]")
 
     // edge-case: we should consider the fact non-path chars including '[' and ", " are accounted
     // 1. second path is not added due to the addition of '['
-    assert(Utils.buildLocationMetadata(paths, 6) == "[path0]")
+    assert(Utils.buildLocationMetadata(paths, 6) == "[path0, ... 4 more]")
     // 2. third path is not added due to the addition of ", "
-    assert(Utils.buildLocationMetadata(paths, 13) == "[path0, path1]")
+    assert(Utils.buildLocationMetadata(paths, 13) == "[path0, path1, ... 3 more]")
   }
 
   test("checkHost supports both IPV4 and IPV6") {

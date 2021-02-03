@@ -2989,6 +2989,9 @@ private[spark] object Utils extends Logging {
       metadata.append(paths(index).toString)
       index += 1
     }
+    if (paths.length > index) {
+      metadata.append(s", ... ${paths.length - index} more")
+    }
     metadata.append("]")
     metadata.toString
   }
