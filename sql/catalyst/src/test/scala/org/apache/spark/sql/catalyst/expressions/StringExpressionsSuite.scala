@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.BigDecimal
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.internal.SQLConf
@@ -886,6 +889,95 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  test("ToNumber") {
+    ToNumber(Literal("454"), Literal("")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Format expression cannot be empty"))
+    }
+
+    // Test '0' and '9'
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("9")))
+    }
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("99")))
+    }
+    checkEvaluation(ToNumber(Literal("454"), Literal("999")), new BigDecimal(454))
+    checkEvaluation(ToNumber(Literal("054"), Literal("999")), new BigDecimal(54))
+    checkEvaluation(ToNumber(Literal("404"), Literal("999")), new BigDecimal(404))
+    checkEvaluation(ToNumber(Literal("450"), Literal("999")), new BigDecimal(450))
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("0")))
+    }
+    intercept[IllegalArgumentException] {
+      evaluateWithoutCodegen(ToNumber(Literal("454"), Literal("00")))
+    }
+    checkEvaluation(ToNumber(Literal("454"), Literal("000")), new BigDecimal(454))
+    checkEvaluation(ToNumber(Literal("054"), Literal("000")), new BigDecimal(54))
+    checkEvaluation(ToNumber(Literal("404"), Literal("000")), new BigDecimal(404))
+    checkEvaluation(ToNumber(Literal("450"), Literal("000")), new BigDecimal(450))
+
+    // Test '.' and 'D'
+    checkEvaluation(ToNumber(Literal("454.2"), Literal("999.9")), new BigDecimal("454.2"))
+    checkEvaluation(ToNumber(Literal("454.2"), Literal("000.0")), new BigDecimal("454.2"))
+    checkEvaluation(ToNumber(Literal("454.2"), Literal("999D9")), new BigDecimal("454.2"))
+    checkEvaluation(ToNumber(Literal("454.2"), Literal("000D0")), new BigDecimal("454.2"))
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("999.9")), new BigDecimal(454))
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("000.0")), new BigDecimal(454))
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("999D9")), new BigDecimal(454))
+    checkEvaluation(ToNumber(Literal("454.0"), Literal("000D0")), new BigDecimal(454))
+    checkEvaluation(ToNumber(Literal("454.00"), Literal("000D00")), new BigDecimal(454))
+    ToNumber(Literal("454.3.2"), Literal("999D9D9")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple decimal points in"))
+    }
+
+    // Test ',' and 'G'
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("99,999")), new BigDecimal(12454))
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("00,000")), new BigDecimal(12454))
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("99G999")), new BigDecimal(12454))
+    checkEvaluation(ToNumber(Literal("12,454"), Literal("00G000")), new BigDecimal(12454))
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("99,999,999")),
+      new BigDecimal(12454367))
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("00,000,000")),
+      new BigDecimal(12454367))
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("99G999G999")),
+      new BigDecimal(12454367))
+    checkEvaluation(ToNumber(Literal("12,454,367"), Literal("00G000G000")),
+      new BigDecimal(12454367))
+
+    // Test '$'
+    checkEvaluation(ToNumber(Literal("$78.12"), Literal("$99.99")), new BigDecimal("78.12"))
+    checkEvaluation(ToNumber(Literal("$78.12"), Literal("$00.00")), new BigDecimal("78.12"))
+    checkEvaluation(ToNumber(Literal("78.12$"), Literal("99.99$")), new BigDecimal("78.12"))
+    checkEvaluation(ToNumber(Literal("78.12$"), Literal("00.00$")), new BigDecimal("78.12"))
+    ToNumber(Literal("78$.12"), Literal("99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'$' must be the first or last char"))
+    }
+    ToNumber(Literal("$78$.12"), Literal("$99$.99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple '$' in"))
+    }
+
+    // Test 'S'
+    checkEvaluation(ToNumber(Literal("454-"), Literal("999S")), new BigDecimal(-454))
+    checkEvaluation(ToNumber(Literal("-454"), Literal("S999")), new BigDecimal(-454))
+    checkEvaluation(ToNumber(Literal("454-"), Literal("000S")), new BigDecimal(-454))
+    checkEvaluation(ToNumber(Literal("-454"), Literal("S000")), new BigDecimal(-454))
+    checkEvaluation(ToNumber(Literal("12,454.8-"), Literal("99G999D9S")),
+      new BigDecimal("-12454.8"))
+    checkEvaluation(ToNumber(Literal("00,454.8-"), Literal("99G999.9S")), new BigDecimal("-454.8"))
+    ToNumber(Literal("-454"), Literal("9S99")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("'S' must be the first or last char"))
+    }
+    ToNumber(Literal("454.3--"), Literal("999D9SS")).checkInputDataTypes() match {
+      case TypeCheckResult.TypeCheckFailure(msg) =>
+        assert(msg.contains("Multiple 'S' in"))
+    }
   }
 
   test("find in set") {

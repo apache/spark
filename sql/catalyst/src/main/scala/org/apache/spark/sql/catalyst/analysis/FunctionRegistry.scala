@@ -337,6 +337,7 @@ object FunctionRegistry {
     expression[Encode]("encode"),
     expression[FindInSet]("find_in_set"),
     expression[FormatNumber]("format_number"),
+    expression[ToNumber]("to_number"),
     expression[FormatString]("format_string"),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),

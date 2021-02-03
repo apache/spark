@@ -328,4 +328,9 @@ object QueryExecutionErrors {
   def compilerError(e: CompileException): Throwable = {
     new CompileException(failedToCompileMsg(e), e.getLocation)
   }
+
+  def invalidToNumberFormatError(format: String): Throwable = {
+    new IllegalArgumentException(
+      s"Format $format used for transforming string to number is invaild")
+  }
 }

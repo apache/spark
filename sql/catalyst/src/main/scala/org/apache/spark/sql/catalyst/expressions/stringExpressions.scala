@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.BigDecimal
 import java.net.{URI, URISyntaxException}
-import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
+import java.text._
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
 
@@ -2372,6 +2373,141 @@ case class FormatNumber(x: Expression, d: Expression)
   }
 
   override def prettyName: String = "format_number"
+}
+
+object ToNumber {
+  val pointSign = '.'
+  val minusSign = '-'
+  val dollarSign = '$'
+
+  def isDecimalPoint(c: Char): Boolean = c == pointSign
+
+  def isMinusSign(c: Char): Boolean = c == minusSign
+
+  def isDollarSign(c: Char): Boolean = c == dollarSign
+
+  def invalidSignPosition(format: String, c: Char): Boolean = {
+    val signIndex = format.indexOf(c)
+    signIndex > 0 && signIndex < format.length - 1
+  }
+
+  def normalize(format: String): String = {
+    format.map {
+      case '9' => '#'
+      case 'D' => pointSign
+      case 'G' => ','
+      case 'S' => minusSign
+      case other => other
+    }
+  }
+
+  def transform(format: String): String = {
+    if (format.contains('-')) {
+      val positiveFormatString = format.replaceAll("-", "")
+      s"$positiveFormatString;$format"
+    } else {
+      format
+    }
+  }
+
+  def convert(input: UTF8String, format: String, formatLength: Int): Decimal = {
+    val numberFormat = NumberFormat.getInstance()
+    val numberDecimalFormat = numberFormat.asInstanceOf[DecimalFormat]
+    numberDecimalFormat.setParseBigDecimal(true)
+    numberDecimalFormat.applyPattern(format)
+    val parsePosition = new ParsePosition(0)
+    val inputStr = input.toString.trim
+    if (inputStr.length != formatLength) {
+      throw QueryExecutionErrors.invalidToNumberFormatError(format)
+    }
+    val number = numberDecimalFormat.parse(inputStr, parsePosition)
+    Decimal.apply(new scala.math.BigDecimal(number.asInstanceOf[BigDecimal]))
+  }
+}
+
+/**
+ * A function that converts string to numeric.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(strExpr, formatExpr) - Convert `strExpr` to a number based on the `formatExpr`.
+    The format can consist of the following characters:
+      '9':  digit position (can be dropped if insignificant)
+      '0':  digit position (will not be dropped, even if insignificant)
+      '.':  decimal point (only allowed once)
+      ',':  group (thousands) separator
+      'S':  sign anchored to number (uses locale)
+      'D':  decimal point (uses locale)
+      'G':  group separator (uses locale)
+      '$':  specifies that the input value has a leading $ (Dollar) sign.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('454', '999');
+       454
+      > SELECT _FUNC_('454.00', '000D00');
+       454
+      > SELECT _FUNC_('12,454', '99G999');
+       12454
+      > SELECT _FUNC_('$78.12', '$99.99');
+       78.12
+      > SELECT _FUNC_('12,454.8-', '99G999D9S');
+       -12454.8
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+case class ToNumber(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
+
+  private lazy val originFormat = right.eval().toString.toUpperCase(Locale.ROOT)
+  private lazy val normalizedFormat = ToNumber.normalize(originFormat)
+
+  private lazy val transformedFormat = ToNumber.transform(normalizedFormat)
+
+  override def dataType: DataType = DecimalType(30, 15)
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val inputTypeCheck = super.checkInputDataTypes()
+    if (inputTypeCheck.isSuccess) {
+      if (right.foldable) {
+        if (normalizedFormat.length == 0) {
+          TypeCheckResult.TypeCheckFailure(s"Format expression cannot be empty")
+        } else if (normalizedFormat.count(ToNumber.isDecimalPoint) > 1) {
+          TypeCheckResult.TypeCheckFailure(s"Multiple decimal points in $originFormat")
+        } else if (normalizedFormat.count(ToNumber.isMinusSign) > 1) {
+          TypeCheckResult.TypeCheckFailure(s"Multiple 'S' in $originFormat")
+        } else if (normalizedFormat.count(ToNumber.isDollarSign) > 1) {
+          TypeCheckResult.TypeCheckFailure(s"Multiple '${ToNumber.dollarSign}' in $originFormat")
+        } else if (ToNumber.invalidSignPosition(normalizedFormat, ToNumber.minusSign)) {
+          TypeCheckResult.TypeCheckFailure("'S' must be the first or last char")
+        } else if (ToNumber.invalidSignPosition(normalizedFormat, ToNumber.dollarSign)) {
+          TypeCheckResult.TypeCheckFailure("'$' must be the first or last char")
+        } else {
+          inputTypeCheck
+        }
+      } else {
+        TypeCheckResult.TypeCheckFailure(s"Format expression must be foldable, but got $right")
+      }
+    } else {
+      inputTypeCheck
+    }
+  }
+
+  override def prettyName: String = "to_number"
+
+  override def nullSafeEval(string: Any, format: Any): Any = {
+    val input = string.asInstanceOf[UTF8String]
+    ToNumber.convert(input, transformedFormat, normalizedFormat.length)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (l, _) =>
+      s"""
+         |${ev.value} = org.apache.spark.sql.catalyst.expressions.ToNumber
+         |  .convert($l, "$transformedFormat", ${normalizedFormat.length});
+       """)
+  }
 }
 
 /**
