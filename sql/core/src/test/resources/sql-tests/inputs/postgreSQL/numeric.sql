@@ -895,16 +895,16 @@ DROP TABLE width_bucket_test;
 -- TO_NUMBER()
 --
 -- SET lc_numeric = 'C';
--- SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999');
+SELECT '' AS to_number_1,  to_number('-34,338,492', '99G999G999');
 -- SELECT '' AS to_number_2,  to_number('-34,338,492.654,878', '99G999G999D999G999');
 -- SELECT '' AS to_number_3,  to_number('<564646.654564>', '999999.999999PR');
--- SELECT '' AS to_number_4,  to_number('0.00001-', '9.999999S');
+SELECT '' AS to_number_4,  to_number('0.00001-', '9.999999S');
 -- SELECT '' AS to_number_5,  to_number('5.01-', 'FM9.999999S');
 -- SELECT '' AS to_number_5,  to_number('5.01-', 'FM9.999999MI');
 -- SELECT '' AS to_number_7,  to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
 -- SELECT '' AS to_number_8,  to_number('.01', 'FM9.99');
--- SELECT '' AS to_number_9,  to_number('.0', '99999999.99999999');
--- SELECT '' AS to_number_10, to_number('0', '99.99');
+SELECT '' AS to_number_9,  to_number('.0', '99999999.99999999');
+SELECT '' AS to_number_10, to_number('0', '99.99');
 -- SELECT '' AS to_number_11, to_number('.-01', 'S99.99');
 -- SELECT '' AS to_number_12, to_number('.01-', '99.99S');
 -- SELECT '' AS to_number_13, to_number(' . 0 1-', ' 9 9 . 9 9 S');

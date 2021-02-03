@@ -2402,11 +2402,12 @@ object ToNumber {
     }
   }
 
+  def isSign(c: Char): Boolean = c match {
+    case c if c == pointSign || c == commaSign || c == minusSign || c == dollarSign => true
+    case _ => false
+  }
+
   def parsePrecisionAndScale(format: String): (Int, Int) = {
-    def isSign(c: Char): Boolean = c match {
-      case c if c == pointSign || c == commaSign || c == minusSign || c == dollarSign => true
-      case _ => false
-    }
     val arr = format.split(pointSign)
     val filteredFormat = format.filterNot(isSign)
     if (arr.length == 1) {
@@ -2425,14 +2426,20 @@ object ToNumber {
     }
   }
 
-  def convert(input: UTF8String, format: String, formatLength: Int): Decimal = {
+  def convert(input: UTF8String, format: String, precision: Int, scale: Int): Decimal = {
     val numberFormat = NumberFormat.getInstance()
     val numberDecimalFormat = numberFormat.asInstanceOf[DecimalFormat]
     numberDecimalFormat.setParseBigDecimal(true)
     numberDecimalFormat.applyPattern(format)
     val parsePosition = new ParsePosition(0)
     val inputStr = input.toString.trim
-    if (inputStr.length != formatLength) {
+    val arr = inputStr.split(pointSign)
+    if (arr.length == 1) {
+      if (inputStr.filterNot(isSign).length > precision - scale) {
+        throw QueryExecutionErrors.invalidToNumberFormatError(format)
+      }
+    } else if (arr(0).filterNot(isSign).length > precision - scale ||
+      arr(1).filterNot(isSign).length > scale) {
       throw QueryExecutionErrors.invalidToNumberFormatError(format)
     }
     val number = numberDecimalFormat.parse(inputStr, parsePosition)
@@ -2513,14 +2520,14 @@ case class ToNumber(left: Expression, right: Expression)
 
   override def nullSafeEval(string: Any, format: Any): Any = {
     val input = string.asInstanceOf[UTF8String]
-    ToNumber.convert(input, transformedFormat, normalizedFormat.length)
+    ToNumber.convert(input, transformedFormat, precision, scale)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (l, _) =>
       s"""
          |${ev.value} = org.apache.spark.sql.catalyst.expressions.ToNumber
-         |  .convert($l, "$transformedFormat", ${normalizedFormat.length});
+         |  .convert($l, "$transformedFormat", $precision, $scale);
        """)
   }
 }
