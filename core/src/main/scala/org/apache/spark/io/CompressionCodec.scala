@@ -217,7 +217,7 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
   // fastest of all with reasonably high compression ratio.
   private val level = conf.get(IO_COMPRESSION_ZSTD_LEVEL)
 
-  private val bufferPool = if (conf.get(IO_COMPRESSION_ZSTD_ENABLE_BUFFERPOOL)) {
+  private val bufferPool = if (conf.get(IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED)) {
     RecyclingBufferPool.INSTANCE
   } else {
     NoPool.INSTANCE
