@@ -298,6 +298,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
+  private val timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
   override def toString: String = value match {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
@@ -305,9 +307,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case other =>
       dataType match {
         case DateType =>
-          DateTimeUtils.toJavaDate(value.asInstanceOf[Int]).toString
+          DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
         case TimestampType =>
-          DateTimeUtils.toJavaTimestamp(value.asInstanceOf[Long]).toString
+          TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case _ =>
           other.toString
       }
@@ -342,8 +344,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
-      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
-      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (i: Int, DateType) => JString(toString)
+      case (l: Long, TimestampType) => JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -422,12 +424,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) =>
-      val formatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"DATE '${formatter.format(v)}'"
+      s"DATE '$toString'"
     case (v: Long, TimestampType) =>
-      val formatter = TimestampFormatter.getFractionFormatter(
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"TIMESTAMP '${formatter.format(v)}'"
+      s"TIMESTAMP '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"

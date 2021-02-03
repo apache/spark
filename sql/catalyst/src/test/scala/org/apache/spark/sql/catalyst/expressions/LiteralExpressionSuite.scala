@@ -340,6 +340,13 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Date/Timestamp toString") {
     assert(Literal.default(DateType).toString === "1970-01-01")
-    assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00.0")
+    assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00")
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+        .atZone(ZoneOffset.UTC)
+        .toInstant
+      val literalStr = Literal.create(timestamp).toString
+      assert(literalStr === "2021-02-03 17:50:03.456")
+    }
   }
 }
