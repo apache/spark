@@ -2377,6 +2377,7 @@ case class FormatNumber(x: Expression, d: Expression)
 
 object ToNumber {
   val pointSign = '.'
+  val commaSign = ','
   val minusSign = '-'
   val dollarSign = '$'
 
@@ -2395,9 +2396,23 @@ object ToNumber {
     format.map {
       case '9' => '#'
       case 'D' => pointSign
-      case 'G' => ','
+      case 'G' => commaSign
       case 'S' => minusSign
       case other => other
+    }
+  }
+
+  def parsePrecisionAndScale(format: String): (Int, Int) = {
+    def isSign(c: Char): Boolean = c match {
+      case c if c == pointSign || c == commaSign || c == minusSign || c == dollarSign => true
+      case _ => false
+    }
+    val arr = format.split(pointSign)
+    val filteredFormat = format.filterNot(isSign)
+    if (arr.length == 1) {
+      (filteredFormat.length, 0)
+    } else {
+      (filteredFormat.length, arr(1).filterNot(isSign).length)
     }
   }
 
@@ -2461,10 +2476,10 @@ case class ToNumber(left: Expression, right: Expression)
 
   private lazy val originFormat = right.eval().toString.toUpperCase(Locale.ROOT)
   private lazy val normalizedFormat = ToNumber.normalize(originFormat)
-
+  private lazy val (precision, scale) = ToNumber.parsePrecisionAndScale(normalizedFormat)
   private lazy val transformedFormat = ToNumber.transform(normalizedFormat)
 
-  override def dataType: DataType = DecimalType(30, 15)
+  override def dataType: DataType = DecimalType(precision, scale)
   override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
