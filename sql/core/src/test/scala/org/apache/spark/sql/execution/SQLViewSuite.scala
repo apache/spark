@@ -150,11 +150,29 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         s"ALTER TABLE $viewName SET SERDEPROPERTIES ('p' = 'an')",
         s"$viewName is a temp view. 'ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]' expects a table")
       assertAnalysisError(
+        s"ALTER TABLE $viewName PARTITION (a='4') RENAME TO PARTITION (a='5')",
+        s"$viewName is a temp view. 'ALTER TABLE ... RENAME TO PARTITION' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName RECOVER PARTITIONS",
+        s"$viewName is a temp view. 'ALTER TABLE ... RECOVER PARTITIONS' expects a table")
+      assertAnalysisError(
         s"ALTER TABLE $viewName SET LOCATION '/path/to/your/lovely/heart'",
         s"$viewName is a temp view. 'ALTER TABLE ... SET LOCATION ...' expects a table")
       assertAnalysisError(
         s"ALTER TABLE $viewName PARTITION (a='4') SET LOCATION '/path/to/home'",
-        s"$viewName is a temp view. 'ALTER TABLE ... SET LOCATION ...' expects a table")
+        "testView is a temp view. 'ALTER TABLE ... SET LOCATION ...' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+        s"$viewName is a temp view. 'ALTER TABLE ... ADD PARTITION ...' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName DROP PARTITION (a='4', b='8')",
+        s"$viewName is a temp view. 'ALTER TABLE ... DROP PARTITION ...' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName SET TBLPROPERTIES ('p' = 'an')",
+        s"$viewName is a temp view. 'ALTER TABLE ... SET TBLPROPERTIES' expects a table")
+      assertAnalysisError(
+        s"ALTER TABLE $viewName UNSET TBLPROPERTIES ('p')",
+        s"$viewName is a temp view. 'ALTER TABLE ... UNSET TBLPROPERTIES' expects a table")
     }
   }
 
@@ -175,23 +193,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage
       assert(e2.contains(s"$viewName is a temp view. 'LOAD DATA' expects a table"))
       val e3 = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $viewName")
-      }.getMessage
-      assert(e3.contains(s"$viewName is a temp view. 'TRUNCATE TABLE' expects a table"))
-      val e4 = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }.getMessage
-      assert(e4.contains(
+      assert(e3.contains(
         s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
-      val e5 = intercept[AnalysisException] {
+      val e4 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
       }.getMessage
-      assert(e5.contains(
+      assert(e4.contains(
         s"$viewName is a temp view. 'ANALYZE TABLE' expects a table or permanent view."))
-      val e6 = intercept[AnalysisException] {
+      val e5 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(e6.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
+      assert(e5.contains(s"Temporary view `$viewName` is not cached for analyzing columns."))
     }
   }
 
@@ -206,7 +220,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     assert(e.message.contains(message))
   }
 
-  test("error handling: insert/load/truncate table commands against a view") {
+  test("error handling: insert/load table commands against a view") {
     val viewName = "testView"
     withView(viewName) {
       sql(s"CREATE VIEW $viewName AS SELECT id FROM jt")
@@ -221,11 +235,6 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql(s"""LOAD DATA LOCAL INPATH "$dataFilePath" INTO TABLE $viewName""")
       }.getMessage
       assert(e.contains("default.testView is a view. 'LOAD DATA' expects a table"))
-
-      e = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $viewName")
-      }.getMessage
-      assert(e.contains("default.testView is a view. 'TRUNCATE TABLE' expects a table"))
     }
   }
 

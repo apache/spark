@@ -273,7 +273,6 @@ case class AlterTableSetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView)
     // This overrides old properties and update the comment parameter of CatalogTable
     // with the newly added/modified comment since CatalogTable also holds comment as its
     // direct property.
@@ -305,7 +304,6 @@ case class AlterTableUnsetPropertiesCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableRawMetadata(tableName)
-    DDLUtils.verifyAlterTableType(catalog, table, isView)
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k) && k != TableCatalog.PROP_COMMENT) {

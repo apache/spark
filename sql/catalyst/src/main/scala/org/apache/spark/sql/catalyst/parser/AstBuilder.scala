@@ -472,11 +472,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
-    val processNullLiteral =
-      !conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
+    val legacyNullAsString =
+      conf.getConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL)
     val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText
-      val value = Option(pVal.constant).map(v => visitStringConstant(v, processNullLiteral))
+      val value = Option(pVal.constant).map(v => visitStringConstant(v, legacyNullAsString))
       name -> value
     }
     // Before calling `toMap`, we check duplicated keys to avoid silently ignore partition values
@@ -503,10 +503,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * String -> Literal -> String.
    */
   protected def visitStringConstant(
-    ctx: ConstantContext,
-    processNullLiteral: Boolean): String = withOrigin(ctx) {
+      ctx: ConstantContext,
+      legacyNullAsString: Boolean): String = withOrigin(ctx) {
     ctx match {
-      case _: NullLiteralContext if processNullLiteral => null
+      case _: NullLiteralContext if !legacyNullAsString => null
       case s: StringLiteralContext => createString(s)
       case o => o.getText
     }
@@ -3477,7 +3477,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewSetProperties]] or [[AlterTableSetPropertiesStatement]] commands.
+   * Parse [[AlterViewSetProperties]] or [[AlterTableSetProperties]] commands.
    *
    * For example:
    * {{{
@@ -3498,14 +3498,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           relationTypeMismatchHint = alterViewTypeMismatchHint),
         cleanedTableProperties)
     } else {
-      AlterTableSetPropertiesStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      AlterTableSetProperties(
+        createUnresolvedTable(
+          ctx.multipartIdentifier,
+          "ALTER TABLE ... SET TBLPROPERTIES",
+          alterTableTypeMismatchHint),
         cleanedTableProperties)
     }
   }
 
   /**
-   * Parse [[AlterViewUnsetProperties]] or [[AlterTableUnsetPropertiesStatement]] commands.
+   * Parse [[AlterViewUnsetProperties]] or [[AlterTableUnsetProperties]] commands.
    *
    * For example:
    * {{{
@@ -3529,8 +3532,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         cleanedProperties,
         ifExists)
     } else {
-      AlterTableUnsetPropertiesStatement(
-        visitMultipartIdentifier(ctx.multipartIdentifier),
+      AlterTableUnsetProperties(
+        createUnresolvedTable(
+          ctx.multipartIdentifier,
+          "ALTER TABLE ... UNSET TBLPROPERTIES",
+          alterTableTypeMismatchHint),
         cleanedProperties,
         ifExists)
     }
