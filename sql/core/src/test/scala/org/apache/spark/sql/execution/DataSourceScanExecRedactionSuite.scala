@@ -126,15 +126,9 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
       // create a sub-directory with long name so that each root path will always exceed the limit
       // this is to ensure we always test the case for the path truncation
-      // 110 = limit 100 + margin 10 to clearly avoid edge case
-      val dataDir = if (dir.length >= 110) {
-        path
-      } else {
-        val dataDirName = Random.alphanumeric.take(110 - dir.length).toList.mkString
-        val f = new File(path, dataDirName)
-        f.mkdir()
-        f
-      }
+      val dataDirName = Random.alphanumeric.take(100).toList.mkString
+      val dataDir = new File(path, dataDirName)
+      dataDir.mkdir()
 
       val partitionCol = "partitionCol"
       spark.range(10)
