@@ -1151,7 +1151,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-  test("hadoop configuration priority for spark/hive/hadoop configs in SparkContext") {
+  test("SPARK-34346: hadoop configuration priority for spark/hive/hadoop configs") {
     val testKey = "hadoop.tmp.dir"
     val bufferKey = "io.file.buffer.size"
     val hadoopConf0 = new Configuration()
