@@ -169,7 +169,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     (e, expectedType) match {
       // This type coercion system will allow implicit converting String type literals as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (_ @ StringType(), a: AtomicType) if e.foldable && a != BooleanType && a != StringType =>
+      case (StringType(), a: AtomicType) if e.foldable && a != BooleanType && a != StringType =>
         Some(Cast(e, a))
 
       case (_ @ StringType(), NumericType) if e.foldable =>
