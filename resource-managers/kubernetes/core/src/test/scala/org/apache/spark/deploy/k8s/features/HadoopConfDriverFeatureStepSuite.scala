@@ -45,7 +45,7 @@ class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
   test("create hadoop config map if config dir is defined") {
     val confDir = Utils.createTempDir()
-    val confFiles = Set("core-site.xml", "hdfs-site.xml")
+    val confFiles = Set("core-site.xml", "core-site.xml")
 
     confFiles.foreach { f =>
       Files.write("some data", new File(confDir, f), UTF_8)
