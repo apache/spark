@@ -140,8 +140,6 @@ case class AdaptiveSparkPlanExec(
 
   private var currentStageId = 0
 
-  def stageId: Int = currentStageId
-
   /**
    * Return type for `createQueryStages`
    * @param newPlan the new plan with created query stages.

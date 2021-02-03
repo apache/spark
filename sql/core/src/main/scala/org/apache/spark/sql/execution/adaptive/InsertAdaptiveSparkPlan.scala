@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{ ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{DataWritingCommandExec, ExecutedCommandExec}
 import org.apache.spark.sql.execution.datasources.v2.V2CommandExec
-import org.apache.spark.sql.execution.exchange. Exchange
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -134,9 +134,9 @@ case class InsertAdaptiveSparkPlan(
         verifyAdaptivePlan(executedPlan, buildPlan)
 
         val name = s"dynamicpruning#${exprId.id}"
-        val broadcastValues = SubqueryAdaptiveBroadcastExec(
+        val subquery = SubqueryAdaptiveBroadcastExec(
           name, broadcastKeyIndex, buildKeys, executedPlan)
-        subqueryMap.put(exprId.id, broadcastValues)
+        subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))
 

@@ -22,9 +22,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 
 /**
- * Similar with [[SubqueryBroadcastExec]], which is to used to store the
- * initial physical plan in subquery expression when both enable AQE and DPP.
- * It is intermediate physical plan and not executed.
+ * Similar to [[SubqueryBroadcastExec]], this node is used to store the
+ * initial physical plan of DPP subquery filters when enabling both AQE and DPP.
+ * It is intermediate physical plan and not executable.
  * After the build side is executed, this node will be replaced with the
  * [[SubqueryBroadcastExec]] and the child will be optimized with the ReusedExchange
  * from the build side.

@@ -47,8 +47,7 @@ case class PlanAdaptiveDynamicPruningFilters(
         val existingStage = stageCache.get(exchange.canonicalized)
         if (existingStage.nonEmpty && conf.exchangeReuseEnabled) {
           val name = s"dynamicpruning#${exprId.id}"
-          val reuseQueryStage = existingStage.get.newReuseInstance(
-            adaptivePlan.stageId, exchange.output)
+          val reuseQueryStage = existingStage.get.newReuseInstance(0, exchange.output)
           val broadcastValues =
             SubqueryBroadcastExec(name, index, buildKeys, reuseQueryStage)
           DynamicPruningExpression(InSubqueryExec(value, broadcastValues, exprId))

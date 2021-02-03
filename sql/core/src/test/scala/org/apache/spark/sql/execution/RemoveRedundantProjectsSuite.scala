@@ -39,10 +39,12 @@ abstract class RemoveRedundantProjectsSuiteBase
 
   private def assertProjectExec(query: String, enabled: Int, disabled: Int): Unit = {
     val df = sql(query)
+    df.collect()
     assertProjectExecCount(df, enabled)
     val result = df.collect()
     withSQLConf(SQLConf.REMOVE_REDUNDANT_PROJECTS_ENABLED.key -> "false") {
       val df2 = sql(query)
+      df2.collect()
       assertProjectExecCount(df2, disabled)
       checkAnswer(df2, result)
     }
@@ -110,7 +112,7 @@ abstract class RemoveRedundantProjectsSuiteBase
   test("join with ordering requirement") {
     val query = "select * from (select key, a, c, b from testView) as t1 join " +
       "(select key, a, b, c from testView) as t2 on t1.key = t2.key where t2.a > 50"
-    assertProjectExec(query, 3, 3)
+    assertProjectExec(query, 2, 2)
   }
 
   test("window function") {
