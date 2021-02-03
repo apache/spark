@@ -382,10 +382,10 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     widenTest(LongType, FloatType, Some(DoubleType))
     widenTest(LongType, DoubleType, Some(DoubleType))
 
-    widenTest(DecimalType(2, 1), DecimalType(3, 2), Some(DecimalType(3, 2)))
-    widenTest(DecimalType(2, 1), DoubleType, Some(DoubleType))
-    widenTest(DecimalType(2, 1), IntegerType, Some(DecimalType(11, 1)))
-    widenTest(DoubleType, DecimalType(2, 1), Some(DoubleType))
+    widenTest(DecimalType(2, 1), DecimalType(3, 2), None)
+    widenTest(DecimalType(2, 1), DoubleType, None)
+    widenTest(DecimalType(2, 1), IntegerType, None)
+    widenTest(DoubleType, DecimalType(2, 1), None)
 
     // StringType
     widenTest(NullType, StringType, Some(StringType))

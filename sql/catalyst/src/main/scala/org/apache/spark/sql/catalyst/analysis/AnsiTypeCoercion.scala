@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.annotation.tailrec
-
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -97,48 +95,19 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       StringLiteralCoercion ::
       Nil
 
-  /**
-   * Find the tightest common type of two types that might be used in a binary expression.
-   */
   override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
     (t1, t2) match {
       case (t1, t2) if t1 == t2 => Some(t1)
       case (NullType, t1) => Some(t1)
       case (t1, NullType) => Some(t1)
 
-      case (t1: NumericType, t2: NumericType) =>
-        findTightestCommonNumericType(t1, t2)
+      case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+        Some(t2)
+      case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+        Some(t1)
 
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
-
-      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
-    }
-  }
-
-  @tailrec
-  private def findTightestCommonNumericType(t1: NumericType, t2: NumericType): Option[DataType] = {
-    (t1, t2) match {
-      case (i: IntegralType, d: DecimalType) =>
-        if (d.isWiderThan(i)) {
-          Some(t2)
-        } else {
-          findTightestCommonNumericType(DecimalType.forType(i), d)
-        }
-
-      case (t1: DecimalType, t2: IntegralType) =>
-        findTightestCommonNumericType(t2, t1)
-
-      case (t1: DecimalType, t2: DecimalType) =>
-        Some(DecimalPrecision.widerDecimalType(t1, t2))
-
-      case (_: FractionalType, _: DecimalType) | (_: DecimalType, _: FractionalType) =>
-        Some(DoubleType)
-
-      // Promote numeric types to the highest of the two
-      case _ =>
-        // The cases that t1 or t2 is DecimalType should be handled already.
-        assert(!t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType])
+      case (t1: NumericType, t2: NumericType)
+          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
         val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
         val widerType = numericPrecedence(index)
         if (widerType == FloatType) {
@@ -149,12 +118,19 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         } else {
           Some(widerType)
         }
+
+      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+        Some(TimestampType)
+
+      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
     }
 
   }
 
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
     findTightestCommonType(t1, t2)
+      .orElse(findWiderTypeForDecimal(t1, t2))
+      .orElse(findTypeForComplex(t1, t2, findWiderTypeForTwo))
   }
 
   override def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
@@ -199,7 +175,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (d: NumericType, DecimalType) => Some(DecimalType.forType(d))
 
       case (n1: NumericType, n2: NumericType) =>
-        val widerType = findTightestCommonNumericType(n1, n2)
+        val widerType = findWiderTypeForTwo(n1, n2)
         widerType match {
           // if the expected type is Float type, we should still return Float type.
           case Some(DoubleType) if n1 != DoubleType && n2 == FloatType => Some(FloatType)

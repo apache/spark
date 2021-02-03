@@ -32,12 +32,36 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 abstract class TypeCoercionBase {
+  /**
+   * A collection of [[Rule]] that can be used to coerce differing types that participate in
+   * operations into compatible ones.
+   */
   def typeCoercionRules: List[Rule[LogicalPlan]]
 
   /**
-   * Find the tightest common type of the two given types
+   * Find the tightest common type of two types that might be used in a binary expression.
+   * This handles all numeric types except fixed-precision decimals interacting with each other or
+   * with primitive types, because in that case the precision and scale of the result depends on
+   * the operation. Those rules are implemented in [[DecimalPrecision]].
    */
   def findTightestCommonType(type1: DataType, type2: DataType): Option[DataType]
+
+  /**
+   * Looking for a widened data type of two given data types with some acceptable loss of precision.
+   * E.g. there is no common type for double and decimal because double's range
+   * is larger than decimal, and yet decimal is more precise than double, but in
+   * union we would cast the decimal into double.
+   */
+  def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType]
+
+  /**
+   * Looking for a widened data type of a given sequence of data types with some acceptable loss
+   * of precision.
+   * E.g. there is no common type for double and decimal because double's range
+   * is larger than decimal, and yet decimal is more precise than double, but in
+   * union we would cast the decimal into double.
+   */
+  def findWiderCommonType(types: Seq[DataType]): Option[DataType]
 
   /**
    * Given an expected data type, try to cast the expression and return the cast expression.
@@ -106,16 +130,6 @@ abstract class TypeCoercionBase {
       }
     }
   }
-
-  /**
-   * Case 2 type widening (see the classdoc comment above for TypeCoercion).
-   *
-   * i.e. the main difference with [[findTightestCommonType]] is that here we allow some
-   * loss of precision when widening decimal and double, and promotion to string.
-   */
-  def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType]
-
-  def findWiderCommonType(types: Seq[DataType]): Option[DataType]
 
   /**
    * Finds a wider type when one or both types are decimals. If the wider decimal type exceeds
@@ -857,14 +871,6 @@ object TypeCoercion extends TypeCoercionBase {
       FloatType,
       DoubleType)
 
-  /**
-   * Case 1 type widening (see the classdoc comment above for TypeCoercion).
-   *
-   * Find the tightest common type of two types that might be used in a binary expression.
-   * This handles all numeric types except fixed-precision decimals interacting with each other or
-   * with primitive types, because in that case the precision and scale of the result depends on
-   * the operation. Those rules are implemented in [[DecimalPrecision]].
-   */
   override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
     (t1, t2) match {
       case (t1, t2) if t1 == t2 => Some(t1)
