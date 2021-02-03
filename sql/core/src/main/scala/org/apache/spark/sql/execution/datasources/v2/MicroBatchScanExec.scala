@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 
 /**
@@ -45,7 +45,18 @@ case class MicroBatchScanExec(
 
   override lazy val readerFactory: PartitionReaderFactory = stream.createReaderFactory()
 
+  /**
+   * The callback function which is called when the output iterator of input RDD is consumed
+   * completely.
+   */
+  private def onOutputCompletion(reader: PartitionReader[_]) = {
+    reader.getCustomMetrics.foreach { metric =>
+      longMetric(metric.getName) += metric.getValue
+    }
+  }
+
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar,
+      onOutputCompletion)
   }
 }

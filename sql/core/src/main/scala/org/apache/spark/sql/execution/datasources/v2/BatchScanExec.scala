@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan}
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
@@ -44,8 +44,19 @@ case class BatchScanExec(
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
+  /**
+   * The callback function which is called when the output iterator of input RDD is consumed
+   * completely.
+   */
+  private def onOutputCompletion(reader: PartitionReader[_]) = {
+    reader.getCustomMetrics.foreach { metric =>
+      longMetric(metric.getName) += metric.getValue
+    }
+  }
+
   override lazy val inputRDD: RDD[InternalRow] = {
-    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar)
+    new DataSourceRDD(sparkContext, partitions, readerFactory, supportsColumnar,
+      onOutputCompletion)
   }
 
   override def doCanonicalize(): BatchScanExec = {

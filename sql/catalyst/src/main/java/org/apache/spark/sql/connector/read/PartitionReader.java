@@ -48,4 +48,12 @@ public interface PartitionReader<T> extends Closeable {
    * Return the current record. This method should return same value until `next` is called.
    */
   T get();
+
+  /**
+   * Returns an array of custom metrics. By default it returns empty array.
+   */
+  default CustomMetric[] getCustomMetrics() {
+    CustomMetric[] NO_METRICS = {};
+    return NO_METRICS;
+  }
 }

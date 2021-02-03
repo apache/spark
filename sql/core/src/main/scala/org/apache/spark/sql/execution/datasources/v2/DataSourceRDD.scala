@@ -26,6 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.CompletionIterator
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
   extends Partition with Serializable
@@ -36,7 +37,8 @@ class DataSourceRDD(
     sc: SparkContext,
     @transient private val inputPartitions: Seq[InputPartition],
     partitionReaderFactory: PartitionReaderFactory,
-    columnarReads: Boolean)
+    columnarReads: Boolean,
+    onCompletion: PartitionReader[_] => Unit = _ => {})
   extends RDD[InternalRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
@@ -55,11 +57,21 @@ class DataSourceRDD(
     val (iter, reader) = if (columnarReads) {
       val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
       val iter = new MetricsBatchIterator(new PartitionIterator[ColumnarBatch](batchReader))
-      (iter, batchReader)
+      def completionFunction = {
+        onCompletion(batchReader)
+      }
+      val completionIterator = CompletionIterator[ColumnarBatch, Iterator[ColumnarBatch]](
+        iter, completionFunction)
+      (completionIterator, batchReader)
     } else {
       val rowReader = partitionReaderFactory.createReader(inputPartition)
       val iter = new MetricsRowIterator(new PartitionIterator[InternalRow](rowReader))
-      (iter, rowReader)
+      def completionFunction = {
+        onCompletion(rowReader)
+      }
+      val completionIterator = CompletionIterator[InternalRow, Iterator[InternalRow]](
+        iter, completionFunction)
+      (completionIterator, rowReader)
     }
     context.addTaskCompletionListener[Unit](_ => reader.close())
     // TODO: SPARK-25083 remove the type erasure hack in data source scan

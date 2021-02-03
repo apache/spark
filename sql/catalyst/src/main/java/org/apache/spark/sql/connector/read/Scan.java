@@ -102,4 +102,13 @@ public interface Scan {
   default ContinuousStream toContinuousStream(String checkpointLocation) {
     throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
   }
+
+  /**
+   * Returns an array of supported custom metrics with name and description.
+   * By default it returns empty array.
+   */
+  default CustomMetric[] supportedCustomMetrics() {
+    CustomMetric[] NO_METRICS = {};
+    return NO_METRICS;
+  }
 }
