@@ -26,9 +26,7 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random int distribution") {
-    val range = 1000
-    val fn: RangeToLimitsFn[Int] = { case (x, y) => Limits(x, y + 2 * range) }
-    checkDistributionOf(range, fn)
+    checkDistributionOf(1000)
   }
 
   test("random longs") {
@@ -41,9 +39,7 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random long distribution") {
-    val range = 1000L
-    val fn: RangeToLimitsFn[Long] = { case (x, y) => Limits(x, y + 2 * range) }
-    checkDistributionOf(range, fn)
+    checkDistributionOf(1000L)
   }
 
   test("random doubles") {
@@ -56,9 +52,7 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random double distribution") {
-    val range = 1000d
-    val fn: RangeToLimitsFn[Double] = { case (x, y) => Limits(x, y + 2 * range) }
-    checkDistributionOf(range, fn)
+    checkDistributionOf(1000d)
   }
 
   test("random floats") {
@@ -71,21 +65,18 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random float distribution") {
-    val range = 1000f
-    val fn: RangeToLimitsFn[Float] = { case (x, y) => Limits(x, y + 2 * range) }
-    checkDistributionOf(range, fn)
+    checkDistributionOf(1000f)
   }
 
-  type RangeToLimitsFn[T] = (T, T) => Limits[T]
-
-  def checkDistributionOf[T: Numeric: Generator: Choose](range: T, limFn: RangeToLimitsFn[T]): Unit = {
+  def checkDistributionOf[T: Numeric: Generator: Choose](range: T): Unit = {
     val ops: Numeric[T] = implicitly[Numeric[T]]
+    import ops._
     val gen: Gen[(T, T)] = for {
-      x <- Gen.choose(ops.negate(range), range)
-      y <- Gen.choose(ops.negate(range), range)
+      x <- Gen.choose(negate(range), range)
+      y <- Gen.choose(range, times(range, plus(one, one)))
     } yield (x, y)
     forAll(gen) { case (x, y) =>
-      assertEvenDistribution(10000, limFn(x, y))
+      assertEvenDistribution(10000, Limits(x, y))
     }
   }
 
