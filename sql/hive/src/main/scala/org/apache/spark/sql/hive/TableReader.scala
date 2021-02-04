@@ -240,6 +240,7 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
+
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
       createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
@@ -393,7 +394,6 @@ private[hive] object HiveTableUtil {
 private[hive] object DeserializerLock
 
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
-
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
    * instantiate a HadoopRDD.
