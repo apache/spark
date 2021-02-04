@@ -46,6 +46,8 @@ import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.DecimalType;
 
 import static org.apache.parquet.column.ValuesType.REPETITION_LEVEL;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT32;
+import static org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.ValuesReaderIntIterator;
 import static org.apache.spark.sql.execution.datasources.parquet.SpecificParquetRecordReaderBase.createRLEIterator;
 
@@ -151,13 +153,13 @@ public class VectorizedColumnReader {
         PrimitiveType primitiveType = descriptor.getPrimitiveType();
         if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
             primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-            primitiveType.getPrimitiveTypeName() == PrimitiveType.PrimitiveTypeName.INT64) {
+            primitiveType.getPrimitiveTypeName() == INT64) {
           // We need to make sure that we initialize the right type for the dictionary otherwise
           // Encoding#initDictionary will initialize it to PrimitiveTypeName.INT64 and
           // WritableColumnVector will throw an exception when trying to decode to an Int when the
           // dictionary is in fact initialized as Long
           PrimitiveType adjustedType = new PrimitiveType(primitiveType.getRepetition(),
-              PrimitiveType.PrimitiveTypeName.INT32, primitiveType.getTypeLength(),
+              INT32, primitiveType.getTypeLength(),
               primitiveType.getName(), primitiveType.getOriginalType(),
               primitiveType.getDecimalMetadata(), primitiveType.getId());
           ColumnDescriptor desc = new ColumnDescriptor(descriptor.getPath(),
