@@ -218,7 +218,7 @@ object FileFormatWriter extends Logging {
       val commitMsgs = ret.map(_.commitMsg)
 
       val commitJobStartTime = System.nanoTime()
-      logInfo(s"Start to commit Job ${description.uuid}.")
+      logInfo(s"Start to commit write Job ${description.uuid}.")
       committer.commitJob(job, commitMsgs)
       logInfo(s"Write Job ${description.uuid} committed. " +
         s"Cost time: ${(System.nanoTime() - commitJobStartTime) / 1000 / 1000} ms")
