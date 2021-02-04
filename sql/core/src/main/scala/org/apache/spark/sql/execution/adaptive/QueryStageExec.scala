@@ -146,11 +146,15 @@ abstract class QueryStageExec extends LeafExecNode {
 
 /**
  * A shuffle query stage whose child is a [[ShuffleExchangeLike]] or [[ReusedExchangeExec]].
+ *
+ * @param id the query stage id.
+ * @param plan the underlying plan.
+ * @param _canonicalized the canonicalized plan before applying query stage optimizer rules.
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    canonicalize: SparkPlan) extends QueryStageExec {
+    _canonicalized: SparkPlan) extends QueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s
@@ -196,11 +200,15 @@ case class ShuffleQueryStageExec(
 
 /**
  * A broadcast query stage whose child is a [[BroadcastExchangeLike]] or [[ReusedExchangeExec]].
+ *
+ * @param id the query stage id.
+ * @param plan the underlying plan.
+ * @param _canonicalized the canonicalized plan before applying query stage optimizer rules.
  */
 case class BroadcastQueryStageExec(
     override val id: Int,
     override val plan: SparkPlan,
-    canonicalize: SparkPlan) extends QueryStageExec {
+    _canonicalized: SparkPlan) extends QueryStageExec {
 
   @transient val broadcast = plan match {
     case b: BroadcastExchangeLike => b

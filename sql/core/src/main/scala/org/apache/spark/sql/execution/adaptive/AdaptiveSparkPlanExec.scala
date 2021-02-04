@@ -157,7 +157,7 @@ case class AdaptiveSparkPlanExec(
 
   override def output: Seq[Attribute] = inputPlan.output
 
-  override def doCanonicalize(): SparkPlan = executedPlan.canonicalized
+  override def doCanonicalize(): SparkPlan = initialPlan.canonicalized
 
   override def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
