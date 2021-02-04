@@ -325,11 +325,13 @@ case class AlterNamespaceSetLocation(
  */
 case class ShowNamespaces(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowNamespaces.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)())
+object ShowNamespaces {
+  val OUTPUT = Seq(AttributeReference("namespace", StringType, nullable = false)())
 }
 
 /**
