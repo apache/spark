@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Except, Expand, FlatMapGroupsInPandas, Generate, Intersect, Join, LogicalPlan, Project, SerializeFromObject, Union, Window}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Except, Expand, FlatMapCoGroupsInPandas, FlatMapGroupsInPandas, Generate, Intersect, Join, LogicalPlan, MapInPandas, Project, SerializeFromObject, Union, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
@@ -148,6 +148,14 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
 
       case oldVersion @ FlatMapGroupsInPandas(_, _, output, _)
           if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+      case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+      case oldVersion @ MapInPandas(_, output, _)
+        if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
       case oldVersion: Generate
