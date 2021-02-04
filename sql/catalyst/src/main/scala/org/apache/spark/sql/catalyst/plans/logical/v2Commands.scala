@@ -736,6 +736,10 @@ case class ShowColumns(
     child: LogicalPlan,
     namespace: Option[Seq[String]]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+
+  override val output: Seq[Attribute] = {
+    AttributeReference("col_name", StringType, nullable = false)() :: Nil
+  }
 }
 
 /**
@@ -844,3 +848,32 @@ case class UncacheTable(
     table: LogicalPlan,
     ifExists: Boolean,
     isTempView: Boolean = false) extends Command
+
+/**
+ * The logical plan of the ALTER TABLE ... SET LOCATION command.
+ */
+case class AlterTableSetLocation(
+    table: LogicalPlan,
+    partitionSpec: Option[TablePartitionSpec],
+    location: String) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
+ */
+case class AlterTableSetProperties(
+    table: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
+ */
+case class AlterTableUnsetProperties(
+    table: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}

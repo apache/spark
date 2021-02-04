@@ -3794,6 +3794,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-33591: null as string partition literal value 'null' after setting legacy conf") {
+    withSQLConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      val t = "tbl"
+      withTable("tbl") {
+        sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+        sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+        checkAnswer(spark.sql(s"SELECT * FROM $t"), Row(0, "null"))
+      }
+    }
+  }
+
   test("SPARK-33593: Vector reader got incorrect data with binary partition value") {
     Seq("false", "true").foreach(value => {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> value) {
@@ -3879,6 +3890,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
       val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
       df.write.parquet(path.toString)
+
+      Seq(true, false).foreach { vectorizedReader =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
+          // We can read the decimal parquet field with a larger precision, if scale is the same.
+          val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+          checkAnswer(readParquet(schema, path), df)
+        }
+      }
 
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"

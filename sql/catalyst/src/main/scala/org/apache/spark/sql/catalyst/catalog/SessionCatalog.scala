@@ -1021,7 +1021,26 @@ class SessionCatalog(
   }
 
   /**
-   * Refresh the cache entry for a metastore table, if any.
+   * Refresh table entries in structures maintained by the session catalog such as:
+   *   - The map of temporary or global temporary view names to their logical plans
+   *   - The relation cache which maps table identifiers to their logical plans
+   *
+   * For temp views, it refreshes their logical plans, and as a consequence of that it can refresh
+   * the file indexes of the base relations (`HadoopFsRelation` for instance) used in the views.
+   * The method still keeps the views in the internal lists of session catalog.
+   *
+   * For tables/views, it removes their entries from the relation cache.
+   *
+   * The method is supposed to use in the following situations:
+   *   1. The logical plan of a table/view was changed, and cached table/view data is cleared
+   *      explicitly. For example, like in `AlterTableRenameCommand` which re-caches the table
+   *      itself. Otherwise if you need to refresh cached data, consider using of
+   *      `CatalogImpl.refreshTable()`.
+   *   2. A table/view doesn't exist, and need to only remove its entry in the relation cache since
+   *      the cached data is invalidated explicitly like in `DropTableCommand` which uncaches
+   *      table/view data itself.
+   *   3. Meta-data (such as file indexes) of any relation used in a temporary view should be
+   *      updated.
    */
   def refreshTable(name: TableIdentifier): Unit = synchronized {
     lookupTempView(name).map(_.refresh).getOrElse {

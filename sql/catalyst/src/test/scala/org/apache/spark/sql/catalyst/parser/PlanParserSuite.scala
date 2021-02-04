@@ -607,20 +607,24 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20841 Support table column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM testData AS t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("testData"))
+        )
       ).select(star()))
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias(
-          "t",
-          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y"))
+        )
       ).select(star()))
   }
 
@@ -629,12 +633,25 @@ class PlanParserSuite extends AnalysisTest {
     val src2 = UnresolvedRelation(TableIdentifier("src2")).as("s2")
     assertEqual(
       "SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("a", "b", "c", "d"),
-        SubqueryAlias(
-          "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      SubqueryAlias(
+        "dst",
+        UnresolvedSubqueryColumnAliases(
+          Seq("a", "b", "c", "d"),
+          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id")))
+        )
       ).select(star()))
+  }
+
+  test("SPARK-34335 Support referencing subquery with column aliases by table alias") {
+    assertEqual(
+      "SELECT t.col1, t.col2 FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      ).select($"t.col1", $"t.col2")
+    )
   }
 
   test("inline table") {

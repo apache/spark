@@ -19,11 +19,11 @@ SELECT
 FROM testData;
 
 -- count with multiple expressions
-SELECT count(a, b), count(b, a), count(testData.*) FROM testData;
+SELECT count(a, b), count(b, a), count(testData.*, testData.*) FROM testData;
 
 -- distinct count with multiple expressions
 SELECT
-  count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.*)
+  count(DISTINCT a, b), count(DISTINCT b, a), count(DISTINCT *), count(DISTINCT testData.*, testData.*)
 FROM testData;
 
 -- distinct count with multiple literals
@@ -43,3 +43,11 @@ SELECT count() FROM testData;
 -- count without expressions
 set spark.sql.legacy.allowParameterlessCount=false;
 SELECT count() FROM testData;
+
+-- legacy behavior: allow count(testData.*)
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=true;
+SELECT count(testData.*) FROM testData;
+
+-- count with a single tblName.* as parameter
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false;
+SELECT count(testData.*) FROM testData;
