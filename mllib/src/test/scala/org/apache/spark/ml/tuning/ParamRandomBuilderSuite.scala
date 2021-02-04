@@ -46,6 +46,21 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     checkDistributionOf(range, fn)
   }
 
+  test("random doubles") {
+    forAll { (x: Double, y: Double) =>
+      val limit:  Limits[Double]  = Limits(x, y)
+      val gen:    RandomT[Double] = RandomRanges(limit)
+      val result: Double          = gen.randomT()
+      assert(result >= math.min(x, y) && result <= math.max(x, y))
+    }
+  }
+
+  test("random double distribution") {
+    val range = 1000d
+    val fn: RangeToLimitsFn[Double] = { case (x, y) => Limits(x, y + 2 * range) }
+    checkDistributionOf(range, fn)
+  }
+
   type RangeToLimitsFn[T] = (T, T) => Limits[T]
 
   def checkDistributionOf[T: Numeric: Generator: Choose](range: T, limFn: RangeToLimitsFn[T]): Unit = {
@@ -62,11 +77,13 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   def assertEvenDistribution[T: Numeric: Generator](n: Int, lim: Limits[T]): Assertion = {
     val gen:          RandomT[T]  = RandomRanges(lim)
     val ops:          Numeric[T]  = implicitly[Numeric[T]]
-    val xs:           Seq[T]      = (0 to n).map(_ => gen.randomT())
+    val xs:           Seq[T]      = (0 to n).map { _: Int => gen.randomT() }
     val mean:         Double      = ops.toDouble(xs.sum) / xs.length
-    val squaredDiff:  Seq[Double] = xs.map(x => math.pow(ops.toDouble(x) - mean, 2))
+    val squaredDiff:  Seq[Double] = xs.map { x: T => math.pow(ops.toDouble(x) - mean, 2) }
     val stdDev:       Double      = math.pow(squaredDiff.sum / n - 1, 0.5)
-    val halfWay:      Double      = ops.toDouble(lim.x) + ops.toDouble(lim.y) / 2
+    val ordered:      (T, T)      = lowerUpper(lim.x, lim.y)
+    val range:        T           = ops.minus(ordered._2, ordered._1)
+    val halfWay:      Double      = (ops.toDouble(range) / 2) + ops.toDouble(ordered._1)
     val tolerance:    Double      = 5 * stdDev
     assert(mean > halfWay - tolerance && mean < halfWay + tolerance)
   }

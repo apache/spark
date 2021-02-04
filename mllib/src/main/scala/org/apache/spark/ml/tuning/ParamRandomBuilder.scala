@@ -46,6 +46,25 @@ object RandomRanges {
     randomBigInt0To(diff) + lower
   }
 
+  def lowerUpper[T: Numeric](x: T, y: T): (T, T) = {
+    val ops:          Numeric[T]  = implicitly[Numeric[T]]
+    (ops.min(x, y), ops.max(x, y))
+  }
+
+  implicit object DoubleGenerator extends Generator[Double] {
+    def apply(limits: Limits[Double]): RandomT[Double] = new RandomT[Double] {
+      override def randomT(): Double = {
+        import limits._
+        val upper:            BigDecimal = BigDecimal(math.max(x, y))
+        val lower:            BigDecimal = BigDecimal(math.min(x, y))
+        val zeroCenteredRnd:  BigDecimal = BigDecimal(rnd.nextDouble() - 0.5)
+        val range:            BigDecimal = upper - lower
+        val halfWay:          BigDecimal = lower + range / 2
+        ((zeroCenteredRnd * range) + halfWay).doubleValue()
+      }
+    }
+  }
+
   implicit object IntGenerator extends Generator[Int] {
     def apply(limits: Limits[Int]): RandomT[Int] = new RandomT[Int] {
       override def randomT(): Int = {
