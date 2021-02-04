@@ -441,7 +441,7 @@ struct<to_number(12,454, 00,000):decimal(5,0)>
 -- !query
 select to_number('12,454', '99G999')
 -- !query schema
-struct<to_number(12,454, 99G999):decimal(6,0)>
+struct<to_number(12,454, 99G999):decimal(5,0)>
 -- !query output
 12454
 

@@ -2468,7 +2468,7 @@ object ToNumber {
       > SELECT _FUNC_('454', '999');
        454
       > SELECT _FUNC_('454.00', '000D00');
-       454
+       454.00
       > SELECT _FUNC_('12,454', '99G999');
        12454
       > SELECT _FUNC_('$78.12', '$99.99');
