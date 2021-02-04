@@ -2980,7 +2980,7 @@ private[spark] object Utils extends Logging {
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
    */
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
-    val metadata = new StringBuilder("[")
+    val metadata = new StringBuilder(s"(${paths.length} paths)[")
     var index: Int = 0
     while (index < paths.length && metadata.length < stopAppendingThreshold) {
       if (index > 0) {
@@ -2990,7 +2990,10 @@ private[spark] object Utils extends Logging {
       index += 1
     }
     if (paths.length > index) {
-      metadata.append(s", ... ${paths.length - index} more")
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append("...")
     }
     metadata.append("]")
     metadata.toString

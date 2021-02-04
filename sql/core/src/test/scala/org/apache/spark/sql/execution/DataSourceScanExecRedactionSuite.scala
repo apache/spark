@@ -144,6 +144,9 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       // The location metadata should at least contain one path
       assert(location.get.contains(paths.head))
 
+      // The location metadata should have the number of root paths
+      assert(location.get.contains("(10 paths)"))
+
       // The location metadata should have bracket wrapping paths
       assert(location.get.indexOf('[') > -1)
       assert(location.get.indexOf(']') > -1)
@@ -154,8 +157,8 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
       // the only one path should be available
       assert(pathsInLocation.size == 2)
-      // indicator ("... N more") should be available
-      assert(pathsInLocation.exists(_.contains("... ")))
+      // indicator ("...") should be available
+      assert(pathsInLocation.exists(_.contains("...")))
     }
   }
 }
