@@ -393,6 +393,11 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
   }
+
+  def truncate(): Boolean = dataMap.synchronized {
+    dataMap.clear()
+    dataMap.isEmpty
+  }
 }
 
 object InMemoryTable {

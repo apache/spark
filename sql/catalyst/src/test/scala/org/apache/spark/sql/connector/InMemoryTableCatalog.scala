@@ -133,6 +133,10 @@ class BasicInMemoryTableCatalog extends TableCatalog {
   def clearTables(): Unit = {
     tables.clear()
   }
+
+  override def truncateTable(ident: Identifier): Boolean = {
+    loadTable(ident).asInstanceOf[InMemoryTable].truncate()
+  }
 }
 
 class InMemoryTableCatalog extends BasicInMemoryTableCatalog with SupportsNamespaces {
