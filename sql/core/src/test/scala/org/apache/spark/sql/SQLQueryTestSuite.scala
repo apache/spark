@@ -260,9 +260,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
 
-    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
-    // here we need to check command available
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = splitCommentsAndCodes(input)
@@ -566,7 +563,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    filteredFiles ++ dirs.flatMap(listFilesRecursively)
+    val allFiles = filteredFiles ++ dirs.flatMap(listFilesRecursively)
+    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+    // here we need to check command available
+    if (TestUtils.testCommandAvailable("/bin/bash")) {
+      allFiles
+    } else {
+      allFiles.filterNot(_.getName == "transform.sql")
+    }
   }
 
   /** Load built-in test tables into the SparkSession. */
