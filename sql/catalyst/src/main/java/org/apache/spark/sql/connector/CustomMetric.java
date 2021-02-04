@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * A general custom metric.
+ * A custom metric.
  *
  * @since 3.2.0
  */
