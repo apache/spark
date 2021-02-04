@@ -185,19 +185,17 @@ final class OneVsRestModel private[ml] (
       return dataset.toDF
     }
 
-    val numModels = models.length
-
     // add an accumulator column to store predictions of all the models
     val accColName = "mbc$acc" + UUID.randomUUID().toString
-    val newDataset = dataset.withColumn(accColName, lit(Array.ofDim[Double](numModels)))
+    val newDataset = dataset.withColumn(accColName, lit(Array.emptyDoubleArray))
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) newDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
     // update the accumulator column with the result of prediction of models
-    val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
-      case (df, (model, index)) =>
+    val aggregatedDataset = models.foldLeft[DataFrame](newDataset) {
+      case (df, model) =>
         // avoid calling directly setter of model
         val tmpModel = model.copy(ParamMap.empty).asInstanceOf[ClassificationModel[_, _]]
         tmpModel.setFeaturesCol($(featuresCol))
@@ -212,8 +210,7 @@ final class OneVsRestModel private[ml] (
         }
 
         val updateUDF = udf { (predictions: Array[Double], prediction: Vector) =>
-          predictions(index) = prediction(1)
-          predictions
+          predictions :+ prediction(1)
         }
 
         tmpModel.transform(df)
@@ -237,7 +234,7 @@ final class OneVsRestModel private[ml] (
     if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
       val labelUDF = udf { (predictions: Array[Double]) =>
-        Iterator.range(0, numModels).maxBy(predictions.apply).toDouble
+        predictions.indices.maxBy(predictions.apply).toDouble
       }
 
       predictionColNames :+= getPredictionCol
