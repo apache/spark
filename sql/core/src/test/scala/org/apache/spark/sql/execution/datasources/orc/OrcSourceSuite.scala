@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException}
 import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
-import org.apache.spark.sql.execution.datasources.SchemaMergeUtils
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
@@ -41,8 +41,10 @@ import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
+abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDataSourceSuite {
   import testImplicits._
+
+  override protected def dataSourceFormat = "orc"
 
   var orcTableDir: File = null
   var orcTableAsDir: File = null
@@ -120,8 +122,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
   }
 
-  protected def testSelectiveDictionaryEncoding(isSelective: Boolean,
-      isHive23: Boolean = false): Unit = {
+  protected def testSelectiveDictionaryEncoding(isSelective: Boolean, isHiveOrc: Boolean): Unit = {
     val tableName = "orcTable"
 
     withTempDir { dir =>
@@ -174,7 +175,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
           // Hive 0.11 and RLE v2 is introduced in Hive 0.12 ORC with more improvements.
           // For more details, see https://orc.apache.org/specification/
           assert(stripe.getColumns(1).getKind === DICTIONARY_V2)
-          if (isSelective || isHive23) {
+          if (isSelective || isHiveOrc) {
             assert(stripe.getColumns(2).getKind === DIRECT_V2)
           } else {
             assert(stripe.getColumns(2).getKind === DICTIONARY_V2)
@@ -336,7 +337,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
@@ -581,7 +582,7 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
   }
 
   test("Enforce direct encoding column-wise selectively") {
-    testSelectiveDictionaryEncoding(isSelective = true)
+    testSelectiveDictionaryEncoding(isSelective = true, isHiveOrc = false)
   }
 
   test("SPARK-11412 read and merge orc schemas in parallel") {
@@ -592,5 +593,13 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")
     assert(df.where("str < 'row 001000'").count() === 1000)
+  }
+
+  test("SPARK-33978: Write and read a file with ZSTD compression") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "zstd").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+    }
   }
 }

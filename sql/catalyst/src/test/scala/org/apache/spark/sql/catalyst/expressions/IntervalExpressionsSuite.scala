@@ -214,4 +214,64 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       millis = Int.MaxValue,
       micros = Int.MaxValue)
   }
+
+  test("ANSI mode: make interval") {
+    def check(
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
+        Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      val totalMonths = years * MONTHS_PER_YEAR + months
+      val totalDays = weeks * DAYS_PER_WEEK + days
+      val totalMicros = secFrac + minutes * MICROS_PER_MINUTE + hours * MICROS_PER_HOUR
+      val expected = new CalendarInterval(totalMonths, totalDays, totalMicros)
+      checkEvaluation(intervalExpr, expected)
+    }
+
+    def checkException(
+        years: Int = 0,
+        months: Int = 0,
+        weeks: Int = 0,
+        days: Int = 0,
+        hours: Int = 0,
+        minutes: Int = 0,
+        seconds: Int = 0,
+        millis: Int = 0,
+        micros: Int = 0): Unit = {
+      val secFrac = DateTimeTestUtils.secFrac(seconds, millis, micros)
+      val intervalExpr = MakeInterval(Literal(years), Literal(months), Literal(weeks),
+        Literal(days), Literal(hours), Literal(minutes),
+        Literal(Decimal(secFrac, Decimal.MAX_LONG_DIGITS, 6)))
+      checkExceptionInExpression[ArithmeticException](intervalExpr, EmptyRow, "")
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      check(months = 0, days = 0, micros = 0)
+      check(years = -123)
+      check(weeks = 123)
+      check(millis = -123)
+      check(9999, 11, 0, 31, 23, 59, 59, 999, 999)
+      check(years = 10000, micros = -1)
+      check(-9999, -11, 0, -31, -23, -59, -59, -999, -999)
+      check(years = -10000, micros = 1)
+      check(
+        hours = Int.MaxValue,
+        minutes = Int.MaxValue,
+        seconds = Int.MaxValue,
+        millis = Int.MaxValue,
+        micros = Int.MaxValue)
+
+      checkException(years = Int.MaxValue)
+      checkException(weeks = Int.MaxValue)
+    }
+  }
 }

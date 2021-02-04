@@ -13,7 +13,7 @@ struct<count(NULL):bigint>
 -- !query
 SELECT COUNT(1 + NULL) FROM VALUES 1, 2, 3
 -- !query schema
-struct<count((1 + CAST(NULL AS INT))):bigint>
+struct<count((1 + NULL)):bigint>
 -- !query output
 0
 
@@ -31,7 +31,7 @@ struct<count(NULL) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWIN
 -- !query
 SELECT COUNT(1 + NULL) OVER () FROM VALUES 1, 2, 3
 -- !query schema
-struct<count((1 + CAST(NULL AS INT))) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
+struct<count((1 + NULL)) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):bigint>
 -- !query output
 0
 0

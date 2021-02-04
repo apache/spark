@@ -35,7 +35,7 @@ CONTEXT=
 INCLUDE_TAGS="k8s"
 EXCLUDE_TAGS=
 JAVA_VERSION="8"
-HADOOP_PROFILE="hadoop-2.7"
+HADOOP_PROFILE="hadoop-3.2"
 MVN="$TEST_ROOT_DIR/build/mvn"
 
 SCALA_VERSION=$("$MVN" help:evaluate -Dexpression=scala.binary.version 2>/dev/null\

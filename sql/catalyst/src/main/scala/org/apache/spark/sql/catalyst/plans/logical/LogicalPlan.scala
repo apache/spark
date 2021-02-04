@@ -33,6 +33,9 @@ abstract class LogicalPlan
   with QueryPlanConstraints
   with Logging {
 
+  /** Metadata fields that can be projected from this node */
+  def metadataOutput: Seq[Attribute] = children.flatMap(_.metadataOutput)
+
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming)
 
@@ -86,7 +89,8 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+  private[this] lazy val childAttributes =
+    AttributeSeq(children.flatMap(c => c.output ++ c.metadataOutput))
 
   private[this] lazy val outputAttributes = AttributeSeq(output)
 
@@ -132,7 +136,7 @@ abstract class LogicalPlan
   def outputOrdering: Seq[SortOrder] = Nil
 
   /**
-   * Returns true iff `other`'s output is semantically the same, ie.:
+   * Returns true iff `other`'s output is semantically the same, i.e.:
    *  - it contains the same number of `Attribute`s;
    *  - references are the same;
    *  - the order is equal too.
@@ -169,8 +173,8 @@ abstract class UnaryNode extends LogicalPlan {
    * Generates all valid constraints including an set of aliased constraints by replacing the
    * original constraint expressions with the corresponding alias
    */
-  protected def getAllValidConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
-    var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
+  protected def getAllValidConstraints(projectList: Seq[NamedExpression]): ExpressionSet = {
+    var allConstraints = child.constraints
     projectList.foreach {
       case a @ Alias(l: Literal, _) =>
         allConstraints += EqualNullSafe(a.toAttribute, l)
@@ -187,7 +191,7 @@ abstract class UnaryNode extends LogicalPlan {
     allConstraints
   }
 
-  override protected lazy val validConstraints: Set[Expression] = child.constraints
+  override protected lazy val validConstraints: ExpressionSet = child.constraints
 }
 
 /**
@@ -202,4 +206,74 @@ abstract class BinaryNode extends LogicalPlan {
 
 abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
+}
+
+object LogicalPlanIntegrity {
+
+  private def canGetOutputAttrs(p: LogicalPlan): Boolean = {
+    p.resolved && !p.expressions.exists { e =>
+      e.collectFirst {
+        // We cannot call `output` in plans with a `ScalarSubquery` expr having no column,
+        // so, we filter out them in advance.
+        case s: ScalarSubquery if s.plan.schema.fields.isEmpty => true
+      }.isDefined
+    }
+  }
+
+  /**
+   * Since some logical plans (e.g., `Union`) can build `AttributeReference`s in their `output`,
+   * this method checks if the same `ExprId` refers to attributes having the same data type
+   * in plan output.
+   */
+  def hasUniqueExprIdsForOutput(plan: LogicalPlan): Boolean = {
+    val exprIds = plan.collect { case p if canGetOutputAttrs(p) =>
+      // NOTE: we still need to filter resolved expressions here because the output of
+      // some resolved logical plans can have unresolved references,
+      // e.g., outer references in `ExistenceJoin`.
+      p.output.filter(_.resolved).map { a => (a.exprId, a.dataType.asNullable) }
+    }.flatten
+
+    val ignoredExprIds = plan.collect {
+      // NOTE: `Union` currently reuses input `ExprId`s for output references, but we cannot
+      // simply modify the code for assigning new `ExprId`s in `Union#output` because
+      // the modification will make breaking changes (See SPARK-32741(#29585)).
+      // So, this check just ignores the `exprId`s of `Union` output.
+      case u: Union if u.resolved => u.output.map(_.exprId)
+    }.flatten.toSet
+
+    val groupedDataTypesByExprId = exprIds.filterNot { case (exprId, _) =>
+      ignoredExprIds.contains(exprId)
+    }.groupBy(_._1).values.map(_.distinct)
+
+    groupedDataTypesByExprId.forall(_.length == 1)
+  }
+
+  /**
+   * This method checks if reference `ExprId`s are not reused when assigning a new `ExprId`.
+   * For example, it returns false if plan transformers create an alias having the same `ExprId`
+   * with one of reference attributes, e.g., `a#1 + 1 AS a#1`.
+   */
+  def checkIfSameExprIdNotReused(plan: LogicalPlan): Boolean = {
+    plan.collect { case p if p.resolved =>
+      p.expressions.forall {
+        case a: Alias =>
+          // Even if a plan is resolved, `a.references` can return unresolved references,
+          // e.g., in `Grouping`/`GroupingID`, so we need to filter out them and
+          // check if the same `exprId` in `Alias` does not exist
+          // among reference `exprId`s.
+          !a.references.filter(_.resolved).map(_.exprId).exists(_ == a.exprId)
+        case _ =>
+          true
+      }
+    }.forall(identity)
+  }
+
+  /**
+   * This method checks if the same `ExprId` refers to an unique attribute in a plan tree.
+   * Some plan transformers (e.g., `RemoveNoopOperators`) rewrite logical
+   * plans based on this assumption.
+   */
+  def checkIfExprIdsAreGloballyUnique(plan: LogicalPlan): Boolean = {
+    checkIfSameExprIdNotReused(plan) && hasUniqueExprIdsForOutput(plan)
+  }
 }

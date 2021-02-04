@@ -114,16 +114,10 @@ if [[ $SPARK_VERSION > "2.3" ]]; then
   BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
 fi
 
-# TODO: revisit for Scala 2.13
-
-PUBLISH_SCALA_2_11=1
-SCALA_2_11_PROFILES="-Pscala-2.11"
-if [[ $SPARK_VERSION > "2.3" ]]; then
-  if [[ $SPARK_VERSION < "3.0." ]]; then
-    SCALA_2_11_PROFILES="-Pkafka-0-8 -Pflume $SCALA_2_11_PROFILES"
-  else
-    PUBLISH_SCALA_2_11=0
-  fi
+PUBLISH_SCALA_2_13=1
+SCALA_2_13_PROFILES="-Pscala-2.13"
+if [[ $SPARK_VERSION < "3.2" ]]; then
+  PUBLISH_SCALA_2_13=0
 fi
 
 PUBLISH_SCALA_2_12=0
@@ -182,8 +176,7 @@ if [[ "$1" == "package" ]]; then
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-    SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
+  shasum -a 512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
 
   ZINC_PORT=3035
@@ -275,6 +268,9 @@ if [[ "$1" == "package" ]]; then
   # In dry run mode, only build the first one. The keys in BINARY_PKGS_ARGS are used as the
   # list of packages to be built, so it's ok for things to be missing in BINARY_PKGS_EXTRA.
 
+  # NOTE: Don't forget to update the valid combinations of distributions at
+  #   'python/pyspark/install.py' and 'python/docs/source/getting_started/install.rst'
+  #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
   BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
@@ -282,19 +278,18 @@ if [[ "$1" == "package" ]]; then
     if [[ $SPARK_VERSION < "3.0." ]]; then
       BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
     else
-      BINARY_PKGS_ARGS["hadoop2.7-hive1.2"]="-Phadoop-2.7 -Phive-1.2 $HIVE_PROFILES"
       BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
     fi
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
 
-  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
-    key="without-hadoop-scala-2.11"
-    args="-Phadoop-provided"
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    key="hadoop3.2-scala2.13"
+    args="-Phadoop-3.2 $HIVE_PROFILES"
     extra=""
-    if ! make_binary_release "$key" "$SCALA_2_11_PROFILES $args" "$extra" "2.11"; then
+    if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
       error "Failed to build $key package. Check logs for details."
     fi
   fi
@@ -379,10 +374,15 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
-  # Generate random point for Zinc
+  # Generate random port for Zinc
   export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
+
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.13
+    $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
+  fi
 
   rm $tmp_settings
   cd ..
@@ -411,21 +411,19 @@ if [[ "$1" == "publish-release" ]]; then
 
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
-  # Generate random point for Zinc
+  # Generate random port for Zinc
   export ZINC_PORT=$(python -S -c "import random; print(random.randrange(3030,4030))")
 
-  # TODO: revisit for Scala 2.13 support
-
-  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.11
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.13
     $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+      $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
     $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+      $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   pushd $tmp_repo/org/apache/spark
@@ -451,7 +449,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
-    echo "Uplading files to $nexus_upload"
+    echo "Uploading files to $nexus_upload"
     for file in $(find . -type f)
     do
       # strip leading ./

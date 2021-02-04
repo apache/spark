@@ -32,12 +32,12 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/test-only *ExpressionsSchemaSuite"
+ *   build/sbt "sql/testOnly *ExpressionsSchemaSuite"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *ExpressionsSchemaSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *ExpressionsSchemaSuite"
  * }}}
  *
  * For example:
@@ -95,7 +95,9 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
       spark.sessionState.catalog.lookupFunctionInfo(funcId)
     }
 
-    val classFunsMap = funInfos.groupBy(_.getClassName).toSeq.sortBy(_._1)
+    val classFunsMap = funInfos.groupBy(_.getClassName).toSeq.sortBy(_._1).map {
+      case (className, infos) => (className, infos.sortBy(_.getName))
+    }
     val outputBuffer = new ArrayBuffer[String]
     val outputs = new ArrayBuffer[QueryOutput]
     val missingExamples = new ArrayBuffer[String]
@@ -152,16 +154,17 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
 
     val outputSize = outputs.size
     val headerSize = header.size
-    val expectedOutputs: Seq[QueryOutput] = {
+    val (expectedMissingExamples, expectedOutputs) = {
       val expectedGoldenOutput = fileToString(resultFile)
       val lines = expectedGoldenOutput.split("\n")
       val expectedSize = lines.size
 
       assert(expectedSize == outputSize + headerSize,
         s"Expected $expectedSize blocks in result file but got " +
-          s"${outputSize + headerSize}. Try regenerate the result files.")
+          s"${outputSize + headerSize}. Try regenerating the result files.")
 
-      Seq.tabulate(outputSize) { i =>
+      val numberOfQueries = lines(2).split(":")(1).trim.toInt
+      val expectedOutputs = Seq.tabulate(outputSize) { i =>
         val segments = lines(i + headerSize).split('|')
         QueryOutput(
           className = segments(1).trim,
@@ -169,6 +172,28 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
           sql = segments(3).trim,
           schema = segments(4).trim)
       }
+
+      assert(numberOfQueries == expectedOutputs.size,
+        s"expected outputs size: ${expectedOutputs.size} not same as numberOfQueries: " +
+          s"$numberOfQueries record in result file. Try regenerating the result files.")
+
+      val numberOfMissingExamples = lines(3).split(":")(1).trim.toInt
+      val expectedMissingExamples = {
+        val missingExamples = lines(4).split(":")(1).trim
+        // Splitting on a empty string would return [""]
+        if (missingExamples.nonEmpty) {
+          missingExamples.split(",")
+        } else {
+          Array.empty[String]
+        }
+      }
+
+      assert(numberOfMissingExamples == expectedMissingExamples.size,
+        s"expected missing examples size: ${expectedMissingExamples.size} not same as " +
+          s"numberOfMissingExamples: $numberOfMissingExamples " +
+          "record in result file. Try regenerating the result files.")
+
+      (expectedMissingExamples, expectedOutputs)
     }
 
     // Compare results.
@@ -178,6 +203,14 @@ class ExpressionsSchemaSuite extends QueryTest with SharedSparkSession {
     outputs.zip(expectedOutputs).foreach { case (output, expected) =>
       assert(expected.sql == output.sql, "SQL query did not match")
       assert(expected.schema == output.schema, s"Schema did not match for query ${expected.sql}")
+    }
+
+    // Compare expressions missing examples
+    assert(expectedMissingExamples.length == missingExamples.size,
+      "The number of missing examples not equals the number of expected missing examples.")
+
+    missingExamples.zip(expectedMissingExamples).foreach { case (output, expected) =>
+      assert(expected == output, "Missing example expression not match")
     }
   }
 }

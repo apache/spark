@@ -13,7 +13,7 @@ struct<>
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -21,7 +21,7 @@ struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE))
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -29,7 +29,7 @@ struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -37,7 +37,7 @@ struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):dou
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -45,7 +45,7 @@ struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -53,7 +53,7 @@ struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):d
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -61,7 +61,7 @@ struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(14,11)>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS DECIMAL(10,0))):decimal(14,11)>
 -- !query output
 1.00000000000
 
@@ -69,7 +69,7 @@ struct<(CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0)) / CAST(C
 -- !query
 SELECT cast(1 as tinyint) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS TINYINT) AS DOUBLE) / CAST(CAST(CAST(1 AS STRING) AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS TINYINT) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -113,7 +113,7 @@ cannot resolve '(CAST(1 AS TINYINT) / CAST('2017-12-11 09:30:00' AS DATE))' due 
 -- !query
 SELECT cast(1 as smallint) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -121,7 +121,7 @@ struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)
 -- !query
 SELECT cast(1 as smallint) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -129,7 +129,7 @@ struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE
 -- !query
 SELECT cast(1 as smallint) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -137,7 +137,7 @@ struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):do
 -- !query
 SELECT cast(1 as smallint) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -145,7 +145,7 @@ struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE))
 -- !query
 SELECT cast(1 as smallint) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -153,7 +153,7 @@ struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):
 -- !query
 SELECT cast(1 as smallint) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -161,7 +161,7 @@ struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE))
 -- !query
 SELECT cast(1 as smallint) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0))):decimal(16,11)>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS DECIMAL(10,0))):decimal(16,11)>
 -- !query output
 1.00000000000
 
@@ -169,7 +169,7 @@ struct<(CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0)) / CAST(
 -- !query
 SELECT cast(1 as smallint) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS SMALLINT) AS DOUBLE) / CAST(CAST(CAST(1 AS STRING) AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS SMALLINT) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -213,7 +213,7 @@ cannot resolve '(CAST(1 AS SMALLINT) / CAST('2017-12-11 09:30:00' AS DATE))' due
 -- !query
 SELECT cast(1 as int) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -221,7 +221,7 @@ struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):dou
 -- !query
 SELECT cast(1 as int) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -229,7 +229,7 @@ struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):do
 -- !query
 SELECT cast(1 as int) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -237,7 +237,7 @@ struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as int) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -245,7 +245,7 @@ struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):doub
 -- !query
 SELECT cast(1 as int) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -253,7 +253,7 @@ struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):doubl
 -- !query
 SELECT cast(1 as int) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -261,7 +261,7 @@ struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):doub
 -- !query
 SELECT cast(1 as int) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
+struct<(CAST(1 AS INT) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query output
 1.00000000000
 
@@ -269,7 +269,7 @@ struct<(CAST(CAST(1 AS INT) AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decima
 -- !query
 SELECT cast(1 as int) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS INT) AS DOUBLE) / CAST(CAST(CAST(1 AS STRING) AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS INT) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -313,7 +313,7 @@ cannot resolve '(CAST(1 AS INT) / CAST('2017-12-11 09:30:00' AS DATE))' due to d
 -- !query
 SELECT cast(1 as bigint) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -321,7 +321,7 @@ struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):
 -- !query
 SELECT cast(1 as bigint) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -329,7 +329,7 @@ struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE))
 -- !query
 SELECT cast(1 as bigint) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -337,7 +337,7 @@ struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):doub
 -- !query
 SELECT cast(1 as bigint) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -345,7 +345,7 @@ struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):d
 -- !query
 SELECT cast(1 as bigint) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -353,7 +353,7 @@ struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):do
 -- !query
 SELECT cast(1 as bigint) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -361,7 +361,7 @@ struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):d
 -- !query
 SELECT cast(1 as bigint) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0))):decimal(31,11)>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS DECIMAL(10,0))):decimal(31,11)>
 -- !query output
 1.00000000000
 
@@ -369,7 +369,7 @@ struct<(CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0)) / CAST(C
 -- !query
 SELECT cast(1 as bigint) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS BIGINT) AS DOUBLE) / CAST(CAST(CAST(1 AS STRING) AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS BIGINT) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -413,7 +413,7 @@ cannot resolve '(CAST(1 AS BIGINT) / CAST('2017-12-11 09:30:00' AS DATE))' due t
 -- !query
 SELECT cast(1 as float) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -421,7 +421,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):d
 -- !query
 SELECT cast(1 as float) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -429,7 +429,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):
 -- !query
 SELECT cast(1 as float) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -437,7 +437,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):doubl
 -- !query
 SELECT cast(1 as float) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -445,7 +445,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):do
 -- !query
 SELECT cast(1 as float) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -453,7 +453,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):dou
 -- !query
 SELECT cast(1 as float) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -461,7 +461,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(1 AS DOUBLE) AS DOUBLE)):do
 -- !query
 SELECT cast(1 as float) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query output
 1.0
 
@@ -469,7 +469,7 @@ struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(CAST(1 AS DECIMAL(10,0)) AS
 -- !query
 SELECT cast(1 as float) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS FLOAT) AS DOUBLE) / CAST(CAST(CAST(1 AS STRING) AS DOUBLE) AS DOUBLE)):double>
+struct<(CAST(1 AS FLOAT) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -513,7 +513,7 @@ cannot resolve '(CAST(1 AS FLOAT) / CAST('2017-12-11 09:30:00' AS DATE))' due to
 -- !query
 SELECT cast(1 as double) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -521,7 +521,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -529,7 +529,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -537,7 +537,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -545,7 +545,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -561,7 +561,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query output
 1.0
 
@@ -569,7 +569,7 @@ struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as double) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) / CAST(CAST(1 AS STRING) AS DOUBLE)):double>
+struct<(CAST(1 AS DOUBLE) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -613,7 +613,7 @@ cannot resolve '(CAST(1 AS DOUBLE) / CAST('2017-12-11 09:30:00' AS DATE))' due t
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS TINYINT) AS DECIMAL(3,0)) AS DECIMAL(10,0))):decimal(16,6)>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS TINYINT)):decimal(16,6)>
 -- !query output
 1.000000
 
@@ -621,7 +621,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS TI
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS SMALLINT) AS DECIMAL(5,0)) AS DECIMAL(10,0))):decimal(16,6)>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS SMALLINT)):decimal(16,6)>
 -- !query output
 1.000000
 
@@ -629,7 +629,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(10,0)) / CAST(CAST(CAST(1 AS SM
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) / CAST(CAST(1 AS INT) AS DECIMAL(10,0))):decimal(21,11)>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS INT)):decimal(21,11)>
 -- !query output
 1.00000000000
 
@@ -637,7 +637,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(CAST(1 AS INT) AS DECIMAL(10,0))):decima
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS BIGINT) AS DECIMAL(20,0)) AS DECIMAL(20,0))):decimal(31,21)>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS BIGINT)):decimal(31,21)>
 -- !query output
 1.000000000000000000000
 
@@ -645,7 +645,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DECIMAL(20,0)) / CAST(CAST(CAST(1 AS BI
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -653,7 +653,7 @@ struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUB
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) / CAST(1 AS DOUBLE)):double>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -669,7 +669,7 @@ struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS DECIMAL(10,0))):decimal(21,11)>
 -- !query
 SELECT cast(1 as decimal(10, 0)) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE) / CAST(CAST(1 AS STRING) AS DOUBLE)):double>
+struct<(CAST(1 AS DECIMAL(10,0)) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 
@@ -713,7 +713,7 @@ cannot resolve '(CAST(1 AS DECIMAL(10,0)) / CAST('2017-12-11 09:30:00' AS DATE))
 -- !query
 SELECT cast(1 as string) / cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS TINYINT)):double>
 -- !query output
 1.0
 
@@ -721,7 +721,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS TINYINT) AS DOUBLE)):
 -- !query
 SELECT cast(1 as string) / cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS SMALLINT)):double>
 -- !query output
 1.0
 
@@ -729,7 +729,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS SMALLINT) AS DOUBLE))
 -- !query
 SELECT cast(1 as string) / cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS INT)):double>
 -- !query output
 1.0
 
@@ -737,7 +737,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS INT) AS DOUBLE)):doub
 -- !query
 SELECT cast(1 as string) / cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS BIGINT)):double>
 -- !query output
 1.0
 
@@ -745,7 +745,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS BIGINT) AS DOUBLE)):d
 -- !query
 SELECT cast(1 as string) / cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS FLOAT)):double>
 -- !query output
 1.0
 
@@ -753,7 +753,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS FLOAT) AS DOUBLE)):do
 -- !query
 SELECT cast(1 as string) / cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(1 AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS DOUBLE)):double>
 -- !query output
 1.0
 
@@ -761,7 +761,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(1 AS DOUBLE)):double>
 -- !query
 SELECT cast(1 as string) / cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS DECIMAL(10,0)) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS DECIMAL(10,0))):double>
 -- !query output
 1.0
 
@@ -769,7 +769,7 @@ struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS DECIMAL(10,0)) AS DOU
 -- !query
 SELECT cast(1 as string) / cast(1 as string) FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS DOUBLE) / CAST(CAST(1 AS STRING) AS DOUBLE)):double>
+struct<(CAST(1 AS STRING) / CAST(1 AS STRING)):double>
 -- !query output
 1.0
 

@@ -51,7 +51,7 @@ h3 {
     max-width: 80%;
 }
 
-/* Left pannel size */
+/* Left panel size */
 @media (min-width: 768px) {
     .col-md-3 {
         flex: 0 0 20%;

@@ -308,7 +308,7 @@ class ParamTests(SparkSessionTestCase):
             LogisticRegression
         )
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             ValueError,
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
@@ -372,7 +372,7 @@ if __name__ == "__main__":
     from pyspark.ml.tests.test_param import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

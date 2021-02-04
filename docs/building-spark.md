@@ -83,9 +83,9 @@ Example:
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 2.3.7.
+By default Spark will build with Hive 2.3.8.
 
-    # With Hive 2.3.7 support
+    # With Hive 2.3.8 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN
@@ -265,17 +265,15 @@ Change the major Scala version using (e.g. 2.13):
 
     ./dev/change-scala-version.sh 2.13
 
-For Maven, please enable the profile (e.g. 2.13):
+Enable the profile (e.g. 2.13):
 
+    # For Maven
     ./build/mvn -Pscala-2.13 compile
 
-For SBT, specify a complete scala version using (e.g. 2.13.0):
+    # For sbt
+    ./build/sbt -Pscala-2.13 compile
 
-    ./build/sbt -Dscala.version=2.13.0
-
-Otherwise, the sbt-pom-reader plugin will use the `scala.version` specified in the spark-parent pom.
-
-## Running Jenkins tests with Github Enterprise
+## Running Jenkins tests with GitHub Enterprise
 
 To run tests with Jenkins:
 

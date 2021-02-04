@@ -256,13 +256,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
         // Discard the cached relation.
-        sessionState.refreshTable("jsonTable")
+        spark.catalog.refreshTable("jsonTable")
 
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
           sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
-        sessionState.refreshTable("jsonTable")
+        spark.catalog.refreshTable("jsonTable")
         val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
 
         assert(expectedSchema === table("jsonTable").schema)
@@ -350,7 +350,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin)
 
         // Discard the cached relation.
-        sessionState.refreshTable("ctasJsonTable")
+        spark.catalog.refreshTable("ctasJsonTable")
 
         // Schema should not be changed.
         assert(table("ctasJsonTable").schema === table("jsonTable").schema)
@@ -438,7 +438,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
         (6 to 10).map(i => Row(i, s"str$i")))
 
-      sessionState.refreshTable("savedJsonTable")
+      spark.catalog.refreshTable("savedJsonTable")
 
       checkAnswer(
         sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
@@ -711,14 +711,14 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           identifier = TableIdentifier("wide_schema"),
           tableType = CatalogTableType.EXTERNAL,
           storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> tempDir.getCanonicalPath)
+            locationUri = Some(tempDir.toURI)
           ),
           schema = schema,
           provider = Some("json")
         )
         spark.sessionState.catalog.createTable(tableDesc, ignoreIfExists = false)
 
-        sessionState.refreshTable("wide_schema")
+        spark.catalog.refreshTable("wide_schema")
 
         val actualSchema = table("wide_schema").schema
         assert(schema === actualSchema)
@@ -751,7 +751,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
       hiveClient.createTable(hiveTable, ignoreIfExists = false)
 
-      sessionState.refreshTable(tableName)
+      spark.catalog.refreshTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
     }
@@ -763,7 +763,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable(tableName) {
       df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
-      sessionState.refreshTable(tableName)
+      spark.catalog.refreshTable(tableName)
       val metastoreTable = hiveClient.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
@@ -798,7 +798,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .bucketBy(8, "d", "b")
         .sortBy("c")
         .saveAsTable(tableName)
-      sessionState.refreshTable(tableName)
+      spark.catalog.refreshTable(tableName)
       val metastoreTable = hiveClient.getTable("default", tableName)
       val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
@@ -1076,7 +1076,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         identifier = TableIdentifier("skip_hive_metadata", Some("default")),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat.empty.copy(
-          properties = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true")
+          locationUri = Some(tempPath.toURI),
+          properties = Map("skipHiveMetadata" -> "true")
         ),
         schema = schema,
         provider = Some("parquet")
@@ -1337,7 +1338,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val e = intercept[AnalysisException] {
         sharedState.externalCatalog.getTable("default", "t")
       }.getMessage
-      assert(e.contains(s"Could not read schema from the hive metastore because it is corrupted"))
+      assert(e.contains("Cannot read table property 'spark.sql.sources.schema' as it's corrupted"))
 
       withDebugMode {
         val tableMeta = sharedState.externalCatalog.getTable("default", "t")
@@ -1354,7 +1355,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val newSession = sparkSession.newSession()
       newSession.sql("CREATE TABLE abc(i int) USING json")
       val tableMeta = newSession.sessionState.catalog.getTableMetadata(TableIdentifier("abc"))
-      assert(tableMeta.properties(DATASOURCE_SCHEMA_NUMPARTS).toInt == 1)
+      assert(tableMeta.properties.contains(DATASOURCE_SCHEMA))
       assert(tableMeta.properties(DATASOURCE_PROVIDER) == "json")
     }
   }

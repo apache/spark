@@ -269,6 +269,8 @@ Class: org.apache.spark.sql.catalyst.expressions.Cast
 Extended Usage:
     No example/argument for boolean.
 
+    Since: 2.0.1
+
 Function: boolean
 Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.
 

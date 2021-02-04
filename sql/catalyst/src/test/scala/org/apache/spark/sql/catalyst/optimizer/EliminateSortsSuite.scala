@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -27,14 +27,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, ORDER_BY_ORDINAL}
 import org.apache.spark.sql.types.IntegerType
 
-class EliminateSortsSuite extends PlanTest {
-  override val conf = new SQLConf().copy(CASE_SENSITIVE -> true, ORDER_BY_ORDINAL -> false)
-  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  val analyzer = new Analyzer(catalog, conf)
+class EliminateSortsSuite extends AnalysisTest {
+  val analyzer = getAnalyzer
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -52,8 +49,14 @@ class EliminateSortsSuite extends PlanTest {
       Batch("Limit PushDown", FixedPoint(10), LimitPushDown) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelationB = LocalRelation('d.int)
+  val testRelation = LocalRelation.fromExternalRows(
+    Seq("a".attr.int, "b".attr.int, "c".attr.int),
+    1.to(12).map(_ => Row(1, 2, 3))
+  )
+  val testRelationB = LocalRelation.fromExternalRows(
+    Seq("d".attr.int),
+    1.to(12).map(_ => Row(1))
+  )
 
   test("Empty order by clause") {
     val x = testRelation
@@ -66,23 +69,29 @@ class EliminateSortsSuite extends PlanTest {
   }
 
   test("All the SortOrder are no-op") {
-    val x = testRelation
+    withSQLConf(CASE_SENSITIVE.key -> "true", ORDER_BY_ORDINAL.key -> "false") {
+      val x = testRelation
+      val analyzer = getAnalyzer
 
-    val query = x.orderBy(SortOrder(3, Ascending), SortOrder(-1, Ascending))
-    val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = analyzer.execute(x)
+      val query = x.orderBy(SortOrder(3, Ascending), SortOrder(-1, Ascending))
+      val optimized = Optimize.execute(analyzer.execute(query))
+      val correctAnswer = analyzer.execute(x)
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("Partial order-by clauses contain no-op SortOrder") {
-    val x = testRelation
+    withSQLConf(CASE_SENSITIVE.key -> "true", ORDER_BY_ORDINAL.key -> "false") {
+      val x = testRelation
+      val analyzer = getAnalyzer
 
-    val query = x.orderBy(SortOrder(3, Ascending), 'a.asc)
-    val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = analyzer.execute(x.orderBy('a.asc))
+      val query = x.orderBy(SortOrder(3, Ascending), 'a.asc)
+      val optimized = Optimize.execute(analyzer.execute(query))
+      val correctAnswer = analyzer.execute(x.orderBy('a.asc))
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("Remove no-op alias") {
@@ -97,12 +106,34 @@ class EliminateSortsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("remove redundant order by") {
+  test("SPARK-33183: remove consecutive no-op sorts") {
+    val plan = testRelation.orderBy().orderBy().orderBy()
+    val optimized = Optimize.execute(plan.analyze)
+    val correctAnswer = testRelation.analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: remove redundant sort by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val unnecessaryReordered = orderedPlan.limit(2).select('a).sortBy('a.asc, 'b.desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
     val correctAnswer = orderedPlan.limit(2).select('a).analyze
-    comparePlans(Optimize.execute(optimized), correctAnswer)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: remove all redundant local sorts") {
+    val orderedPlan = testRelation.sortBy('a.asc).orderBy('a.asc).sortBy('a.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = testRelation.orderBy('a.asc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: should not remove global sort") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
+    val reordered = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val optimized = Optimize.execute(reordered.analyze)
+    val correctAnswer = reordered.analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("do not remove sort if the order is different") {
@@ -113,19 +144,36 @@ class EliminateSortsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("filters don't affect order") {
+  test("SPARK-33183: remove top level local sort with filter operators") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
-    val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.where('a > Literal(10)).sortBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
     val correctAnswer = orderedPlan.where('a > Literal(10)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
-  test("limits don't affect order") {
+  test("SPARK-33183: keep top level global sort with filter operators") {
+    val projectPlan = testRelation.select('a, 'b)
+    val orderedPlan = projectPlan.orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)
+    val optimized = Optimize.execute(filteredAndReordered.analyze)
+    val correctAnswer = projectPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: limits should not affect order for local sort") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
+    val filteredAndReordered = orderedPlan.limit(Literal(10)).sortBy('a.asc, 'b.desc)
+    val optimized = Optimize.execute(filteredAndReordered.analyze)
+    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: should not remove global sort with limit operators") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
     val filteredAndReordered = orderedPlan.limit(Literal(10)).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
-    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    val correctAnswer = filteredAndReordered.analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -137,11 +185,11 @@ class EliminateSortsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("range is already sorted") {
+  test("SPARK-33183: should not remove global sort with range operator") {
     val inputPlan = Range(1L, 1000L, 1, 10)
     val orderedPlan = inputPlan.orderBy('id.asc)
     val optimized = Optimize.execute(orderedPlan.analyze)
-    val correctAnswer = inputPlan.analyze
+    val correctAnswer = orderedPlan.analyze
     comparePlans(optimized, correctAnswer)
 
     val reversedPlan = inputPlan.orderBy('id.desc)
@@ -152,8 +200,16 @@ class EliminateSortsSuite extends PlanTest {
     val negativeStepInputPlan = Range(10L, 1L, -1, 10)
     val negativeStepOrderedPlan = negativeStepInputPlan.orderBy('id.desc)
     val negativeStepOptimized = Optimize.execute(negativeStepOrderedPlan.analyze)
-    val negativeStepCorrectAnswer = negativeStepInputPlan.analyze
+    val negativeStepCorrectAnswer = negativeStepOrderedPlan.analyze
     comparePlans(negativeStepOptimized, negativeStepCorrectAnswer)
+  }
+
+  test("SPARK-33183: remove local sort with range operator") {
+    val inputPlan = Range(1L, 1000L, 1, 10)
+    val orderedPlan = inputPlan.sortBy('id.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = inputPlan.analyze
+    comparePlans(optimized, correctAnswer)
   }
 
   test("sort should not be removed when there is a node which doesn't guarantee any order") {
@@ -197,13 +253,25 @@ class EliminateSortsSuite extends PlanTest {
     comparePlans(optimizedThrice, correctAnswerThrice)
   }
 
-  test("remove orderBy in groupBy clause with count aggs") {
-    val projectPlan = testRelation.select('a, 'b)
-    val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
-    val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(count(1))
-    val optimized = Optimize.execute(groupByPlan.analyze)
-    val correctAnswer = projectPlan.groupBy('a)(count(1)).analyze
-    comparePlans(optimized, correctAnswer)
+  test("remove orderBy in groupBy clause with order irrelevant aggs") {
+    Seq(
+      (e : Expression) => min(e),
+      (e : Expression) => minDistinct(e),
+      (e : Expression) => max(e),
+      (e : Expression) => maxDistinct(e),
+      (e : Expression) => count(e),
+      (e : Expression) => countDistinct(e),
+      (e : Expression) => bitAnd(e),
+      (e : Expression) => bitOr(e),
+      (e : Expression) => bitXor(e)
+    ).foreach(agg => {
+      val projectPlan = testRelation.select('a, 'b)
+      val unnecessaryOrderByPlan = projectPlan.orderBy('a.asc, 'b.desc)
+      val groupByPlan = unnecessaryOrderByPlan.groupBy('a)(agg('b))
+      val optimized = Optimize.execute(groupByPlan.analyze)
+      val correctAnswer = projectPlan.groupBy('a)(agg('b)).analyze
+      comparePlans(optimized, correctAnswer)
+    })
   }
 
   test("remove orderBy in groupBy clause with sum aggs") {
@@ -318,5 +386,40 @@ class EliminateSortsSuite extends PlanTest {
       .limit(10)
     val correctAnswer = PushDownOptimizer.execute(noOrderByPlan.analyze)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: remove consecutive global sorts with the same ordering") {
+    Seq(
+      (testRelation.orderBy('a.asc).orderBy('a.asc), testRelation.orderBy('a.asc)),
+      (testRelation.orderBy('a.asc, 'b.desc).orderBy('a.asc), testRelation.orderBy('a.asc))
+    ).foreach { case (ordered, answer) =>
+      val optimized = Optimize.execute(ordered.analyze)
+      comparePlans(optimized, answer.analyze)
+    }
+  }
+
+  test("SPARK-33183: remove consecutive local sorts with the same ordering") {
+    val orderedPlan = testRelation.sortBy('a.asc).sortBy('a.asc).sortBy('a.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = testRelation.sortBy('a.asc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: remove consecutive local sorts with different ordering") {
+    val orderedPlan = testRelation.sortBy('b.asc).sortBy('a.desc).sortBy('a.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = testRelation.sortBy('a.asc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-33183: should keep global sort when child is a local sort with the same ordering") {
+    val correctAnswer = testRelation.orderBy('a.asc).analyze
+    Seq(
+      testRelation.sortBy('a.asc).orderBy('a.asc),
+      testRelation.orderBy('a.asc).sortBy('a.asc).orderBy('a.asc)
+    ).foreach { ordered =>
+      val optimized = Optimize.execute(ordered.analyze)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }

@@ -131,7 +131,7 @@ the following case-insensitive options:
   <tr>
     <td><code>fetchsize</code></td>
     <td>
-      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows). This option applies only to reading.
+      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (e.g. Oracle with 10 rows). This option applies only to reading.
     </td>
   </tr>
 

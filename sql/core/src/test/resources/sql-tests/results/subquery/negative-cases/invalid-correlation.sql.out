@@ -46,7 +46,7 @@ AND    t2b = (SELECT max(avg)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 't2.`t2b`' is not an aggregate function. Wrap '(avg(CAST(t2.`t2b` AS BIGINT)) AS `avg`)' in windowing function(s) or wrap 't2.`t2b`' in first() (or first_value) if you don't care which value you get.;
+grouping expressions sequence is empty, and 't2.`t2b`' is not an aggregate function. Wrap '(avg(t2.`t2b`) AS `avg`)' in windowing function(s) or wrap 't2.`t2b`' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -63,7 +63,7 @@ WHERE  t1a IN (SELECT   min(t2a)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x]).;
+Resolved attribute(s) t2b#x missing from min(t2a)#x,t2c#x in operator !Filter t2c#x IN (list#x [t2b#x]).
 
 
 -- !query
@@ -78,7 +78,7 @@ HAVING EXISTS (SELECT t2a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t1.`t1a` + t2.`t2a`)), Outer references: t1.`t1a`, Local references: t2.`t2a`.;
+Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t1.`t1a` + t2.`t2a`)), Outer references: t1.`t1a`, Local references: t2.`t2a`.
 
 
 -- !query
@@ -94,7 +94,7 @@ WHERE  t1a IN (SELECT t2a
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t2.`t2a` + t3.`t3a`)), Outer references: t2.`t2a`, Local references: t3.`t3a`.;
+Found an aggregate expression in a correlated predicate that has both outer and local references, which is not supported yet. Aggregate expression: min((t2.`t2a` + t3.`t3a`)), Outer references: t2.`t2a`, Local references: t3.`t3a`.
 
 
 -- !query
@@ -111,7 +111,8 @@ org.apache.spark.sql.AnalysisException
 Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses:
 Aggregate [min(outer(t2a#x)) AS min(outer(t2.`t2a`))#x]
 +- SubqueryAlias t3
-   +- Project [t3a#x, t3b#x, t3c#x]
-      +- SubqueryAlias t3
-         +- LocalRelation [t3a#x, t3b#x, t3c#x]
-;
+   +- View (`t3`, [t3a#x,t3b#x,t3c#x])
+      +- Project [cast(t3a#x as int) AS t3a#x, cast(t3b#x as int) AS t3b#x, cast(t3c#x as int) AS t3c#x]
+         +- Project [t3a#x, t3b#x, t3c#x]
+            +- SubqueryAlias t3
+               +- LocalRelation [t3a#x, t3b#x, t3c#x]

@@ -110,7 +110,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       Seq(UnresolvedAlias(Multiply(unresolved_a, Literal(2))),
         unresolved_b, UnresolvedAlias(count(unresolved_c))))
 
-    val resultPlan = getAnalyzer(true).executeAndCheck(originalPlan2, new QueryPlanningTracker)
+    val resultPlan = getAnalyzer.executeAndCheck(originalPlan2, new QueryPlanningTracker)
     val gExpressions = resultPlan.asInstanceOf[Aggregate].groupingExpressions
     assert(gExpressions.size == 3)
     val firstGroupingExprAttrName =
@@ -160,7 +160,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   }
 
   test("grouping function") {
-    // GrouingSets
+    // GroupingSets
     val originalPlan = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
       Seq(unresolved_a, unresolved_b), r1,
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),
@@ -200,7 +200,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
   }
 
   test("grouping_id") {
-    // GrouingSets
+    // GroupingSets
     val originalPlan = GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
       Seq(unresolved_a, unresolved_b), r1,
       Seq(unresolved_a, unresolved_b, UnresolvedAlias(count(unresolved_c)),

@@ -44,7 +44,7 @@ import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.DRIVER_LOG_DFS_DIR
 import org.apache.spark.internal.config.History._
-import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, USER_GROUPS_MAPPING}
+import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -926,8 +926,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     oldProvider.listing.setMetadata(meta)
     oldProvider.stop()
 
-    val mistatchedVersionProvider = new FsHistoryProvider(conf)
-    assert(mistatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
+    val mismatchedVersionProvider = new FsHistoryProvider(conf)
+    assert(mismatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
   }
 
   test("invalidate cached UI") {
@@ -1473,6 +1473,107 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
         assert(job2.status === JobExecutionStatus.SUCCEEDED)
       }
     }
+  }
+
+  test("SPARK-33146: don't let one bad rolling log folder prevent loading other applications") {
+    withTempDir { dir =>
+      val conf = createTestConf(true)
+      conf.set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+      val fs = new Path(dir.getAbsolutePath).getFileSystem(hadoopConf)
+
+      val provider = new FsHistoryProvider(conf)
+
+      val writer = new RollingEventLogFilesWriter("app", None, dir.toURI, conf, hadoopConf)
+      writer.start()
+
+      writeEventsToRollingWriter(writer, Seq(
+        SparkListenerApplicationStart("app", Some("app"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+      provider.checkForLogs()
+      provider.cleanLogs()
+      assert(dir.listFiles().size === 1)
+      assert(provider.getListing.length === 1)
+
+      // Manually delete the appstatus file to make an invalid rolling event log
+      val appStatusPath = RollingEventLogFilesWriter.getAppStatusFilePath(new Path(writer.logPath),
+        "app", None, true)
+      fs.delete(appStatusPath, false)
+      provider.checkForLogs()
+      provider.cleanLogs()
+      assert(provider.getListing.length === 0)
+
+      // Create a new application
+      val writer2 = new RollingEventLogFilesWriter("app2", None, dir.toURI, conf, hadoopConf)
+      writer2.start()
+      writeEventsToRollingWriter(writer2, Seq(
+        SparkListenerApplicationStart("app2", Some("app2"), 0, "user", None),
+        SparkListenerJobStart(1, 0, Seq.empty)), rollFile = false)
+
+      // Both folders exist but only one application found
+      provider.checkForLogs()
+      provider.cleanLogs()
+      assert(provider.getListing.length === 1)
+      assert(dir.listFiles().size === 2)
+
+      // Make sure a new provider sees the valid application
+      provider.stop()
+      val newProvider = new FsHistoryProvider(conf)
+      newProvider.checkForLogs()
+      assert(newProvider.getListing.length === 1)
+    }
+  }
+
+  test("SPARK-33215: check ui view permissions without retrieving ui") {
+    val conf = createTestConf()
+      .set(HISTORY_SERVER_UI_ACLS_ENABLE, true)
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS, Seq("user1", "user2"))
+      .set(HISTORY_SERVER_UI_ADMIN_ACLS_GROUPS, Seq("group1"))
+      .set(USER_GROUPS_MAPPING, classOf[TestGroupsMappingProvider].getName)
+
+    val provider = new FsHistoryProvider(conf)
+    val log = newLogFile("app1", Some("attempt1"), inProgress = false)
+    writeFile(log, None,
+      SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
+        "test", Some("attempt1")),
+      SparkListenerEnvironmentUpdate(Map(
+        "Spark Properties" -> List((UI_VIEW_ACLS.key, "user"), (UI_VIEW_ACLS_GROUPS.key, "group")),
+        "Hadoop Properties" -> Seq.empty,
+        "JVM Information" -> Seq.empty,
+        "System Properties" -> Seq.empty,
+        "Classpath Entries" -> Seq.empty
+      )),
+      SparkListenerApplicationEnd(System.currentTimeMillis()))
+
+    provider.checkForLogs()
+
+    // attempt2 doesn't exist
+    intercept[NoSuchElementException] {
+      provider.checkUIViewPermissions("app1", Some("attempt2"), "user1")
+    }
+    // app2 doesn't exist
+    intercept[NoSuchElementException] {
+      provider.checkUIViewPermissions("app2", Some("attempt1"), "user1")
+    }
+
+    // user1 and user2 are admins
+    assert(provider.checkUIViewPermissions("app1", Some("attempt1"), "user1"))
+    assert(provider.checkUIViewPermissions("app1", Some("attempt1"), "user2"))
+    // user3 is a member of admin group "group1"
+    assert(provider.checkUIViewPermissions("app1", Some("attempt1"), "user3"))
+    // test is the app owner
+    assert(provider.checkUIViewPermissions("app1", Some("attempt1"), "test"))
+    // user is in the app's view acls
+    assert(provider.checkUIViewPermissions("app1", Some("attempt1"), "user"))
+    // user5 is a member of the app's view acls group "group"
+    assert(provider.checkUIViewPermissions("app1", Some("attempt1"), "user5"))
+
+    // abc, user6, user7 don't have permissions
+    assert(!provider.checkUIViewPermissions("app1", Some("attempt1"), "abc"))
+    assert(!provider.checkUIViewPermissions("app1", Some("attempt1"), "user6"))
+    assert(!provider.checkUIViewPermissions("app1", Some("attempt1"), "user7"))
+
+    provider.stop()
   }
 
   /**

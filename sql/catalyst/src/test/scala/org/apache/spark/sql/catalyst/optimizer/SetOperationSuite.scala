@@ -154,11 +154,11 @@ class SetOperationSuite extends PlanTest {
       .union(testRelation2.select(Literal(-1L).as("vcol"), 'd, 'e, 'f))
       .groupBy('a, 'b, 'c)('a, 'b, 'c, sum('vcol).as("sum"))
       .where(GreaterThan('sum, Literal(0L))).analyze
-    val multiplerAttr = planFragment.output.last
+    val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
       Generate(
-        ReplicateRows(Seq(multiplerAttr) ++ output),
+        ReplicateRows(Seq(multiplierAttr) ++ output),
         Nil,
         false,
         None,
@@ -183,11 +183,11 @@ class SetOperationSuite extends PlanTest {
       .select('a, 'b, 'c,
         If(GreaterThan('vcol1_count, 'vcol2_count), 'vcol2_count, 'vcol1_count).as("min_count"))
       .analyze
-    val multiplerAttr = planFragment.output.last
+    val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
       Generate(
-        ReplicateRows(Seq(multiplerAttr) ++ output),
+        ReplicateRows(Seq(multiplierAttr) ++ output),
         Nil,
         false,
         None,

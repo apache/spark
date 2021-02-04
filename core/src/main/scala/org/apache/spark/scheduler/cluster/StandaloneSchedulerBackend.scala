@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.Locale
 import java.util.concurrent.Semaphore
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -165,19 +166,26 @@ private[spark] class StandaloneSchedulerBackend(
   }
 
   override def executorRemoved(
-      fullId: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
+      fullId: String,
+      message: String,
+      exitStatus: Option[Int],
+      workerHost: Option[String]): Unit = {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code, exitCausedByApp = true, message)
-      case None => ExecutorProcessLost(message, workerLost = workerLost)
+      case None => ExecutorProcessLost(message, workerHost)
     }
     logInfo("Executor %s removed: %s".format(fullId, message))
     removeExecutor(fullId.split("/")(1), reason)
   }
 
-  override def executorDecommissioned(fullId: String, decommissionInfo: ExecutorDecommissionInfo) {
-    logInfo("Asked to decommission executor")
+  override def executorDecommissioned(fullId: String,
+      decommissionInfo: ExecutorDecommissionInfo): Unit = {
+    logInfo(s"Asked to decommission executor $fullId")
     val execId = fullId.split("/")(1)
-    decommissionExecutors(Array((execId, decommissionInfo)), adjustTargetNumExecutors = false)
+    decommissionExecutors(
+      Array((execId, decommissionInfo)),
+      adjustTargetNumExecutors = false,
+      triggeredByExecutor = false)
     logInfo("Executor %s decommissioned: %s".format(fullId, decommissionInfo))
   }
 
@@ -226,6 +234,13 @@ private[spark] class StandaloneSchedulerBackend(
         logWarning("Attempted to kill executors before driver fully initialized.")
         Future.successful(false)
     }
+  }
+
+  override def getDriverLogUrls: Option[Map[String, String]] = {
+    val prefix = "SPARK_DRIVER_LOG_URL_"
+    val driverLogUrls = sys.env.filterKeys(_.startsWith(prefix))
+      .map(e => (e._1.substring(prefix.length).toLowerCase(Locale.ROOT), e._2)).toMap
+    if (driverLogUrls.nonEmpty) Some(driverLogUrls) else None
   }
 
   private def waitForRegistration() = {

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret,
+import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Secret,
   TaskState => MesosTaskState, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 import org.apache.mesos.Protos.Environment.Variable
@@ -138,7 +138,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
     val containerInfo = ContainerInfo.newBuilder()
       .setType(containerType)
 
-    conf.get(EXECUTOR_DOCKER_IMAGE).map { image =>
+    conf.get(EXECUTOR_DOCKER_IMAGE).foreach { image =>
       val forcePullImage = conf
         .get(EXECUTOR_DOCKER_FORCE_PULL_IMAGE).contains(true)
 

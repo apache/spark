@@ -8,6 +8,7 @@
 *.swp
 *~
 .DS_Store
+.bsp/
 .cache
 .classpath
 .ensime
@@ -68,6 +69,7 @@ python/docs/source/reference/api/
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
+.mypy_cache/
 reports/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml
@@ -80,6 +82,7 @@ target/
 unit-tests.log
 work/
 docs/.jekyll-metadata
+docs/.jekyll-cache
 
 # For Hive
 TempStatsStore/

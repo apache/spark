@@ -481,6 +481,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>1.1.1</td>
 </tr>
 <tr>
+  <td><code>spark.mesos.driver.memoryOverhead</code></td>
+  <td>driver memory * 0.10, with minimum of 384</td>
+  <td>
+    The amount of additional memory, specified in MB, to be allocated to the driver. By default,
+    the overhead will be larger of either 384 or 10% of <code>spark.driver.memory</code>. If set,
+    the final overhead will be this value. Only applies to cluster mode.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.uris</code></td>
   <td>(none)</td>
   <td>
@@ -735,6 +744,38 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>2.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.mesos.dispatcher.queue</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Set the name of the dispatcher queue to which the application is submitted.
+    The specified queue must be added to the dispatcher with <code>spark.mesos.dispatcher.queue.[QueueName]</code>.
+    If no queue is specified, then the application is submitted to the "default" queue with 0.0 priority.
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.mesos.dispatcher.queue.[QueueName]</code></td>
+  <td><code>0.0</code></td>
+  <td>
+    Add a new queue for submitted drivers with the specified priority.
+    Higher numbers indicate higher priority.
+    The user can specify multiple queues to define a workload management policy for queued drivers in the dispatcher.
+    A driver can then be submitted to a specific queue with <code>spark.mesos.dispatcher.queue</code>.
+    By default, the dispatcher has a single queue with 0.0 priority (cannot be overridden).
+    It is possible to implement a consistent and overall workload management policy throughout the lifecycle of drivers
+    by mapping priority queues to weighted Mesos roles, and by specifying a
+    <code>spark.mesos.role</code> along with a <code>spark.mesos.dispatcher.queue</code> when submitting an application.
+    For example, with the URGENT Mesos role:
+    <pre>
+    spark.mesos.dispatcher.queue.URGENT=1.0
+
+    spark.mesos.dispatcher.queue=URGENT
+    spark.mesos.role=URGENT
+    </pre>
+  </td>
+  <td>3.1.0</td>
+</tr>
+<tr>
   <td><code>spark.mesos.gpus.max</code></td>
   <td><code>0</code></td>
   <td>
@@ -825,7 +866,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>host</code></td>
   <td>
     Provides support for the `local:///` scheme to reference the app jar resource in cluster mode.
-    If user uses a local resource (`local:///path/to/jar`) and the config option is not used it defaults to `host` eg.
+    If user uses a local resource (`local:///path/to/jar`) and the config option is not used it defaults to `host` e.g.
     the mesos fetcher tries to get the resource from the host's file system.
     If the value is unknown it prints a warning msg in the dispatcher logs and defaults to `host`.
     If the value is `container` then spark submit in the container will use the jar in the container's path:

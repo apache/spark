@@ -72,7 +72,7 @@ public class OneForOneStreamManagerSuite {
     Assert.assertNotNull(getChunk(manager, streamId, 2));
     manager.connectionTerminated(dummyChannel);
 
-    // loaded buffers are not released yet as in production a MangedBuffer returned by getChunk()
+    // loaded buffers are not released yet as in production a ManagedBuffer returned by getChunk()
     // would only be released by Netty after it is written to the network
     Mockito.verify(buffer1, Mockito.never()).release();
     Mockito.verify(buffer2, Mockito.never()).release();

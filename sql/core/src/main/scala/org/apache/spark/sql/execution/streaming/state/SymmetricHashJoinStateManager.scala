@@ -25,14 +25,14 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, JoinedRow, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.KeyToValuePair
 import org.apache.spark.sql.types.{BooleanType, LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
 /**
- * Helper class to manage state required by a single side of [[StreamingSymmetricHashJoinExec]].
+ * Helper class to manage state required by a single side of
+ * [[org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinExec]].
  * The interface of this class is basically that of a multi-map:
  * - Get: Returns an iterator of multiple values for given key
  * - Append: Append a new value to the given key
@@ -99,13 +99,20 @@ class SymmetricHashJoinStateManager(
   /**
    * Get all the matched values for given join condition, with marking matched.
    * This method is designed to mark joined rows properly without exposing internal index of row.
+   *
+   * @param excludeRowsAlreadyMatched Do not join with rows already matched previously.
+   *                                  This is used for right side of left semi join in
+   *                                  [[StreamingSymmetricHashJoinExec]] only.
    */
   def getJoinedRows(
       key: UnsafeRow,
       generateJoinedRow: InternalRow => JoinedRow,
-      predicate: JoinedRow => Boolean): Iterator[JoinedRow] = {
+      predicate: JoinedRow => Boolean,
+      excludeRowsAlreadyMatched: Boolean = false): Iterator[JoinedRow] = {
     val numValues = keyToNumValues.get(key)
-    keyWithIndexToValue.getAll(key, numValues).map { keyIdxToValue =>
+    keyWithIndexToValue.getAll(key, numValues).filterNot { keyIdxToValue =>
+      excludeRowsAlreadyMatched && keyIdxToValue.matched
+    }.map { keyIdxToValue =>
       val joinedRow = generateJoinedRow(keyIdxToValue.value)
       if (predicate(joinedRow)) {
         if (!keyIdxToValue.matched) {
@@ -171,7 +178,7 @@ class SymmetricHashJoinStateManager(
         return null
       }
 
-      override def close: Unit = {}
+      override def close(): Unit = {}
     }
   }
 
@@ -280,7 +287,7 @@ class SymmetricHashJoinStateManager(
         return reusedRet.withNew(currentKey, currentValue.value, currentValue.matched)
       }
 
-      override def close: Unit = {}
+      override def close(): Unit = {}
     }
   }
 

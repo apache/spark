@@ -95,6 +95,15 @@ class WorkerTests(ReusedPySparkTestCase):
             self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
         self.assertEqual(100, rdd.map(str).count())
 
+    def test_after_non_exception_error(self):
+        # SPARK-33339: Pyspark application will hang due to non Exception
+        def raise_system_exit(_):
+            raise SystemExit()
+        rdd = self.sc.parallelize(range(100), 1)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: rdd.foreach(raise_system_exit))
+        self.assertEqual(100, rdd.map(str).count())
+
     def test_after_jvm_exception(self):
         tempFile = tempfile.NamedTemporaryFile(delete=False)
         tempFile.write(b"Hello World!")
@@ -134,7 +143,7 @@ class WorkerTests(ReusedPySparkTestCase):
         t.daemon = True
         t.start()
         t.join(5)
-        self.assertTrue(not t.isAlive())
+        self.assertTrue(not t.is_alive())
         self.assertEqual(100000, rdd.count())
 
     def test_with_different_versions_of_python(self):
@@ -156,7 +165,7 @@ class WorkerTests(ReusedPySparkTestCase):
 
             self.sc.parallelize([1]).map(lambda x: f()).count()
         except Py4JJavaError as e:
-            self.assertRegexpMatches(str(e), "exception with 中")
+            self.assertRegex(str(e), "exception with 中")
 
 
 class WorkerReuseTest(PySparkTestCase):
@@ -202,7 +211,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_worker import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

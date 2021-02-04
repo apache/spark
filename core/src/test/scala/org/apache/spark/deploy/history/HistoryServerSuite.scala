@@ -169,12 +169,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1426533911241/1/stages/0/0/taskList",
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
-    "blacklisting for stage" -> "applications/app-20180109111548-0000/stages/0/0",
-    "blacklisting node for stage" -> "applications/application_1516285256255_0012/stages/0/0",
+    "excludeOnFailure for stage" -> "applications/app-20180109111548-0000/stages/0/0",
+    "excludeOnFailure node for stage" -> "applications/application_1516285256255_0012/stages/0/0",
 
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
-    "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
-    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
+    "executor node excludeOnFailure" -> "applications/app-20161116163331-0000/executors",
+    "executor node excludeOnFailure unexcluding" ->
+      "applications/app-20161115172038-0000/executors",
     "executor memory usage" -> "applications/app-20161116163331-0000/executors",
     "executor resource information" -> "applications/application_1555004656427_0144/executors",
     "multiple resource profiles" -> "applications/application_1578436911597_0052/environment",
@@ -198,7 +199,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       errOpt should be (None)
 
       val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")),
+        StandardCharsets.UTF_8)
       // compare the ASTs so formatting differences don't cause failures
       import org.json4s._
       import org.json4s.jackson.JsonMethods._
@@ -584,6 +586,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  test("SPARK-33215: speed up event log download by skipping UI rebuild") {
+    val appId = "local-1430917381535"
+
+    stop()
+    init()
+
+    val port = server.boundPort
+    val testUrls = Seq(
+      s"http://localhost:$port/api/v1/applications/$appId/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+
+    testUrls.foreach { url =>
+      TestUtils.httpResponseCode(new URL(url))
+    }
+    assert(server.cacheMetrics.loadCount.getCount === 0, "downloading event log shouldn't load ui")
+  }
+
   test("access history application defaults to the last attempt id") {
 
     def getRedirectUrl(url: URL): (Int, String) = {
@@ -694,7 +714,7 @@ object HistoryServerSuite {
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)
-    val inString = in.map(IOUtils.toString)
+    val inString = in.map(IOUtils.toString(_, StandardCharsets.UTF_8))
     (code, inString, errString)
   }
 
@@ -710,7 +730,7 @@ object HistoryServerSuite {
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map(IOUtils.toString)
+      err.map(IOUtils.toString(_, StandardCharsets.UTF_8))
     } catch {
       case io: IOException => None
     }

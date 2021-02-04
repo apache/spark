@@ -39,7 +39,7 @@ abstract class Collect[T <: Growable[Any] with Iterable[Any]] extends TypedImper
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def dataType: DataType = ArrayType(child.dataType, false)
 

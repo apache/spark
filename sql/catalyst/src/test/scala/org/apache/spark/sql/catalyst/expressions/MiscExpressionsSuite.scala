@@ -26,21 +26,21 @@ import org.apache.spark.sql.types._
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  test("assert_true") {
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
-    }
-    intercept[RuntimeException] {
-      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
-    }
-    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
-    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
+  test("RaiseError") {
+    checkExceptionInExpression[RuntimeException](
+      RaiseError(Literal("error message")),
+      EmptyRow,
+      "error message"
+    )
+
+    checkExceptionInExpression[RuntimeException](
+      RaiseError(Literal.create(null, StringType)),
+      EmptyRow,
+      null
+    )
+
+    // Expects a string
+    assert(RaiseError(Literal(5)).checkInputDataTypes().isFailure)
   }
 
   test("uuid") {

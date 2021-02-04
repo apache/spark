@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
@@ -54,7 +53,11 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
-      groupingExprs ++ aggExprs
+      groupingExprs match {
+        // call `toList` because `Stream` can't serialize in scala 2.13
+        case s: Stream[Expression] => s.toList ++ aggExprs
+        case other => other ++ aggExprs
+      }
     } else {
       aggExprs
     }

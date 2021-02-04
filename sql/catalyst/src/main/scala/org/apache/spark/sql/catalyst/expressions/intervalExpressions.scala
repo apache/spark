@@ -109,25 +109,25 @@ abstract class IntervalNumOperation(
 case class MultiplyInterval(
     interval: Expression,
     num: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
-    if (checkOverflow) multiplyExact else multiply
+    if (failOnError) multiplyExact else multiply
 
-  override protected def operationName: String = if (checkOverflow) "multiplyExact" else "multiply"
+  override protected def operationName: String = if (failOnError) "multiplyExact" else "multiply"
 }
 
 case class DivideInterval(
     interval: Expression,
     num: Expression,
-    checkOverflow: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends IntervalNumOperation(interval, num) {
 
   override protected val operation: (CalendarInterval, Double) => CalendarInterval =
-    if (checkOverflow) divideExact else divide
+    if (failOnError) divideExact else divide
 
-  override protected def operationName: String = if (checkOverflow) "divideExact" else "divide"
+  override protected def operationName: String = if (failOnError) "divideExact" else "divide"
 }
 
 // scalastyle:off line.size.limit
@@ -152,7 +152,8 @@ case class DivideInterval(
       > SELECT _FUNC_(0, 1, 0, 1, 0, 0, 100.000001);
        1 months 1 days 1 minutes 40.000001 seconds
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "datetime_funcs")
 // scalastyle:on line.size.limit
 case class MakeInterval(
     years: Expression,
@@ -161,7 +162,8 @@ case class MakeInterval(
     days: Expression,
     hours: Expression,
     mins: Expression,
-    secs: Expression)
+    secs: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends SeptenaryExpression with ImplicitCastInputTypes with NullIntolerant {
 
   def this(
@@ -170,8 +172,19 @@ case class MakeInterval(
       weeks: Expression,
       days: Expression,
       hours: Expression,
+      mins: Expression,
+      sec: Expression) = {
+    this(years, months, weeks, days, hours, mins, sec, SQLConf.get.ansiEnabled)
+  }
+  def this(
+      years: Expression,
+      months: Expression,
+      weeks: Expression,
+      days: Expression,
+      hours: Expression,
       mins: Expression) = {
-    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
+    this(years, months, weeks, days, hours, mins, Literal(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)),
+      SQLConf.get.ansiEnabled)
   }
   def this(
       years: Expression,
@@ -195,7 +208,7 @@ case class MakeInterval(
   override def inputTypes: Seq[AbstractDataType] = Seq(IntegerType, IntegerType, IntegerType,
     IntegerType, IntegerType, IntegerType, DecimalType(Decimal.MAX_LONG_DIGITS, 6))
   override def dataType: DataType = CalendarIntervalType
-  override def nullable: Boolean = true
+  override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def nullSafeEval(
       year: Any,
@@ -215,7 +228,7 @@ case class MakeInterval(
         min.asInstanceOf[Int],
         sec.map(_.asInstanceOf[Decimal]).getOrElse(Decimal(0, Decimal.MAX_LONG_DIGITS, 6)))
     } catch {
-      case _: ArithmeticException => null
+      case _: ArithmeticException if !failOnError => null
     }
   }
 
@@ -223,11 +236,12 @@ case class MakeInterval(
     nullSafeCodeGen(ctx, ev, (year, month, week, day, hour, min, sec) => {
       val iu = IntervalUtils.getClass.getName.stripSuffix("$")
       val secFrac = sec.getOrElse("0")
+      val faileOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
       s"""
         try {
           ${ev.value} = $iu.makeInterval($year, $month, $week, $day, $hour, $min, $secFrac);
         } catch (java.lang.ArithmeticException e) {
-          ${ev.isNull} = true;
+          $faileOnErrorBranch
         }
       """
     })

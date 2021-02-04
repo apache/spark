@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.internal.SQLConf
 
 
 class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
@@ -45,9 +44,8 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   object Optimize extends Optimizer(
     new CatalogManager(
-      new SQLConf(),
       FakeV2SessionCatalog,
-      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, new SQLConf()))) {
+      new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))) {
     val newBatch = Batch("OptimizeRuleBreakSI", Once, OptimizeRuleBreakSI)
     override def defaultBatches: Seq[Batch] = Seq(newBatch) ++ super.defaultBatches
   }

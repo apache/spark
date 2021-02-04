@@ -67,6 +67,26 @@ def generic_file_source_options_example(spark):
     # +-------------+
     # $example off:load_with_path_glob_filter$
 
+    # $example on:load_with_modified_time_filter$
+    # Only load files modified before 07/1/2050 @ 08:30:00
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedBefore="2050-07-01T08:30:00")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # |file1.parquet|
+    # +-------------+
+    # Only load files modified after 06/01/2050 @ 08:30:00
+    df = spark.read.load("examples/src/main/resources/dir1",
+                         format="parquet", modifiedAfter="2050-06-01T08:30:00")
+    df.show()
+    # +-------------+
+    # |         file|
+    # +-------------+
+    # +-------------+
+    # $example off:load_with_modified_time_filter$
+
 
 def basic_datasource_example(spark):
     # $example on:generic_load_save_functions$
@@ -94,7 +114,7 @@ def basic_datasource_example(spark):
 
     # $example on:manual_load_options_csv$
     df = spark.read.load("examples/src/main/resources/people.csv",
-                         format="csv", sep=":", inferSchema="true", header="true")
+                         format="csv", sep=";", inferSchema="true", header="true")
     # $example off:manual_load_options_csv$
 
     # $example on:manual_save_options_orc$

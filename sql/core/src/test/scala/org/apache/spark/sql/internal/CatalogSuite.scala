@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -545,4 +545,11 @@ class CatalogSuite extends SharedSparkSession {
     assert(spark.table("my_temp_table").storageLevel == StorageLevel.DISK_ONLY)
   }
 
+  test("SPARK-34301: recover partitions of views is not supported") {
+    createTempTable("my_temp_table")
+    val errMsg = intercept[AnalysisException] {
+      spark.catalog.recoverPartitions("my_temp_table")
+    }.getMessage
+    assert(errMsg.contains("my_temp_table is a temp view. 'recoverPartitions()' expects a table"))
+  }
 }

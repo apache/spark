@@ -45,7 +45,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       if (e != null) {
         elementDt match {
           // For Nan, etc.
-          case FloatType | DoubleType => assert(seq(i).equals(e))
+          case FloatType | DoubleType => assert(seq(i) == e)
           case _ => assert(seq(i) === e)
         }
       } else {

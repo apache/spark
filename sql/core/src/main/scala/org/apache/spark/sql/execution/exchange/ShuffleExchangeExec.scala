@@ -57,9 +57,9 @@ trait ShuffleExchangeLike extends Exchange {
   def numPartitions: Int
 
   /**
-   * Returns whether the shuffle partition number can be changed.
+   * The origin of this shuffle operator.
    */
-  def canChangeNumPartitions: Boolean
+  def shuffleOrigin: ShuffleOrigin
 
   /**
    * The asynchronous job that materializes the shuffle.
@@ -77,18 +77,30 @@ trait ShuffleExchangeLike extends Exchange {
   def runtimeStatistics: Statistics
 }
 
+// Describes where the shuffle operator comes from.
+sealed trait ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
+// means that the shuffle operator is used to ensure internal data partitioning requirements and
+// Spark is free to optimize it as long as the requirements are still ensured.
+case object ENSURE_REQUIREMENTS extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
+// can still optimize it via changing shuffle partition number, as data partitioning won't change.
+case object REPARTITION extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator with
+// a certain partition number. Spark can't optimize it.
+case object REPARTITION_WITH_NUM extends ShuffleOrigin
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    noUserSpecifiedNumPartition: Boolean = true) extends ShuffleExchangeLike {
-
-  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
-  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
-  override def canChangeNumPartitions: Boolean =
-    noUserSpecifiedNumPartition && outputPartitioning != SinglePartition
+    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
+  extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)

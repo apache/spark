@@ -56,8 +56,8 @@ limitations under the License.
         </th>
         <th>
           <span data-toggle="tooltip" data-placement="top"
-                title="Number of executors blacklisted by the scheduler due to task failures.">
-            Blacklisted</span>
+                title="Number of executors excluded by the scheduler due to task failures.">
+            Excluded</span>
         </th>
           </tr>
         </thead>
@@ -86,9 +86,25 @@ limitations under the License.
             <span data-toggle="tooltip" data-placement="top"
                   title="Memory used / total available memory for off heap storage of data like RDD partitions cached in memory.">
               Off Heap Storage Memory</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Peak onHeap / offHeap memory used by JVM.">
+              Peak JVM Memory OnHeap / OffHeap</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Peak onHeap / offHeap memory used for execution. This refers to memory used for computation in shuffles, joins, user data structures, etc. See the Memory Management Overview documentation for more details.">
+              Peak Execution Memory OnHeap / OffHeap</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top"
+            title="Peak storage onHeap / offHeap memory used for storage of data like RDD partitions cached in memory.">
+              Peak Storage Memory OnHeap / OffHeap</span></th>
+          <th>
+            <span data-toggle="tooltip" data-placement="top"
+                  title="Peak direct byte buffer / memory-mapped buffer pool memory used by JVM. This refers to BufferPoolMXBean with form 'java.nio:type=BufferPool,name=direct' and 'java.nio:type=BufferPool,name=mapped'.">
+              Peak Pool Memory Direct / Mapped</span></th>
           <th>Disk Used</th>
           <th>Cores</th>
-          <th>Resources</th>
+          <th><span data-toggle="tooltip" data-placement="top" title="Resources currently used by each executor, such as GPU, FPGA, etc.">Resources</span></th>
           <th>Resource Profile Id</th>
           <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks currently executing. Darker shading highlights executors with more active tasks.">Active Tasks</span></th>
           <th><span data-toggle="tooltip" data-placement="top" title="Number of tasks that have failed on this executor. Darker shading highlights executors with a high proportion of failed tasks.">Failed Tasks</span></th>

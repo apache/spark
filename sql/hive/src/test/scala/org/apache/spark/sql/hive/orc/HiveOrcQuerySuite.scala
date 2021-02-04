@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import com.google.common.io.Files
+import org.apache.orc.OrcConf
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -168,9 +169,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // Since Hive 1.2.1 library code path still has this problem, users may hit this
-  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
-  // Apache Spark with the default configuration doesn't hit this bug.
   test("SPARK-22267 Spark SQL incorrectly reads ORC files when column order is different") {
     Seq("native", "hive").foreach { orcImpl =>
       withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
@@ -179,10 +177,12 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
           Seq(1 -> 2).toDF("c1", "c2").write.orc(path)
           checkAnswer(spark.read.orc(path), Row(1, 2))
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-            withTable("t") {
-              sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
-              checkAnswer(spark.table("t"), Row(2, 1))
+          Seq(true, false).foreach { convertMetastoreOrc =>
+            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+              withTable("t") {
+                sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
+                checkAnswer(spark.table("t"), Row(2, 1))
+              }
             }
           }
         }
@@ -190,9 +190,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
     }
   }
 
-  // Since Hive 1.2.1 library code path still has this problem, users may hit this
-  // when spark.sql.hive.convertMetastoreOrc=false. However, after SPARK-22279,
-  // Apache Spark with the default configuration doesn't hit this bug.
   test("SPARK-19809 NullPointerException on zero-size ORC file") {
     Seq("native", "hive").foreach { orcImpl =>
       withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl) {
@@ -201,8 +198,10 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
             sql(s"CREATE TABLE spark_19809(a int) STORED AS ORC LOCATION '$dir'")
             Files.touch(new File(s"${dir.getCanonicalPath}", "zero.orc"))
 
-            withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") { // default since 2.3.0
-              checkAnswer(spark.table("spark_19809"), Seq.empty)
+            Seq(true, false).foreach { convertMetastoreOrc =>
+              withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastoreOrc.toString) {
+                checkAnswer(spark.table("spark_19809"), Seq.empty)
+              }
             }
           }
         }
@@ -224,7 +223,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
   }
 
   test("SPARK-26437 Can not query decimal type when value is 0") {
-    assume(HiveUtils.isHive23, "bad test: This bug fixed by HIVE-13083(Hive 2.0.1)")
     withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
       withTable("spark_26437") {
         sql("CREATE TABLE spark_26437 STORED AS ORCFILE AS SELECT 0.00 AS c1")
@@ -257,7 +255,6 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
         withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true",
           HiveUtils.CONVERT_INSERTING_PARTITIONED_TABLE.key -> conversion) {
           withTable("dummy_orc_partitioned") {
-            spark.sessionState.refreshTable("dummy_orc_partitioned")
             spark.sql(
               s"""
                  |CREATE TABLE dummy_orc_partitioned(key INT, value STRING)
@@ -311,6 +308,76 @@ class HiveOrcQuerySuite extends OrcQueryTest with TestHiveSingleton {
 
             val df = spark.sql("SELECT _col2 FROM test_hive_orc_impl")
             checkAnswer(df, Row("12"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32864: Support ORC forced positional evolution") {
+    Seq("native", "hive").foreach { orcImpl =>
+      Seq(true, false).foreach { forcePositionalEvolution =>
+        Seq(true, false).foreach { convertMetastore =>
+          withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+            OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString,
+            HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastore.toString) {
+            withTempPath { f =>
+              val path = f.getCanonicalPath
+              Seq[(Integer, Integer)]((1, 2), (3, 4), (5, 6), (null, null))
+                .toDF("c1", "c2").write.orc(path)
+              val correctAnswer = Seq(Row(1, 2), Row(3, 4), Row(5, 6), Row(null, null))
+              checkAnswer(spark.read.orc(path), correctAnswer)
+
+              withTable("t") {
+                sql(s"CREATE EXTERNAL TABLE t(c3 INT, c2 INT) STORED AS ORC LOCATION '$path'")
+
+                val expected = if (forcePositionalEvolution) {
+                  correctAnswer
+                } else {
+                  Seq(Row(null, 2), Row(null, 4), Row(null, 6), Row(null, null))
+                }
+
+                checkAnswer(spark.table("t"), expected)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-32864: Support ORC forced positional evolution with partitioned table") {
+    Seq("native", "hive").foreach { orcImpl =>
+      Seq(true, false).foreach { forcePositionalEvolution =>
+        Seq(true, false).foreach { convertMetastore =>
+          withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> orcImpl,
+            OrcConf.FORCE_POSITIONAL_EVOLUTION.getAttribute -> forcePositionalEvolution.toString,
+            HiveUtils.CONVERT_METASTORE_ORC.key -> convertMetastore.toString) {
+            withTempPath { f =>
+              val path = f.getCanonicalPath
+              Seq[(Integer, Integer, Integer)]((1, 2, 1), (3, 4, 2), (5, 6, 3), (null, null, 4))
+                .toDF("c1", "c2", "p").write.partitionBy("p").orc(path)
+              val correctAnswer = Seq(Row(1, 2, 1), Row(3, 4, 2), Row(5, 6, 3), Row(null, null, 4))
+              checkAnswer(spark.read.orc(path), correctAnswer)
+
+              withTable("t") {
+                sql(
+                  s"""
+                     |CREATE EXTERNAL TABLE t(c3 INT, c2 INT)
+                     |PARTITIONED BY (p int)
+                     |STORED AS ORC
+                     |LOCATION '$path'
+                     |""".stripMargin)
+                sql("MSCK REPAIR TABLE t")
+                val expected = if (forcePositionalEvolution) {
+                  correctAnswer
+                } else {
+                  Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3), Row(null, null, 4))
+                }
+
+                checkAnswer(spark.table("t"), expected)
+              }
+            }
           }
         }
       }

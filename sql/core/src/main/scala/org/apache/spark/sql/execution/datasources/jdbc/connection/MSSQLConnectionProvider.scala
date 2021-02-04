@@ -25,12 +25,13 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[sql] class MSSQLConnectionProvider(
-    driver: Driver,
-    options: JDBCOptions,
-    parserMethod: String = "parseAndMergeProperties"
-  ) extends SecureConnectionProvider(driver, options) {
-  override val appEntry: String = {
+private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
+  override val driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+  val parserMethod: String = "parseAndMergeProperties"
+
+  override val name: String = "mssql"
+
+  override def appEntry(driver: Driver, options: JDBCOptions): String = {
     val configName = "jaasConfigurationName"
     val appEntryDefault = "SQLJDBCDriver"
 
@@ -58,18 +59,20 @@ private[sql] class MSSQLConnectionProvider(
     }
   }
 
-  override def getConnection(): Connection = {
-    setAuthenticationConfigIfNeeded()
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(options.principal, options.keytab).doAs(
-      new PrivilegedExceptionAction[Connection]() {
-        override def run(): Connection = {
-          MSSQLConnectionProvider.super.getConnection()
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+    val jdbcOptions = new JDBCOptions(options)
+    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(
+        new PrivilegedExceptionAction[Connection]() {
+          override def run(): Connection = {
+            MSSQLConnectionProvider.super.getConnection(driver, options)
+          }
         }
-      }
-    )
+      )
   }
 
-  override def getAdditionalProperties(): Properties = {
+  override def getAdditionalProperties(options: JDBCOptions): Properties = {
     val result = new Properties()
     // These props needed to reach internal kerberos authentication in the JDBC driver
     result.put("integratedSecurity", "true")
@@ -77,8 +80,8 @@ private[sql] class MSSQLConnectionProvider(
     result
   }
 
-  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
-    val (parent, configEntry) = getConfigWithAppEntry()
+  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
+    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
     /**
      * Couple of things to mention here (v8.2.2 client):
      * 1. MS SQL supports JAAS application name configuration
@@ -87,11 +90,7 @@ private[sql] class MSSQLConnectionProvider(
     val entryUsesKeytab = configEntry != null &&
       configEntry.exists(_.getOptions().get("useKeyTab") == "true")
     if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
-      setAuthenticationConfig(parent)
+      setAuthenticationConfig(parent, driver, options)
     }
   }
-}
-
-private[sql] object MSSQLConnectionProvider {
-  val driverClass = "com.microsoft.sqlserver.jdbc.SQLServerDriver"
 }

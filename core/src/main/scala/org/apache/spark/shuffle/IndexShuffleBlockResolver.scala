@@ -91,7 +91,7 @@ private[spark] class IndexShuffleBlockResolver(
    * When the dirs parameter is None then use the disk manager's local directories. Otherwise,
    * read from the specified directories.
    */
-  private def getIndexFile(
+  def getIndexFile(
       shuffleId: Int,
       mapId: Long,
       dirs: Option[Array[String]] = None): File = {
@@ -225,19 +225,37 @@ private[spark] class IndexShuffleBlockResolver(
    * Get the index & data block for migration.
    */
   def getMigrationBlocks(shuffleBlockInfo: ShuffleBlockInfo): List[(BlockId, ManagedBuffer)] = {
-    val shuffleId = shuffleBlockInfo.shuffleId
-    val mapId = shuffleBlockInfo.mapId
-    // Load the index block
-    val indexFile = getIndexFile(shuffleId, mapId)
-    val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val indexFileSize = indexFile.length()
-    val indexBlockData = new FileSegmentManagedBuffer(transportConf, indexFile, 0, indexFileSize)
+    try {
+      val shuffleId = shuffleBlockInfo.shuffleId
+      val mapId = shuffleBlockInfo.mapId
+      // Load the index block
+      val indexFile = getIndexFile(shuffleId, mapId)
+      val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      val indexFileSize = indexFile.length()
+      val indexBlockData = new FileSegmentManagedBuffer(
+        transportConf, indexFile, 0, indexFileSize)
 
-    // Load the data block
-    val dataFile = getDataFile(shuffleId, mapId)
-    val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val dataBlockData = new FileSegmentManagedBuffer(transportConf, dataFile, 0, dataFile.length())
-    List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      // Load the data block
+      val dataFile = getDataFile(shuffleId, mapId)
+      val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+      val dataBlockData = new FileSegmentManagedBuffer(
+        transportConf, dataFile, 0, dataFile.length())
+
+      // Make sure the index exist.
+      if (!indexFile.exists()) {
+        throw new FileNotFoundException("Index file is deleted already.")
+      }
+      if (dataFile.exists()) {
+        List((indexBlockId, indexBlockData), (dataBlockId, dataBlockData))
+      } else {
+        List((indexBlockId, indexBlockData))
+      }
+    } catch {
+      case _: Exception => // If we can't load the blocks ignore them.
+        logWarning(s"Failed to resolve shuffle block ${shuffleBlockInfo}. " +
+          "This is expected to occur if a block is removed after decommissioning has started.")
+        List.empty[(BlockId, ManagedBuffer)]
+    }
   }
 
 

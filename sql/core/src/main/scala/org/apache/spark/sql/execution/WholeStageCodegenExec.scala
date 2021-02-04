@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -671,7 +670,7 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
       }
 
       ${ctx.registerComment(
-        s"""Codegend pipeline for stage (id=$codegenStageId)
+        s"""Codegened pipeline for stage (id=$codegenStageId)
            |${this.treeString.trim}""".stripMargin,
          "wsc_codegenPipeline")}
       ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
@@ -873,7 +872,6 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
  * failed to generate/compile code.
  */
 case class CollapseCodegenStages(
-    conf: SQLConf,
     codegenStageCounter: AtomicInteger = new AtomicInteger(0))
   extends Rule[SparkPlan] {
 

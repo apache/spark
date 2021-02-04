@@ -156,4 +156,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       indexIn2.close()
     }
   }
+
+  test("SPARK-33198 getMigrationBlocks should not fail at missing files") {
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    assert(resolver.getMigrationBlocks(ShuffleBlockInfo(Int.MaxValue, Long.MaxValue)).isEmpty)
+  }
 }

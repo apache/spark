@@ -52,4 +52,15 @@ class SharedStateSuite extends SharedSparkSession {
     assert(conf.isInstanceOf[Configuration])
     assert(conf.asInstanceOf[Configuration].get("fs.defaultFS") == "file:///")
   }
+
+  test("SPARK-33740: hadoop configs in hive-site.xml can overrides pre-existing hadoop ones") {
+    val conf = new SparkConf()
+    val hadoopConf = new Configuration()
+    SharedState.loadHiveConfFile(conf, hadoopConf, Map.empty)
+    assert(hadoopConf.get("hadoop.tmp.dir") === "/tmp/hive_one")
+    hadoopConf.clear()
+    SharedState.loadHiveConfFile(
+      conf.set("spark.hadoop.hadoop.tmp.dir", "noop"), hadoopConf, Map.empty)
+    assert(hadoopConf.get("hadoop.tmp.dir") === null)
+  }
 }

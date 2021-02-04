@@ -285,7 +285,7 @@ private[spark] object ClosureCleaner extends Logging {
           logDebug(s" + outermost object is a closure, so we clone it: ${outermostClass}")
         } else if (outermostClass.getName.startsWith("$line")) {
           // SPARK-14558: if the outermost object is a REPL line object, we should clone
-          // and clean it as it may carray a lot of unnecessary information,
+          // and clean it as it may carry a lot of unnecessary information,
           // e.g. hadoop conf, spark conf, etc.
           logDebug(s" + outermost object is a REPL line object, so we clone it:" +
             s" ${outermostClass}")

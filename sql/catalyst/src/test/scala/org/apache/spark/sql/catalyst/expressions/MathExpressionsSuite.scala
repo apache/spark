@@ -138,9 +138,8 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     expression: Expression,
     inputRow: InternalRow = EmptyRow): Unit = {
 
-    val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
+    val plan =
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)
 
     val actual = plan(inputRow).get(0, expression.dataType)
     if (!actual.asInstanceOf[Double].isNaN) {
@@ -159,7 +158,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("conv") {
     checkEvaluation(Conv(Literal("3"), Literal(10), Literal(2)), "11")
     checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(-16)), "-F")
-    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "FFFFFFFFFFFFFFF1")
+    checkEvaluation(Conv(Literal("-15"), Literal(10), Literal(16)), "-F")
     checkEvaluation(Conv(Literal("big"), Literal(36), Literal(16)), "3A48")
     checkEvaluation(Conv(Literal.create(null, StringType), Literal(36), Literal(16)), null)
     checkEvaluation(Conv(Literal("3"), Literal.create(null, IntegerType), Literal(16)), null)
@@ -169,10 +168,12 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       Conv(Literal(""), Literal(10), Literal(16)), null)
     checkEvaluation(
-      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "FFFFFFFFFFFFFFFF")
+      Conv(Literal("9223372036854775807"), Literal(36), Literal(16)), "12DDAC15F246BAF8C0D551AC7")
     // If there is an invalid digit in the number, the longest valid prefix should be converted.
     checkEvaluation(
       Conv(Literal("11abc"), Literal(10), Literal(16)), "B")
+    checkEvaluation(Conv(Literal("c8dcdfb41711fc9a1f17928001d7fd61"), Literal(16), Literal(10)),
+      "266992441711411603393340504520074460513")
   }
 
   test("e") {

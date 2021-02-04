@@ -24,11 +24,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.AlterTable
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, DataType, HIVE_TYPE_STRING, HiveStringType, MapType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -295,16 +294,63 @@ private[sql] object CatalogV2Util {
     catalog.name().equalsIgnoreCase(CatalogManager.SESSION_CATALOG_NAME)
   }
 
-  def convertTableProperties(
+  def convertTableProperties(c: CreateTableStatement): Map[String, String] = {
+    convertTableProperties(
+      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
+  }
+
+  def convertTableProperties(c: CreateTableAsSelectStatement): Map[String, String] = {
+    convertTableProperties(
+      c.properties, c.options, c.serde, c.location, c.comment, c.provider, c.external)
+  }
+
+  def convertTableProperties(r: ReplaceTableStatement): Map[String, String] = {
+    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  }
+
+  def convertTableProperties(r: ReplaceTableAsSelectStatement): Map[String, String] = {
+    convertTableProperties(r.properties, r.options, r.serde, r.location, r.comment, r.provider)
+  }
+
+  private def convertTableProperties(
       properties: Map[String, String],
       options: Map[String, String],
+      serdeInfo: Option[SerdeInfo],
       location: Option[String],
       comment: Option[String],
-      provider: Option[String]): Map[String, String] = {
-    properties ++ options ++
+      provider: Option[String],
+      external: Boolean = false): Map[String, String] = {
+    properties ++
+      options ++ // to make the transition to the "option." prefix easier, add both
+      options.map { case (key, value) => TableCatalog.OPTION_PREFIX + key -> value } ++
+      convertToProperties(serdeInfo) ++
+      (if (external) Some(TableCatalog.PROP_EXTERNAL -> "true") else None) ++
       provider.map(TableCatalog.PROP_PROVIDER -> _) ++
       comment.map(TableCatalog.PROP_COMMENT -> _) ++
       location.map(TableCatalog.PROP_LOCATION -> _)
+  }
+
+  /**
+   * Converts Hive Serde info to table properties. The mapped property keys are:
+   *  - INPUTFORMAT/OUTPUTFORMAT: hive.input/output-format
+   *  - STORED AS: hive.stored-as
+   *  - ROW FORMAT SERDE: hive.serde
+   *  - SERDEPROPERTIES: add "option." prefix
+   */
+  private def convertToProperties(serdeInfo: Option[SerdeInfo]): Map[String, String] = {
+    serdeInfo match {
+      case Some(s) =>
+        s.formatClasses.map { f =>
+          Map("hive.input-format" -> f.input, "hive.output-format" -> f.output)
+        }.getOrElse(Map.empty) ++
+        s.storedAs.map("hive.stored-as" -> _) ++
+        s.serde.map("hive.serde" -> _) ++
+        s.serdeProperties.map {
+          case (key, value) => TableCatalog.OPTION_PREFIX + key -> value
+        }
+      case None =>
+        Map.empty
+    }
   }
 
   def withDefaultOwnership(properties: Map[String, String]): Map[String, String] = {
@@ -330,21 +376,6 @@ private[sql] object CatalogV2Util {
       .map(catalogManager.catalog)
       .getOrElse(catalogManager.v2SessionCatalog)
       .asTableCatalog
-  }
-
-  def failCharType(dt: DataType): Unit = {
-    if (HiveStringType.containsCharType(dt)) {
-      throw new AnalysisException(
-        "Cannot use CHAR type in non-Hive-Serde tables, please use STRING type instead.")
-    }
-  }
-
-  def assertNoCharTypeInSchema(schema: StructType): Unit = {
-    schema.foreach { f =>
-      if (f.metadata.contains(HIVE_TYPE_STRING)) {
-        failCharType(CatalystSqlParser.parseRawDataType(f.metadata.getString(HIVE_TYPE_STRING)))
-      }
-    }
   }
 
   def failNullType(dt: DataType): Unit = {

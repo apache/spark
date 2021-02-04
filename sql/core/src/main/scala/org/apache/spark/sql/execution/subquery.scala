@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSeq, CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
+import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, ExprId, InSet, ListQuery, Literal, PlanExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
@@ -114,10 +114,10 @@ case class InSubqueryExec(
     child: Expression,
     plan: BaseSubqueryExec,
     exprId: ExprId,
-    private var resultBroadcast: Broadcast[Set[Any]] = null) extends ExecSubqueryExpression {
+    private var resultBroadcast: Broadcast[Array[Any]] = null) extends ExecSubqueryExpression {
 
-  @transient private var result: Set[Any] = _
-  @transient private lazy val inSet = InSet(child, result)
+  @transient private var result: Array[Any] = _
+  @transient private lazy val inSet = InSet(child, result.toSet)
 
   override def dataType: DataType = BooleanType
   override def children: Seq[Expression] = child :: Nil
@@ -133,14 +133,14 @@ case class InSubqueryExec(
   def updateResult(): Unit = {
     val rows = plan.executeCollect()
     result = if (plan.output.length > 1) {
-      rows.toSet
+      rows.asInstanceOf[Array[Any]]
     } else {
-      rows.map(_.get(0, child.dataType)).toSet
+      rows.map(_.get(0, child.dataType))
     }
     resultBroadcast = plan.sqlContext.sparkContext.broadcast(result)
   }
 
-  def values(): Option[Set[Any]] = Option(resultBroadcast).map(_.value)
+  def values(): Option[Array[Any]] = Option(resultBroadcast).map(_.value)
 
   private def prepareResult(): Unit = {
     require(resultBroadcast != null, s"$this has not finished")
@@ -177,7 +177,8 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(
-          SubqueryExec(s"scalar-subquery#${subquery.exprId.id}", executedPlan),
+          SubqueryExec.createForScalarSubquery(
+            s"scalar-subquery#${subquery.exprId.id}", executedPlan),
           subquery.exprId)
       case expressions.InSubquery(values, ListQuery(query, _, exprId, _)) =>
         val expr = if (values.length == 1) {
@@ -199,7 +200,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
  * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
  * references.
  */
-case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
+object ReuseSubquery extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.subqueryReuseEnabled) {

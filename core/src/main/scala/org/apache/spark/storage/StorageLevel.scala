@@ -45,7 +45,7 @@ class StorageLevel private(
   extends Externalizable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
-  private def this(flags: Int, replication: Int) {
+  private def this(flags: Int, replication: Int) = {
     this((flags & 8) != 0, (flags & 4) != 0, (flags & 2) != 0, (flags & 1) != 0, replication)
   }
 

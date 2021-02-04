@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
 class CodeBlockSuite extends SparkFunSuite {
 
@@ -115,7 +115,7 @@ class CodeBlockSuite extends SparkFunSuite {
     assert(exprValues === Set(isNull1, value1, isNull2, value2, literal))
   }
 
-  test("Throws exception when interpolating unexcepted object in code block") {
+  test("Throws exception when interpolating unexpected object in code block") {
     val obj = Tuple2(1, 1)
     val e = intercept[IllegalArgumentException] {
       code"$obj"

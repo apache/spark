@@ -33,7 +33,7 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
   test("handle large number of containers and tasks (SPARK-18750)") {
     // Run the test in a thread with a small stack size, since the original issue
     // surfaced as a StackOverflowError.
-    var error: Throwable = null
+    @volatile var error: Throwable = null
 
     val runnable = new Runnable() {
       override def run(): Unit = try {
@@ -43,14 +43,22 @@ class LocalityPlacementStrategySuite extends SparkFunSuite {
       }
     }
 
-    val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 32 * 1024)
+    val thread = new Thread(new ThreadGroup("test"), runnable, "test-thread", 256 * 1024)
+    thread.setDaemon(true)
     thread.start()
-    thread.join()
+    val secondsToWait = 30
+    thread.join(secondsToWait * 1000)
+    if (thread.isAlive()) {
+      error = new RuntimeException(
+        "Timeout at waiting for thread to stop (its stack trace is added to the exception)")
+      error.setStackTrace(thread.getStackTrace)
+      thread.interrupt()
+    }
 
     if (error != null) {
       val errors = new StringWriter()
       error.printStackTrace(new PrintWriter(errors))
-      fail(s"StackOverflowError should not be thrown; however, got:\n\n$errors")
+      fail(s"Failed with an exception or a timeout at thread join:\n\n$errors")
     }
   }
 
