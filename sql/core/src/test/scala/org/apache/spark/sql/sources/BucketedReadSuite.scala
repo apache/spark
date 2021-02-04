@@ -122,7 +122,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
       SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false",
       SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "false") {
-      val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
+      val bucketedDataFrame = spark.table("bucketed_table")
       val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
       // Limit: bucket pruning only works when the bucket column has one and only one column
       assert(bucketColumnNames.length == 1)
@@ -154,15 +154,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
         withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
           // Bucket pruning should still work without bucketed scan
-          val planWithoutBucketedScan = spark.table("bucketed_table").select("i", "j", "k")
-            .filter(filterCondition).queryExecution.executedPlan
+          val planWithoutBucketedScan = bucketedDataFrame.filter(filterCondition)
+            .queryExecution.executedPlan
           val fileScan = getFileScan(planWithoutBucketedScan)
           assert(!fileScan.bucketedScan, s"except no bucketed scan but found\n$fileScan")
 
-          val tableSchema = fileScan.schema
-          val bucketColumnIndex = tableSchema.fieldIndex(bucketColumnNames.head)
-          val bucketColumn = tableSchema.toAttributes(bucketColumnIndex)
-          val bucketColumnType = tableSchema.apply(bucketColumnIndex).dataType
+          val bucketColumnType = bucketedDataFrame.schema.apply(bucketColumnIndex).dataType
           val rowsWithInvalidBuckets = fileScan.execute().filter(row => {
             // Return rows should have been pruned
             val bucketColumnValue = row.get(bucketColumnIndex, bucketColumnType)
@@ -179,14 +176,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       }
 
       val expectedDataFrame = originalDataFrame.filter(filterCondition).orderBy("i", "j", "k")
+        .select("i", "j", "k")
       checkAnswer(
-        bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
+        bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k").select("i", "j", "k"),
         expectedDataFrame)
 
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
         checkAnswer(
-          spark.table("bucketed_table").select("i", "j", "k").filter(filterCondition)
-            .orderBy("i", "j", "k"),
+          bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k").select("i", "j", "k"),
           expectedDataFrame)
       }
     }

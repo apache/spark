@@ -602,7 +602,7 @@ case class FileSourceScanExec(
               true
           }
         }
-      case None =>
+      case _ =>
         _ => true
     }
 
