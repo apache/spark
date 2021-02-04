@@ -305,8 +305,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("b", ArrayType(IntegerType))(),
             AttributeReference("c", MapType(StringType, IntegerType))(),
             AttributeReference("d", StructType(
-              Array(StructField("col1", IntegerType),
-                StructField("col2", IntegerType))))(),
+              Array(StructField("_1", IntegerType),
+                StructField("_2", IntegerType))))(),
             AttributeReference("e", new SimpleTupleUDT)()),
           child = child,
           ioschema = defaultIOSchema
@@ -508,18 +508,18 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             AttributeReference("c", MapType(StringType, IntegerType))(),
             AttributeReference("d", MapType(StringType, ArrayType(StringType)))(),
             AttributeReference("e", StructType(
-              Array(StructField("col1", ArrayType(IntegerType)),
-                StructField("col2", ArrayType(ArrayType(IntegerType))))))(),
+              Array(StructField("a", ArrayType(IntegerType)),
+                StructField("b", ArrayType(ArrayType(IntegerType))))))(),
             AttributeReference("f", StructType(
-              Array(StructField("col1", ArrayType(IntegerType)),
-                StructField("col2", MapType(StringType, ArrayType(StringType))))))(),
+              Array(StructField("a", ArrayType(IntegerType)),
+                StructField("d", MapType(StringType, ArrayType(StringType))))))(),
             AttributeReference("g", StructType(
               Array(StructField("col1", StructType(
-                Array(StructField("col1", ArrayType(IntegerType)),
-                  StructField("col2", ArrayType(ArrayType(IntegerType)))))),
+                Array(StructField("a", ArrayType(IntegerType)),
+                  StructField("b", ArrayType(ArrayType(IntegerType)))))),
                 StructField("col2", StructType(
-                  Array(StructField("col1", ArrayType(IntegerType)),
-                    StructField("col2", MapType(StringType, ArrayType(StringType)))))))))()),
+                  Array(StructField("a", ArrayType(IntegerType)),
+                    StructField("d", MapType(StringType, ArrayType(StringType)))))))))()),
           child = child,
           ioschema = defaultIOSchema
         ),
@@ -551,23 +551,19 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ),
         df.select('level_7).collect())
 
-      val e = intercept[RuntimeException] {
-        checkAnswer(
-          df,
-          (child: SparkPlan) => createScriptTransformationExec(
-            input = Seq(
-              df.col("level_8").expr),
-            script = "cat",
-            output = Seq(
-              AttributeReference("a", ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
-                ArrayType(ArrayType(IntegerType)))))))))()),
-            child = child,
-            ioschema = defaultIOSchema
-          ),
-          df.select('level_8).collect())
-      }.getMessage
-      assert(e.contains("Number of levels of nesting supported for Spark SQL" +
-        " script transform is 7 Unable to work with level 8"))
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("level_8").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("a", ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
+              ArrayType(ArrayType(IntegerType)))))))))()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select('level_8).collect())
     }
   }
 
