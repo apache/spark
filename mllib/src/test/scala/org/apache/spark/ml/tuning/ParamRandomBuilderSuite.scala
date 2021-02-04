@@ -74,17 +74,28 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     }
   }
 
-  def assertEvenDistribution[T: Numeric: Generator](n: Int, lim: Limits[T]): Assertion = {
-    val gen:          RandomT[T]  = RandomRanges(lim)
+  def meanAndStandardDeviation[T: Numeric](xs: Seq[T]): (Double, Double) = {
     val ops:          Numeric[T]  = implicitly[Numeric[T]]
-    val xs:           Seq[T]      = (0 to n).map { _: Int => gen.randomT() }
-    val mean:         Double      = ops.toDouble(xs.sum) / xs.length
+    val n:            Int         = xs.length
+    val mean:         Double      = ops.toDouble(xs.sum) / n
     val squaredDiff:  Seq[Double] = xs.map { x: T => math.pow(ops.toDouble(x) - mean, 2) }
     val stdDev:       Double      = math.pow(squaredDiff.sum / n - 1, 0.5)
-    val ordered:      (T, T)      = lowerUpper(lim.x, lim.y)
-    val range:        T           = ops.minus(ordered._2, ordered._1)
-    val halfWay:      Double      = (ops.toDouble(range) / 2) + ops.toDouble(ordered._1)
-    val tolerance:    Double      = 5 * stdDev
+    (mean, stdDev)
+  }
+
+  def midPointOf[T: Numeric : Generator](lim: Limits[T]): Double = {
+    val ordered:  (T, T)      = lowerUpper(lim.x, lim.y)
+    val ops:      Numeric[T]  = implicitly[Numeric[T]]
+    val range:    T           = ops.minus(ordered._2, ordered._1)
+    (ops.toDouble(range) / 2) + ops.toDouble(ordered._1)
+  }
+
+  def assertEvenDistribution[T: Numeric: Generator](n: Int, lim: Limits[T]): Assertion = {
+    val gen:          RandomT[T]  = RandomRanges(lim)
+    val xs:           Seq[T]      = (0 to n).map { _: Int => gen.randomT() }
+    val (mean, stdDev)            = meanAndStandardDeviation(xs)
+    val tolerance:    Double      = 4 * stdDev
+    val halfWay:      Double      = midPointOf(lim)
     assert(mean > halfWay - tolerance && mean < halfWay + tolerance)
   }
 
