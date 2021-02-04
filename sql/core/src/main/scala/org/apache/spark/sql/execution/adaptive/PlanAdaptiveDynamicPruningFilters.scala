@@ -43,7 +43,7 @@ case class PlanAdaptiveDynamicPruningFilters(
           HashJoin.rewriteKeyExpr(buildKeys), adaptivePlan.executedPlan.output)
         val mode = HashedRelationBroadcastMode(packedKeys)
         // plan a broadcast exchange of the build side of the join
-        val exchange = BroadcastExchangeExec(mode, adaptivePlan.executedPlan)
+        val exchange = BroadcastExchangeExec(mode, adaptivePlan)
         val existingStage = stageCache.get(exchange.canonicalized)
         if (existingStage.nonEmpty && conf.exchangeReuseEnabled) {
           val name = s"dynamicpruning#${exprId.id}"
