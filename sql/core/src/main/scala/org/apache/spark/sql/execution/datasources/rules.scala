@@ -406,7 +406,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       catalogTable.get.tracksPartitionsInCatalog
     if (partitionsTrackedByCatalog && normalizedPartSpec.nonEmpty) {
       // empty partition column value
-      if (normalizedPartSpec.map(_._2)
+      if (normalizedPartSpec.values
           .filter(_.isDefined).map(_.get).exists(v => v != null && v.isEmpty)) {
         val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
         throw new AnalysisException(
