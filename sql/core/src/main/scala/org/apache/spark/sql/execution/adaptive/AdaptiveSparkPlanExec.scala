@@ -157,7 +157,7 @@ case class AdaptiveSparkPlanExec(
 
   override def output: Seq[Attribute] = inputPlan.output
 
-  override def doCanonicalize(): SparkPlan = inputPlan.canonicalized
+  override def doCanonicalize(): SparkPlan = executedPlan.canonicalized
 
   override def resetMetrics(): Unit = {
     metrics.valuesIterator.foreach(_.reset())
@@ -464,7 +464,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform shuffle node to something else.")
         }
-        ShuffleQueryStageExec(currentStageId, newShuffle)
+        ShuffleQueryStageExec(currentStageId, newShuffle, s.canonicalized)
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
@@ -474,7 +474,7 @@ case class AdaptiveSparkPlanExec(
           throw new IllegalStateException(
             "Custom columnar rules cannot transform broadcast node to something else.")
         }
-        BroadcastQueryStageExec(currentStageId, newBroadcast)
+        BroadcastQueryStageExec(currentStageId, newBroadcast, b.canonicalized)
     }
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, e)

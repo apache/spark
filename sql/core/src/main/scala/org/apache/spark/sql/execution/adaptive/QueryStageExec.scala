@@ -149,7 +149,8 @@ abstract class QueryStageExec extends LeafExecNode {
  */
 case class ShuffleQueryStageExec(
     override val id: Int,
-    override val plan: SparkPlan) extends QueryStageExec {
+    override val plan: SparkPlan,
+    canonicalize: SparkPlan) extends QueryStageExec {
 
   @transient val shuffle = plan match {
     case s: ShuffleExchangeLike => s
@@ -165,7 +166,8 @@ case class ShuffleQueryStageExec(
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
     val reuse = ShuffleQueryStageExec(
       newStageId,
-      ReusedExchangeExec(newOutput, shuffle))
+      ReusedExchangeExec(newOutput, shuffle),
+      shuffle.canonicalized)
     reuse._resultOption = this._resultOption
     reuse
   }
@@ -197,7 +199,8 @@ case class ShuffleQueryStageExec(
  */
 case class BroadcastQueryStageExec(
     override val id: Int,
-    override val plan: SparkPlan) extends QueryStageExec {
+    override val plan: SparkPlan,
+    canonicalize: SparkPlan) extends QueryStageExec {
 
   @transient val broadcast = plan match {
     case b: BroadcastExchangeLike => b
@@ -229,7 +232,8 @@ case class BroadcastQueryStageExec(
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
     val reuse = BroadcastQueryStageExec(
       newStageId,
-      ReusedExchangeExec(newOutput, broadcast))
+      ReusedExchangeExec(newOutput, broadcast),
+      broadcast.canonicalized)
     reuse._resultOption = this._resultOption
     reuse
   }
