@@ -61,6 +61,21 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     checkDistributionOf(range, fn)
   }
 
+  test("random floats") {
+    forAll { (x: Float, y: Float) =>
+      val limit:  Limits[Float]  = Limits(x, y)
+      val gen:    RandomT[Float] = RandomRanges(limit)
+      val result: Float          = gen.randomT()
+      assert(result >= math.min(x, y) && result <= math.max(x, y))
+    }
+  }
+
+  test("random float distribution") {
+    val range = 1000f
+    val fn: RangeToLimitsFn[Float] = { case (x, y) => Limits(x, y + 2 * range) }
+    checkDistributionOf(range, fn)
+  }
+
   type RangeToLimitsFn[T] = (T, T) => Limits[T]
 
   def checkDistributionOf[T: Numeric: Generator: Choose](range: T, limFn: RangeToLimitsFn[T]): Unit = {
@@ -81,6 +96,11 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     val squaredDiff:  Seq[Double] = xs.map { x: T => math.pow(ops.toDouble(x) - mean, 2) }
     val stdDev:       Double      = math.pow(squaredDiff.sum / n - 1, 0.5)
     (mean, stdDev)
+  }
+
+  def lowerUpper[T: Numeric](x: T, y: T): (T, T) = {
+    val ops:          Numeric[T]  = implicitly[Numeric[T]]
+    (ops.min(x, y), ops.max(x, y))
   }
 
   def midPointOf[T: Numeric : Generator](lim: Limits[T]): Double = {

@@ -46,21 +46,27 @@ object RandomRanges {
     randomBigInt0To(diff) + lower
   }
 
-  def lowerUpper[T: Numeric](x: T, y: T): (T, T) = {
-    val ops:          Numeric[T]  = implicitly[Numeric[T]]
-    (ops.min(x, y), ops.max(x, y))
+  private def randomBigIntIn(lower: BigDecimal, upper: BigDecimal): BigDecimal = {
+    val zeroCenteredRnd:  BigDecimal = BigDecimal(rnd.nextDouble() - 0.5)
+    val range:            BigDecimal = upper - lower
+    val halfWay:          BigDecimal = lower + range / 2
+    (zeroCenteredRnd * range) + halfWay
   }
 
   implicit object DoubleGenerator extends Generator[Double] {
     def apply(limits: Limits[Double]): RandomT[Double] = new RandomT[Double] {
       override def randomT(): Double = {
         import limits._
-        val upper:            BigDecimal = BigDecimal(math.max(x, y))
-        val lower:            BigDecimal = BigDecimal(math.min(x, y))
-        val zeroCenteredRnd:  BigDecimal = BigDecimal(rnd.nextDouble() - 0.5)
-        val range:            BigDecimal = upper - lower
-        val halfWay:          BigDecimal = lower + range / 2
-        ((zeroCenteredRnd * range) + halfWay).doubleValue()
+        randomBigIntIn(BigDecimal(math.min(x, y)), BigDecimal(math.max(x, y))).doubleValue()
+      }
+    }
+  }
+
+  implicit object FloatGenerator extends Generator[Float] {
+    def apply(limits: Limits[Float]): RandomT[Float] = new RandomT[Float] {
+      override def randomT(): Float = {
+        import limits._
+        randomBigIntIn(BigDecimal(math.min(x, y)), BigDecimal(math.max(x, y))).floatValue()
       }
     }
   }
