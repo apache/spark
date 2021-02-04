@@ -226,10 +226,9 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
-      case _: ArrayType | _: MapType | _: StructType => wrapperConvertException(data => {
+      case _: ArrayType | _: MapType | _: StructType => wrapperConvertException(data =>
         JsonToStructs(attr.dataType, Map.empty[String, String],
-          Literal(data), Some(conf.sessionLocalTimeZone)).eval()
-      }, converter)
+          Literal(data), Some(conf.sessionLocalTimeZone)).eval(), converter)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
