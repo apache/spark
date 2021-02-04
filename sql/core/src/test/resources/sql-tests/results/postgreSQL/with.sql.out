@@ -523,14 +523,14 @@ UNION ALL
     SELECT tree.id, t.path || array(tree.id)
     FROM tree JOIN t ON (tree.parent_id = t.id)
 )
-SELECT t1.id, count(t2.*) FROM t AS t1 JOIN t AS t2 ON
+SELECT t1.id, count(*) FROM t AS t1 JOIN t AS t2 ON
 	(t1.path[0] = t2.path[0] AND
 	size(t1.path) = 1 AND
 	size(t2.path) > 1)
 	GROUP BY t1.id
 	ORDER BY t1.id
 -- !query schema
-struct<id:int,count(id, path):bigint>
+struct<id:int,count(1):bigint>
 -- !query output
 2	6
 3	7
@@ -873,7 +873,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 INTERSECT SELECT n+1 FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -883,7 +883,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 INTERSECT ALL SELECT n+1 FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -893,7 +893,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 EXCEPT SELECT n+1 FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -903,7 +903,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 EXCEPT ALL SELECT n+1 FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -913,7 +913,7 @@ WITH RECURSIVE x(n) AS (SELECT n FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -923,7 +923,7 @@ WITH RECURSIVE x(n) AS (SELECT n FROM x UNION ALL SELECT 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should not contain recursive references in its anchor (first) term.;
+Recursive query x should not contain recursive references in its anchor (first) term.
 
 
 -- !query
@@ -951,7 +951,7 @@ SELECT * FROM x
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -963,7 +963,7 @@ SELECT * FROM x
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -975,7 +975,7 @@ SELECT * FROM x
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -986,7 +986,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should not contain recursive references in its subquery.;
+Recursive query x should not contain recursive references in its subquery.
 
 
 -- !query
@@ -996,7 +996,7 @@ WITH RECURSIVE x(n) AS (SELECT 1L UNION ALL SELECT count(*) FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -1006,7 +1006,7 @@ WITH RECURSIVE x(n) AS (SELECT 1L UNION ALL SELECT sum(n) FROM x)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference x cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -1016,7 +1016,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x ORDER BY 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -1026,7 +1026,7 @@ WITH RECURSIVE x(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM x LIMIT 10)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query x should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -1038,7 +1038,7 @@ WITH RECURSIVE x(id) AS (values (1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query x should not contain recursive references in its subquery.;
+Recursive query x should not contain recursive references in its subquery.
 
 
 -- !query
@@ -1314,7 +1314,7 @@ WITH RECURSIVE foo(i) AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference foo cannot be used multiple times in a recursive term.;
+Recursive reference foo cannot be used multiple times in a recursive term.
 
 
 -- !query
@@ -1329,7 +1329,7 @@ WITH RECURSIVE foo(i) AS
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference foo cannot be used multiple times in a recursive term.;
+Recursive reference foo cannot be used multiple times in a recursive term.
 
 
 -- !query
@@ -1495,7 +1495,7 @@ SELECT * FROM outermost ORDER BY 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query outermost should not contain recursive references in its anchor (first) term.;
+Recursive query outermost should not contain recursive references in its anchor (first) term.
 
 
 -- !query

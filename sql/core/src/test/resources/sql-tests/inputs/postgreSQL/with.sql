@@ -417,7 +417,7 @@ UNION ALL
     SELECT tree.id, t.path || array(tree.id)
     FROM tree JOIN t ON (tree.parent_id = t.id)
 )
-SELECT t1.id, count(t2.*) FROM t AS t1 JOIN t AS t2 ON
+SELECT t1.id, count(*) FROM t AS t1 JOIN t AS t2 ON
 	(t1.path[0] = t2.path[0] AND
 	size(t1.path) = 1 AND
 	size(t2.path) > 1)

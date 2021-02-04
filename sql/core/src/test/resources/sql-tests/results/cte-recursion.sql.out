@@ -140,7 +140,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query r should not contain recursive references in its anchor (first) term.;
+Recursive query r should not contain recursive references in its anchor (first) term.
 
 
 -- !query
@@ -178,7 +178,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query r should not contain recursive references in its anchor (first) term.;
+Recursive query r should not contain recursive references in its anchor (first) term.
 
 
 -- !query
@@ -196,7 +196,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query r should not contain recursive references in its anchor (first) term.;
+Recursive query r should not contain recursive references in its anchor (first) term.
 
 
 -- !query
@@ -208,7 +208,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query r should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query r should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -244,7 +244,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query r should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.;
+Recursive query r should contain UNION or UNION ALL statements only. This error can also be caused by ORDER BY or LIMIT keywords used on result of UNION or UNION ALL.
 
 
 -- !query
@@ -258,7 +258,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive query r should not contain recursive references in its subquery.;
+Recursive query r should not contain recursive references in its subquery.
 
 
 -- !query
@@ -275,7 +275,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference r cannot be used multiple times in a recursive term.;
+Recursive reference r cannot be used multiple times in a recursive term.
 
 
 -- !query
@@ -293,7 +293,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -311,7 +311,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -339,7 +339,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
@@ -353,7 +353,7 @@ SELECT * FROM r
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).;
+Recursive reference r cannot be used here. This can be caused by using it on inner side of an outer join, using it with aggregate in a subquery or using it multiple times in a recursive term (except for using it on different sides of an UNION ALL).
 
 
 -- !query
