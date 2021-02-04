@@ -28,7 +28,6 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
@@ -240,7 +239,6 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
-      val avroPropertyKeys = HadoopTableReader.avroTableProperties
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
       createHadoopRDD(localTableDesc, inputPathStr).mapPartitions { iter =>
@@ -256,7 +254,7 @@ class HadoopTableReader(
         // properties.
         val props = new Properties(tableProperties)
         partProps.asScala.filterNot { case (k, _) =>
-          avroPropertyKeys.contains(k) && tableProperties.containsKey(k)
+          k.startsWith("avro.schema.") && tableProperties.containsKey(k)
         }.foreach { case (key, value) =>
           props.setProperty(key, value)
         }
@@ -394,8 +392,6 @@ private[hive] object HiveTableUtil {
 private[hive] object DeserializerLock
 
 private[hive] object HadoopTableReader extends HiveInspectors with Logging {
-
-  val avroTableProperties = AvroTableProperties.values().map(_.getPropName()).toSet
 
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
