@@ -19,13 +19,11 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException, SQLFeatureNotSupportedException}
 import java.time.{Instant, LocalDate}
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.util.Try
 import scala.util.control.NonFatal
-
-import sun.util.calendar.ZoneInfo
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
@@ -456,7 +454,7 @@ object JdbcUtils extends Logging {
         row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
 
     // SPARK-34357 - sql TIME type represents as zero epoch timestamp.
-    // It is represented as Spark TimestampType but fixed at 1970-01-01 for day,
+    // It is mapped as Spark TimestampType but fixed at 1970-01-01 for day,
     // time portion is time of day, with no reference to a particular calendar,
     // time zone or date, with a precision till microseconds.
     // It stores the number of milliseconds after midnight, 00:00:00.000000
@@ -464,13 +462,11 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) => {
         val rawTime = rs.getTime(pos + 1)
         if (rawTime != null) {
-          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(rawTime.toLocalTime().toNanoOfDay())
-          val localTimeMillis = DateTimeUtils.microsToMillis(localTimeMicro)
-          val timeZoneOffset = TimeZone.getDefault match {
-            case zoneInfo: ZoneInfo => zoneInfo.getOffsetsByWall(localTimeMillis, null)
-            case timeZone: TimeZone => timeZone.getOffset(localTimeMillis - timeZone.getRawOffset)
-          }
-          row.setLong(pos, localTimeMicro - DateTimeUtils.millisToMicros(timeZoneOffset))
+          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
+            rawTime.toLocalTime().toNanoOfDay())
+          val utcTimeMicro = DateTimeUtils.toUTCTime(
+            localTimeMicro, SQLConf.get.sessionLocalTimeZone)
+          row.setLong(pos, utcTimeMicro)
         } else {
           row.update(pos, null)
         }
