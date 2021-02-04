@@ -2480,6 +2480,15 @@ class DataFrameSuite extends QueryTest
   test("SPARK-32761: aggregating multiple distinct CONSTANT columns") {
      checkAnswer(sql("select count(distinct 2), count(distinct 2,3)"), Row(1, 1))
   }
+
+  test("SPARK-34318: colRegex should work with column names & qualifiers which contain newlines") {
+    val df = Seq(1, 2, 3).toDF("test\n_column").as("test\n_table")
+    val col1 = df.colRegex("`tes.*\n.*mn`")
+    checkAnswer(df.select(col1), Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
+    checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
