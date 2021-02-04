@@ -218,7 +218,7 @@ Before using <code>keytab</code> and <code>principal</code> configuration option
 * The included JDBC driver version supports kerberos authentication with keytab. 
 * There is a built-in connection provider which supports the used database.
 
-There is a built-in connection provider for the following databases:
+There is a built-in connection providers for the following databases:
 * DB2
 * MariaDB
 * MS Sql

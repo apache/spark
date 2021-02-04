@@ -23,17 +23,16 @@ and the usage or custom provider implementation is not obvious.
 
 ## What are JDBC connection providers and why use them?
 
-JDBC connection providers (CPs from now on) are making JDBC connections initiated by JDBC sources.
-When a Spark source initiates JDBC connection it looks for a CP which supports the included driver,
-the user just need to provide the `keytab` location and the `principal`. The `keytab` file must exist
-on each node where connection is initiated. The way how CP lookup happens described in later chapter.
-
 Spark initially provided non-authenticated or user/password authenticated connections.
-This is quite insecure and some of the users expected stronger authentication possibilities.
-This need fulfilled in 2 ways:
- * Embedded CPs added which support kerberos authentication using `keytab` and `principal` (but only if the JDBC driver supports keytab)
- * `org.apache.spark.sql.jdbc.JdbcConnectionProvider` developer API added which allows developers
-   to implement any kind of database/use-case specific authentication method.
+This is quite insecure and must be avoided when possible.
+
+JDBC connection providers (CPs from now on) are making JDBC connections initiated by JDBC sources
+which can be a more secure alternative.
+
+Spark provides two ways to deal with stronger authentication:
+* Built-in CPs added which support kerberos authentication using `keytab` and `principal` (but only if the JDBC driver supports keytab)
+* `org.apache.spark.sql.jdbc.JdbcConnectionProvider` developer API added which allows developers
+  to implement any kind of database/use-case specific authentication method.
 
 ## How JDBC connection providers loaded?
 
@@ -42,31 +41,35 @@ effect on all other CPs.
 
 ## How to disable JDBC connection providers?
 
-There are cases where the embedded CP doesn't provide the exact feature which needed
+There are cases where the built-in CP doesn't provide the exact feature which needed
 so they can be turned off and can be replaced with custom implementation. All CPs must provide a `name`
 which must be unique. One can set the following configuration entry in `SparkConf` to turn off CPs:
 `spark.sql.sources.disabledJdbcConnProviderList=name1,name2`.
 
 ## How a JDBC connection provider found when new connection initiated?
 
+When a Spark source initiates JDBC connection it looks for a CP which supports the included driver,
+the user just need to provide the `keytab` location and the `principal`. The `keytab` file must exist
+on each node where connection is initiated.
+
 CPs has a mandatory API which must be implemented:
 
 `def canHandle(driver: Driver, options: Map[String, String]): Boolean`
 
 If this function returns `true` then `Spark` considers the CP can handle the connection setup.
-Embedded CPs returning `true` in the following cases:
+Built-in CPs returning `true` in the following cases:
 * If the connection is not secure (no `keytab` or `principal` provided) then the `basic` named CP responds.
 * If the connection is secure (`keytab` and `principal` provided) then the database specific CP responds.
   Database specific providers are checking the JDBC driver class name and the decision is made based
   on that. For example `PostgresConnectionProvider` responds only when the driver class name is `org.postgresql.Driver`.
 
-Important to mention that exactly one CP can return `true` from `canHandle` for a particular connection
+Important to mention that exactly one CP must return `true` from `canHandle` for a particular connection
 request because otherwise `Spark` can't decide which CP need to be used to make the connection.
 Such cases exception is thrown and the data processing stops.
 
 ## How to implement a custom JDBC connection provider?
 
-I've added an example CP to the examples project (which does nothing).
+Spark provides an example CP in the examples project (which does nothing).
 There are basically 2 files:
 * `examples/src/main/scala/org/apache/spark/examples/sql/jdbc/ExampleJdbcConnectionProvider.scala`
   which contains the main logic that can be further developed.
