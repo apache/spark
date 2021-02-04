@@ -1,8 +1,9 @@
 package org.apache.spark.ml.tuning
 
+import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.SparkFunSuite
 import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Gen.Choose
 import org.scalatest.Assertion
 import org.scalatest.matchers.must.Matchers
@@ -17,12 +18,7 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random ints") {
-    forAll { (x: Int, y: Int) =>
-      val intLimit: Limits[Int] = Limits(x, y)
-      val gen:    RandomT[Int]  = RandomRanges(intLimit)
-      val result: Int           = gen.randomT()
-      assert(result >= math.min(x, y) && result <= math.max(x, y))
-    }
+    checkRange[Int]
   }
 
   test("random int distribution") {
@@ -30,12 +26,7 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random longs") {
-    forAll { (x: Long, y: Long) =>
-      val longLimit:  Limits[Long]  = Limits(x, y)
-      val gen:        RandomT[Long] = RandomRanges(longLimit)
-      val result:     Long          = gen.randomT()
-      assert(result >= math.min(x, y) && result <= math.max(x, y))
-    }
+    checkRange[Long]
   }
 
   test("random long distribution") {
@@ -43,12 +34,7 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random doubles") {
-    forAll { (x: Double, y: Double) =>
-      val limit:  Limits[Double]  = Limits(x, y)
-      val gen:    RandomT[Double] = RandomRanges(limit)
-      val result: Double          = gen.randomT()
-      assert(result >= math.min(x, y) && result <= math.max(x, y))
-    }
+    checkRange[Double]
   }
 
   test("random double distribution") {
@@ -56,16 +42,22 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
 
   test("random floats") {
-    forAll { (x: Float, y: Float) =>
-      val limit:  Limits[Float]  = Limits(x, y)
-      val gen:    RandomT[Float] = RandomRanges(limit)
-      val result: Float          = gen.randomT()
-      assert(result >= math.min(x, y) && result <= math.max(x, y))
-    }
+    checkRange[Float]
   }
 
   test("random float distribution") {
     checkDistributionOf(1000f)
+  }
+
+  def checkRange[T: Numeric: Generator: Choose: TypeTag: Arbitrary]: Assertion = {
+    forAll { (x: T, y: T) =>
+      val ops: Numeric[T]     = implicitly[Numeric[T]]
+      val limit:  Limits[T]   = Limits(x, y)
+      val gen:    RandomT[T]  = RandomRanges(limit)
+      val result: T           = gen.randomT()
+      val ordered             = lowerUpper(x, y)
+      assert(ops.gteq(result, ordered._1) && ops.lteq(result, ordered._2))
+    }
   }
 
   def checkDistributionOf[T: Numeric: Generator: Choose](range: T): Unit = {
