@@ -21,7 +21,7 @@ import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
 import java.net.{URI, URL, URLEncoder}
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.{TimeUnit, TimeoutException}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
@@ -35,8 +35,8 @@ import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
@@ -577,6 +577,11 @@ private[spark] class ApplicationMaster(
         failureCount = 0
       } catch {
         case i: InterruptedException => // do nothing
+        case e: ApplicationAttemptNotFoundException if isClusterMode =>
+          failureCount += 1
+          logError("Exception from Reporter thread.", e)
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_REPORTER_FAILURE,
+            e.getMessage)
         case e: Throwable =>
           failureCount += 1
           if (!NonFatal(e)) {
