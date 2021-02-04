@@ -152,20 +152,18 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
           fail(s"Buckets ${invalidBuckets.mkString(",")} should have been pruned from:\n$plan")
         }
 
-        withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
-          // Bucket pruning should still work when bucketing is disabled
-          val planWithBucketDisabled = spark.table("bucketed_table").select("i", "j", "k")
+        withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
+          // Bucket pruning should still work without bucketed scan
+          val planWithoutBucketedScan = spark.table("bucketed_table").select("i", "j", "k")
             .filter(filterCondition).queryExecution.executedPlan
-          val fileScanWithBucketDisabled = getFileScan(planWithBucketDisabled)
-          assert(!fileScanWithBucketDisabled.bucketedScan,
-            "except no bucketed scan when disabling bucketing but found\n" +
-              s"$fileScanWithBucketDisabled")
+          val fileScan = getFileScan(planWithoutBucketedScan)
+          assert(!fileScan.bucketedScan, s"except no bucketed scan but found\n$fileScan")
 
-          val tableSchema = fileScanWithBucketDisabled.schema
+          val tableSchema = fileScan.schema
           val bucketColumnIndex = tableSchema.fieldIndex(bucketColumnNames.head)
           val bucketColumn = tableSchema.toAttributes(bucketColumnIndex)
           val bucketColumnType = tableSchema.apply(bucketColumnIndex).dataType
-          val rowsWithInvalidBuckets = fileScanWithBucketDisabled.execute().filter(row => {
+          val rowsWithInvalidBuckets = fileScan.execute().filter(row => {
             // Return rows should have been pruned
             val bucketColumnValue = row.get(bucketColumnIndex, bucketColumnType)
             val bucketId = BucketingUtils.getBucketIdFromValue(
@@ -175,7 +173,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
 
           if (rowsWithInvalidBuckets.nonEmpty) {
             fail(s"Rows ${rowsWithInvalidBuckets.mkString(",")} should have been pruned from:\n" +
-              s"$planWithBucketDisabled")
+              s"$planWithoutBucketedScan")
           }
         }
       }
@@ -185,7 +183,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
         expectedDataFrame)
 
-      withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
         checkAnswer(
           spark.table("bucketed_table").select("i", "j", "k").filter(filterCondition)
             .orderBy("i", "j", "k"),
