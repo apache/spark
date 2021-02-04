@@ -71,7 +71,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "'((100.3, 40.2), (20.198, 83.1), (500.821, 311.38))', '<500, 200, 100>', '16/B374D848', "
       + "'ab', 'efg', '2021-02-02', '1 minute', '00:11:22:33:44:55', "
       + "'00:11:22:33:44:55:66:77', 12.3456, '10:20:10,14,15', 1E+37, "
-      + "'17:22:31.949271', '2016-08-12 10:22:31.949271', 'cat:AB & dog:CD', "
+      + "'17:22:31', '2016-08-12 10:22:31.949271', 'cat:AB & dog:CD', "
       + "'dog and cat and fox', '10:20:10,14,15', '<key>id</key><value>10</value>')"
     ).executeUpdate()
     conn.prepareStatement("INSERT INTO bar VALUES (null, null, null, null, null, "
@@ -158,7 +158,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(classOf[JBigDecimal].isAssignableFrom(types(33)))
     assert(classOf[String].isAssignableFrom(types(34)))
     assert(classOf[java.lang.Float].isAssignableFrom(types(35)))
-    assert(classOf[java.lang.Integer].isAssignableFrom(types(36)))
+    assert(classOf[java.sql.Timestamp].isAssignableFrom(types(36)))
     assert(classOf[java.sql.Timestamp].isAssignableFrom(types(37)))
     assert(classOf[String].isAssignableFrom(types(38)))
     assert(classOf[String].isAssignableFrom(types(39)))
@@ -204,7 +204,7 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDecimal(33) == new JBigDecimal("12.3456"))
     assert(rows(0).getString(34) == "10:20:10,14,15")
     assert(rows(0).getFloat(35) == 1E+37F)
-    assert(rows(0).getInt(36) == 62551000)
+    assert(rows(0).getTimestamp(36) == Timestamp.valueOf("1970-01-01 17:22:31.0"))
     assert(rows(0).getTimestamp(37) == Timestamp.valueOf("2016-08-12 10:22:31.949271"))
     assert(rows(0).getString(38) == "'cat':AB & 'dog':CD")
     assert(rows(0).getString(39) == "'and' 'cat' 'dog' 'fox'")
