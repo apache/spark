@@ -1559,6 +1559,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT =
+    buildConf("spark.sql.legacy.allowStarWithSingleTableIdentifierInCount")
+      .internal()
+      .doc("When true, the SQL function 'count' is allowed to take single 'tblName.*' as parameter")
+      .version("3.2")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
     buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()
@@ -2475,10 +2483,10 @@ object SQLConf {
   val LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL =
     buildConf("spark.sql.legacy.parseNullPartitionSpecAsStringLiteral")
       .internal()
-      .doc("If it is set to true, a null partition value is parsed as a string literal of its " +
-        "text representation, e.g., string 'null'. Otherwise, null partition values are parsed " +
-        "as they are.")
-      .version("3.2.0")
+      .doc("If it is set to true, `PARTITION(col=null)` is parsed as a string literal of its " +
+        "text representation, e.g., string 'null', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a null literal in the partition spec.")
+      .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
 
@@ -3576,6 +3584,9 @@ class SQLConf extends Serializable with Logging {
   def useCurrentSQLConfigsForView: Boolean = getConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW)
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
+
+  def allowStarWithSingleTableIdentifierInCount: Boolean =
+    getConf(SQLConf.ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 

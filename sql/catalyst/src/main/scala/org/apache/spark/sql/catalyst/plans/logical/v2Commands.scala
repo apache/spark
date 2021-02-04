@@ -858,3 +858,22 @@ case class AlterTableSetLocation(
     location: String) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
 }
+
+/**
+ * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
+ */
+case class AlterTableSetProperties(
+    table: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
+ */
+case class AlterTableUnsetProperties(
+    table: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
