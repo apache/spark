@@ -70,10 +70,12 @@ case class CartesianProductExec(
   override def output: Seq[Attribute] = left.output ++ right.output
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"))
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val numMatchedPairs = longMetric("numMatchedPairs")
 
     val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
@@ -92,10 +94,14 @@ case class CartesianProductExec(
         val joined = new JoinedRow
 
         iter.filter { r =>
+          numMatchedPairs += 1
           boundCondition.eval(joined(r._1, r._2))
         }
       } else {
-        iter
+        iter.map { r =>
+          numMatchedPairs += 1
+          r
+        }
       }
       filtered.map { r =>
         numOutputRows += 1

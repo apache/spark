@@ -57,7 +57,8 @@ case class BroadcastHashJoinExec(
   }
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildBoundKeys, isNullAwareAntiJoin)

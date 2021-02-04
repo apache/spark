@@ -44,7 +44,8 @@ case class SortMergeJoinExec(
     isSkewJoin: Boolean = false) extends ShuffledJoin with CodegenSupport {
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"))
 
   override def nodeName: String = {
     if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
@@ -128,14 +129,21 @@ case class SortMergeJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val numMatchedPairs = longMetric("numMatchedPairs")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
-          Predicate.create(cond, left.output ++ right.output).eval _
+          (r: InternalRow) => {
+            numMatchedPairs += 1
+            Predicate.create(cond, left.output ++ right.output).eval(r)
+          }
         }.getOrElse {
-          (r: InternalRow) => true
+          (_: InternalRow) => {
+            numMatchedPairs += 1
+            true
+          }
         }
       }
 
@@ -585,6 +593,7 @@ case class SortMergeJoinExec(
 
     val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")
+    val numMatched = metricTerm(ctx, "numMatchedPairs")
     val (beforeLoop, condCheck) = if (condition.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")
@@ -624,6 +633,7 @@ case class SortMergeJoinExec(
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
        |  while ($iterator.hasNext()) {
        |    InternalRow $rightRow = (InternalRow) $iterator.next();
+       |    $numMatched.add(1);
        |    ${condCheck.trim}
        |    $numOutput.add(1);
        |    ${consume(ctx, leftVars ++ rightVars)}
