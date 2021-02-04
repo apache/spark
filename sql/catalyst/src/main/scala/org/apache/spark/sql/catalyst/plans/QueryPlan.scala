@@ -265,7 +265,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
    * The outer plan may have old references and the function below updates the
    * outer references to refer to the new attributes.
    */
-  private def updateOuterReferencesInSubquery(
+  protected def updateOuterReferencesInSubquery(
       plan: PlanType,
       attrMap: AttributeMap[Attribute]): PlanType = {
     plan.transformDown { case currentFragment =>

@@ -1492,9 +1492,9 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def hasConflictingAttrs(p: LogicalPlan): Boolean = {
       p.children.length > 1 && {
-        val numDistinctAttrs = p.children.flatMap(_.output.map(_.exprId)).distinct.length
-        val numOutputAttrs = p.children.map(_.output.length).sum
-        numDistinctAttrs < numOutputAttrs
+        p.children.tail.foldLeft(p.children.head.outputSet) {
+          case (conflictAttrs, child) => conflictAttrs.intersect(child.outputSet)
+        }.nonEmpty
       }
     }
 

@@ -59,9 +59,13 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
   private def renewDuplicatedRelations(
       existingRelations: Seq[MultiInstanceRelation],
       plan: LogicalPlan): (LogicalPlan, Seq[MultiInstanceRelation]) = plan match {
+    case p: LogicalPlan if p.isStreaming => (plan, Nil)
+
     case m: MultiInstanceRelation =>
       if (isDuplicated(existingRelations, m)) {
-        (m.newInstance(), Nil)
+        val newNode = m.newInstance()
+        newNode.copyTagsFrom(m)
+        (newNode, Nil)
       } else {
         (m, Seq(m))
       }
