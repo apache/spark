@@ -29,7 +29,6 @@ import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
-
 class HadoopConfDriverFeatureStepSuite extends SparkFunSuite {
 
   import KubernetesFeaturesTestUtils._
