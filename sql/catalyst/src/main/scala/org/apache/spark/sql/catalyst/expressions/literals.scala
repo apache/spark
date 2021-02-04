@@ -298,7 +298,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
-  private val timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+  private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
 
   override def toString: String = value match {
     case null => "null"

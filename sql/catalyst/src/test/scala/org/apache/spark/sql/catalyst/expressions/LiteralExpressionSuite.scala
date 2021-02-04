@@ -338,7 +338,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
   }
 
-  test("Date/Timestamp toString") {
+  test("SPARK-34342: Date/Timestamp toString") {
     assert(Literal.default(DateType).toString === "1970-01-01")
     assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00")
     withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
