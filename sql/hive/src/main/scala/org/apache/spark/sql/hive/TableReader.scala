@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.avro.AvroSerdeUtils.AvroTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspectorConverters, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
@@ -254,7 +255,7 @@ class HadoopTableReader(
         // properties.
         val props = new Properties(tableProperties)
         partProps.asScala.filterNot { case (k, _) =>
-          k.startsWith("avro.schema.") && tableProperties.containsKey(k)
+          k == AvroTableProperties.SCHEMA_LITERAL.getPropName() && tableProperties.containsKey(k)
         }.foreach { case (key, value) =>
           props.setProperty(key, value)
         }
