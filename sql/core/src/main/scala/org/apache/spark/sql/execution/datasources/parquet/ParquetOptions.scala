@@ -69,6 +69,25 @@ class ParquetOptions(
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
+
+  /**
+   * The rebasing modes of the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in read/write.
+   */
+  def datetimeRebaseModeInRead: String = parameters
+    .get(DATETIME_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
+  def datetimeRebaseModeInWrite: String = parameters
+    .get(DATETIME_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE))
+  /**
+   * The rebasing mode of the INT96 timestamp values in read/write.
+   */
+  def int96RebaseModeInRead: String = parameters
+    .get(INT96_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ))
+  def int96RebaseModeInWrite: String = parameters
+    .get(INT96_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE))
 }
 
 
