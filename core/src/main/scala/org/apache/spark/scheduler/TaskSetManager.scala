@@ -230,15 +230,15 @@ private[spark] class TaskSetManager(
    */
   private[scheduler] var myLocalityLevels = computeValidLocalityLevels()
 
-  // Time to wait at each level
-  private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
-
   // Delay scheduling variables: we keep track of our current locality level and the time we
   // last reset the locality wait timer, and move up a level when localityWaits[curLevel] expires.
   // We then move down if we manage to launch a "more local" task when resetting the timer
   private val legacyLocalityWaitReset = conf.get(LEGACY_LOCALITY_WAIT_RESET)
   private var currentLocalityIndex = 0 // Index of our current locality level in validLocalityLevels
   private var lastLocalityWaitResetTime = clock.getTimeMillis()  // Time we last reset locality wait
+
+  // Time to wait at each level
+  private[scheduler] var localityWaits = myLocalityLevels.map(getLocalityWait)
 
   override def schedulableQueue: ConcurrentLinkedQueue[Schedulable] = null
 
@@ -1131,6 +1131,8 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
+    if (legacyLocalityWaitReset && isBarrier) return 0
+
     val localityWait = level match {
       case TaskLocality.PROCESS_LOCAL => config.LOCALITY_WAIT_PROCESS
       case TaskLocality.NODE_LOCAL => config.LOCALITY_WAIT_NODE
