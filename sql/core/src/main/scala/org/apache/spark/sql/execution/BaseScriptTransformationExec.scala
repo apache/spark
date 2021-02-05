@@ -228,7 +228,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         converter)
       case _: ArrayType | _: MapType | _: StructType => wrapperConvertException(data =>
         JsonToStructs(attr.dataType, Map.empty[String, String],
-          Literal(data), Some(conf.sessionLocalTimeZone)).eval(), converter)
+          Literal(data), Some(conf.sessionLocalTimeZone)).eval(), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
