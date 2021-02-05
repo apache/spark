@@ -1035,7 +1035,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(EXECUTOR_ALLOW_SPARK_CONTEXT, true)).stop()
     }
   }
-  
+
   test("SPARK-34346: hadoop configuration priority for spark/hive/hadoop configs") {
     val testKey = "hadoop.tmp.dir"
     val bufferKey = "io.file.buffer.size"
