@@ -157,7 +157,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   /** List of test cases to ignore, in lower cases. */
   protected def ignoreList: Set[String] = if (TestUtils.testCommandAvailable("/bin/bash")) {
     // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
-    // here we need to check command available
+    // here we need to ignore it.
     Set("ignored.sql", "transform.sql")
   } else {
     Set("ignored.sql")   // Do NOT remove this one. It is here to test the ignore functionality.
