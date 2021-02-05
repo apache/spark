@@ -106,7 +106,7 @@ object ParquetOptions {
   // The option controls rebasing of the DATE and TIMESTAMP values between
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Parquet
   // datasource similarly to the SQL config `spark.sql.legacy.parquet.datetimeRebaseModeInRead`,
-  // and can be set the same values:
+  // and can be set to the same values:
   //   - "EXCEPTION", Spark fails in reads or writes of ancient dates/timestamps
   //     that are ambiguous between the two calendars.
   //   - "CORRECTED", no rebasing. Spark reads and writes dates/timestamps as is.
