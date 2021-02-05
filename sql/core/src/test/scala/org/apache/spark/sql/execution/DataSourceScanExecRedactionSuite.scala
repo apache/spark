@@ -122,8 +122,6 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
   test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
     withTempPath { path =>
-      val dir = path.getCanonicalPath
-
       // create a sub-directory with long name so that each root path will always exceed the limit
       // this is to ensure we always test the case for the path truncation
       val dataDirName = Random.alphanumeric.take(100).toList.mkString
@@ -146,6 +144,9 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       // The location metadata should at least contain one path
       assert(location.get.contains(paths.head))
 
+      // The location metadata should have the number of root paths
+      assert(location.get.contains("(10 paths)"))
+
       // The location metadata should have bracket wrapping paths
       assert(location.get.indexOf('[') > -1)
       assert(location.get.indexOf(']') > -1)
@@ -155,7 +156,9 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
         location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
 
       // the only one path should be available
-      assert(pathsInLocation.size == 1)
+      assert(pathsInLocation.size == 2)
+      // indicator ("...") should be available
+      assert(pathsInLocation.exists(_.contains("...")))
     }
   }
 }

@@ -965,11 +965,37 @@ class Analyzer(override val catalogManager: CatalogManager)
    * columns are not accidentally selected by *.
    */
   object AddMetadataColumns extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+
+    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      plan.expressions.exists(_.find {
+        case a: Attribute => a.isMetadataCol
+        case _ => false
+      }.isDefined)
+    }
+
+    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
+      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case node if node.resolved && node.children.nonEmpty && node.missingInput.nonEmpty =>
-        node resolveOperatorsUp {
-          case rel: DataSourceV2Relation =>
-            rel.withMetadataColumns()
+      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
+        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
+        val metaCols = node.expressions.flatMap(_.collect {
+          case a: Attribute if a.isMetadataCol && !inputAttrs.contains(a) => a
+        })
+        if (metaCols.isEmpty) {
+          node
+        } else {
+          val newNode = addMetadataCol(node)
+          // We should not change the output schema of the plan. We should project away the extr
+          // metadata columns if necessary.
+          if (newNode.sameOutput(node)) {
+            newNode
+          } else {
+            Project(node.output, newNode)
+          }
         }
     }
   }
