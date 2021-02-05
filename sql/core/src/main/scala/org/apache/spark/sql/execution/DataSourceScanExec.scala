@@ -591,7 +591,7 @@ case class FileSourceScanExec(
       s"open cost is considered as scanning $openCostInBytes bytes.")
 
     // Filter files with bucket pruning if possible
-    lazy val bucketingEnabled = fsRelation.sparkSession.sessionState.conf.bucketingEnabled
+    val bucketingEnabled = fsRelation.sparkSession.sessionState.conf.bucketingEnabled
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
         filePath => {
