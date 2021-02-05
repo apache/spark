@@ -433,24 +433,24 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val matched = ctx.freshName("matched")
     val numMatched = metricTerm(ctx, "numMatchedPairs")
     val buildVars = genBuildSideVars(ctx, matched)
-    val checkCondition = s"$numMatched.add(1);\n" +
-      (if (condition.isDefined) {
-        val expr = condition.get
-        // evaluate the variables from build side that used by condition
-        val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-        // filter the output via condition
-        ctx.currentVars = input ++ buildVars
-        val ev =
-          BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-        val skipRow = s"${ev.isNull} || !${ev.value}"
-        s"""
-           |$eval
-           |${ev.code}
-           |if (!($skipRow))
-         """.stripMargin
-      } else {
-        ""
-      })
+    val conditionDef = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // filter the output via condition
+      ctx.currentVars = input ++ buildVars
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      val skipRow = s"${ev.isNull} || !${ev.value}"
+      s"""
+         |$eval
+         |${ev.code}
+         |if (!($skipRow))
+       """.stripMargin
+    } else {
+      ""
+    }
+    val checkCondition = s"$numMatched.add(1);\n$conditionDef"
     (matched, checkCondition, buildVars)
   }
 
@@ -521,30 +521,29 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
 
     // filter the output via condition
     val conditionPassed = ctx.freshName("conditionPassed")
-    val checkCondition = s"$numMatched.add(0);\n" +
-      (if (condition.isDefined) {
-        val expr = condition.get
-        // evaluate the variables from build side that used by condition
-        val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-        ctx.currentVars = input ++ buildVars
-        val ev =
-          BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-        s"""
-           |boolean $conditionPassed = true;
-           |${eval.trim}
-           |if ($matched != null) {
-           |  $numMatched.add(1);
-           |  ${ev.code}
-           |  $conditionPassed = !${ev.isNull} && ${ev.value};
-           |}
-         """.stripMargin
-      } else {
-        s"""
-           |if ($matched != null) {
-           |  $numMatched.add(1);
-           |}
-         """.stripMargin + s"final boolean $conditionPassed = true;"
-      })
+    val checkCondition = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      ctx.currentVars = input ++ buildVars
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      s"""
+         |boolean $conditionPassed = true;
+         |${eval.trim}
+         |if ($matched != null) {
+         |  $numMatched.add(1);
+         |  ${ev.code}
+         |  $conditionPassed = !${ev.isNull} && ${ev.value};
+         |}
+       """.stripMargin
+    } else {
+      s"""
+         |if ($matched != null) {
+         |  $numMatched.add(1);
+         |}
+       """.stripMargin + s"final boolean $conditionPassed = true;"
+    }
 
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input
@@ -726,23 +725,23 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
 
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
-    val checkCondition = s"$numMatched.add(1);\n" +
-      (if (condition.isDefined) {
-        val expr = condition.get
-        // evaluate the variables from build side that used by condition
-        val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-        // filter the output via condition
-        ctx.currentVars = input ++ buildVars
-        val ev =
-          BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-        s"""
-           |$eval
-           |${ev.code}
-           |$existsVar = !${ev.isNull} && ${ev.value};
-         """.stripMargin
-      } else {
-        s"$existsVar = true;"
-      })
+    val conditionDef = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // filter the output via condition
+      ctx.currentVars = input ++ buildVars
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      s"""
+         |$eval
+         |${ev.code}
+         |$existsVar = !${ev.isNull} && ${ev.value};
+       """.stripMargin
+    } else {
+      s"$existsVar = true;"
+    }
+    val checkCondition = s"$numMatched.add(1);\n$conditionDef"
 
     val resultVar = input ++ Seq(ExprCode.forNonNullValue(
       JavaCode.variable(existsVar, BooleanType)))
