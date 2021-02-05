@@ -22,9 +22,6 @@ pyspark.sql.conf.RuntimeConfig
 
 .. autoclass:: RuntimeConfig
 
-
-
-
    .. rubric:: Methods
 
    .. autosummary::
