@@ -21,7 +21,7 @@ import java.io.{File, IOException}
 import java.lang.reflect.{InvocationTargetException, Modifier}
 import java.net.{URI, URL, URLEncoder}
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.{TimeUnit, TimeoutException}
+import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
