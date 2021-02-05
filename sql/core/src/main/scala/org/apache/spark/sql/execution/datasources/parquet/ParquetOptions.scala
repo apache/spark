@@ -71,7 +71,7 @@ class ParquetOptions(
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
 
   /**
-   * The rebasing modes for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
+   * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
   def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
