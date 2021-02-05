@@ -217,12 +217,10 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
-      val commitJobStartTime = System.nanoTime()
       logInfo(s"Start to commit write Job ${description.uuid}.")
-      committer.commitJob(job, commitMsgs)
-      val commitJobEndTime = System.nanoTime()
+      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
       logInfo(s"Write Job ${description.uuid} committed. " +
-        s"Elapsed time: ${(commitJobEndTime - commitJobStartTime) / 1000 / 1000} ms")
+        s"Elapsed time: $duration ms.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
