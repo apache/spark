@@ -38,7 +38,6 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       .setMaster(s"local-cluster[$numWorker, 1, 1024]")
       .setAppName("test-cluster")
       .set(TEST_NO_STAGE_RETRY, true)
-      .set(LEGACY_LOCALITY_WAIT_RESET, true)
     sc = new SparkContext(conf)
     TestUtils.waitUntilExecutorsUp(sc, numWorker, 60000)
   }
