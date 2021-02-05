@@ -1853,6 +1853,110 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-26836: support Avro schema evolution (add column)") {
+    withTable("t") {
+      val originalSchema =
+        """
+          |{
+          |  "namespace": "test",
+          |  "name": "some_schema",
+          |  "type": "record",
+          |  "fields": [
+          |    {
+          |      "name": "col2",
+          |      "type": "string"
+          |    }
+          |  ]
+          |}
+        """.stripMargin
+      sql(
+        s"""
+          |CREATE TABLE t PARTITIONED BY (ds string)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |WITH SERDEPROPERTIES ('avro.schema.literal'='$originalSchema')
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+        """.stripMargin)
+      sql("INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
+      val evolvedSchema =
+        """
+          |{
+          |  "namespace": "test",
+          |  "name": "some_schema",
+          |  "type": "record",
+          |  "fields": [
+          |    {
+          |      "name": "col1",
+          |      "type": "string",
+          |      "default": "col1_default"
+          |    },
+          |    {
+          |      "name": "col2",
+          |      "type": "string"
+          |    }
+          |  ]
+          |}
+        """.stripMargin
+      sql(s"ALTER TABLE t SET SERDEPROPERTIES ('avro.schema.literal'='$evolvedSchema')")
+      sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
+      checkAnswer(spark.table("t"), Row("col1_default", "col2_value", "1981-01-07")
+        :: Row("col1_value", "col2_value", "1983-04-27") :: Nil)
+    }
+  }
+
+  test("SPARK-26836: support Avro schema evolution (remove column)") {
+    withTable("t") {
+      val originalSchema =
+        """
+          |{
+          |  "namespace": "test",
+          |  "name": "some_schema",
+          |  "type": "record",
+          |  "fields": [
+          |    {
+          |      "name": "col1",
+          |      "type": "string",
+          |      "default": "col1_default"
+          |    },
+          |    {
+          |      "name": "col2",
+          |      "type": "string"
+          |    }
+          |  ]
+          |}
+        """.stripMargin
+      sql(
+        s"""
+          |CREATE TABLE t PARTITIONED BY (ds string)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |WITH SERDEPROPERTIES ('avro.schema.literal'='$originalSchema')
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+        """.stripMargin)
+      sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
+      val evolvedSchema =
+        """
+          |{
+          |  "namespace": "test",
+          |  "name": "some_schema",
+          |  "type": "record",
+          |  "fields": [
+          |    {
+          |      "name": "col2",
+          |      "type": "string"
+          |    }
+          |  ]
+          |}
+        """.stripMargin
+      sql(s"ALTER TABLE t SET SERDEPROPERTIES ('avro.schema.literal'='$evolvedSchema')")
+      sql("INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
+      checkAnswer(spark.table("t"), Row("col2_value", "1981-01-07")
+        :: Row("col2_value", "1983-04-27") :: Nil)
+    }
+  }
+
   test("append data to hive serde table") {
     withTable("t", "t1") {
       Seq(1 -> "a").toDF("i", "j")
