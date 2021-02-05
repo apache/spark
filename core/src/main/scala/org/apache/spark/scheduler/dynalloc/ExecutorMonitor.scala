@@ -38,7 +38,9 @@ private[spark] class ExecutorMonitor(
     conf: SparkConf,
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
-    clock: Clock) extends SparkListener with CleanerListener with Logging {
+    clock: Clock,
+    metrics: ExecutorAllocationManagerSource = null)
+  extends SparkListener with CleanerListener with Logging {
 
   private val idleTimeoutNs = TimeUnit.SECONDS.toNanos(
     conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT))
@@ -91,11 +93,6 @@ private[spark] class ExecutorMonitor(
   private val shuffleToActiveJobs = new mutable.HashMap[Int, mutable.ArrayBuffer[Int]]()
   private val stageToShuffleID = new mutable.HashMap[Int, Int]()
   private val jobToStageIDs = new mutable.HashMap[Int, Seq[Int]]()
-
-  var numExecutorsGracefullyDecommissioned: Int = 0
-  var numExecutorsDecommissionUnfinished: Int = 0
-  var numExecutorsKilledByDriver: Int = 0
-  var numExecutorsExitedUnexpectedly: Int = 0
 
   def reset(): Unit = {
     executors.clear()
@@ -359,20 +356,20 @@ private[spark] class ExecutorMonitor(
       decrementExecResourceProfileCount(removed.resourceProfileId)
       if (removed.decommissioning) {
         if (event.reason == ExecutorLossMessage.decommissionFinished) {
-          numExecutorsGracefullyDecommissioned += 1
+          metrics.gracefullyDecommissioned.inc()
         } else {
-          numExecutorsDecommissionUnfinished += 1
+          metrics.decommissionUnfinished.inc()
         }
       } else if (removed.pendingRemoval) {
-        numExecutorsKilledByDriver += 1
+        metrics.driverKilled.inc()
       } else {
-        numExecutorsExitedUnexpectedly += 1
+        metrics.exitedUnexpectedly.inc()
       }
       logInfo(s"Executor ${event.executorId} is removed. Remove reason statistics: (" +
-        s"gracefully decommissioned: $numExecutorsGracefullyDecommissioned, " +
-        s"decommision unfinished: $numExecutorsDecommissionUnfinished, " +
-        s"driver killed: $numExecutorsKilledByDriver, " +
-        s"unexpectedly exited: $numExecutorsExitedUnexpectedly).")
+        s"gracefully decommissioned: ${metrics.gracefullyDecommissioned.getCount()}, " +
+        s"decommision unfinished: ${metrics.decommissionUnfinished.getCount()}, " +
+        s"driver killed: ${metrics.driverKilled.getCount()}, " +
+        s"unexpectedly exited: ${metrics.exitedUnexpectedly.getCount()}).")
       if (!removed.pendingRemoval || !removed.decommissioning) {
         nextTimeout.set(Long.MinValue)
       }

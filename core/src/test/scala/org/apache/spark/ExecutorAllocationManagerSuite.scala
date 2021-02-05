@@ -946,20 +946,20 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(executorsPendingToRemove(manager).contains("2"))
 
     onExecutorRemoved(manager, "1", "driver requested exit")
-    assert(manager.executorMonitor.numExecutorsKilledByDriver === 1)
-    assert(manager.executorMonitor.numExecutorsExitedUnexpectedly === 0)
+    assert(manager.executorAllocationManagerSource.driverKilled.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
 
     onExecutorRemoved(manager, "2", "another driver requested exit")
-    assert(manager.executorMonitor.numExecutorsKilledByDriver === 2)
-    assert(manager.executorMonitor.numExecutorsExitedUnexpectedly === 0)
+    assert(manager.executorAllocationManagerSource.driverKilled.getCount() === 2)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
 
     onExecutorRemoved(manager, "3", "this will be an unexpected exit")
-    assert(manager.executorMonitor.numExecutorsKilledByDriver === 2)
-    assert(manager.executorMonitor.numExecutorsExitedUnexpectedly === 1)
+    assert(manager.executorAllocationManagerSource.driverKilled.getCount() === 2)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 1)
   }
 
-  test("SPARK-33763: metrics to track dynamic allocation (decommissionEnabled=true)") {
-    val manager = createManager(createConf(3, 5, 3, decommissioningEnabled=true))
+  test("SPARK-33763: metrics to track dynamic allocation (decommissionEnabled = true)") {
+    val manager = createManager(createConf(3, 5, 3, decommissioningEnabled = true))
     (1 to 5).map(_.toString).foreach { id => onExecutorAddedDefaultProfile(manager, id) }
 
     assert(executorsPendingToRemove(manager).isEmpty)
@@ -968,19 +968,19 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(executorsDecommissioning(manager).contains("2"))
 
     onExecutorRemoved(manager, "1", ExecutorLossMessage.decommissionFinished)
-    assert(manager.executorMonitor.numExecutorsGracefullyDecommissioned === 1)
-    assert(manager.executorMonitor.numExecutorsDecommissionUnfinished === 0)
-    assert(manager.executorMonitor.numExecutorsExitedUnexpectedly === 0)
+    assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 0)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
 
     onExecutorRemoved(manager, "2", "stopped before gracefully finished")
-    assert(manager.executorMonitor.numExecutorsGracefullyDecommissioned === 1)
-    assert(manager.executorMonitor.numExecutorsDecommissionUnfinished === 1)
-    assert(manager.executorMonitor.numExecutorsExitedUnexpectedly === 0)
+    assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 0)
 
     onExecutorRemoved(manager, "3", "this will be an unexpected exit")
-    assert(manager.executorMonitor.numExecutorsGracefullyDecommissioned === 1)
-    assert(manager.executorMonitor.numExecutorsDecommissionUnfinished === 1)
-    assert(manager.executorMonitor.numExecutorsExitedUnexpectedly === 1)
+    assert(manager.executorAllocationManagerSource.gracefullyDecommissioned.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.decommissionUnfinished.getCount() === 1)
+    assert(manager.executorAllocationManagerSource.exitedUnexpectedly.getCount() === 1)
   }
 
   test("remove multiple executors") {
