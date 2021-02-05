@@ -155,9 +155,13 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
   /** List of test cases to ignore, in lower cases. */
-  protected def ignoreList: Set[String] = Set(
-    "ignored.sql"   // Do NOT remove this one. It is here to test the ignore functionality.
-  )
+  protected def ignoreList: Set[String] = if (TestUtils.testCommandAvailable("/bin/bash")) {
+    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+    // here we need to check command available
+    Set("ignored.sql", "transform.sql")
+  } else {
+    Set("ignored.sql")   // Do NOT remove this one. It is here to test the ignore functionality.
+  }
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
@@ -563,14 +567,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Filter out test files with invalid extensions such as temp files created
     // by vi (.swp), Mac (.DS_Store) etc.
     val filteredFiles = files.filter(_.getName.endsWith(validFileExtensions))
-    val allFiles = filteredFiles ++ dirs.flatMap(listFilesRecursively)
-    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
-    // here we need to check command available
-    if (TestUtils.testCommandAvailable("/bin/bash")) {
-      allFiles
-    } else {
-      allFiles.filterNot(_.getName == "transform.sql")
-    }
+    filteredFiles ++ dirs.flatMap(listFilesRecursively)
   }
 
   /** Load built-in test tables into the SparkSession. */
