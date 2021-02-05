@@ -116,7 +116,11 @@ private[sql] object CatalogV2Util {
         newProperties.put(set.property, set.value)
 
       case unset: RemoveProperty =>
-        newProperties.remove(unset.property)
+        val prop = unset.property
+        if (!unset.ifExists && !properties.containsKey(prop)) {
+            throw new AnalysisException(s"Attempted to unset non-existent property '$prop'")
+        }
+        newProperties.remove(prop)
 
       case _ =>
       // ignore non-property changes

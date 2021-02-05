@@ -64,7 +64,20 @@ public interface TableChange {
    * @return a TableChange for the addition
    */
   static TableChange removeProperty(String property) {
-    return new RemoveProperty(property);
+    return removeProperty(property, true);
+  }
+
+  /**
+   * Create a TableChange for removing a table property.
+   * <p>
+   * If the property does not exist and `ifExists` is set to false, the change must result in
+   * an {@link IllegalArgumentException}. Otherwise, the change will succeed.
+   *
+   * @param property the property name
+   * @return a TableChange for the addition
+   */
+  static TableChange removeProperty(String property, boolean ifExists) {
+    return new RemoveProperty(property, ifExists);
   }
 
   /**
@@ -270,17 +283,24 @@ public interface TableChange {
   /**
    * A TableChange to remove a table property.
    * <p>
-   * If the property does not exist, the change should succeed.
+   * If the property does not exist and `ifExists` is set to false, the change must result in
+   * an {@link IllegalArgumentException}. Otherwise, the change will succeed.
    */
   final class RemoveProperty implements TableChange {
     private final String property;
+    private final boolean ifExists;
 
-    private RemoveProperty(String property) {
+    private RemoveProperty(String property, boolean ifExists) {
       this.property = property;
+      this.ifExists = ifExists;
     }
 
     public String property() {
       return property;
+    }
+
+    public boolean ifExists() {
+      return ifExists;
     }
 
     @Override

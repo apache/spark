@@ -437,9 +437,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toSeq
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case AlterTableUnsetProperties(table: ResolvedTable, keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
+    case AlterTableUnsetProperties(table: ResolvedTable, keys, ifExists) =>
+      val changes = keys.map(key => TableChange.removeProperty(key, ifExists))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
     case _ => Nil
