@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -110,22 +109,20 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       withTable("tbl") {
         sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
         checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-        checkAnswer(sql("show tables")
-          .select(col("namespace"), col("tableName"), col("isTemporary")),
-          Row("ns", "tbl", false))
+        assert(sql("show tables").schema.fieldNames.deep ==
+          Seq("namespace", "tableName", "isTemporary"))
         assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-        assert(sql("show table extended like 'tbl'").select(col("namespace"), col("tableName"),
-          col("isTemporary"), col("information")).collect()(0).length == 4)
+        assert(sql("show table extended like 'tbl'").schema.fieldNames.deep ==
+          Seq("namespace", "tableName", "isTemporary", "information"))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
           checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-          checkAnswer(sql("show tables")
-            .select(col("database"), col("tableName"), col("isTemporary")),
-            Row("ns", "tbl", false))
+          assert(sql("show tables").schema.fieldNames.deep ==
+            Seq("database", "tableName", "isTemporary"))
           assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-          assert(sql("show table extended like 'tbl'").select(col("database"), col("tableName"),
-            col("isTemporary"), col("information")).collect()(0).length == 4)
+          assert(sql("show table extended like 'tbl'").schema.fieldNames.deep ==
+            Seq("database", "tableName", "isTemporary", "information"))
         }
       }
     }

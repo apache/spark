@@ -349,7 +349,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       } else {
         output
       }
-      ShowTablesCommand(Some(db), pattern, requiredOutput)
+      ShowTablesCommand(Some(db), pattern, output = requiredOutput)
 
     case ShowTableExtended(
         DatabaseInSessionCatalog(db),
@@ -365,9 +365,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ShowTablesCommand(
         databaseName = Some(db),
         tableIdentifierPattern = Some(pattern),
-        requiredOutput,
         isExtended = true,
-        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
+        partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec),
+        requiredOutput)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>
