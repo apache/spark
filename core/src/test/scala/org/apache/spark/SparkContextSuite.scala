@@ -1035,6 +1035,39 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .set(EXECUTOR_ALLOW_SPARK_CONTEXT, true)).stop()
     }
   }
+
+  test("SPARK-34346: hadoop configuration priority for spark/hive/hadoop configs") {
+    val testKey = "hadoop.tmp.dir"
+    val bufferKey = "io.file.buffer.size"
+    val hadoopConf0 = new Configuration()
+
+    val hiveConfFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    assert(hiveConfFile != null)
+    hadoopConf0.addResource(hiveConfFile)
+    assert(hadoopConf0.get(testKey) === "/tmp/hive_one")
+    assert(hadoopConf0.get(bufferKey) === "201811")
+
+    val sparkConf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(BUFFER_SIZE, 65536)
+    sc = new SparkContext(sparkConf)
+    assert(sc.hadoopConfiguration.get(testKey) === "/tmp/hive_one",
+      "hive configs have higher priority than hadoop ones ")
+    assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
+      "spark configs have higher priority than hive ones")
+
+    resetSparkContext()
+
+    sparkConf
+      .set("spark.hadoop.hadoop.tmp.dir", "/tmp/hive_two")
+      .set(s"spark.hadoop.$bufferKey", "20181117")
+    sc = new SparkContext(sparkConf)
+    assert(sc.hadoopConfiguration.get(testKey) === "/tmp/hive_two",
+      "spark.hadoop configs have higher priority than hive/hadoop ones")
+    assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
+      "spark configs have higher priority than spark.hadoop configs")
+  }
 }
 
 object SparkContextSuite {
