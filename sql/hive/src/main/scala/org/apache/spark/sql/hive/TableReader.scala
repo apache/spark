@@ -257,8 +257,8 @@ class HadoopTableReader(
         val props = new Properties(tableProperties)
         partProps.asScala.filterNot { case (k, _) =>
           k == AvroTableProperties.SCHEMA_LITERAL.getPropName() && tableProperties.containsKey(k)
-        }.foreach { case (key, value) =>
-          props.setProperty(key, value)
+        }.foreach {
+          case (key, value) => props.setProperty(key, value)
         }
         DeserializerLock.synchronized {
           deserializer.initialize(hconf, props)
