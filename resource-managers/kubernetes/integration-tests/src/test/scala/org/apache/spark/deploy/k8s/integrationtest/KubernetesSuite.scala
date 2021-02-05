@@ -404,20 +404,22 @@ class KubernetesSuite extends SparkFunSuite
 
     Eventually.eventually(patienceTimeout, patienceInterval) {
       expectedDriverLogOnCompletion.foreach { e =>
-        assert(kubernetesTestComponents.kubernetesClient
+        val driverLog = kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(driverPod.getMetadata.getName)
           .getLog
-          .contains(e),
-          s"The application did not complete, driver log did not contain str ${e}")
+        assert(driverLog.contains(e),
+          s"The application did not complete, driver log did not contain str ${e}." +
+            s"Last driver log:\n$driverLog")
       }
       expectedExecutorLogOnCompletion.foreach { e =>
-        assert(kubernetesTestComponents.kubernetesClient
+        val execLog = kubernetesTestComponents.kubernetesClient
           .pods()
           .withName(execPod.get.getMetadata.getName)
           .getLog
-          .contains(e),
-          s"The application did not complete, executor log did not contain str ${e}")
+        assert(execLog.contains(e),
+          s"The application did not complete, executor log did not contain str ${e}." +
+           s"Last executor log:\n$execLog")
       }
     }
     execWatcher.close()
