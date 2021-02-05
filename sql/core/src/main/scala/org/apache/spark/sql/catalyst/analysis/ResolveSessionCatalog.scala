@@ -342,17 +342,30 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DropNamespace(DatabaseInSessionCatalog(db), _, _) =>
       DropDatabaseCommand(db, d.ifExists, d.cascade)
 
-    case s @ ShowTables(DatabaseInSessionCatalog(db), pattern) =>
-      ShowTablesCommand(Some(db), pattern, s.output)
+    case ShowTables(DatabaseInSessionCatalog(db), pattern, output) =>
+      val requiredOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 3)
+        output.head.withName("database") +: output.tail
+      } else {
+        output
+      }
+      ShowTablesCommand(Some(db), pattern, requiredOutput)
 
-    case s @ ShowTableExtended(
+    case ShowTableExtended(
         DatabaseInSessionCatalog(db),
         pattern,
-        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+        partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
+        output) =>
+      val requiredOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 4)
+        output.head.withName("database") +: output.tail
+      } else {
+        output
+      }
       ShowTablesCommand(
         databaseName = Some(db),
         tableIdentifierPattern = Some(pattern),
-        s.output,
+        requiredOutput,
         isExtended = true,
         partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 

@@ -116,6 +116,17 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
         assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
         assert(sql("show table extended like 'tbl'").select(col("namespace"), col("tableName"),
           col("isTemporary"), col("information")).collect()(0).length == 4)
+
+        // Keep the legacy output schema
+        withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+          checkAnswer(sql("show tables"), Row("ns", "tbl", false))
+          checkAnswer(sql("show tables")
+            .select(col("database"), col("tableName"), col("isTemporary")),
+            Row("ns", "tbl", false))
+          assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+          assert(sql("show table extended like 'tbl'").select(col("database"), col("tableName"),
+            col("isTemporary"), col("information")).collect()(0).length == 4)
+        }
       }
     }
   }
