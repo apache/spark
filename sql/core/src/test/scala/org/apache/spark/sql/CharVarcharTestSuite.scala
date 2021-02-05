@@ -72,8 +72,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("char type values should be padded or trimmed: partitioned columns") {
-    // DSV2 doesn't support DROP PARTITION yet.
-    assume(format != "foo")
     // via dynamic partitioned columns
     withTable("t") {
       sql(s"CREATE TABLE t(i STRING, c CHAR(5)) USING $format PARTITIONED BY (c)")
@@ -102,8 +100,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("varchar type values length check and trim: partitioned columns") {
-    // DSV2 doesn't support DROP PARTITION yet.
-    assume(format != "foo")
     (0 to 5).foreach { n =>
       // SPARK-34192: we need to create a a new table for each round of test because of
       // trailing spaces in partition column will be treated differently.
@@ -131,7 +127,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("oversize char/varchar values for alter table partition operations") {
-    // DSV2 doesn't support DROP PARTITION yet.
+    // DSV2 doesn't support RENAME PARTITION yet.
     assume(format != "foo")
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
@@ -169,8 +165,6 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("char/varchar type values length check: partitioned columns of other types") {
-    // DSV2 doesn't support DROP PARTITION yet.
-    assume(format != "foo")
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
         sql(s"CREATE TABLE t(i STRING, c $typ) USING $format PARTITIONED BY (c)")
