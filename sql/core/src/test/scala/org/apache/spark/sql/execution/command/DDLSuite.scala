@@ -1324,6 +1324,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       Nil)
   }
 
+  test("SPARK-34359: keep the legacy output schema") {
+    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+      assert(sql("SHOW NAMESPACES").schema.fieldNames.toSeq == Seq("databaseName"))
+    }
+  }
+
   test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(

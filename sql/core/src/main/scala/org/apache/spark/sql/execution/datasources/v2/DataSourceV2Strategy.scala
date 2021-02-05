@@ -315,8 +315,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case DropNamespace(ResolvedNamespace(catalog, ns), ifExists, cascade) =>
       DropNamespaceExec(catalog, ns, ifExists, cascade) :: Nil
 
-    case r @ ShowNamespaces(ResolvedNamespace(catalog, ns), pattern) =>
-      ShowNamespacesExec(r.output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
+    case ShowNamespaces(ResolvedNamespace(catalog, ns), pattern, output) =>
+      ShowNamespacesExec(output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
     case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
       ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
