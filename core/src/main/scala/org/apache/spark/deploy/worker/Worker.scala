@@ -620,7 +620,7 @@ private[deploy] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
+            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
               Some(e.toString), None))
         }
       }
@@ -750,6 +750,36 @@ private[deploy] class Worker(
     }
   }
 
+  /**
+   * Send `ExecutorStateChanged` to the current master. Unlike `sendToMaster`, we use `askSync`
+   * to send the message in order to ensure Master can receive the message.
+   */
+  private def syncExecutorStateWithMaster(newState: ExecutorStateChanged): Unit = {
+    master match {
+      case Some(masterRef) =>
+        try {
+          // SPARK-34245: We use async `send` to send the state previously. In that case, the
+          // finished executor can be leaked if Worker fails to send `ExecutorStateChanged`
+          // message to Master due to some unexpected errors, e.g., temporary network error.
+          // In the worst case, the application can get hang if the leaked executor is the only
+          // or last executor for the application. Therefore, we switch to `askSync` to ensure
+          // the state is handled by Master.
+          masterRef.askSync[Boolean](newState)
+        } catch {
+          case t: Throwable =>
+            logError(s"Failed to send $newState to Master $masterRef, will retry.", t)
+            // In case of the error is caused by a non-transient network error, we should leave
+            // some time for Worker to handle ReregisterWithMaster messages.
+            Thread.sleep(100)
+            self.send(newState)
+        }
+
+      case None =>
+        logWarning(
+          s"Dropping $newState because the connection to master has not yet been established")
+    }
+  }
+
   private def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
@@ -825,7 +855,7 @@ private[deploy] class Worker(
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
     Unit = {
-    sendToMaster(executorStateChanged)
+    syncExecutorStateWithMaster(executorStateChanged)
     val state = executorStateChanged.state
     if (ExecutorState.isFinished(state)) {
       val appId = executorStateChanged.appId
