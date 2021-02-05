@@ -22,8 +22,8 @@ import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.nio.file.Files
 
-import org.apache.spark.{SparkConf, SparkEnv}
-import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
@@ -56,6 +56,7 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
+  private val remoteShuffleMaxDisk: Option[Long] = conf.get(config.STORAGE_REMOTE_SHUFFLE_MAX_DISK)
 
   def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
 
@@ -69,6 +70,15 @@ private[spark] class IndexShuffleBlockResolver(
         Some(ShuffleBlockInfo(shuffleId, mapId))
       case _ =>
         None
+    }
+  }
+
+  private def getShuffleBytesStored(): Long = {
+    val shuffleFiles: Seq[File] = getStoredShuffles().map {
+      si => getDataFile(si.shuffleId, si.mapId)
+    }
+    shuffleFiles.foldLeft[Long](0: Long) { (acc: Long, f: File) =>
+      acc + f.length()
     }
   }
 
@@ -173,6 +183,13 @@ private[spark] class IndexShuffleBlockResolver(
    */
   override def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
       StreamCallbackWithID = {
+    // Throw an exception if we have exceeded maximum shuffle files stored
+    remoteShuffleMaxDisk.foreach { maxBytes =>
+      val bytesUsed = getShuffleBytesStored()
+      if (maxBytes < bytesUsed) {
+        throw new SparkException(s"Not storing remote shuffles $bytesUsed exceeds $maxBytes")
+      }
+    }
     val file = blockId match {
       case ShuffleIndexBlockId(shuffleId, mapId, _) =>
         getIndexFile(shuffleId, mapId)
