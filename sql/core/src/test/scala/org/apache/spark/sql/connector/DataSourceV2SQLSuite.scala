@@ -956,6 +956,14 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("terry") {
+    withTable("t") {
+      spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+      sql(s"CREATE TABLE t USING json AS SELECT 1 AS i")
+      sql("alter table t unset tblproperties ('unknown')")
+    }
+  }
+
   test("qualified column names for v1 tables") {
     Seq(true, false).foreach { useV1Table =>
       val format = if (useV1Table) "json" else v2Format

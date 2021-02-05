@@ -1158,6 +1158,9 @@ trait AlterTableTests extends SharedSparkSession {
       }
       assert(exc.getMessage.contains("Attempted to unset non-existent property 'unknown'"))
 
+      // Reserved property, "comment", should still be allowed.
+      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('comment')")
+
       // The following becomes a no-op because "IF EXISTS" is set.
       sql(s"ALTER TABLE $t UNSET TBLPROPERTIES IF EXISTS ('unknown')")
 
