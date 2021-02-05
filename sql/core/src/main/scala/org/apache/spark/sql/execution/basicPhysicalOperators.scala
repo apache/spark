@@ -311,11 +311,11 @@ case class RecursiveRelationExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numIterations" -> SQLMetrics.createMetric(sparkContext, "number of iterations"))
 
-  private def unionRDDs(rdds: Seq[RDD[InternalRow]]): RDD[InternalRow] = {
+  private def unionRDDs(rdds: mutable.ArrayBuffer[RDD[InternalRow]]): RDD[InternalRow] = {
     if (rdds.size == 1) {
       rdds.head
     } else {
-      sparkContext.union(rdds)
+      sparkContext.union(rdds.toSeq)
     }
   }
 
