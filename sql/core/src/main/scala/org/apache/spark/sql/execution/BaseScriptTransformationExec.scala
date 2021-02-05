@@ -47,7 +47,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   def ioschema: ScriptTransformationIOSchema
 
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
-    input.map { in: Expression =>
+    input.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
           new StructsToJson(in).withTimeZone(conf.sessionLocalTimeZone)
@@ -226,8 +226,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
-      case _: ArrayType | _: MapType | _: StructType => wrapperConvertException(data =>
-        JsonToStructs(attr.dataType, Map.empty[String, String],
+      case _: ArrayType | _: MapType | _: StructType =>
+        wrapperConvertException(data => JsonToStructs(attr.dataType, Map.empty[String, String],
           Literal(data), Some(conf.sessionLocalTimeZone)).eval(), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)

@@ -527,43 +527,69 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-31936: Script transform support 7 level nested complex type (no serde)") {
+  test("SPARK-31936: Script transform support nested complex type (no serde)") {
     assume(TestUtils.testCommandAvailable("python"))
     withTempView("v") {
       val df = Seq(
-        Array(1)
-      ).toDF("a").select('a,
-        array(array(array(array(array(array('a)))))).as("level_7"),
-        array(array(array(array(array(array(array('a))))))).as("level_8")
+        (Array(Array(Array(Array(Array(Array(1, 2, 3)))))),
+          Array(Array(Array(Array(Array(Array(1, 2, 3))), Array(Array(Array(1, 2, 3)))))),
+          Map("a" -> Map("c" -> Map("d" -> Array(1, 2, 3))),
+            "b" -> Map("c" -> Map("d" -> Array(1, 2, 3))))
+        )
+      ).toDF("a", "b", "c").select('a, 'b, 'c,
+        struct('a, 'b, 'c).as("d")
+      ).select('a, 'b, 'c, 'd,
+        struct('c, 'd).as("e")
       )
 
       checkAnswer(
         df,
         (child: SparkPlan) => createScriptTransformationExec(
           input = Seq(
-            df.col("level_7").expr),
+            df.col("a").expr,
+            df.col("b").expr,
+            df.col("c").expr,
+            df.col("d").expr,
+            df.col("e").expr),
           script = "cat",
           output = Seq(
-            AttributeReference("a", ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
-              ArrayType(ArrayType(IntegerType))))))))()),
+            AttributeReference("a",
+              ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(IntegerType)))))))(),
+            AttributeReference("b",
+              ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(IntegerType)))))))(),
+            AttributeReference("c",
+              MapType(StringType, MapType(StringType,
+                MapType(StringType, ArrayType(IntegerType)))))(),
+            AttributeReference("d",
+              StructType(Array(
+                StructField("a",
+                  ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(IntegerType))))))),
+                StructField("b",
+                  ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(IntegerType))))))),
+                StructField("c",
+                  MapType(StringType, MapType(StringType,
+                    MapType(StringType, ArrayType(IntegerType))))))))(),
+            AttributeReference("e",
+              StructType(Array(
+                StructField("c",
+                  MapType(StringType, MapType(StringType,
+                    MapType(StringType, ArrayType(IntegerType))))),
+                StructField("d",
+                  StructType(Array(
+                    StructField("a",
+                      ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
+                        ArrayType(IntegerType))))))),
+                    StructField("b",
+                      ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
+                        ArrayType(IntegerType))))))),
+                    StructField("c",
+                      MapType(StringType, MapType(StringType,
+                        MapType(StringType, ArrayType(IntegerType)))))))))))()
+          ),
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('level_7).collect())
-
-      checkAnswer(
-        df,
-        (child: SparkPlan) => createScriptTransformationExec(
-          input = Seq(
-            df.col("level_8").expr),
-          script = "cat",
-          output = Seq(
-            AttributeReference("a", ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(ArrayType(
-              ArrayType(ArrayType(IntegerType)))))))))()),
-          child = child,
-          ioschema = defaultIOSchema
-        ),
-        df.select('level_8).collect())
+        df.select('a, 'b, 'c, 'd, 'e).collect())
     }
   }
 
