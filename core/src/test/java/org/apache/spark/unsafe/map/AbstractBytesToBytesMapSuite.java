@@ -87,7 +87,7 @@ public abstract class AbstractBytesToBytesMapSuite {
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "unsafe-test");
     spillFilesCreated.clear();
-    MockitoAnnotations.initMocks(this);
+    MockitoAnnotations.openMocks(this);
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
     when(diskBlockManager.createTempLocalBlock()).thenAnswer(invocationOnMock -> {
       TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());

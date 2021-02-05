@@ -98,7 +98,7 @@ public class UnsafeShuffleWriterSuite {
   @Before
   @SuppressWarnings("unchecked")
   public void setUp() throws IOException {
-    MockitoAnnotations.initMocks(this);
+    MockitoAnnotations.openMocks(this);
     tempDir = Utils.createTempDir(null, "test");
     mergedOutputFile = File.createTempFile("mergedoutput", "", tempDir);
     partitionSizesInMergedFile = null;
