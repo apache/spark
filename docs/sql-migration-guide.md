@@ -26,11 +26,34 @@ license: |
 
   - In Spark 3.2, `spark.sql.adaptive.enabled` is enabled by default. To restore the behavior before Spark 3.2, you can set `spark.sql.adaptive.enabled` to `false`.
 
-  - In Spark 3.2, the meta-characters `\n` and `\t` are escaped in the `show()` action. In Spark 3.1 or earlier, the two metacharacters are output as it is.
+  - In Spark 3.2, the following meta-characters are escaped in the `show()` action. In Spark 3.1 or earlier, the following metacharacters are output as it is.
+    * `\n` (new line)
+    * `\r` (carrige ret)
+    * `\t` (horizontal tab)
+    * `\f` (form feed)
+    * `\b` (backspace)
+    * `\u000B` (vertical tab)
+    * `\u0007` (bell)
 
   - In Spark 3.2, `ALTER TABLE .. RENAME TO PARTITION` throws `PartitionAlreadyExistsException` instead of `AnalysisException` for tables from Hive external when the target partition already exists.
 
-  - In Spark 3.2, script transform default FIELD DELIMIT is `\u0001` for no serde mode. In Spark 3.1 or earlier, the default FIELD DELIMIT is `\t`.
+  - In Spark 3.2, script transform default FIELD DELIMIT is `\u0001` for no serde mode, serde property `field.delim` is `\t` for Hive serde mode when user specifies serde. In Spark 3.1 or earlier, the default FIELD DELIMIT is `\t`, serde property `field.delim` is `\u0001` for Hive serde mode when user specifies serde.
+
+  - In Spark 3.2, the auto-generated `Cast` (such as those added by type coercion rules) will be stripped when generating column alias names. E.g., `sql("SELECT floor(1)").columns` will be `FLOOR(1)` instead of `FLOOR(CAST(1 AS DOUBLE))`.
+
+  - In Spark 3.2, table refreshing clears cached data of the table as well as of all its dependents such as views while keeping the dependents cached. The following commands perform table refreshing:
+    * `ALTER TABLE .. ADD PARTITION`
+    * `ALTER TABLE .. RENAME PARTITION`
+    * `ALTER TABLE .. DROP PARTITION`
+    * `ALTER TABLE .. RECOVER PARTITIONS`
+    * `MSCK REPAIR TABLE`
+    * `LOAD DATA`
+    * `REFRESH TABLE`
+    * `TRUNCATE TABLE`
+    * and the method `spark.catalog.refreshTable`
+  In Spark 3.1 and earlier, table refreshing leaves dependents uncached.
+
+  - In Spark 3.2, the usage of `count(tblName.*)` is blocked to avoid producing ambiguous results. Because `count(*)` and `count(tblName.*)` will output differently if there is any null values. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.allowStarWithSingleTableIdentifierInCount` to `true`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
@@ -66,6 +89,8 @@ license: |
 
   - In Spark 3.1, the temporary view will have same behaviors with the permanent view, i.e. capture and store runtime SQL configs, SQL text, catalog and namespace. The capatured view properties will be applied during the parsing and analysis phases of the view resolution. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.storeAnalyzedPlanForView` to `true`.
 
+  - In Spark 3.1, temporary view created via `CACHE TABLE ... AS SELECT` will also have the same behavior with permanent view. In particular, when the temporary view is dropped, Spark will invalidate all its cache dependents, as well as the cache for the temporary view itself. This is different from Spark 3.0 and below, which only does the latter. To restore the previous behavior, you can set `spark.sql.legacy.storeAnalyzedPlanForView` to `true`.
+
   - Since Spark 3.1, CHAR/CHARACTER and VARCHAR types are supported in the table schema. Table scan/insertion will respect the char/varchar semantic. If char/varchar is used in places other than table schema, an exception will be thrown (CAST is an exception that simply treats char/varchar as string like before). To restore the behavior before Spark 3.1, which treats them as STRING types and ignores a length parameter, e.g. `CHAR(4)`, you can set `spark.sql.legacy.charVarcharAsString` to `true`.
 
   - In Spark 3.1, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
@@ -77,6 +102,10 @@ license: |
   - In Spark 3.0.2, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
     * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
     * `ALTER TABLE .. DROP PARTITION` throws `NoSuchPartitionsException` for not existing partitions
+
+  - In Spark 3.0.2, `PARTITION(col=null)` is always parsed as a null literal in the partition spec. In Spark 3.0.1 or earlier, it is parsed as a string literal of its text representation, e.g., string "null", if the partition column is string type. To restore the legacy behavior, you can set `spark.sql.legacy.parseNullPartitionSpecAsStringLiteral` as true.
+
+  - In Spark 3.0.0, the output schema of `SHOW DATABASES` becomes `namespace: string`. In Spark version 2.4 and earlier, the schema was `databaseName: string`. Since Spark 3.0.2, you can restore the old schema by setting `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
@@ -854,7 +883,7 @@ Python UDF registration is unchanged.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently, Hive SerDes and UDFs are based on built-in Hive,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 2.3.7 and 3.0.0 to 3.1.2. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.3.8 and 3.0.0 to 3.1.2. Also see [Interacting with Different Versions of Hive Metastore](sql-data-sources-hive-tables.html#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 {:.no_toc}

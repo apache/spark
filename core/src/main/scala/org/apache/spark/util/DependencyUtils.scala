@@ -129,7 +129,7 @@ private[spark] object DependencyUtils extends Logging {
    *             2. exclude: exclusion list when download Ivy URI jar and dependency jars.
    *                The `exclude` parameter content is a ',' separated `group:module` pair string :
    *                `exclude=group:module,group:module...`
-   * @return Comma separated string list of jars downloaded.
+   * @return List of jars downloaded.
    */
   def resolveMavenDependencies(uri: URI): Seq[String] = {
     val ivyProperties = DependencyUtils.getIvyProperties()

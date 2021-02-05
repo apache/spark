@@ -798,7 +798,11 @@ private[spark] class ExecutorAllocationManager(
         }
         if (taskEnd.taskInfo.speculative) {
           stageAttemptToSpeculativeTaskIndices.get(stageAttempt).foreach {_.remove{taskIndex}}
-          stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
+          // If the previous task attempt succeeded first and it was the last task in a stage,
+          // the stage may have been removed before handing this speculative TaskEnd event.
+          if (stageAttemptToNumSpeculativeTasks.contains(stageAttempt)) {
+            stageAttemptToNumSpeculativeTasks(stageAttempt) -= 1
+          }
         }
 
         taskEnd.reason match {
@@ -904,7 +908,7 @@ private[spark] class ExecutorAllocationManager(
      */
     def pendingUnschedulableTaskSetsPerResourceProfile(rp: Int): Int = {
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
-      attempts.filter(attempt => unschedulableTaskSets.contains(attempt)).size
+      attempts.count(attempt => unschedulableTaskSets.contains(attempt))
     }
 
     def hasPendingTasks: Boolean = {

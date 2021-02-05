@@ -26,7 +26,6 @@ import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -130,7 +129,6 @@ case class AtomicCreateTableAsSelectExec(
  * ReplaceTableAsSelectStagingExec.
  */
 case class ReplaceTableAsSelectExec(
-    session: SparkSession,
     catalog: TableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
@@ -138,7 +136,8 @@ case class ReplaceTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends TableWriteExecHelper {
+    orCreate: Boolean,
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     // Note that this operation is potentially unsafe, but these are the strict semantics of
@@ -151,7 +150,7 @@ case class ReplaceTableAsSelectExec(
     // 3. The table returned by catalog.createTable doesn't support writing.
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
-      uncacheTable(session, catalog, table, ident)
+      invalidateCache(catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw new CannotReplaceMissingTableException(ident)
@@ -176,7 +175,6 @@ case class ReplaceTableAsSelectExec(
  * is left untouched.
  */
 case class AtomicReplaceTableAsSelectExec(
-    session: SparkSession,
     catalog: StagingTableCatalog,
     ident: Identifier,
     partitioning: Seq[Transform],
@@ -184,13 +182,14 @@ case class AtomicReplaceTableAsSelectExec(
     query: SparkPlan,
     properties: Map[String, String],
     writeOptions: CaseInsensitiveStringMap,
-    orCreate: Boolean) extends TableWriteExecHelper {
+    orCreate: Boolean,
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends TableWriteExecHelper {
 
   override protected def run(): Seq[InternalRow] = {
     val schema = CharVarcharUtils.getRawSchema(query.schema).asNullable
     if (catalog.tableExists(ident)) {
       val table = catalog.loadTable(ident)
-      uncacheTable(session, catalog, table, ident)
+      invalidateCache(catalog, table, ident)
     }
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
@@ -363,15 +362,6 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     }
 
     Nil
-  }
-
-  protected def uncacheTable(
-      session: SparkSession,
-      catalog: TableCatalog,
-      table: Table,
-      ident: Identifier): Unit = {
-    val plan = DataSourceV2Relation.create(table, Some(catalog), Some(ident))
-    session.sharedState.cacheManager.uncacheQuery(session, plan, cascade = true)
   }
 }
 

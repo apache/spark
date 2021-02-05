@@ -64,7 +64,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def schema(schema: StructType): DataStreamReader = {
-    this.userSpecifiedSchema = Option(CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
+    val replaced = CharVarcharUtils.failIfHasCharVarchar(schema).asInstanceOf[StructType]
+    this.userSpecifiedSchema = Option(replaced)
     this
   }
 
@@ -76,7 +77,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.3.0
    */
   def schema(schemaString: String): DataStreamReader = {
-    this.userSpecifiedSchema = Option(StructType.fromDDL(schemaString))
+    val rawSchema = StructType.fromDDL(schemaString)
+    val schema = CharVarcharUtils.failIfHasCharVarchar(rawSchema).asInstanceOf[StructType]
+    this.userSpecifiedSchema = Option(schema)
     this
   }
 

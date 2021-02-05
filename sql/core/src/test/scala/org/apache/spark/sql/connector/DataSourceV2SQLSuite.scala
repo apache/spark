@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
@@ -142,7 +142,7 @@ class DataSourceV2SQLSuite
       Array("Part 0", "id", ""),
       Array("", "", ""),
       Array("# Metadata Columns", "", ""),
-      Array("index", "string", "Metadata column used to conflict with a data column"),
+      Array("index", "int", "Metadata column used to conflict with a data column"),
       Array("_partition", "string", "Partition key used to store the row"),
       Array("", "", ""),
       Array("# Detailed Table Information", "", ""),
@@ -752,6 +752,24 @@ class DataSourceV2SQLSuite
     assert(t2.v1Table.provider == Some(conf.defaultDataSourceName))
   }
 
+  test("SPARK-34039: ReplaceTable (atomic or non-atomic) should invalidate cache") {
+    Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
+      val view = "view"
+      withTable(t) {
+        withTempView(view) {
+          sql(s"CREATE TABLE $t USING foo AS SELECT id, data FROM source")
+          sql(s"CACHE TABLE $view AS SELECT id FROM $t")
+          checkAnswer(sql(s"SELECT * FROM $t"), spark.table("source"))
+          checkAnswer(sql(s"SELECT * FROM $view"), spark.table("source").select("id"))
+
+          val oldView = spark.table(view)
+          sql(s"REPLACE TABLE $t (a bigint) USING foo")
+          assert(spark.sharedState.cacheManager.lookupCachedData(oldView).isEmpty)
+        }
+      }
+    }
+  }
+
   test("SPARK-33492: ReplaceTableAsSelect (atomic or non-atomic) should invalidate cache") {
     Seq("testcat.ns.t", "testcat_atomic.ns.t").foreach { t =>
       val view = "view"
@@ -989,26 +1007,6 @@ class DataSourceV2SQLSuite
 
     assert(exception.getMessage.contains("Catalog testcat doesn't support SHOW VIEWS," +
       " only SessionCatalog supports this command."))
-  }
-
-  private def runShowTablesSql(
-      sqlText: String,
-      expected: Seq[Row],
-      expectV2Catalog: Boolean = true): Unit = {
-    val schema = if (expectV2Catalog) {
-      new StructType()
-        .add("namespace", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-    } else {
-      new StructType()
-        .add("database", StringType, nullable = false)
-        .add("tableName", StringType, nullable = false)
-        .add("isTemporary", BooleanType, nullable = false)
-    }
-
-    val df = spark.sql(sqlText)
-    assert(df.schema === schema)
-    assert(expected === df.collect())
   }
 
   test("CreateNameSpace: basic tests") {
@@ -1303,95 +1301,6 @@ class DataSourceV2SQLSuite
         Row(SupportsNamespaces.PROP_OWNER.capitalize, defaultUser))
       )
     }
-  }
-
-  test("ShowNamespaces: show root namespaces with default v2 catalog") {
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq())
-
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1", "ns2"))
-    testShowNamespaces("SHOW NAMESPACES LIKE '*1*'", Seq("ns1"))
-  }
-
-  test("ShowNamespaces: show namespaces with v2 catalog") {
-    spark.sql("CREATE TABLE testcat.ns1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_1.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns1.ns1_2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.table (id bigint) USING foo")
-    spark.sql("CREATE TABLE testcat.ns2.ns2_1.table (id bigint) USING foo")
-
-    // Look up only with catalog name, which should list root namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat", Seq("ns1", "ns2"))
-
-    // Look up sub-namespaces.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1", Seq("ns1.ns1_1", "ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1 LIKE '*2*'", Seq("ns1.ns1_2"))
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns2", Seq("ns2.ns2_1"))
-
-    // Try to look up namespaces that do not exist.
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns3", Seq())
-    testShowNamespaces("SHOW NAMESPACES IN testcat.ns1.ns3", Seq())
-  }
-
-  test("ShowNamespaces: default v2 catalog is not set") {
-    spark.sql("CREATE TABLE testcat.ns.table (id bigint) USING foo")
-
-    // The current catalog is resolved to a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-  }
-
-  test("ShowNamespaces: default v2 catalog doesn't support namespace") {
-    spark.conf.set(
-      "spark.sql.catalog.testcat_no_namespace",
-      classOf[BasicInMemoryTableCatalog].getName)
-    spark.conf.set(SQLConf.DEFAULT_CATALOG.key, "testcat_no_namespace")
-
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES")
-    }
-
-    assert(exception.getMessage.contains("does not support namespaces"))
-  }
-
-  test("ShowNamespaces: v2 catalog doesn't support namespace") {
-    spark.conf.set(
-      "spark.sql.catalog.testcat_no_namespace",
-      classOf[BasicInMemoryTableCatalog].getName)
-
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in testcat_no_namespace")
-    }
-
-    assert(exception.getMessage.contains("does not support namespaces"))
-  }
-
-  test("ShowNamespaces: session catalog is used and namespace doesn't exist") {
-    val exception = intercept[AnalysisException] {
-      sql("SHOW NAMESPACES in dummy")
-    }
-
-    assert(exception.getMessage.contains("Namespace 'dummy' not found"))
-  }
-
-  test("ShowNamespaces: change catalog and namespace with USE statements") {
-    sql("CREATE TABLE testcat.ns1.ns2.table (id bigint) USING foo")
-
-    // Initially, the current catalog is a v2 session catalog.
-    testShowNamespaces("SHOW NAMESPACES", Seq("default"))
-
-    // Update the current catalog to 'testcat'.
-    sql("USE testcat")
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
-
-    // Update the current namespace to 'ns1'.
-    sql("USE ns1")
-    // 'SHOW NAMESPACES' is not affected by the current namespace and lists root namespaces.
-    testShowNamespaces("SHOW NAMESPACES", Seq("ns1"))
   }
 
   private def testShowNamespaces(
@@ -1721,16 +1630,23 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33435: REFRESH TABLE should invalidate all caches referencing the table") {
+  test("SPARK-33435, SPARK-34099: REFRESH TABLE should refresh all caches referencing the table") {
     val tblName = "testcat.ns.t"
     withTable(tblName) {
       withTempView("t") {
         sql(s"CREATE TABLE $tblName (id bigint) USING foo")
+        sql(s"INSERT INTO $tblName SELECT 0")
         sql(s"CACHE TABLE t AS SELECT id FROM $tblName")
+        checkAnswer(spark.table(tblName), Row(0))
+        checkAnswer(spark.table("t"), Row(0))
+
+        sql(s"INSERT INTO $tblName SELECT 1")
 
         assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
         sql(s"REFRESH TABLE $tblName")
-        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isEmpty)
+        assert(spark.sharedState.cacheManager.lookupCachedData(spark.table("t")).isDefined)
+        checkAnswer(spark.table(tblName), Seq(Row(0), Row(1)))
+        checkAnswer(spark.table("t"), Seq(Row(0), Row(1)))
       }
     }
   }
@@ -2018,21 +1934,6 @@ class DataSourceV2SQLSuite
     withTable(t) {
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
       testNotSupportedV2Command("MSCK REPAIR TABLE", t)
-    }
-  }
-
-  test("TRUNCATE TABLE") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(
-        s"""
-           |CREATE TABLE $t (id bigint, data string)
-           |USING foo
-           |PARTITIONED BY (id)
-         """.stripMargin)
-
-      testNotSupportedV2Command("TRUNCATE TABLE", t)
-      testNotSupportedV2Command("TRUNCATE TABLE", s"$t PARTITION(id='1')")
     }
   }
 
@@ -2542,9 +2443,12 @@ class DataSourceV2SQLSuite
           "PARTITIONED BY (bucket(4, id), id)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
-      checkAnswer(
-        spark.sql(s"SELECT id, data, _partition FROM $t1"),
-        Seq(Row(1, "a", "3/1"), Row(2, "b", "0/2"), Row(3, "c", "1/3")))
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1")
+      val dfQuery = spark.table(t1).select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
     }
   }
 
@@ -2555,9 +2459,12 @@ class DataSourceV2SQLSuite
           "PARTITIONED BY (bucket(4, index), index)")
       sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
-      checkAnswer(
-        spark.sql(s"SELECT index, data, _partition FROM $t1"),
-        Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
+      val sqlQuery = spark.sql(s"SELECT index, data, _partition FROM $t1")
+      val dfQuery = spark.table(t1).select("index", "data", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
+      }
     }
   }
 
@@ -2568,9 +2475,27 @@ class DataSourceV2SQLSuite
           "PARTITIONED BY (bucket(4, id), id)")
       sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $t1"),
-        Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+      val sqlQuery = spark.sql(s"SELECT * FROM $t1")
+      val dfQuery = spark.table(t1)
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+      }
+    }
+  }
+
+  test("SPARK-31255: metadata column should only be produced when necessary") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+
+      val sqlQuery = spark.sql(s"SELECT * FROM $t1 WHERE index = 0")
+      val dfQuery = spark.table(t1).filter("index = 0")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        assert(query.schema.fieldNames.toSeq == Seq("id", "data"))
+      }
     }
   }
 

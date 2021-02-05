@@ -183,7 +183,7 @@ private[spark] class ExecutorMonitor(
   def pendingRemovalCount: Int = executors.asScala.count { case (_, exec) => exec.pendingRemoval }
 
   def pendingRemovalCountPerResourceProfileId(id: Int): Int = {
-    executors.asScala.filter { case (k, v) => v.resourceProfileId == id && v.pendingRemoval }.size
+    executors.asScala.count { case (k, v) => v.resourceProfileId == id && v.pendingRemoval }
   }
 
   def decommissioningCount: Int = executors.asScala.count { case (_, exec) =>
@@ -191,9 +191,9 @@ private[spark] class ExecutorMonitor(
   }
 
   def decommissioningPerResourceProfileId(id: Int): Int = {
-    executors.asScala.filter { case (k, v) =>
+    executors.asScala.count { case (k, v) =>
       v.resourceProfileId == id && v.decommissioning
-    }.size
+    }
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
@@ -227,7 +227,7 @@ private[spark] class ExecutorMonitor(
     }
 
     if (updateExecutors) {
-      val activeShuffleIds = shuffleStages.map(_._2).toSeq
+      val activeShuffleIds = shuffleStages.map(_._2)
       var needTimeoutUpdate = false
       val activatedExecs = new ExecutorIdCollector()
       executors.asScala.foreach { case (id, exec) =>
@@ -251,7 +251,7 @@ private[spark] class ExecutorMonitor(
     }
 
     stageToShuffleID ++= shuffleStages
-    jobToStageIDs(event.jobId) = shuffleStages.map(_._1).toSeq
+    jobToStageIDs(event.jobId) = shuffleStages.map(_._1)
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {

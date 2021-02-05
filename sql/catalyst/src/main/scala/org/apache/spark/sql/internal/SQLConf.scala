@@ -1551,6 +1551,22 @@ object SQLConf {
         "must be positive.")
       .createWithDefault(100)
 
+  val ALLOW_PARAMETERLESS_COUNT =
+    buildConf("spark.sql.legacy.allowParameterlessCount")
+      .internal()
+      .doc("When true, the SQL function 'count' is allowed to take no parameters.")
+      .version("3.1.1")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT =
+    buildConf("spark.sql.legacy.allowStarWithSingleTableIdentifierInCount")
+      .internal()
+      .doc("When true, the SQL function 'count' is allowed to take single 'tblName.*' as parameter")
+      .version("3.2")
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
     buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()
@@ -2464,6 +2480,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.parseNullPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true, `PARTITION(col=null)` is parsed as a string literal of its " +
+        "text representation, e.g., string 'null', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a null literal in the partition spec.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
       .internal()
@@ -3036,6 +3062,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val CLI_PRINT_HEADER =
+    buildConf("spark.sql.cli.print.header")
+     .doc("When set to true, spark-sql CLI prints the names of the columns in query output.")
+     .version("3.2.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA =
+    buildConf("spark.sql.legacy.keepCommandOutputSchema")
+      .internal()
+      .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
+        "unchanged, for v1 catalog and/or table.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3552,6 +3594,9 @@ class SQLConf extends Serializable with Logging {
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
+  def allowStarWithSingleTableIdentifierInCount: Boolean =
+    getConf(SQLConf.ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT)
+
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
@@ -3693,6 +3738,8 @@ class SQLConf extends Serializable with Logging {
   def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
+
+  def cliPrintHeader: Boolean = getConf(SQLConf.CLI_PRINT_HEADER)
 
   /** ********************** SQLConf functionality methods ************ */
 

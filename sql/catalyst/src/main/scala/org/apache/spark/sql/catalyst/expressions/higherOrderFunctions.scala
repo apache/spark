@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -961,9 +962,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def assertSizeOfArrayBuffer(size: Int): Unit = {
     if (size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new RuntimeException(s"Unsuccessful try to zip maps with $size " +
-        s"unique keys due to exceeding the array size limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      throw QueryExecutionErrors.mapSizeExceedArraySizeWhenZipMapError(size)
     }
   }
 

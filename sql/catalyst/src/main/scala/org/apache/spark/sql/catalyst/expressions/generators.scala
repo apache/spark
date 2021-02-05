@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -260,10 +261,10 @@ case class ReplicateRows(children: Seq[Expression]) extends Generator with Codeg
  */
 case class GeneratorOuter(child: Generator) extends UnaryExpression with Generator {
   final override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def elementSchema: StructType = child.elementSchema
 

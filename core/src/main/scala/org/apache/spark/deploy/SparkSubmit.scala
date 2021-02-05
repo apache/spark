@@ -240,7 +240,7 @@ private[spark] class SparkSubmit extends Logging {
     }
 
     // Set the deploy mode; default is client mode
-    var deployMode: Int = args.deployMode match {
+    val deployMode: Int = args.deployMode match {
       case "client" | null => CLIENT
       case "cluster" => CLUSTER
       case _ =>
@@ -1194,11 +1194,11 @@ private[spark] object SparkSubmitUtils {
   }
 
   /**
-   * Output a comma-delimited list of paths for the downloaded jars to be added to the classpath
+   * Output a list of paths for the downloaded jars to be added to the classpath
    * (will append to jars in SparkSubmit).
    * @param artifacts Sequence of dependencies that were resolved and retrieved
-   * @param cacheDirectory directory where jars are cached
-   * @return a comma-delimited list of paths for the dependencies
+   * @param cacheDirectory Directory where jars are cached
+   * @return List of paths for the dependencies
    */
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],

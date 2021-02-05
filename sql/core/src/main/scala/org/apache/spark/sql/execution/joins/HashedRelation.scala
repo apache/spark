@@ -219,7 +219,7 @@ private[joins] class UnsafeHashedRelation(
   var resultRow = new UnsafeRow(numFields)
 
   // re-used in getWithKeyIndex()/getValueWithKeyIndex()/valuesWithKeyIndex()
-  var valueRowWithKeyIndex = new ValueRowWithKeyIndex
+  val valueRowWithKeyIndex = new ValueRowWithKeyIndex
 
   override def get(key: InternalRow): Iterator[InternalRow] = {
     val unsafeKey = key.asInstanceOf[UnsafeRow]

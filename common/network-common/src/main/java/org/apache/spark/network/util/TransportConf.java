@@ -19,6 +19,7 @@ package org.apache.spark.network.util;
 
 import java.util.Locale;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.primitives.Ints;
 import io.netty.util.NettyRuntime;
@@ -31,6 +32,7 @@ public class TransportConf {
   private final String SPARK_NETWORK_IO_MODE_KEY;
   private final String SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY;
   private final String SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY;
+  private final String SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY;
   private final String SPARK_NETWORK_IO_BACKLOG_KEY;
   private final String SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY;
   private final String SPARK_NETWORK_IO_SERVERTHREADS_KEY;
@@ -54,6 +56,7 @@ public class TransportConf {
     SPARK_NETWORK_IO_MODE_KEY = getConfKey("io.mode");
     SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY = getConfKey("io.preferDirectBufs");
     SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY = getConfKey("io.connectionTimeout");
+    SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY = getConfKey("io.connectionCreationTimeout");
     SPARK_NETWORK_IO_BACKLOG_KEY = getConfKey("io.backLog");
     SPARK_NETWORK_IO_NUMCONNECTIONSPERPEER_KEY =  getConfKey("io.numConnectionsPerPeer");
     SPARK_NETWORK_IO_SERVERTHREADS_KEY = getConfKey("io.serverThreads");
@@ -94,12 +97,20 @@ public class TransportConf {
     return conf.getBoolean(SPARK_NETWORK_IO_PREFERDIRECTBUFS_KEY, true);
   }
 
-  /** Connect timeout in milliseconds. Default 120 secs. */
+  /** Connection idle timeout in milliseconds. Default 120 secs. */
   public int connectionTimeoutMs() {
     long defaultNetworkTimeoutS = JavaUtils.timeStringAsSec(
       conf.get("spark.network.timeout", "120s"));
     long defaultTimeoutMs = JavaUtils.timeStringAsSec(
       conf.get(SPARK_NETWORK_IO_CONNECTIONTIMEOUT_KEY, defaultNetworkTimeoutS + "s")) * 1000;
+    return (int) defaultTimeoutMs;
+  }
+
+  /** Connect creation timeout in milliseconds. Default 30 secs. */
+  public int connectionCreationTimeoutMs() {
+    long connectionTimeoutS = TimeUnit.MILLISECONDS.toSeconds(connectionTimeoutMs());
+    long defaultTimeoutMs = JavaUtils.timeStringAsSec(
+      conf.get(SPARK_NETWORK_IO_CONNECTIONCREATIONTIMEOUT_KEY,  connectionTimeoutS + "s")) * 1000;
     return (int) defaultTimeoutMs;
   }
 

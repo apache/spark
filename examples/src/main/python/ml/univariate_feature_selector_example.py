@@ -16,20 +16,20 @@
 #
 
 """
-An example for ANOVASelector.
+An example for UnivariateFeatureSelector.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/anova_selector_example.py
+  bin/spark-submit examples/src/main/python/ml/univariate_feature_selector_example.py
 """
 from pyspark.sql import SparkSession
 # $example on$
-from pyspark.ml.feature import ANOVASelector
+from pyspark.ml.feature import UnivariateFeatureSelector
 from pyspark.ml.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
-        .appName("ANOVASelectorExample")\
+        .appName("UnivariateFeatureSelectorExample")\
         .getOrCreate()
 
     # $example on$
@@ -41,12 +41,14 @@ if __name__ == "__main__":
         (5, Vectors.dense([8.9, 5.2, 7.8, 8.3, 5.2, 3.0]), 4.0,),
         (6, Vectors.dense([7.9, 8.5, 9.2, 4.0, 9.4, 2.1]), 4.0,)], ["id", "features", "label"])
 
-    selector = ANOVASelector(numTopFeatures=1, featuresCol="features",
-                             outputCol="selectedFeatures", labelCol="label")
+    selector = UnivariateFeatureSelector(featuresCol="features", outputCol="selectedFeatures",
+                                         labelCol="label", selectionMode="numTopFeatures")
+    selector.setFeatureType("continuous").setLabelType("categorical").setSelectionThreshold(1)
 
     result = selector.fit(df).transform(df)
 
-    print("ANOVASelector output with top %d features selected" % selector.getNumTopFeatures())
+    print("UnivariateFeatureSelector output with top %d features selected using f_classif"
+          % selector.getSelectionThreshold())
     result.show()
     # $example off$
 

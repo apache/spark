@@ -245,10 +245,10 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
   override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
-    throw QueryExecutionErrors.cannotEvaluateGeneratorError(this)
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForGeneratorError(this)
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   override def terminate(): TraversableOnce[InternalRow] =
     throw QueryExecutionErrors.cannotTerminateGeneratorError(this)
@@ -334,6 +334,10 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
       attribute.qualifier.takeRight(nameParts.length)
     }
     nameParts.corresponds(qualifierList)(resolver)
+  }
+
+  def isQualifiedByTable(input: LogicalPlan, resolver: Resolver): Boolean = {
+    target.exists(nameParts => input.output.exists(matchedQualifier(_, nameParts, resolver)))
   }
 
   override def expand(

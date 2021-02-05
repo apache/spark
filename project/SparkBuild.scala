@@ -655,7 +655,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.guava" % "guava" % guavaVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
-    dependencyOverrides += "org.apache.avro" % "avro" % "1.8.2")
+    dependencyOverrides += "org.apache.avro" % "avro" % "1.10.1")
 }
 
 /**
@@ -910,7 +910,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalyst")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/execution")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/internal")))
-      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive/test")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/catalog/v2/utils")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hive")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/sql/v2/avro")))
@@ -958,18 +958,24 @@ object Unidoc {
         .map(_.filterNot(_.getCanonicalPath.contains("org/apache/hadoop")))
     },
 
-    javacOptions in (JavaUnidoc, unidoc) := Seq(
-      "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
-      "-public",
-      "-noqualifier", "java.lang",
-      "-tag", """example:a:Example\:""",
-      "-tag", """note:a:Note\:""",
-      "-tag", "group:X",
-      "-tag", "tparam:X",
-      "-tag", "constructor:X",
-      "-tag", "todo:X",
-      "-tag", "groupname:X"
-    ),
+    javacOptions in (JavaUnidoc, unidoc) := {
+      val versionParts = System.getProperty("java.version").split("[+.\\-]+", 3)
+      var major = versionParts(0).toInt
+      if (major == 1) major = versionParts(1).toInt
+
+      Seq(
+        "-windowtitle", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " JavaDoc",
+        "-public",
+        "-noqualifier", "java.lang",
+        "-tag", """example:a:Example\:""",
+        "-tag", """note:a:Note\:""",
+        "-tag", "group:X",
+        "-tag", "tparam:X",
+        "-tag", "constructor:X",
+        "-tag", "todo:X",
+        "-tag", "groupname:X",
+      ) ++ { if (major >= 9) Seq("--ignore-source-errors", "-notree") else Seq.empty }
+    },
 
     // Use GitHub repository for Scaladoc source links
     unidocSourceBase := s"https://github.com/apache/spark/tree/v${version.value}",

@@ -669,6 +669,41 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 2, null, null, null, null)))
   }
 
+  test("nth_value with ignoreNulls over offset window frame") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = false).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = false).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", "x", "y", null, null, null),
+        Row("a", 1, "x", "x", "y", "x", "x", null),
+        Row("a", 2, "x", "x", "y", "x", "x", "y"),
+        Row("a", 3, "x", "x", "y", "x", "x", "y"),
+        Row("a", 4, "x", "x", "y", "x", "x", "y"),
+        Row("b", 1, null, null, null, null, null, null),
+        Row("b", 2, null, null, null, null, null, null)))
+  }
+
   test("nth_value on descending ordered window") {
     val nullStr: String = null
     val df = Seq(
@@ -1008,5 +1043,31 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       Seq(
         Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
         Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
+  }
+
+  test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
+    // This creates a single partition dataframe with 3 records:
+    //   "a", 0, null
+    //   "a", 1, "x"
+    //   "b", 0, null
+    val df = spark.range(0, 3, 1, 1).select(
+      when($"id" < 2, lit("a")).otherwise(lit("b")).as("key"),
+      ($"id" % 2).cast("int").as("order"),
+      when($"id" % 2 === 0, lit(null)).otherwise(lit("x")).as("value"))
+
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 1, ignoreNulls = true).over(window1),
+        nth_value($"value", 1, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", null),
+        Row("a", 1, "x", "x"),
+        Row("b", 0, null, null)))
   }
 }
