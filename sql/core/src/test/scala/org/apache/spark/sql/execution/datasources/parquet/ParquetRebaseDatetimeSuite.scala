@@ -155,14 +155,15 @@ abstract class ParquetRebaseDatetimeSuite
         }
         // For Parquet files written by Spark 3.0, we know the writer info and don't need the
         // config to guide the rebase behavior.
-        val expected = (0 until N).flatMap { i =>
-          val (dictS, plainS) = rowFunc(i)
-          Seq.tabulate(3) { _ =>
-            Row(toJavaType(dictS), toJavaType(plainS))
-          }
-        }
         runInMode(inReadConf, Seq(LEGACY)) { options =>
-          spark.read.format("parquet").options(options).load(path2_4, path3_0, path3_0_rebase)
+          checkAnswer(
+            spark.read.format("parquet").options(options).load(path2_4, path3_0, path3_0_rebase),
+            (0 until N).flatMap { i =>
+              val (dictS, plainS) = rowFunc(i)
+              Seq.tabulate(3) { _ =>
+                Row(toJavaType(dictS), toJavaType(plainS))
+              }
+            })
         }
       }
     }
