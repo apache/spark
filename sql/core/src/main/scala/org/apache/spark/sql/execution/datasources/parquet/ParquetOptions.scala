@@ -71,23 +71,17 @@ class ParquetOptions(
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
 
   /**
-   * The rebasing modes of the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in read/write.
+   * The rebasing modes for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
   def datetimeRebaseModeInRead: String = parameters
     .get(DATETIME_REBASE_MODE)
     .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
-  def datetimeRebaseModeInWrite: String = parameters
-    .get(DATETIME_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE))
   /**
-   * The rebasing mode of the INT96 timestamp values in read/write.
+   * The rebasing mode for INT96 timestamp values in reads.
    */
   def int96RebaseModeInRead: String = parameters
     .get(INT96_REBASE_MODE)
     .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ))
-  def int96RebaseModeInWrite: String = parameters
-    .get(INT96_REBASE_MODE)
-    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE))
 }
 
 
@@ -111,10 +105,8 @@ object ParquetOptions {
 
   // The option controls rebasing of the DATE and TIMESTAMP values between
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Parquet
-  // datasource similarly to the SQL configs below, and can be set the same values as:
-  //   - `spark.sql.legacy.parquet.datetimeRebaseModeInRead` in loading parquet files
-  //   - `spark.sql.legacy.parquet.datetimeRebaseModeInWrite` in saving.
-  // The valid values:
+  // datasource similarly to the SQL config `spark.sql.legacy.parquet.datetimeRebaseModeInRead`,
+  // and can be set the same values:
   //   - "EXCEPTION", Spark fails in reads or writes of ancient dates/timestamps
   //     that are ambiguous between the two calendars.
   //   - "CORRECTED", no rebasing. Spark reads and writes dates/timestamps as is.
@@ -122,10 +114,8 @@ object ParquetOptions {
   val DATETIME_REBASE_MODE = "datetimeRebaseMode"
 
   // The option controls rebasing of the INT96 timestamp values between Julian and Proleptic
-  // Gregorian calendars. It impacts on the behaviour of the Parquet
-  // datasource similarly to the SQL configs below, and can be set the same values as:
-  //  - `spark.sql.legacy.parquet.int96RebaseModeInRead` in loading.
-  //  - `spark.sql.legacy.parquet.int96RebaseModeInWrite` in saving parquet files.
+  // Gregorian calendars. It impacts on the behaviour of the Parquet datasource similarly to
+  // the SQL config `spark.sql.legacy.parquet.int96RebaseModeInRead`.
   // The valid option values are: "EXCEPTION", "LEGACY" or "CORRECTED".
   val INT96_REBASE_MODE = "int96RebaseMode"
 }
