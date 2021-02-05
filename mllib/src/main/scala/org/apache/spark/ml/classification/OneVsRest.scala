@@ -185,47 +185,49 @@ final class OneVsRestModel private[ml] (
       return dataset.toDF
     }
 
+    val isProbModel = models.head.isInstanceOf[ProbabilisticClassificationModel[_, _]]
+
+    // use a temporary raw prediction column to avoid column conflict
+    val tmpRawPredName = "mbc$raw" + UUID.randomUUID().toString
+
     // add an accumulator column to store predictions of all the models
     val accColName = "mbc$acc" + UUID.randomUUID().toString
     val newDataset = dataset.withColumn(accColName, lit(Array.emptyDoubleArray))
+    val columns = newDataset.schema.fieldNames.map(col)
+    val updateUDF = udf { (preds: Array[Double], pred: Vector) => preds :+ pred(1) }
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = !dataset.isStreaming && dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) newDataset.persist(StorageLevel.MEMORY_AND_DISK)
-
-    // update the accumulator column with the result of prediction of models
-    val aggregatedDataset = models.foldLeft[DataFrame](newDataset) {
-      case (df, model) =>
-        // avoid calling directly setter of model
-        val tmpModel = model.copy(ParamMap.empty).asInstanceOf[ClassificationModel[_, _]]
-        tmpModel.setFeaturesCol($(featuresCol))
-
-        // use a temporary raw prediction column to avoid column conflict
-        val tmpRawPredName = "mbc$raw" + UUID.randomUUID().toString
-        tmpModel.setRawPredictionCol(tmpRawPredName)
-        tmpModel.setPredictionCol("")
-        tmpModel match {
-          case m: ProbabilisticClassificationModel[_, _] => m.setProbabilityCol("")
-          case _ =>
-        }
-
-        val updateUDF = udf { (predictions: Array[Double], prediction: Vector) =>
-          predictions :+ prediction(1)
-        }
-
-        tmpModel.transform(df)
-          .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
-          .drop(tmpRawPredName)
+    if (handlePersistence) {
+      newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
-    if (handlePersistence) newDataset.unpersist()
+    // update the accumulator column with the result of prediction of models
+    val aggregatedDataset = models.foldLeft[DataFrame](newDataset) { case (df, model) =>
+      // avoid calling directly setter of model
+      val tmpModel = model.copy(ParamMap.empty).asInstanceOf[ClassificationModel[_, _]]
+      tmpModel.setFeaturesCol($(featuresCol))
+      tmpModel.setRawPredictionCol(tmpRawPredName)
+      tmpModel.setPredictionCol("")
+      if (isProbModel) {
+        tmpModel.asInstanceOf[ProbabilisticClassificationModel[_, _]].setProbabilityCol("")
+      }
+
+      tmpModel.transform(df)
+        .withColumn(accColName, updateUDF(col(accColName), col(tmpRawPredName)))
+        .select(columns: _*)
+    }
+
+    if (handlePersistence) {
+      newDataset.unpersist()
+    }
 
     var predictionColNames = Seq.empty[String]
     var predictionColumns = Seq.empty[Column]
 
     if (getRawPredictionCol.nonEmpty) {
       // output the RawPrediction as vector
-      val rawPredictionUDF = udf { predictions: Array[Double] => Vectors.dense(predictions) }
+      val rawPredictionUDF = udf { preds: Array[Double] => Vectors.dense(preds) }
       predictionColNames :+= getRawPredictionCol
       predictionColumns :+= rawPredictionUDF(col(accColName))
         .as($(rawPredictionCol), outputSchema($(rawPredictionCol)).metadata)
@@ -233,10 +235,7 @@ final class OneVsRestModel private[ml] (
 
     if (getPredictionCol.nonEmpty) {
       // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (predictions: Array[Double]) =>
-        predictions.indices.maxBy(predictions.apply).toDouble
-      }
-
+      val labelUDF = udf { (preds: Array[Double]) => preds.indices.maxBy(preds.apply).toDouble }
       predictionColNames :+= getPredictionCol
       predictionColumns :+= labelUDF(col(accColName))
         .as(getPredictionCol, labelMetadata)
