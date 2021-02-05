@@ -283,7 +283,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         testSparkPlanMetrics(df, 1, Map(
           nodeId1 -> (("SortMergeJoin", Map(
             // It's 4 because we only read 3 rows in the first partition and 1 row in the second one
-            "number of output rows" -> 4L, "number of matched pairs" -> 4L))),
+            "number of output rows" -> 4L,
+            "number of matched rows" -> 4L))),
           nodeId2 -> (("Exchange", Map(
             "records read" -> 4L,
             "local blocks read" -> 2L,
@@ -298,7 +299,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         Seq(false, true).foreach { case  enableWholeStage =>
           testSparkPlanMetrics(df2, 1, Map(
             0L -> ("SortMergeJoin", Map(
-              "number of output rows" -> 3L, "number of matched pairs" -> 4L))),
+              "number of output rows" -> 3L,
+              "number of matched rows" -> 4L))),
             enableWholeStage
           )
         }
@@ -342,7 +344,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         testSparkPlanMetrics(df, 1, Map(
           0L -> (("SortMergeJoin", Map(
             // It's 8 because we read 6 rows in the left and 2 row in the right one
-            "number of output rows" -> rows, "number of matched pairs" -> 4L)))),
+            "number of output rows" -> rows,
+            "number of matched rows" -> 4L)))),
           enableWholeStage
         )
       }
@@ -366,7 +369,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
       testSparkPlanMetrics(df, 2, Map(
         nodeId -> (("BroadcastHashJoin", Map(
-          "number of output rows" -> rows, "number of matched pairs" -> 2L)))),
+          "number of output rows" -> rows,
+          "number of matched rows" -> 2L)))),
         enableWholeStage
       )
     }
@@ -392,7 +396,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           testSparkPlanMetrics(df, 1, Map(
             nodeId1 -> (("ShuffledHashJoin", Map(
               "number of output rows" -> rows,
-              "number of matched pairs" -> 2L))),
+              "number of matched rows" -> 2L))),
             nodeId2 -> (("Exchange", Map(
               "shuffle records written" -> 2L,
               "records read" -> 2L))),
@@ -436,7 +440,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         testSparkPlanMetrics(df, 1, Map(
           nodeId -> (("ShuffledHashJoin", Map(
             "number of output rows" -> rows,
-            "number of matched pairs" -> numMatched)))),
+            "number of matched rows" -> numMatched)))),
           enableWholeStage
         )
       }
@@ -516,7 +520,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       testSparkPlanMetrics(df, 2, Map(
         nodeId -> (("BroadcastHashJoin", Map(
           "number of output rows" -> numRows,
-          "number of matched pairs" -> numMatched)))),
+          "number of matched rows" -> numMatched)))),
         enableWholeStage
       )
     }
@@ -545,7 +549,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           testSparkPlanMetrics(df, 2, Map(
             0L -> (("BroadcastNestedLoopJoin", Map(
               "number of output rows" -> rows,
-              "number of matched pairs" -> 12L)))),
+              "number of matched rows" -> 12L)))),
             enableWholeStage
           )
         }
@@ -574,7 +578,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       testSparkPlanMetrics(df, 2, Map(
         nodeId -> (("BroadcastHashJoin", Map(
           "number of output rows" -> rows,
-          "number of matched pairs" -> matched)))),
+          "number of matched rows" -> matched)))),
         enableWholeStage
       )
     }
@@ -609,7 +613,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           testSparkPlanMetrics(df, 1, Map(
             0L -> (("CartesianProduct",
               Map("number of output rows" -> rows,
-                "number of matched pairs" -> 12L)))),
+                "number of matched rows" -> 12L)))),
             enableWholeStage
           )
         }
@@ -627,7 +631,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         testSparkPlanMetrics(df, 1, Map(
           0L -> (("SortMergeJoin",
             Map("number of output rows" -> 4L,
-              "number of matched pairs" -> 2L)))),
+              "number of matched rows" -> 2L)))),
           enableWholeStage
         )
       }

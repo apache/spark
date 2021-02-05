@@ -46,7 +46,7 @@ case class ShuffledHashJoinExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"),
+    "numMatchedRows" -> SQLMetrics.createMetric(sparkContext, "number of matched rows"),
     "buildDataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size of build side"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"))
 

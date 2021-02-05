@@ -45,7 +45,7 @@ case class SortMergeJoinExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"))
+    "numMatchedRows" -> SQLMetrics.createMetric(sparkContext, "number of matched rows"))
 
   override def nodeName: String = {
     if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
@@ -129,19 +129,19 @@ case class SortMergeJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val numMatchedPairs = longMetric("numMatchedPairs")
+    val numMatchedRows = longMetric("numMatchedRows")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
           (r: InternalRow) => {
-            numMatchedPairs += 1
+            numMatchedRows += 1
             Predicate.create(cond, left.output ++ right.output).eval(r)
           }
         }.getOrElse {
           (_: InternalRow) => {
-            numMatchedPairs += 1
+            numMatchedRows += 1
             true
           }
         }
@@ -593,7 +593,7 @@ case class SortMergeJoinExec(
 
     val iterator = ctx.freshName("iterator")
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val numMatched = metricTerm(ctx, "numMatchedPairs")
+    val numMatched = metricTerm(ctx, "numMatchedRows")
     val (beforeLoop, condCheck) = if (condition.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")

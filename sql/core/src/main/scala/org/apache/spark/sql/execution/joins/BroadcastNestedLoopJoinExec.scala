@@ -40,7 +40,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"))
+    "numMatchedRows" -> SQLMetrics.createMetric(sparkContext, "number of matched rows"))
 
   /** BuildRight means the right relation <=> the broadcast relation. */
   private val (streamed, broadcast) = buildSide match {
@@ -90,17 +90,17 @@ case class BroadcastNestedLoopJoinExec(
     }
   }
 
-  private val numMatchedPairs = longMetric("numMatchedPairs")
+  private val numMatchedRows = longMetric("numMatchedRows")
 
   @transient private lazy val boundCondition: InternalRow => Boolean =
     if (condition.isDefined) {
       (r: InternalRow) => {
-        numMatchedPairs += 1
+        numMatchedRows += 1
         Predicate.create(condition.get, streamed.output ++ broadcast.output).eval(r)
       }
     } else {
       (_: InternalRow) => {
-        numMatchedPairs += 1
+        numMatchedRows += 1
         true
       }
     }

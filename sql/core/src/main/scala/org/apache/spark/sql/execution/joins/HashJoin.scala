@@ -49,11 +49,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   }
 
   /**
-   * When overriding metrics be sure to include numOutputRows & numMatchedPairs
+   * When overriding metrics be sure to include numOutputRows & numMatchedRows
    */
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numMatchedPairs" -> SQLMetrics.createMetric(sparkContext, "number of matched pairs"))
+    "numMatchedRows" -> SQLMetrics.createMetric(sparkContext, "number of matched rows"))
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -144,17 +144,17 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
 
-  private val numMatchedPairs = longMetric("numMatchedPairs")
+  private val numMatchedRows = longMetric("numMatchedRows")
 
   @transient protected[this] lazy val boundCondition: InternalRow => Boolean =
     if (condition.isDefined) {
       (r: InternalRow) => {
-        numMatchedPairs += 1
+        numMatchedRows += 1
         Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval(r)
       }
     } else {
       (_: InternalRow) => {
-        numMatchedPairs += 1
+        numMatchedRows += 1
         true
       }
   }
@@ -431,7 +431,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       ctx: CodegenContext,
       input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
     val matched = ctx.freshName("matched")
-    val numMatched = metricTerm(ctx, "numMatchedPairs")
+    val numMatched = metricTerm(ctx, "numMatchedRows")
     val buildVars = genBuildSideVars(ctx, matched)
     val conditionDef = if (condition.isDefined) {
       val expr = condition.get
@@ -517,7 +517,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val numMatched = metricTerm(ctx, "numMatchedPairs")
+    val numMatched = metricTerm(ctx, "numMatchedRows")
 
     // filter the output via condition
     val conditionPassed = ctx.freshName("conditionPassed")
@@ -720,7 +720,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val numMatched = metricTerm(ctx, "numMatchedPairs")
+    val numMatched = metricTerm(ctx, "numMatchedRows")
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
