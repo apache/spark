@@ -219,8 +219,7 @@ object FileFormatWriter extends Logging {
 
       logInfo(s"Start to commit write Job ${description.uuid}.")
       val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
-      logInfo(s"Write Job ${description.uuid} committed. " +
-        s"Elapsed time: $duration ms.")
+      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
