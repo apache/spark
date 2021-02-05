@@ -63,6 +63,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected String hiveHost;
   protected TServer server;
   protected org.eclipse.jetty.server.Server httpServer;
+  private Thread serverThread = null;
 
   private boolean isStarted = false;
   protected boolean isEmbedded = false;
@@ -177,7 +178,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     super.start();
     if (!isStarted && !isEmbedded) {
       initializeServer();
-      new Thread(this).start();
+      serverThread = new Thread(this);
+      serverThread.setName(getName());
+      serverThread.start();
       isStarted = true;
     }
   }
@@ -185,6 +188,10 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   @Override
   public synchronized void stop() {
     if (isStarted && !isEmbedded) {
+      if (serverThread != null) {
+        serverThread.interrupt();
+        serverThread = null;
+      }
       if(server != null) {
         server.stop();
         LOG.info("Thrift server has stopped");
