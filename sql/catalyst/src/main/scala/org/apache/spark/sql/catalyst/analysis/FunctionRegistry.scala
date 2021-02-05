@@ -358,6 +358,7 @@ object FunctionRegistry {
     expression[RegExpExtractAll]("regexp_extract_all"),
     expression[RegExpReplace]("regexp_replace"),
     expression[RLike]("regexp_like", true),
+    expression[RLike]("regexp", true),
     expression[StringRepeat]("repeat"),
     expression[StringReplace]("replace"),
     expression[Overlay]("overlay"),
