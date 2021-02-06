@@ -16,6 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.Minutes
+import org.scalatest.time.Span
+
 import org.apache.spark.internal.config
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
@@ -107,7 +111,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
         "Decommission executors",
-        "Remove reason statistics: (gracefully decommissioned: 2, decommision unfinished: 0, " +
+        "Remove reason statistics: (gracefully decommissioned: 1, decommision unfinished: 0, " +
           "driver killed: 0, unexpectedly exited: 0)."),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
@@ -115,7 +119,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
-      executorPatience = None,
+      executorPatience = Some(None, Some(DECOMMISSIONING_FINISHED_TIMEOUT)),
       decommissioningTest = false)
   }
 }
@@ -125,4 +129,5 @@ private[spark] object DecommissionSuite {
   val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decommissioning.py"
   val PYSPARK_DECOMISSIONING_CLEANUP: String = TEST_LOCAL_PYSPARK + "decommissioning_cleanup.py"
   val PYSPARK_SCALE: String = TEST_LOCAL_PYSPARK + "autoscale.py"
+  val DECOMMISSIONING_FINISHED_TIMEOUT = PatienceConfiguration.Timeout(Span(4, Minutes))
 }
