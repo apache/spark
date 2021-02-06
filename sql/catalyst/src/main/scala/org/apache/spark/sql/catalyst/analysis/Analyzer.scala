@@ -2718,19 +2718,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         p
 
       case p @ Project(projectList, child) =>
-        // Holds the resolved generator, if one exists in the project list.
-        var resolvedGenerator: Generate = null
-
-        val newProjectList = projectList
+        val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
-          .flatMap {
-            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-              // It's a sanity check, this should not happen as the previous case will throw
-              // exception earlier.
-              assert(resolvedGenerator == null, "More than one generator found in SELECT.")
+          .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
+            e match {
+              case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+                // It's a sanity check, this should not happen as the previous case will throw
+                // exception earlier.
+                assert(res._1.isEmpty, "More than one generator found in SELECT.")
 
-              resolvedGenerator =
-                Generate(
+                val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
                   outer = outer,
@@ -2738,12 +2735,14 @@ class Analyzer(override val catalogManager: CatalogManager)
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
 
-              resolvedGenerator.generatorOutput
-            case other => other :: Nil
+                (Some(g), res._2 ++ g.generatorOutput)
+              case other =>
+                (res._1, res._2 :+ other)
+            }
           }
 
-        if (resolvedGenerator != null) {
-          Project(newProjectList, resolvedGenerator)
+        if (resolvedGenerator.isDefined) {
+          Project(newProjectList, resolvedGenerator.get)
         } else {
           p
         }
