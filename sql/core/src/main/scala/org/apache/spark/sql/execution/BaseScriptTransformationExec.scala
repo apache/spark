@@ -50,7 +50,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
     input.map { in =>
       in.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          new StructsToJson(in).withTimeZone(conf.sessionLocalTimeZone)
+          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
+            .withTimeZone(conf.sessionLocalTimeZone)
         case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
       }
     }
@@ -227,7 +228,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
       case _: ArrayType | _: MapType | _: StructType =>
-        wrapperConvertException(data => JsonToStructs(attr.dataType, Map.empty[String, String],
+        wrapperConvertException(data => JsonToStructs(attr.dataType,
+          ioschema.outputSerdeProps.toMap,
           Literal(data), Some(conf.sessionLocalTimeZone)).eval(), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
