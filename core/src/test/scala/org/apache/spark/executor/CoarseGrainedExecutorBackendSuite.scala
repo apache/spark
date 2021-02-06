@@ -95,7 +95,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val rpBuilder = new ResourceProfileBuilder
     val ereqs = new ExecutorResourceRequests().resource(GPU, 2)
     ereqs.resource(FPGA, 3)
-    val rp = rpBuilder.require(ereqs).build
+    val rp = rpBuilder.executorRequire(ereqs).build
     testParsingMultipleResources(new SparkConf, rp)
   }
 
@@ -173,7 +173,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
     val rpBuilder = new ResourceProfileBuilder
     val ereqs = new ExecutorResourceRequests().resource(GPU, 4)
     val treqs = new TaskResourceRequests().resource(GPU, 1)
-    val rp = rpBuilder.require(ereqs).require(treqs).build
+    val rp = rpBuilder.executorRequire(ereqs).taskRequire(treqs).build
     testExecutorResourceFoundLessThanRequired(new SparkConf, rp)
   }
 
@@ -241,7 +241,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val rpBuilder = new ResourceProfileBuilder
       val ereqs = new ExecutorResourceRequests().resource(FPGA, 3, scriptPath)
       ereqs.resource(GPU, 2)
-      val rp = rpBuilder.require(ereqs).build
+      val rp = rpBuilder.executorRequire(ereqs).build
       allocatedFileAndConfigsResourceDiscoveryTestFpga(dir, new SparkConf, rp)
     }
   }

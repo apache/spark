@@ -933,7 +933,7 @@ public class JavaAPISuite implements Serializable {
   public void withResources() {
     ExecutorResourceRequests ereqs = new ExecutorResourceRequests().cores(4);
     TaskResourceRequests treqs = new TaskResourceRequests().cpus(1);
-    ResourceProfile rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build();
+    ResourceProfile rp1 = new ResourceProfileBuilder().executorRequire(ereqs).taskRequire(treqs).build();
     JavaRDD<Integer> in1 = sc.parallelize(Arrays.asList(1, 2, 3, 4));
     in1.withResources(rp1);
     assertEquals(rp1, in1.getResourceProfile());

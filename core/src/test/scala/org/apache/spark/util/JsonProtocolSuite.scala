@@ -129,7 +129,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     val taskReq = new TaskResourceRequests().cpus(1).resource("gpu", 1)
     val execReq =
       new ExecutorResourceRequests().cores(2).resource("gpu", 2, "myscript")
-    rprofBuilder.require(taskReq).require(execReq)
+    rprofBuilder.taskRequire(taskReq).executorRequire(execReq)
     val resourceProfile = rprofBuilder.build
     resourceProfile.setResourceProfileId(21)
     val resourceProfileAdded = SparkListenerResourceProfileAdded(resourceProfile)

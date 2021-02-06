@@ -114,8 +114,8 @@ class ResourceProfileSuite extends SparkFunSuite {
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
       new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
+    rprof.taskRequire(taskReq).executorRequire(execReq)
+    val immrprof = rprof.build()
     assert(immrprof.limitingResource(sparkConf) == "cpus")
     assert(immrprof.maxTasksPerExecutor(sparkConf) == 1)
   }
@@ -126,8 +126,8 @@ class ResourceProfileSuite extends SparkFunSuite {
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
       new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
+    rprof.taskRequire(taskReq).executorRequire(execReq)
+    val immrprof = rprof.build()
     assert(immrprof.limitingResource(sparkConf) == "gpu")
     assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
     assert(immrprof.isCoresLimitKnown == false)
@@ -147,8 +147,8 @@ class ResourceProfileSuite extends SparkFunSuite {
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
       new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(execReq)
-    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
+    rprof.taskRequire(taskReq).executorRequire(execReq)
+    val immrprof = rprof.build()
     assert(immrprof.limitingResource(sparkConf) == ResourceProfile.CPUS)
     assert(immrprof.maxTasksPerExecutor(sparkConf) == 2)
     assert(immrprof.isCoresLimitKnown == true)
@@ -159,21 +159,22 @@ class ResourceProfileSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprof.require(taskReq).require(eReq)
+    rprof.taskRequire(taskReq).executorRequire(eReq)
+    val rp1 = rprof.build()
 
-    assert(rprof.executorResources.size === 1)
-    assert(rprof.executorResources.contains("gpu"),
+    assert(rp1.executorResources.size === 1)
+    assert(rp1.executorResources.contains("gpu"),
       "Executor resources should have gpu")
-    assert(rprof.executorResources.get("gpu").get.vendor === "nvidia",
+    assert(rp1.executorResources.get("gpu").get.vendor === "nvidia",
       "gpu vendor should be nvidia")
-    assert(rprof.executorResources.get("gpu").get.discoveryScript === "myscript",
+    assert(rp1.executorResources.get("gpu").get.discoveryScript === "myscript",
       "discoveryScript should be myscript")
-    assert(rprof.executorResources.get("gpu").get.amount === 2,
+    assert(rp1.executorResources.get("gpu").get.amount === 2,
     "gpu amount should be 2")
 
-    assert(rprof.taskResources.size === 1, "Should have 1 task resource")
-    assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
-    assert(rprof.taskResources.get("gpu").get.amount === 1,
+    assert(rp1.taskResources.size === 1, "Should have 1 task resource")
+    assert(rp1.taskResources.contains("gpu"), "Task resources should have gpu")
+    assert(rp1.taskResources.get("gpu").get.amount === 1,
       "Task resources should have 1 gpu")
 
     val ereqs = new ExecutorResourceRequests()
@@ -182,37 +183,38 @@ class ResourceProfileSuite extends SparkFunSuite {
     val treqs = new TaskResourceRequests()
     treqs.cpus(1)
 
-    rprof.require(treqs)
-    rprof.require(ereqs)
+    rprof.taskRequire(treqs)
+    rprof.executorRequire(ereqs)
+    val rp2 = rprof.build()
 
-    assert(rprof.executorResources.size === 6)
-    assert(rprof.executorResources(ResourceProfile.CORES).amount === 2,
+    assert(rp2.executorResources.size === 6)
+    assert(rp2.executorResources(ResourceProfile.CORES).amount === 2,
       "Executor resources should have 2 cores")
-    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
+    assert(rp2.executorResources(ResourceProfile.MEMORY).amount === 4096,
       "Executor resources should have 4096 memory")
-    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2048,
+    assert(rp2.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2048,
       "Executor resources should have 2048 overhead memory")
-    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 1024,
+    assert(rp2.executorResources(ResourceProfile.PYSPARK_MEM).amount === 1024,
       "Executor resources should have 1024 pyspark memory")
-    assert(rprof.executorResources(ResourceProfile.OFFHEAP_MEM).amount === 3072,
+    assert(rp2.executorResources(ResourceProfile.OFFHEAP_MEM).amount === 3072,
       "Executor resources should have 3072 offHeap memory")
 
-    assert(rprof.taskResources.size === 2)
-    assert(rprof.taskResources("cpus").amount === 1, "Task resources should have cpu")
+    assert(rp2.taskResources.size === 2)
+    assert(rp2.taskResources("cpus").amount === 1, "Task resources should have cpu")
   }
 
   test("test ResourceProfiles equal") {
     val rprofBuilder = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val eReq = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprofBuilder.require(taskReq).require(eReq)
-    val rprof = rprofBuilder.build
+    rprofBuilder.taskRequire(taskReq).executorRequire(eReq)
+    val rprof = rprofBuilder.build()
 
     val rprofBuilder2 = new ResourceProfileBuilder()
     val taskReq2 = new TaskResourceRequests().resource("gpu", 1)
     val eReq2 = new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
-    rprofBuilder2.require(taskReq2).require(eReq2)
-    val rprof2 = rprofBuilder.build
+    rprofBuilder2.taskRequire(taskReq2).executorRequire(eReq2)
+    val rprof2 = rprofBuilder.build()
     rprof2.setResourceProfileId(rprof.id)
 
     assert(rprof === rprof2, "resource profile equality not working")
@@ -226,43 +228,46 @@ class ResourceProfileSuite extends SparkFunSuite {
     val ereqs = new ExecutorResourceRequests()
     ereqs.memory("4g")
     ereqs.memoryOverhead("2000m").pysparkMemory("512000k").offHeapMemory("1g")
-    rprof.require(ereqs)
+    rprof.executorRequire(ereqs)
+    val rp = rprof.build()
 
-    assert(rprof.executorResources(ResourceProfile.MEMORY).amount === 4096,
+    assert(rp.executorResources(ResourceProfile.MEMORY).amount === 4096,
       "Executor resources should have 4096 memory")
-    assert(rprof.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2000,
+    assert(rp.executorResources(ResourceProfile.OVERHEAD_MEM).amount === 2000,
       "Executor resources should have 2000 overhead memory")
-    assert(rprof.executorResources(ResourceProfile.PYSPARK_MEM).amount === 500,
+    assert(rp.executorResources(ResourceProfile.PYSPARK_MEM).amount === 500,
       "Executor resources should have 512 pyspark memory")
-    assert(rprof.executorResources(ResourceProfile.OFFHEAP_MEM).amount === 1024,
+    assert(rp.executorResources(ResourceProfile.OFFHEAP_MEM).amount === 1024,
       "Executor resources should have 1024 offHeap memory")
   }
 
   test("Test TaskResourceRequest fractional") {
     val rprof = new ResourceProfileBuilder()
     val treqs = new TaskResourceRequests().resource("gpu", 0.33)
-    rprof.require(treqs)
+    rprof.taskRequire(treqs)
+    val rp1 = rprof.build()
 
-    assert(rprof.taskResources.size === 1, "Should have 1 task resource")
-    assert(rprof.taskResources.contains("gpu"), "Task resources should have gpu")
-    assert(rprof.taskResources.get("gpu").get.amount === 0.33,
+    assert(rp1.taskResources.size === 1, "Should have 1 task resource")
+    assert(rp1.taskResources.contains("gpu"), "Task resources should have gpu")
+    assert(rp1.taskResources.get("gpu").get.amount === 0.33,
       "Task resources should have 0.33 gpu")
 
     val fpgaReqs = new TaskResourceRequests().resource("fpga", 4.0)
-    rprof.require(fpgaReqs)
+    rprof.taskRequire(fpgaReqs)
+    val rp2 = rprof.build()
 
-    assert(rprof.taskResources.size === 2, "Should have 2 task resource")
-    assert(rprof.taskResources.contains("fpga"), "Task resources should have gpu")
-    assert(rprof.taskResources.get("fpga").get.amount === 4.0,
+    assert(rp2.taskResources.size === 2, "Should have 2 task resource")
+    assert(rp2.taskResources.contains("fpga"), "Task resources should have gpu")
+    assert(rp2.taskResources.get("fpga").get.amount === 4.0,
       "Task resources should have 4.0 gpu")
 
     var taskError = intercept[AssertionError] {
-      rprof.require(new TaskResourceRequests().resource("gpu", 1.5))
+      rprof.taskRequire(new TaskResourceRequests().resource("gpu", 1.5))
     }.getMessage()
     assert(taskError.contains("The resource amount 1.5 must be either <= 0.5, or a whole number."))
 
     taskError = intercept[AssertionError] {
-      rprof.require(new TaskResourceRequests().resource("gpu", 0.7))
+      rprof.taskRequire(new TaskResourceRequests().resource("gpu", 0.7))
     }.getMessage()
     assert(taskError.contains("The resource amount 0.7 must be either <= 0.5, or a whole number."))
   }
@@ -273,7 +278,7 @@ class ResourceProfileSuite extends SparkFunSuite {
       .cores(2).memory("4096")
       .memoryOverhead("2048").pysparkMemory("1024").offHeapMemory("3072")
       .resource("gpu", 2)
-    rprof.require(eReq)
+    rprof.executorRequire(eReq)
 
     // Update this if new resource type added
     assert(ResourceProfile.allSupportedExecutorResources.size === 5,
@@ -289,7 +294,7 @@ class ResourceProfileSuite extends SparkFunSuite {
     val eReq = new ExecutorResourceRequests()
       .cores(2).memory("4096")
       .memoryOverhead("2048").pysparkMemory("1024").offHeapMemory("3072")
-    rprof.require(taskReq).require(eReq)
+    rprof.taskRequire(taskReq).executorRequire(eReq)
 
     assert(ResourceProfile.getCustomTaskResources(rprof.build).size === 1,
       "Task resources should have 1 custom resource")

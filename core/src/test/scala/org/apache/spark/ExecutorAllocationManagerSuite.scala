@@ -179,7 +179,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val rp1 = new ResourceProfileBuilder()
     val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
-    rp1.require(execReqs).require(taskReqs)
+    rp1.executorRequire(execReqs).taskRequire(taskReqs)
     val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
     post(SparkListenerStageSubmitted(createStageInfo(1, 1000, rp = rprof1)))
@@ -276,7 +276,7 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val rp1 = new ResourceProfileBuilder()
     val execReqs = new ExecutorResourceRequests().cores(2).resource("gpu", 2)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
-    rp1.require(execReqs).require(taskReqs)
+    rp1.executorRequire(execReqs).taskRequire(taskReqs)
     val rprof1 = rp1.build
     rpManager.addResourceProfile(rprof1)
     when(client.requestTotalExecutors(any(), any(), any())).thenReturn(true)
@@ -291,12 +291,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     val rp1 = new ResourceProfileBuilder()
     val execReqs = new ExecutorResourceRequests().cores(4).resource("gpu", 4)
     val taskReqs = new TaskResourceRequests().cpus(1).resource("gpu", 1)
-    rp1.require(execReqs).require(taskReqs)
+    rp1.executorRequire(execReqs).taskRequire(taskReqs)
     val rprof1 = rp1.build
     val rp2 = new ResourceProfileBuilder()
     val execReqs2 = new ExecutorResourceRequests().cores(1)
     val taskReqs2 = new TaskResourceRequests().cpus(1)
-    rp2.require(execReqs2).require(taskReqs2)
+    rp2.executorRequire(execReqs2).taskRequire(taskReqs2)
     val rprof2 = rp2.build
     rpManager.addResourceProfile(rprof1)
     rpManager.addResourceProfile(rprof2)

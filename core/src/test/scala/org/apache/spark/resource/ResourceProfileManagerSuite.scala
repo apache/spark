@@ -62,7 +62,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.executorRequire(gpuExecReq).build
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -81,7 +81,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.executorRequire(gpuExecReq).build
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -96,7 +96,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript", "nvidia")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.executorRequire(gpuExecReq).build
     assert(rpmanager.isSupported(immrprof) == true)
   }
 
@@ -109,7 +109,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     val rprof = new ResourceProfileBuilder()
     val gpuExecReq =
       new ExecutorResourceRequests().resource("gpu", 2, "someScript")
-    val immrprof = rprof.require(gpuExecReq).build
+    val immrprof = rprof.executorRequire(gpuExecReq).build
     val error = intercept[SparkException] {
       rpmanager.isSupported(immrprof)
     }.getMessage()
@@ -129,7 +129,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
       ereqs.cores(i).memory("4g").memoryOverhead("2000m")
       val treqs = new TaskResourceRequests()
       treqs.cpus(i)
-      rprofBuilder.require(ereqs).require(treqs)
+      rprofBuilder.executorRequire(ereqs).taskRequire(treqs)
       val rprof = rprofBuilder.build
       rpmanager.addResourceProfile(rprof)
       if (i == checkId) rpAlreadyExist = Some(rprof)
@@ -143,7 +143,7 @@ class ResourceProfileManagerSuite extends SparkFunSuite {
     ereqs.cores(checkId).memory("4g").memoryOverhead("2000m")
     val treqs = new TaskResourceRequests()
     treqs.cpus(checkId)
-    rprofBuilder.require(ereqs).require(treqs)
+    rprofBuilder.executorRequire(ereqs).taskRequire(treqs)
     val rpShouldMatch = rprofBuilder.build
 
     val equivProf = rpmanager.getEquivalentProfile(rpShouldMatch)

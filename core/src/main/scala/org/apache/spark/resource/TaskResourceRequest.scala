@@ -20,11 +20,14 @@ package org.apache.spark.resource
 import org.apache.spark.annotation.{Evolving, Since}
 
 /**
- * A task resource request. This is used in conjunction with the ResourceProfile to
+ * A task resource request. This is used in conjunction with the [[ResourceProfile]] to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *
- * Use TaskResourceRequests class as a convenience API.
+ * Use [[TaskResourceRequests]] class as a convenience API.
+ *
+ * @param resourceName Resource name
+ * @param amount Expected amount of the resource, must be either <= 0.5 or a whole number
  */
 @Evolving
 @Since("3.1.0")
