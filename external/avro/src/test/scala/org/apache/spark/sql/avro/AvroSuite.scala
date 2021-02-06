@@ -2132,7 +2132,7 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
            |Output \\[2\\]: \\[value#xL, id#x\\]
            |DataFilters: \\[isnotnull\\(value#xL\\), \\(value#xL > 2\\)\\]
            |Format: avro
-           |Location: InMemoryFileIndex\\[.*\\]
+           |Location: InMemoryFileIndex\\([0-9]+ paths\\)\\[.*\\]
            |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
            |PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]
            |ReadSchema: struct\\<value:bigint\\>

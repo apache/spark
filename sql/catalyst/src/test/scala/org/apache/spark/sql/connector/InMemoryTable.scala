@@ -36,7 +36,7 @@ import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
 import org.apache.spark.sql.sources.{And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
-import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, DateType, IntegerType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -61,7 +61,7 @@ class InMemoryTable(
 
   private object IndexColumn extends MetadataColumn {
     override def name: String = "index"
-    override def dataType: DataType = StringType
+    override def dataType: DataType = IntegerType
     override def comment: String = "Metadata column used to conflict with a data column"
   }
 
