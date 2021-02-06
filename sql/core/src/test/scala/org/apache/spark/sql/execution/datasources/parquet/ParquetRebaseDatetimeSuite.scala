@@ -97,8 +97,6 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  protected def failInRead(path: String): Unit
-
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     val N = 8
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
@@ -147,6 +145,10 @@ abstract class ParquetRebaseDatetimeSuite
       }
     }
     def successInRead(path: String): Unit = spark.read.parquet(path).collect()
+    def failInRead(path: String): Unit = {
+      val e = intercept[SparkException](spark.read.parquet(path).collect())
+      assert(e.getCause.isInstanceOf[SparkUpgradeException])
+    }
     Seq(
       // By default we should fail to read ancient datetime values when parquet files don't
       // contain Spark version.
@@ -360,11 +362,6 @@ class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
-
-  override protected def failInRead(path: String): Unit = {
-    val e = intercept[SparkException](spark.read.parquet(path).collect())
-    assert(e.getCause.isInstanceOf[SparkUpgradeException])
-  }
 }
 
 class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
@@ -372,12 +369,4 @@ class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
-
-  override protected def failInRead(path: String): Unit = {
-    var e: Throwable = intercept[SparkException](spark.read.parquet(path).collect())
-    while (e != null && !e.isInstanceOf[SparkUpgradeException]) {
-      e = e.getCause
-    }
-    assert(e != null && e.isInstanceOf[SparkUpgradeException])
-  }
 }
