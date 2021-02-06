@@ -153,8 +153,15 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
-    kryo.register(classOf[GenericData.Record], new GenericAvroSerializer(avroSchemas))
+    kryo.register(classOf[GenericRecord], new GenericAvroSerializer[GenericRecord](avroSchemas))
+    kryo.register(classOf[GenericData.Record],
+      new GenericAvroSerializer[GenericData.Record](avroSchemas))
+    kryo.register(classOf[GenericData.Array[_]],
+      new GenericAvroSerializer[GenericData.Array[_]](avroSchemas))
+    kryo.register(classOf[GenericData.EnumSymbol],
+      new GenericAvroSerializer[GenericData.EnumSymbol](avroSchemas))
+    kryo.register(classOf[GenericData.Fixed],
+      new GenericAvroSerializer[GenericData.Fixed](avroSchemas))
 
     // Use the default classloader when calling the user registrator.
     Utils.withContextClassLoader(classLoader) {
