@@ -448,12 +448,12 @@ case class ScalaUDAF(
   }
 
   override def toString: String = {
-    s"""${nodeName}(hello${children.mkString(",")})"""
+    s"""$nodeName(${children.mkString(",")})"""
   }
 
-  override def nodeName: String = udaf.getClass.getSimpleName
+  override def nodeName: String = name
 
-  override def name: String = udafName.getOrElse(nodeName)
+  override def name: String = udafName.getOrElse(udaf.getClass.getSimpleName)
 }
 
 case class ScalaAggregator[IN, BUF, OUT](
@@ -517,9 +517,9 @@ case class ScalaAggregator[IN, BUF, OUT](
 
   override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
 
-  override def nodeName: String = agg.getClass.getSimpleName
+  override def nodeName: String = name
 
-  override def name: String = aggregatorName.getOrElse(nodeName)
+  override def name: String = aggregatorName.getOrElse(agg.getClass.getSimpleName)
 }
 
 /**
