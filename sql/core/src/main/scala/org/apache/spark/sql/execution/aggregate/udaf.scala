@@ -325,7 +325,8 @@ case class ScalaUDAF(
     children: Seq[Expression],
     udaf: UserDefinedAggregateFunction,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    udafName: Option[String] = None)
   extends ImperativeAggregate
   with NonSQLExpression
   with Logging
@@ -447,10 +448,12 @@ case class ScalaUDAF(
   }
 
   override def toString: String = {
-    s"""${udaf.getClass.getSimpleName}(${children.mkString(",")})"""
+    s"""${nodeName}(hello${children.mkString(",")})"""
   }
 
   override def nodeName: String = udaf.getClass.getSimpleName
+
+  override def name: String = udafName.getOrElse(nodeName)
 }
 
 case class ScalaAggregator[IN, BUF, OUT](
@@ -461,7 +464,8 @@ case class ScalaAggregator[IN, BUF, OUT](
     nullable: Boolean = true,
     isDeterministic: Boolean = true,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0)
+    inputAggBufferOffset: Int = 0,
+    aggregatorName: Option[String] = None)
   extends TypedImperativeAggregate[BUF]
   with NonSQLExpression
   with UserDefinedExpression
@@ -514,6 +518,8 @@ case class ScalaAggregator[IN, BUF, OUT](
   override def toString: String = s"""${nodeName}(${children.mkString(",")})"""
 
   override def nodeName: String = agg.getClass.getSimpleName
+
+  override def name: String = aggregatorName.getOrElse(nodeName)
 }
 
 /**

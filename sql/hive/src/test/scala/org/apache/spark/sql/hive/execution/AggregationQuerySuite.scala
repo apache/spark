@@ -189,7 +189,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // Register UDAFs
     spark.udf.register("mydoublesum", new MyDoubleSum)
-    spark.udf.register("mydoubleavg", new MyDoubleAvg)
+    spark.udf.register("mydoubleavgname", new MyDoubleAvg)
     spark.udf.register("longProductSum", new LongProductSum)
   }
 
@@ -497,6 +497,18 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
   }
 
   test("udaf") {
+    spark.sql(
+      """
+        |SELECT
+        |  key,
+        |  mydoublesum(value + 1.5 * key),
+        |  mydoubleavgname(value),
+        |  avg(value - key),
+        |  mydoublesum(value - 1.5 * key),
+        |  avg(value)
+        |FROM agg1
+        |GROUP BY key
+        """.stripMargin).explain(true)
     checkAnswer(
       spark.sql(
         """
