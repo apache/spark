@@ -1919,12 +1919,6 @@ class DDLParserSuite extends AnalysisTest {
       "missing 'COLUMNS' at '<EOF>'")
   }
 
-  test("MSCK REPAIR TABLE") {
-    comparePlans(
-      parsePlan("MSCK REPAIR TABLE a.b.c"),
-      RepairTable(UnresolvedTable(Seq("a", "b", "c"), "MSCK REPAIR TABLE", None)))
-  }
-
   test("LOAD DATA INTO table") {
     comparePlans(
       parsePlan("LOAD DATA INPATH 'filepath' INTO TABLE a.b.c"),
