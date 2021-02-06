@@ -1854,11 +1854,9 @@ class HiveDDLSuite
   }
 
   test("SPARK-34370: support Avro schema evolution (add column with avro.schema.url)") {
-    val originalSchema = TestHive.getHiveFile("schemaEvolution/schemaWithOneField.avsc").toURI
-    val evolvedSchema = TestHive.getHiveFile("schemaEvolution/schemaWithTwoFields.avsc").toURI
     checkAvroSchemaEvolutionAddColumn(
-      s"'avro.schema.url'='$originalSchema'",
-      s"'avro.schema.url'='$evolvedSchema'")
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithOneField.avsc").toURI}'",
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithTwoFields.avsc").toURI}'")
   }
 
   test("SPARK-26836: support Avro schema evolution (add column with avro.schema.literal)") {
@@ -1922,11 +1920,9 @@ class HiveDDLSuite
   }
 
   test("SPARK-34370: support Avro schema evolution (remove column with avro.schema.url)") {
-    val originalSchema = TestHive.getHiveFile("schemaEvolution/schemaWithTwoFields.avsc").toURI
-    val evolvedSchema = TestHive.getHiveFile("schemaEvolution/schemaWithOneField.avsc").toURI
     checkAvroSchemaEvolutionRemoveColumn(
-      s"'avro.schema.url'='$originalSchema'",
-      s"'avro.schema.url'='$evolvedSchema'")
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithTwoFields.avsc").toURI}'",
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithOneField.avsc").toURI}'")
   }
 
   test("SPARK-26836: support Avro schema evolution (remove column with avro.schema.literal)") {

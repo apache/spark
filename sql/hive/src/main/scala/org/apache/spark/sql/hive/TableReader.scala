@@ -240,7 +240,7 @@ class HadoopTableReader(
       fillPartitionKeys(partValues, mutableRow)
 
       val tableProperties = tableDesc.getProperties
-      val avroSchemaEvolutionProperties = Seq(AvroTableProperties.SCHEMA_LITERAL,
+      val avroSchemaProperties = Seq(AvroTableProperties.SCHEMA_LITERAL,
         AvroTableProperties.SCHEMA_URL).map(_.getPropName())
 
       // Create local references so that the outer object isn't serialized.
@@ -258,7 +258,7 @@ class HadoopTableReader(
         // properties.
         val props = new Properties(tableProperties)
         partProps.asScala.filterNot { case (k, _) =>
-          avroSchemaEvolutionProperties.contains(k) && tableProperties.containsKey(k)
+          avroSchemaProperties.contains(k) && tableProperties.containsKey(k)
         }.foreach {
           case (key, value) => props.setProperty(key, value)
         }
