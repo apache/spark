@@ -47,9 +47,9 @@ object RandomRanges {
   }
 
   private def randomBigIntIn(lower: BigDecimal, upper: BigDecimal): BigDecimal = {
-    val zeroCenteredRnd:  BigDecimal = BigDecimal(rnd.nextDouble() - 0.5)
-    val range:            BigDecimal = upper - lower
-    val halfWay:          BigDecimal = lower + range / 2
+    val zeroCenteredRnd: BigDecimal = BigDecimal(rnd.nextDouble() - 0.5)
+    val range: BigDecimal = upper - lower
+    val halfWay: BigDecimal = lower + range / 2
     (zeroCenteredRnd * range) + halfWay
   }
 
