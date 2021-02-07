@@ -349,8 +349,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
-      ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
+    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
+      ShowTablePropertiesExec(output, rt.table, propertyKey) :: Nil
 
     case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")

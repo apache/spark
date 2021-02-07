@@ -490,7 +490,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
 
-    case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
+    case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey, output) =>
       ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, s.output)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>

@@ -1205,7 +1205,7 @@ class PlanResolutionSuite extends AnalysisTest {
         case DescribeRelation(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
-        case ShowTableProperties(r: ResolvedTable, _) =>
+        case ShowTableProperties(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalogIdent)
           assert(r.identifier.name() == tableIdent)
         case ShowTablePropertiesCommand(t: TableIdentifier, _, _) =>
