@@ -2581,6 +2581,21 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       }
     }
   }
+
+  test("SPARK-34171: Support SHOW COLUMNS as table valued function") {
+    withTable("t") {
+      sql("CREATE TABLE t(id INT) PARTITIONED BY (part STRING)")
+      checkAnswer(sql("SELECT * from show_columns('t')"),
+        Row("id") :: Row("part") :: Nil)
+      checkAnswer(sql("SELECT * from show_columns('t', 'default')"),
+        Row("id") :: Row("part") :: Nil)
+      val e = intercept[AnalysisException]{
+        checkAnswer(sql("SELECT * from show_columns('t', 'spark_catalog.test')"),
+          Row("id") :: Row("part") :: Nil)
+      }.getMessage
+      assert(e.contains("SHOW COLUMNS with conflicting databases: 'spark_catalog' != 'default'"))
+    }
+  }
 }
 
 @SlowHiveTest
