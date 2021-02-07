@@ -107,6 +107,7 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
         val gen:    RandomT[T]  = RandomRanges(limit)
         val result: T           = rand(gen)
         val ordered             = lowerUpper(x, y)
+        println(s"result = $result [${result.getClass}], ordered._1 = ${ordered._1} [${ordered._1.getClass}], , ordered._1 = ${ordered._2} [${ordered._2.getClass}]")
         assert(ops.gteq(result, ordered._1) && ops.lteq(result, ordered._2))
       } else Succeeded
     }
