@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range, ShowNamespaces}
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -162,6 +163,16 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
               s"""error: table-valued function ${u.functionName} with alternatives:
                  |${tvf.keys.map(_.toString).toSeq.sorted.map(x => s" ($x)").mkString("\n")}
                  |cannot be applied to: ($argTypes)""".stripMargin)
+          }
+
+          if (Seq("show_databases", "show_namespaces")
+            .contains(u.functionName.toLowerCase(Locale.ROOT)) &&
+            conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+            u.failAnalysis(
+              s"""
+                 |error: table-valued function ${u.functionName} only can be used when
+                 |config `spark.sql.legacy.keepCommandOutputSchema` is false.
+                 |""".stripMargin)
           }
 
           val resolved = tvf.flatMap { case (argList, resolver) =>
