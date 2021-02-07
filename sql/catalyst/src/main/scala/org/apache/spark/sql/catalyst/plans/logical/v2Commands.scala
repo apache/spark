@@ -388,7 +388,7 @@ case class MergeIntoTable(
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("nullable")
   override def children: Seq[Expression] = condition.toSeq
 }
 
@@ -408,7 +408,7 @@ case class InsertAction(
 
 case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("nullable")
   override def children: Seq[Expression] = key ::  value :: Nil
 }
 

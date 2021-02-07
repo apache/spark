@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -76,7 +77,7 @@ object BindReferences extends Logging {
         if (allowFailures) {
           a
         } else {
-          sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
+          throw QueryExecutionErrors.cannotFindExpressionInInputAttributesError(a, input)
         }
       } else {
         BoundReference(ordinal, a.dataType, input(ordinal).nullable)
