@@ -1,3 +1,5 @@
+--SET spark.sql.legacy.keepCommandOutputSchema=false
+
 -- Test data.
 CREATE DATABASE showdb;
 USE showdb;
