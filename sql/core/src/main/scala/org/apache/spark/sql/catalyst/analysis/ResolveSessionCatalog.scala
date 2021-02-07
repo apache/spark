@@ -482,7 +482,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey, output) =>
-      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 2)
+        output.tail
+      } else {
+        output
+      }
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, newOutput)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
