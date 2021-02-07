@@ -21,9 +21,11 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Rule that resolves table-valued function references.
@@ -103,6 +105,14 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
           "numPartitions" -> IntegerType) {
         case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
           Range(start, end, step, Some(numPartitions))
+      }),
+
+    "show_partitions" -> Map(
+      /* show_partitions() */
+      tvf("identifier" -> StringType) { case Seq(identifier: UTF8String) =>
+        ShowPartitions(UnresolvedTable(
+          CatalystSqlParser.parseMultipartIdentifier(identifier.toString),
+          "SHOW PARTITIONS", None), None)
       })
   )
 
