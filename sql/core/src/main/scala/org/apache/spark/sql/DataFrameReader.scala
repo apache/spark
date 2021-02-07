@@ -825,8 +825,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * must be in the following form: YYYY-MM-DDTHH:mm:ss (e.g. 2020-06-01T13:00:00)</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
-   * <li>`datetimeRebaseMode`: the rebasing mode for the values of the `DATE`, `TIMESTAMP_MICROS`,
-   *   `TIMESTAMP_MILLIS` logical types from the Julian to Proleptic Gregorian calendar:
+   * <li>`datetimeRebaseMode` (default is the value specified in the SQL config
+   * `spark.sql.legacy.parquet.datetimeRebaseModeInRead`): the rebasing mode for the values
+   * of the `DATE`, `TIMESTAMP_MICROS`, `TIMESTAMP_MILLIS` logical types from the Julian to
+   * Proleptic Gregorian calendar:
    *   <ul>
    *     <li>`EXCEPTION` : Spark fails in reads of ancient dates/timestamps that are ambiguous
    *     between the two calendars</li>
@@ -835,8 +837,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *     Gregorian calendar</li>
    *   </ul>
    * </li>
-   * <li>`int96RebaseMode`: the rebasing mode for `INT96` timestamps from the Julian to Proleptic
-   * Gregorian calendar:
+   * <li>`int96RebaseMode` (default is the value specified in the SQL config
+   * `spark.sql.legacy.parquet.int96RebaseModeInRead`): the rebasing mode for `INT96` timestamps
+   * from the Julian to Proleptic Gregorian calendar:
    *   <ul>
    *     <li>`EXCEPTION` : Spark fails in reads of ancient `INT96` timestamps that are ambiguous
    *     between the two calendars</li>
