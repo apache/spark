@@ -710,7 +710,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           |""".stripMargin)
       val optimizedPlan = df.queryExecution.optimizedPlan
       optimizedPlan.stats
-      val subqueryExpression = new ArrayBuffer[SubqueryExpression]()
+      val subqueryExpression = ArrayBuffer.empty[SubqueryExpression]
       optimizedPlan.asInstanceOf[Project].child.transformExpressions {
         case e: SubqueryExpression =>
           subqueryExpression.append(e)
