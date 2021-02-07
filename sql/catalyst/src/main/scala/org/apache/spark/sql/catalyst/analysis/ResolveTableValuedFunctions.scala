@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Range, ShowNamespaces}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType}
@@ -107,20 +108,42 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
       }),
 
     "show_namespaces" -> Map(
-      /* show_namespace() */
+      /* show_namespaces() */
       tvf() { case Seq() =>
         ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None)
       },
 
-      /* show_tables(identifier) */
+      /* show_namespaces(identifier) */
       tvf("identifier" -> StringType) { case Seq(identifier: UTF8String) =>
-        ShowNamespaces(UnresolvedNamespace(identifier.toString.split('.')), None)
+        ShowNamespaces(UnresolvedNamespace(
+          CatalystSqlParser.parseMultipartIdentifier(identifier.toString)), None)
       },
 
       /* show_namespaces(identifier, pattern) */
       tvf("identifier" -> StringType, "pattern" -> StringType) {
         case Seq(identifier: UTF8String, pattern: UTF8String) =>
-          ShowNamespaces(UnresolvedNamespace(identifier.toString.split('.')),
+          ShowNamespaces(UnresolvedNamespace(
+            CatalystSqlParser.parseMultipartIdentifier(identifier.toString)),
+            Some(pattern.toString))
+      }),
+
+    "show_databases" -> Map(
+      /* show_databases() */
+      tvf() { case Seq() =>
+        ShowNamespaces(UnresolvedNamespace(Seq.empty[String]), None)
+      },
+
+      /* show_databases(identifier) */
+      tvf("identifier" -> StringType) { case Seq(identifier: UTF8String) =>
+        ShowNamespaces(UnresolvedNamespace(
+          CatalystSqlParser.parseMultipartIdentifier(identifier.toString)), None)
+      },
+
+      /* show_databases(identifier, pattern) */
+      tvf("identifier" -> StringType, "pattern" -> StringType) {
+        case Seq(identifier: UTF8String, pattern: UTF8String) =>
+          ShowNamespaces(UnresolvedNamespace(
+            CatalystSqlParser.parseMultipartIdentifier(identifier.toString)),
             Some(pattern.toString))
       })
   )
