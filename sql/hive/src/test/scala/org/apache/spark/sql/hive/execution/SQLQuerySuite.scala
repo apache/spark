@@ -2583,18 +2583,23 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("SPARK-34172: Support SHOW DATABASES/NAMESPACES as table valued function") {
-    withDatabase("d1", "d2") {
-      sql("CREATE DATABASE d1")
-      sql("CREATE DATABASE d2")
+    withNamespace("spark_catalog.d1", "spark_catalog.d2") {
+      sql("CREATE NAMESPACE spark_catalog.d1")
+      sql("CREATE NAMESPACE spark_catalog.d2")
       checkAnswer(sql("SELECT * from show_namespaces()"),
-        Row(null) :: Nil)
-      checkAnswer(sql("SELECT * from show_namespaces('', 'd1*')"),
-        Row("d1", "t1", false) :: Row("d1", "t2", false) :: Nil)
+        Row("d1") :: Row("d2") :: Row("default") :: Nil)
+      checkAnswer(sql("SELECT * from show_namespaces('spark_catalog')"),
+        Row("d1") :: Row("d2") :: Row("default") :: Nil)
+      checkAnswer(sql("SELECT * from show_namespaces('spark_catalog', 'd1*')"),
+        Row("d1") :: Nil)
       sql("SET spark.sql.legacy.keepCommandOutputSchema=true")
       val e = intercept[AnalysisException] {
         sql("SELECT * from show_namespaces()")
       }.getMessage
-      assert(e.contains("xxxx"))
+      assert(e.contains(
+        """error: table-valued function show_namespaces only can be used when
+          |config `spark.sql.legacy.keepCommandOutputSchema` is false.
+          |""".stripMargin))
     }
   }
 }

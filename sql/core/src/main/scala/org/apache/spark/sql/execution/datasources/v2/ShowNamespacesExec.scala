@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.LeafExecNode
  */
 case class ShowNamespacesExec(
     output: Seq[Attribute],
-    catalog: SupportsNamespaces,
+    @transient catalog: SupportsNamespaces,
     namespace: Seq[String],
     pattern: Option[String]) extends V2CommandExec with LeafExecNode {
 
