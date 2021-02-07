@@ -5,7 +5,7 @@ import org.apache.spark.SparkFunSuite
 import org.scalacheck.Arbitrary._
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Gen.Choose
-import org.scalatest.Assertion
+import org.scalatest.{Assertion, Succeeded}
 import org.scalatest.matchers.must.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
@@ -13,12 +13,29 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
 
   import RandomRanges._
 
+  test("random doubles in log space") {
+    val gen: Gen[(Double, Double)] = for {
+      x <- Gen.choose(0d, Double.MaxValue)
+      y <- Gen.choose(0d, Double.MaxValue)
+    } yield (x, y)
+    forAll(gen) { case (x, y) =>
+      val lower = math.min(x, y)
+      val upper = math.max(x, y)
+      val result = randomLog(x, y, 10)
+      assert(result >= lower && result <= upper)
+    }
+  }
+
   test("random BigInt generation does not go into infinite loop") {
     assert(randomBigInt0To(0) == BigInt(0))
   }
 
   test("random ints") {
-    checkRange[Int]
+    checkRange(Linear[Int])
+  }
+
+  test("random log ints") {
+    checkRange(Log10[Int])
   }
 
   test("random int distribution") {
@@ -26,7 +43,11 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
   }
 
   test("random longs") {
-    checkRange[Long]
+    checkRange(Linear[Long])
+  }
+
+  test("random log longs") {
+    checkRange(Log10[Long])
   }
 
   test("random long distribution") {
@@ -34,7 +55,11 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
   }
 
   test("random doubles") {
-    checkRange[Double]
+    checkRange(Linear[Double])
+  }
+
+  test("random log doubles") {
+    checkRange(Log10[Double])
   }
 
   test("random double distribution") {
@@ -42,21 +67,41 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
   }
 
   test("random floats") {
-    checkRange[Float]
+    checkRange(Linear[Float])
+  }
+
+  test("random log floats") {
+    checkRange(Log10[Float])
   }
 
   test("random float distribution") {
     checkDistributionOf(1000f)
   }
 
-  def checkRange[T: Numeric: Generator: Choose: TypeTag: Arbitrary]: Assertion = {
+  abstract class RandomFn[T: Numeric: Generator] {
+    def apply(genRandom: RandomT[T]): T = genRandom.randomT()
+    def appropriate(t: T): Boolean
+  }
+  def Linear[T: Numeric: Generator]: RandomFn[T] = new RandomFn {
+    override def apply(genRandom: RandomT[T]): T = genRandom.randomT()
+    override def appropriate(t: T): Boolean = true
+  }
+  def Log10[T: Numeric: Generator]: RandomFn[T] = new RandomFn {
+    override def apply(genRandom: RandomT[T]): T = genRandom.randomTLog(10)
+    val ops: Numeric[T] = implicitly[Numeric[T]]
+    override def appropriate(t: T): Boolean = ops.gt(t, ops.zero)
+  }
+
+  def checkRange[T: Numeric: Generator: Choose: TypeTag: Arbitrary](rand: RandomFn[T]): Assertion = {
     forAll { (x: T, y: T) =>
-      val ops: Numeric[T]     = implicitly[Numeric[T]]
-      val limit:  Limits[T]   = Limits(x, y)
-      val gen:    RandomT[T]  = RandomRanges(limit)
-      val result: T           = gen.randomT()
-      val ordered             = lowerUpper(x, y)
-      assert(ops.gteq(result, ordered._1) && ops.lteq(result, ordered._2))
+      if (rand.appropriate(x) && rand.appropriate(y)) {
+        val ops: Numeric[T]     = implicitly[Numeric[T]]
+        val limit:  Limits[T]   = Limits(x, y)
+        val gen:    RandomT[T]  = RandomRanges(limit)
+        val result: T           = rand(gen)
+        val ordered             = lowerUpper(x, y)
+        assert(ops.gteq(result, ordered._1) && ops.lteq(result, ordered._2))
+      } else Succeeded
     }
   }
 

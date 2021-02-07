@@ -23,6 +23,7 @@ case class Limits[T: Numeric](x: T, y: T)
 
 abstract class RandomT[T: Numeric] {
   def randomT(): T
+  def randomTLog(n: Int): T
 }
 
 abstract class Generator[T: Numeric] {
@@ -46,7 +47,7 @@ object RandomRanges {
     randomBigInt0To(diff) + lower
   }
 
-  private def randomBigIntIn(lower: BigDecimal, upper: BigDecimal): BigDecimal = {
+  private def randomBigDecimalBetween(lower: BigDecimal, upper: BigDecimal): BigDecimal = {
     val zeroCenteredRnd: BigDecimal = BigDecimal(rnd.nextDouble() - 0.5)
     val range: BigDecimal = upper - lower
     val halfWay: BigDecimal = lower + range / 2
@@ -55,38 +56,65 @@ object RandomRanges {
 
   implicit object DoubleGenerator extends Generator[Double] {
     def apply(limits: Limits[Double]): RandomT[Double] = new RandomT[Double] {
-      override def randomT(): Double = {
-        import limits._
-        randomBigIntIn(BigDecimal(math.min(x, y)), BigDecimal(math.max(x, y))).doubleValue()
-      }
+      import limits._
+      val lower: Double = math.min(x, y)
+      val upper: Double = math.max(x, y)
+
+      override def randomTLog(n: Int): Double =
+        RandomRanges.randomLog(lower, upper, n)
+
+      override def randomT(): Double =
+        randomBigDecimalBetween(BigDecimal(lower), BigDecimal(upper)).doubleValue()
     }
   }
 
   implicit object FloatGenerator extends Generator[Float] {
     def apply(limits: Limits[Float]): RandomT[Float] = new RandomT[Float] {
-      override def randomT(): Float = {
-        import limits._
-        randomBigIntIn(BigDecimal(math.min(x, y)), BigDecimal(math.max(x, y))).floatValue()
-      }
+      import limits._
+      val lower: Float = math.min(x, y)
+      val upper: Float = math.max(x, y)
+
+      override def randomTLog(n: Int): Float =
+        RandomRanges.randomLog(lower, upper, n).toFloat
+
+      override def randomT(): Float =
+        randomBigDecimalBetween(BigDecimal(lower), BigDecimal(upper)).floatValue()
     }
   }
 
   implicit object IntGenerator extends Generator[Int] {
     def apply(limits: Limits[Int]): RandomT[Int] = new RandomT[Int] {
-      override def randomT(): Int = {
-        import limits._
-        bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).intValue()
-      }
+      import limits._
+      val lower: Int = math.min(x, y)
+      val upper: Int = math.max(x, y)
+
+      override def randomTLog(n: Int): Int =
+        RandomRanges.randomLog(lower, upper, n).toInt
+
+      override def randomT(): Int =
+        bigIntBetween(BigInt(lower), BigInt(upper)).intValue()
     }
   }
 
   implicit object LongGenerator extends Generator[Long] {
     def apply(limits: Limits[Long]): RandomT[Long] = new RandomT[Long] {
-      override def randomT(): Long = {
-        import limits._
-        bigIntBetween(BigInt(math.min(x, y)), BigInt(math.max(x, y))).longValue()
-      }
+      import limits._
+      val lower: Long = math.min(x, y)
+      val upper: Long = math.max(x, y)
+
+      override def randomTLog(n: Int): Long =
+        RandomRanges.randomLog(lower, upper, n).toLong
+
+      override def randomT(): Long =
+        bigIntBetween(BigInt(lower), BigInt(upper)).longValue()
     }
+  }
+
+  def randomLog(lower: Double, upper: Double, n: Int): Double = {
+    val logLimits: Limits[Double] = Limits(math.log10(lower), math.log10(upper))
+    val rndLogged: RandomT[Double] = RandomRanges(logLimits)
+    val rndDouble: Double = math.pow(10, rndLogged.randomT()) // TODO use log n
+    rndDouble
   }
 
   def apply[T: Generator](lim: Limits[T])(implicit t: Generator[T]): RandomT[T] = t(lim)
