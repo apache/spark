@@ -1,0 +1,27 @@
+================================================================================================
+Benchmark ZStandardCompressionCodec
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.9.1+1-Ubuntu-0ubuntu1.18.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Benchmark ZStandardCompressionCodec:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+Compression 10000 times at level 1 without buffer pool           1175           1307         187          0.0      117459.2       1.0X
+Compression 10000 times at level 2 without buffer pool            979           1020          58          0.0       97889.6       1.2X
+Compression 10000 times at level 3 without buffer pool           1241           1282          58          0.0      124101.1       0.9X
+Compression 10000 times at level 1 with buffer pool               466            476           6          0.0       46593.2       2.5X
+Compression 10000 times at level 2 with buffer pool               544            554           6          0.0       54421.3       2.2X
+Compression 10000 times at level 3 with buffer pool               795            804           8          0.0       79453.9       1.5X
+
+OpenJDK 64-Bit Server VM 11.0.9.1+1-Ubuntu-0ubuntu1.18.04 on Linux 4.15.0-1044-aws
+Intel(R) Xeon(R) CPU E5-2670 v2 @ 2.50GHz
+Benchmark ZStandardCompressionCodec:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+Decompression 10000 times from level 1 without buffer pool           1033           1069          52          0.0      103254.9       1.0X
+Decompression 10000 times from level 2 without buffer pool           1033           1070          53          0.0      103262.6       1.0X
+Decompression 10000 times from level 3 without buffer pool           1031           1076          64          0.0      103104.7       1.0X
+Decompression 10000 times from level 1 with buffer pool               603            609           5          0.0       60285.0       1.7X
+Decompression 10000 times from level 2 with buffer pool               602            607           4          0.0       60156.6       1.7X
+Decompression 10000 times from level 3 with buffer pool               608            613           4          0.0       60767.3       1.7X
+
+
