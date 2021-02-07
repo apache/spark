@@ -167,28 +167,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    case AlterTableSetPropertiesStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), props) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          AlterTableSetPropertiesCommand(tbl.asTableIdentifier, props, isView = false)
-      }.getOrElse {
-        val changes = props.map { case (key, value) =>
-          TableChange.setProperty(key, value)
-        }.toSeq
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case AlterTableSetProperties(ResolvedV1TableIdentifier(ident), props) =>
+      AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
 
-    case AlterTableUnsetPropertiesStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), keys, ifExists) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          AlterTableUnsetPropertiesCommand(
-            tbl.asTableIdentifier, keys, ifExists, isView = false)
-      }.getOrElse {
-        val changes = keys.map(key => TableChange.removeProperty(key))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case AlterTableUnsetProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
+      AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
 
     case AlterViewSetProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
@@ -204,6 +187,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
       AlterDatabaseSetLocationCommand(db, location)
+
+    case s @ ShowNamespaces(ResolvedNamespace(cata, _), _, output) if isSessionCatalog(cata) =>
+      if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 1)
+        s.copy(output = Seq(output.head.withName("databaseName")))
+      } else {
+        s
+      }
 
     case RenameTable(ResolvedV1TableOrViewIdentifier(oldName), newName, isView) =>
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)

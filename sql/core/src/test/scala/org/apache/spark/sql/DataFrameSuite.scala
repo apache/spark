@@ -1303,6 +1303,59 @@ class DataFrameSuite extends QueryTest
         |""".stripMargin)
   }
 
+  test("SPARK-34308: printSchema: escape meta-characters") {
+    val captured = new ByteArrayOutputStream()
+
+    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
+    Console.withOut(captured) {
+      df1.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df2.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
+        | |    |-- element: string (containsNull = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df3 =
+      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df3.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
+        | |    |-- key: string
+        | |    |-- value: string (valueContainsNull = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df4 =
+      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df4.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
+        | |    |-- v: string (nullable = false)
+        |
+        |""".stripMargin)
+  }
+
   test("SPARK-7319 showString") {
     val expectedAnswer = """+---+-----+
                            ||key|value|
@@ -2673,6 +2726,15 @@ class DataFrameSuite extends QueryTest
     ).foreach { sqlStr =>
       assert(sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
     }
+  }
+
+  test("SPARK-34318: colRegex should work with column names & qualifiers which contain newlines") {
+    val df = Seq(1, 2, 3).toDF("test\n_column").as("test\n_table")
+    val col1 = df.colRegex("`tes.*\n.*mn`")
+    checkAnswer(df.select(col1), Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
+    checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 }
 

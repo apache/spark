@@ -895,7 +895,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
       case u @ UnresolvedTable(ident, cmd, _) =>
         lookupTempView(ident).foreach { _ =>
-          throw QueryCompilationErrors.expectTableNotTempViewError(ident.quoted, cmd, u)
+          throw QueryCompilationErrors.expectTableNotViewError(
+            ResolvedView(ident.asIdentifier, isTemp = true), cmd, u.relationTypeMismatchHint, u)
         }
         u
       case u @ UnresolvedView(ident, cmd, allowTemp, _) =>
@@ -964,11 +965,37 @@ class Analyzer(override val catalogManager: CatalogManager)
    * columns are not accidentally selected by *.
    */
   object AddMetadataColumns extends Rule[LogicalPlan] {
+    import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+
+    private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      plan.expressions.exists(_.find {
+        case a: Attribute => a.isMetadataCol
+        case _ => false
+      }.isDefined)
+    }
+
+    private def addMetadataCol(plan: LogicalPlan): LogicalPlan = plan match {
+      case r: DataSourceV2Relation => r.withMetadataColumns()
+      case _ => plan.withNewChildren(plan.children.map(addMetadataCol))
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-      case node if node.resolved && node.children.nonEmpty && node.missingInput.nonEmpty =>
-        node resolveOperatorsUp {
-          case rel: DataSourceV2Relation =>
-            rel.withMetadataColumns()
+      case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
+        val inputAttrs = AttributeSet(node.children.flatMap(_.output))
+        val metaCols = node.expressions.flatMap(_.collect {
+          case a: Attribute if a.isMetadataCol && !inputAttrs.contains(a) => a
+        })
+        if (metaCols.isEmpty) {
+          node
+        } else {
+          val newNode = addMetadataCol(node)
+          // We should not change the output schema of the plan. We should project away the extr
+          // metadata columns if necessary.
+          if (newNode.sameOutput(node)) {
+            newNode
+          } else {
+            Project(node.output, newNode)
+          }
         }
     }
   }
@@ -1022,8 +1049,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u: UnresolvedRelation if !u.isStreaming =>
             lookupV2Relation(u.multipartIdentifier, u.options, false).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
-              case other =>
-                throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupV2Relation")
+              case other => throw new IllegalStateException(
+                "[BUG] unexpected plan returned by `lookupV2Relation`: " + other)
             }.getOrElse(write)
           case _ => write
         }
@@ -1134,8 +1161,8 @@ class Analyzer(override val catalogManager: CatalogManager)
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
                 case r: DataSourceV2Relation => write.withNewTable(r)
-                case other =>
-                  throw QueryExecutionErrors.unexpectedPlanReturnError(other, "lookupRelation")
+                case other => throw new IllegalStateException(
+                  "[BUG] unexpected plan returned by `lookupRelation`: " + other)
               }.getOrElse(write)
           case _ => write
         }
@@ -2691,19 +2718,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         p
 
       case p @ Project(projectList, child) =>
-        // Holds the resolved generator, if one exists in the project list.
-        var resolvedGenerator: Generate = null
-
-        val newProjectList = projectList
+        val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
-          .flatMap {
-            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-              // It's a sanity check, this should not happen as the previous case will throw
-              // exception earlier.
-              assert(resolvedGenerator == null, "More than one generator found in SELECT.")
+          .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
+            e match {
+              case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+                // It's a sanity check, this should not happen as the previous case will throw
+                // exception earlier.
+                assert(res._1.isEmpty, "More than one generator found in SELECT.")
 
-              resolvedGenerator =
-                Generate(
+                val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
                   outer = outer,
@@ -2711,12 +2735,14 @@ class Analyzer(override val catalogManager: CatalogManager)
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
 
-              resolvedGenerator.generatorOutput
-            case other => other :: Nil
+                (Some(g), res._2 ++ g.generatorOutput)
+              case other =>
+                (res._1, res._2 :+ other)
+            }
           }
 
-        if (resolvedGenerator != null) {
-          Project(newProjectList, resolvedGenerator)
+        if (resolvedGenerator.isDefined) {
+          Project(newProjectList, resolvedGenerator.get)
         } else {
           p
         }

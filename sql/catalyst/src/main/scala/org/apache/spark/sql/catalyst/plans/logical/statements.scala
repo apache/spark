@@ -269,21 +269,6 @@ case class AlterTableDropColumnsStatement(
     columnsToDrop: Seq[Seq[String]]) extends ParsedStatement
 
 /**
- * ALTER TABLE ... SET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterTableSetPropertiesStatement(
-    tableName: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... UNSET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterTableUnsetPropertiesStatement(
-    tableName: Seq[String],
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

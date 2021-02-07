@@ -325,11 +325,13 @@ case class AlterNamespaceSetLocation(
  */
 case class ShowNamespaces(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowNamespaces.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)())
+object ShowNamespaces {
+  val OUTPUT = Seq(AttributeReference("namespace", StringType, nullable = false)())
 }
 
 /**
@@ -859,5 +861,24 @@ case class AlterTableSetLocation(
     table: LogicalPlan,
     partitionSpec: Option[TablePartitionSpec],
     location: String) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
+ */
+case class AlterTableSetProperties(
+    table: LogicalPlan,
+    properties: Map[String, String]) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
+ */
+case class AlterTableUnsetProperties(
+    table: LogicalPlan,
+    propertyKeys: Seq[String],
+    ifExists: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
 }

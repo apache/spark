@@ -763,19 +763,25 @@ class DDLParserSuite extends AnalysisTest {
         "'comment' = 'new_comment')"
     val sql2_table = "ALTER TABLE table_name UNSET TBLPROPERTIES ('comment', 'test')"
     val sql3_table = "ALTER TABLE table_name UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+    val hint = Some("Please use ALTER VIEW instead.")
 
     comparePlans(
       parsePlan(sql1_table),
-      AlterTableSetPropertiesStatement(
-        Seq("table_name"), Map("test" -> "test", "comment" -> "new_comment")))
+      AlterTableSetProperties(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET TBLPROPERTIES", hint),
+        Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(
       parsePlan(sql2_table),
-      AlterTableUnsetPropertiesStatement(
-        Seq("table_name"), Seq("comment", "test"), ifExists = false))
+      AlterTableUnsetProperties(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", hint),
+        Seq("comment", "test"),
+        ifExists = false))
     comparePlans(
       parsePlan(sql3_table),
-      AlterTableUnsetPropertiesStatement(
-        Seq("table_name"), Seq("comment", "test"), ifExists = true))
+      AlterTableUnsetProperties(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... UNSET TBLPROPERTIES", hint),
+        Seq("comment", "test"),
+        ifExists = true))
   }
 
   test("alter table: add column") {
@@ -2014,18 +2020,6 @@ class DDLParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan("UNCACHE TABLE IF EXISTS a.b.c"),
       UncacheTable(UnresolvedRelation(Seq("a", "b", "c")), ifExists = true))
-  }
-
-  test("TRUNCATE table") {
-    comparePlans(
-      parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None), None))
-
-    comparePlans(
-      parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTable(
-        UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None),
-        Some(Map("ds" -> "2017-06-10"))))
   }
 
   test("REFRESH TABLE") {

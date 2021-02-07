@@ -2483,10 +2483,10 @@ object SQLConf {
   val LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL =
     buildConf("spark.sql.legacy.parseNullPartitionSpecAsStringLiteral")
       .internal()
-      .doc("If it is set to true, a null partition value is parsed as a string literal of its " +
-        "text representation, e.g., string 'null'. Otherwise, null partition values are parsed " +
-        "as they are.")
-      .version("3.2.0")
+      .doc("If it is set to true, `PARTITION(col=null)` is parsed as a string literal of its " +
+        "text representation, e.g., string 'null', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a null literal in the partition spec.")
+      .version("3.0.2")
       .booleanConf
       .createWithDefault(false)
 
@@ -3068,6 +3068,15 @@ object SQLConf {
      .version("3.2.0")
     .booleanConf
     .createWithDefault(false)
+
+  val LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA =
+    buildConf("spark.sql.legacy.keepCommandOutputSchema")
+      .internal()
+      .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
+        "unchanged, for v1 catalog and/or table.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.

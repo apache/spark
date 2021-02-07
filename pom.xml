@@ -1079,19 +1079,19 @@
       <!-- Hadoop 3.x dependencies -->
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-api</artifactId>
+        <artifactId>${hadoop-client-api.artifact}</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-runtime</artifactId>
+        <artifactId>${hadoop-client-runtime.artifact}</artifactId>
         <version>${hadoop.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-client-minicluster</artifactId>
+        <artifactId>${hadoop-client-minicluster.artifact}</artifactId>
         <version>${yarn.version}</version>
         <scope>test</scope>
       </dependency>
