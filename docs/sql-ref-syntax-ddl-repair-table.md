@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-MSCK REPAIR TABLE table_identifier
+MSCK REPAIR TABLE table_identifier [[ADD|DROP|SYNC] PARTITIONS]
 ```
 
 ### Parameters
@@ -36,6 +36,13 @@ MSCK REPAIR TABLE table_identifier
     Specifies the name of the table to be repaired. The table name may be optionally qualified with a database name.
 
     **Syntax:** `[ database_name. ] table_name`
+
+* **`[[ADD|DROP|SYNC] PARTITIONS]`**
+
+    * If the option is not specified, `MSCK REPAIR TABLE` adds partitions to the Hive external catalog only.
+    * **ADD**, the command adds new partitions in the catalog for all sub-folder in the base table folder that don't belong to any table partitions.
+    * **DROP**, the command drops all partitions from the Hive external catalog that have non-existing locations in the file system.
+    * **SYNC** is the combination of **DROP** and **ADD**. 
 
 ### Examples
 
