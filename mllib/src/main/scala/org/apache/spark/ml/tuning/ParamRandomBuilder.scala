@@ -99,27 +99,11 @@ object RandomRanges {
  * - Evaluating Machine Learning Models by Alice Zheng
  * https://www.oreilly.com/library/view/evaluating-machine-learning/9781492048756/ch04.html
  */
-class ParamRandomBuilder {
+class ParamRandomBuilder extends ParamGridBuilder {
 
-  // Java interface
-
-  def addGrid(param: DoubleParam, values: Array[Double]): this.type = ???
-
-  def addGrid(param: IntParam, values: Array[Int]): this.type = ???
-
-  def addGrid(param: FloatParam, values: Array[Float]): this.type = ???
-
-  def addGrid(param: LongParam, values: Array[Long]): this.type = ???
-
-  // Scala interface
-
-  def addGrid[T: RandomT](param: Param[T], values: Iterable[T]): this.type = {
-    ???
+  def addRandom[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type = {
+    val gen: RandomT[T] = RandomRanges(lim)
+    addGrid(param, (1 to n).map { _: Int => gen.randomT() })
   }
 
-  def addGrid[T](param: Param[T], values: Iterable[T]): this.type = ???
-
-  def build(): Array[ParamMap] = {
-    ???
-  }
 }
