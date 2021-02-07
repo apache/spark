@@ -1174,6 +1174,7 @@ ansiNonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
