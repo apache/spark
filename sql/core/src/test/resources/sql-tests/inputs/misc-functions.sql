@@ -20,3 +20,12 @@ SELECT assert_true(false, 'custom error message');
 CREATE TEMPORARY VIEW tbl_misc AS SELECT * FROM (VALUES (1), (8), (2)) AS T(v);
 SELECT raise_error('error message');
 SELECT if(v > 5, raise_error('too big: ' || v), v + 1) FROM tbl_misc;
+
+-- delegate
+SELECT delegate();
+SELECT delegate(1);
+SELECT delegate(1, 'a');
+SELECT delegate(1 + 2, assert_true(true), typeof(null));
+SELECT delegate(raise_error('failed in first expression'), raise_error('failed in second expression'), concat(1, 2));
+SELECT delegate(assert_true(true), raise_error('failed in second expression'), raise_error('failed in last expression'));
+SELECT delegate(concat(1, 2), assert_true(true), raise_error('failed in last expression'));

@@ -507,6 +507,7 @@ object FunctionRegistry {
     expression[CallMethodViaReflection]("java_method", true),
     expression[SparkVersion]("version"),
     expression[TypeOf]("typeof"),
+    expression[DelegateFunction]("delegate"),
 
     // grouping sets
     expression[Cube]("cube"),

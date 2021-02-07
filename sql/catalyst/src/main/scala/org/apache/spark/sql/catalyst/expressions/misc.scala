@@ -269,3 +269,62 @@ case class TypeOf(child: Expression) extends UnaryExpression {
     defineCodeGen(ctx, ev, _ => s"""UTF8String.fromString(${child.dataType.catalogString})""")
   }
 }
+
+@ExpressionDescription(
+  usage = """_FUNC_(expr) - Execute all children and return the last child result.""",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(1, 2);
+       2
+      > SELECT _FUNC_(1 + 2, 3 + 4);
+       7
+  """,
+  since = "3.2.0",
+  group = "misc_funcs")
+case class DelegateFunction(children: Seq[Expression]) extends Expression {
+  require(children.nonEmpty, s"$prettyName function requires children is not empty.")
+
+  private lazy val lastChild = children.last
+
+  override lazy val deterministic: Boolean = children.forall(_.deterministic)
+  override lazy val resolved: Boolean = children.forall(_.resolved)
+  override def foldable: Boolean = children.forall(_.foldable)
+  override def nullable: Boolean = lastChild.nullable
+  override def dataType: DataType = lastChild.dataType
+
+  override def eval(input: InternalRow): Any = {
+    var result: Any = null
+    children.foreach { child =>
+      result = child.eval(input)
+    }
+    result
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
+    ev.value = JavaCode.global(ctx.addMutableState(CodeGenerator.javaType(dataType), ev.value),
+      dataType)
+
+    val evals = children.zipWithIndex.map { case (child, index) =>
+      val eval = child.genCode(ctx)
+      if (index == children.size - 1) {
+        s"""
+           |${eval.code}
+           |${ev.isNull} = ${eval.isNull};
+           |${ev.value} = ${eval.value};
+         """.stripMargin
+      } else {
+        s"${eval.code}"
+      }
+    }
+
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "delegate"
+    )
+
+    ev.copy(code = code"$codes")
+  }
+
+  override def prettyName: String = "delegate"
+}
