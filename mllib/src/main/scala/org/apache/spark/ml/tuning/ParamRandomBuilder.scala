@@ -111,9 +111,11 @@ object RandomRanges {
   }
 
   def randomLog(lower: Double, upper: Double, n: Int): Double = {
-    val logLimits: Limits[Double] = Limits(math.log10(lower), math.log10(upper))
+    val logLower: Double = math.log10(lower)
+    val logUpper: Double = math.log10(upper)
+    val logLimits: Limits[Double] = Limits(logLower, logUpper)
     val rndLogged: RandomT[Double] = RandomRanges(logLimits)
-    val rndDouble: Double = math.pow(10, rndLogged.randomT()) // TODO use log n
+    val rndDouble: Double = math.pow(10, rndLogged.randomT())
     rndDouble
   }
 

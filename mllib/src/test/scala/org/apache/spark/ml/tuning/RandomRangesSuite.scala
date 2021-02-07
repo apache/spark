@@ -14,14 +14,15 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
   import RandomRanges._
 
   test("random doubles in log space") {
-    val gen: Gen[(Double, Double)] = for {
+    val gen: Gen[(Double, Double, Int)] = for {
       x <- Gen.choose(0d, Double.MaxValue)
       y <- Gen.choose(0d, Double.MaxValue)
-    } yield (x, y)
-    forAll(gen) { case (x, y) =>
+      n <- Gen.choose(0, Int.MaxValue)
+    } yield (x, y, n)
+    forAll(gen) { case (x, y, n) =>
       val lower = math.min(x, y)
       val upper = math.max(x, y)
-      val result = randomLog(x, y, 10)
+      val result = randomLog(x, y, n)
       assert(result >= lower && result <= upper)
     }
   }
