@@ -13,6 +13,12 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
 
   import RandomRanges._
 
+  test("log of any base") {
+    assert(logN(16, 4) == 2d)
+    assert(logN(1000, 10) === (3d +- 0.000001))
+    assert(logN(256, 2) == 8d)
+  }
+
   test("random doubles in log space") {
     val gen: Gen[(Double, Double, Int)] = for {
       x <- Gen.choose(0d, Double.MaxValue)
