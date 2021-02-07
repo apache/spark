@@ -217,10 +217,11 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
-      committer.commitJob(job, commitMsgs)
-      logInfo(s"Write Job ${description.uuid} committed.")
+      logInfo(s"Start to commit write Job ${description.uuid}.")
+      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
+      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
-      processStats(description.statsTrackers, ret.map(_.summary.stats))
+      processStats(description.statsTrackers, ret.map(_.summary.stats), duration)
       logInfo(s"Finished processing stats for write job ${description.uuid}.")
 
       // return a set of all the partition paths that were updated during this job
@@ -303,7 +304,8 @@ object FileFormatWriter extends Logging {
    */
   private[datasources] def processStats(
       statsTrackers: Seq[WriteJobStatsTracker],
-      statsPerTask: Seq[Seq[WriteTaskStats]])
+      statsPerTask: Seq[Seq[WriteTaskStats]],
+      duration: Long)
   : Unit = {
 
     val numStatsTrackers = statsTrackers.length
@@ -319,8 +321,10 @@ object FileFormatWriter extends Logging {
       statsTrackers.map(_ => Seq.empty)
     }
 
+    statsTrackers.foreach(_.processCommitDuration(duration))
     statsTrackers.zip(statsPerTracker).foreach {
-      case (statsTracker, stats) => statsTracker.processStats(stats)
+      case (statsTracker, stats) =>
+        statsTracker.processStats(stats)
     }
   }
 }

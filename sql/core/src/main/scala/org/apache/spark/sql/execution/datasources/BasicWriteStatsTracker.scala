@@ -139,6 +139,10 @@ class BasicWriteJobStatsTracker(
     new BasicWriteTaskStatsTracker(serializableHadoopConf.value)
   }
 
+  override def processCommitDuration(duration: Long): Unit = {
+    metrics(BasicWriteJobStatsTracker.DURATION_FILE_COMMIT).add(duration)
+  }
+
   override def processStats(stats: Seq[WriteTaskStats]): Unit = {
     val sparkContext = SparkContext.getActive.get
     var partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
@@ -170,6 +174,7 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
+  private val DURATION_FILE_COMMIT = "durationCommit"
 
   def metrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
@@ -177,7 +182,8 @@ object BasicWriteJobStatsTracker {
       NUM_FILES_KEY -> SQLMetrics.createMetric(sparkContext, "number of written files"),
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part")
+      NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
+      DURATION_FILE_COMMIT-> SQLMetrics.createMetric(sparkContext, "duration of commit files")
     )
   }
 }

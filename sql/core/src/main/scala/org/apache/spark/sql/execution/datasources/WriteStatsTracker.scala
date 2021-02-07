@@ -104,6 +104,11 @@ trait WriteJobStatsTracker extends Serializable {
   def newTaskInstance(): WriteTaskStatsTracker
 
   /**
+   * Process the duration of commit all files.
+   */
+  def processCommitDuration(duration: Long): Unit
+
+  /**
    * Process the given collection of stats computed during this job.
    * E.g. aggregate them, write them to memory / disk, issue warnings, whatever.
    * @param stats One [[WriteTaskStats]] object from each successful write task.
