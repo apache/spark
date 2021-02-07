@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+
+import org.apache.commons.io.FileUtils
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
@@ -125,5 +128,28 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   def checkCachedRelation(name: String, expected: Seq[Row]): Unit = {
     assert(spark.catalog.isCached(name))
     QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
+  }
+
+
+  def getPartitionLocation(tableName: String, part: String): String = {
+    val idents = tableName.split('.')
+    val table = idents.last
+    val catalogAndNs = idents.init
+    val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"
+    val information = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($part)")
+      .select("information")
+      .first().getString(0)
+    information
+      .split("\\r?\\n")
+      .filter(_.startsWith("Location:"))
+      .head
+      .replace("Location: file:", "")
+  }
+
+  def copyPartition(tableName: String, from: String, to: String): String = {
+    val part0Loc = getPartitionLocation(tableName, from)
+    val part1Loc = part0Loc.replace(from, to)
+    FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
+    part1Loc
   }
 }
