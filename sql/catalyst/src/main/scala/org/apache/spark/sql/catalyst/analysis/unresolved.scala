@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -34,7 +33,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
  * resolved.
  */
-class UnresolvedException[TreeType <: TreeNode[_]](function: String)
+class UnresolvedException(function: String)
   extends AnalysisException(s"Invalid call to $function on unresolved object")
 
 /**
