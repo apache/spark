@@ -165,6 +165,24 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   }
 }
 
+
+class PartitionTimestampFormatter(zoneId: ZoneId) extends Iso8601TimestampFormatter(
+  TimestampFormatter.partitionPattern,
+  zoneId,
+  TimestampFormatter.defaultLocale,
+  isParsing = true) {
+
+  override def parse(s: String): Long = {
+    convertSpecialTimestamp(s.trim, zoneId) match {
+      case Some(x) =>
+        throw new DateTimeException(
+          s"$s is a special timestamp which is not valid as a partition timestamp")
+      case None => super.parse(s)
+    }
+  }
+}
+
+
 /**
  * The custom sub-class of `GregorianCalendar` is needed to get access to
  * protected `fields` immediately after parsing. We cannot use
@@ -284,6 +302,8 @@ object TimestampFormatter {
 
   def defaultPattern(): String = s"${DateFormatter.defaultPattern} HH:mm:ss"
 
+  def partitionPattern(): String = "yyyy-MM-dd HH:mm:ss[.S]"
+
   private def getFormatter(
       format: Option[String],
       zoneId: ZoneId,
@@ -346,5 +366,13 @@ object TimestampFormatter {
 
   def getFractionFormatter(zoneId: ZoneId): TimestampFormatter = {
     new FractionTimestampFormatter(zoneId)
+  }
+
+  def getPartitioningFormatter(zoneId: ZoneId): TimestampFormatter = {
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+      getLegacyFormatter(partitionPattern, zoneId, defaultLocale, LENIENT_SIMPLE_DATE_FORMAT)
+    } else {
+      new PartitionTimestampFormatter(zoneId)
+    }
   }
 }

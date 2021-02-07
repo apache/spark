@@ -130,11 +130,9 @@ object PartitioningUtils {
       Map.empty[String, String]
     }
 
-    val dateFormatter = DateFormatter(zoneId)
-    val timestampFormatter = TimestampFormatter(
-      timestampPartitionPattern,
-      zoneId,
-      isParsing = true)
+    val dateFormatter = DateFormatter.getPartitioningFormatter(zoneId)
+    val timestampFormatter = TimestampFormatter.getPartitioningFormatter(zoneId)
+
     // First, we need to parse every partition's path and see if we can find partition values.
     val (partitionValues, optDiscoveredBasePaths) = paths.map { path =>
       parsePartition(path, typeInference, basePaths, userSpecifiedDataTypes,

@@ -18,12 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
-import java.time.{LocalDate, ZoneId}
+import java.time.{DateTimeException, LocalDate, ZoneId}
 import java.util.{Date, Locale}
-
 import org.apache.commons.lang3.time.FastDateFormat
-
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 
@@ -81,6 +80,23 @@ class Iso8601DateFormatter(
     try {
       formatter
     } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+  }
+}
+
+class PartitionDateFormatter(zoneId: ZoneId) extends Iso8601DateFormatter(
+  DateFormatter.defaultPattern,
+  zoneId,
+  TimestampFormatter.defaultLocale,
+  LENIENT_SIMPLE_DATE_FORMAT,
+  isParsing = false) {
+
+  override def parse(s: String): Int = {
+    convertSpecialDate(s.trim, zoneId) match {
+      case Some(_) =>
+        throw new DateTimeException(
+          s"$s is a special date which is not valid as a partition date")
+      case None => super.parse(s)
+    }
   }
 }
 
@@ -195,5 +211,13 @@ object DateFormatter {
 
   def apply(zoneId: ZoneId): DateFormatter = {
     getFormatter(None, zoneId, isParsing = false)
+  }
+
+  def getPartitioningFormatter(zoneId: ZoneId): DateFormatter = {
+    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+      getLegacyFormatter(defaultPattern, zoneId, defaultLocale, LENIENT_SIMPLE_DATE_FORMAT)
+    } else {
+      new PartitionDateFormatter(zoneId)
+    }
   }
 }
