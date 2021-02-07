@@ -97,8 +97,6 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
-  protected def failInRead(path: String): Unit
-
   private def inReadConfToOptions(
       conf: String,
       mode: LegacyBehaviorPolicy.Value): Map[String, String] = conf match {
@@ -168,6 +166,10 @@ abstract class ParquetRebaseDatetimeSuite
       }
     }
     def successInRead(path: String): Unit = spark.read.parquet(path).collect()
+    def failInRead(path: String): Unit = {
+      val e = intercept[SparkException](spark.read.parquet(path).collect())
+      assert(e.getCause.isInstanceOf[SparkUpgradeException])
+    }
     Seq(
       // By default we should fail to read ancient datetime values when parquet files don't
       // contain Spark version.
@@ -379,11 +381,6 @@ class ParquetRebaseDatetimeV1Suite extends ParquetRebaseDatetimeSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
-
-  override protected def failInRead(path: String): Unit = {
-    val e = intercept[SparkException](spark.read.parquet(path).collect())
-    assert(e.getCause.isInstanceOf[SparkUpgradeException])
-  }
 }
 
 class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
@@ -391,12 +388,4 @@ class ParquetRebaseDatetimeV2Suite extends ParquetRebaseDatetimeSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
-
-  override protected def failInRead(path: String): Unit = {
-    var e: Throwable = intercept[SparkException](spark.read.parquet(path).collect())
-    while (e != null && !e.isInstanceOf[SparkUpgradeException]) {
-      e = e.getCause
-    }
-    assert(e != null && e.isInstanceOf[SparkUpgradeException])
-  }
 }
