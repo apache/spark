@@ -491,7 +491,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
 
     case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey, output) =>
-      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, s.output)
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, output)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
