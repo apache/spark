@@ -2038,6 +2038,18 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(sortedBlocks.sameElements(decomManager.shufflesToMigrate.asScala.map(_._1)))
   }
 
+  test("SPARK-34193: Potential race condition during decommissioning with TorrentBroadcast") {
+    // Validate that we allow putting of broadcast blocks during decommissioning
+    val exec1 = "exec1"
+
+    val store = makeBlockManager(1000, exec1)
+    master.decommissionBlockManagers(Seq(exec1))
+    val a = new Array[Byte](1)
+    // Put a broadcast block, no exception
+    val broadcast0BlockId = BroadcastBlockId(0)
+    store.putSingle(broadcast0BlockId, a, StorageLevel.DISK_ONLY)
+  }
+
   class MockBlockTransferService(
       val maxFailures: Int,
       override val hostName: String = "MockBlockTransferServiceHost") extends BlockTransferService {

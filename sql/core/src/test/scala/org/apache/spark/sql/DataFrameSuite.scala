@@ -133,7 +133,7 @@ class DataFrameSuite extends QueryTest
       df2
         .select('_1 as 'letter, 'number)
         .groupBy('letter)
-        .agg(countDistinct('number)),
+        .agg(count_distinct('number)),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }
@@ -513,7 +513,7 @@ class DataFrameSuite extends QueryTest
         Row(5, false)))
 
     checkAnswer(
-      testData2.select(sumDistinct($"a")),
+      testData2.select(sum_distinct($"a")),
       Row(6))
   }
 
@@ -607,7 +607,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
     checkAnswer(
-      df.select($"id", callUDF("simpleUDF", $"value")),
+      df.select($"id", callUDF("simpleUDF", $"value")), // test deprecated one
       Row("id1", 1) :: Row("id2", 16) :: Row("id3", 25) :: Nil)
   }
 
@@ -830,6 +830,15 @@ class DataFrameSuite extends QueryTest
     ("David", 60, 192),
     ("Amy", 24, 180)).toDF("name", "age", "height")
 
+  private lazy val person3: DataFrame = Seq(
+    ("Luis", 1, 99),
+    ("Luis", 16, 99),
+    ("Luis", 16, 176),
+    ("Fernando", 32, 99),
+    ("Fernando", 32, 164),
+    ("David", 60, 99),
+    ("Amy", 24, 99)).toDF("name", "age", "height")
+
   test("describe") {
     val describeResult = Seq(
       Row("count", "4", "4", "4"),
@@ -919,6 +928,25 @@ class DataFrameSuite extends QueryTest
     val emptyDescription = person2.limit(0).summary()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptySummaryResult)
+  }
+
+  test("SPARK-34165: Add count_distinct to summary") {
+    val summaryDF = person3.summary("count", "count_distinct")
+
+    val summaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("count_distinct", "4", "5", "3"))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(summaryDF, summaryResult)
+
+    val approxSummaryDF = person3.summary("count", "approx_count_distinct")
+    val approxSummaryResult = Seq(
+      Row("count", "7", "7", "7"),
+      Row("approx_count_distinct", "4", "5", "3"))
+    assert(getSchemaAsSeq(summaryDF) === Seq("summary", "name", "age", "height"))
+    checkAnswer(approxSummaryDF, approxSummaryResult)
   }
 
   test("summary advanced") {
@@ -1272,6 +1300,59 @@ class DataFrameSuite extends QueryTest
         |+-------------------------------------------------------+
         ||{aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh}               |
         |+-------------------------------------------------------+
+        |""".stripMargin)
+  }
+
+  test("SPARK-34308: printSchema: escape meta-characters") {
+    val captured = new ByteArrayOutputStream()
+
+    val df1 = spark.sql("SELECT 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh'")
+    Console.withOut(captured) {
+      df1.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh: string (nullable = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df2 = spark.sql("SELECT array('aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df2.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- array(aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): array (nullable = false)
+        | |    |-- element: string (containsNull = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df3 =
+      spark.sql("SELECT map('aaa\nbbb\tccc', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df3.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- map(aaa\nbbb\tccc, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): map (nullable = false)
+        | |    |-- key: string
+        | |    |-- value: string (valueContainsNull = false)
+        |
+        |""".stripMargin)
+    captured.reset()
+
+    val df4 =
+      spark.sql("SELECT named_struct('v', 'aaa\nbbb\tccc\rddd\feee\bfff\u000Bggg\u0007hhh')")
+    Console.withOut(captured) {
+      df4.printSchema()
+    }
+    assert(captured.toString ===
+      """root
+        | |-- named_struct(v, aaa\nbbb\tccc\rddd\feee\bfff\vggg\ahhh): struct (nullable = false)
+        | |    |-- v: string (nullable = false)
+        |
         |""".stripMargin)
   }
 
@@ -2645,6 +2726,15 @@ class DataFrameSuite extends QueryTest
     ).foreach { sqlStr =>
       assert(sql(sqlStr).schema.fieldNames.head.toLowerCase(Locale.getDefault).contains("cast"))
     }
+  }
+
+  test("SPARK-34318: colRegex should work with column names & qualifiers which contain newlines") {
+    val df = Seq(1, 2, 3).toDF("test\n_column").as("test\n_table")
+    val col1 = df.colRegex("`tes.*\n.*mn`")
+    checkAnswer(df.select(col1), Row(1) :: Row(2) :: Row(3) :: Nil)
+
+    val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
+    checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 }
 
