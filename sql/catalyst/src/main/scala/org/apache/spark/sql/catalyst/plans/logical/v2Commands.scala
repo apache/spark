@@ -563,6 +563,7 @@ object ShowTableProperties {
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
 }
+
 /**
  * The logical plan that defines or changes the comment of an NAMESPACE for v2 catalogs.
  *
