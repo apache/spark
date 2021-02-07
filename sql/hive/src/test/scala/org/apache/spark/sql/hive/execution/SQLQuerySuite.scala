@@ -2587,8 +2587,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       sql("CREATE TABLE t(id INT) PARTITIONED BY (part STRING)")
       sql("INSERT OVERWRITE TABLE t PARTITION (part = '1') SELECT 1")
       sql("INSERT OVERWRITE TABLE t PARTITION (part = '2') SELECT 2")
-      sql("SELECT * FROM show_partitions('t')").explain()
-      sql("SELECT * FROM show_partitions('t')").show()
       checkAnswer(sql("SELECT * from show_partitions('t')"),
         Row("part=1") :: Row("part=2") :: Nil)
     }
