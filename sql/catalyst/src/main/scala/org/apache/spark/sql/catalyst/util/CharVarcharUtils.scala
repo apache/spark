@@ -41,7 +41,7 @@ object CharVarcharUtils extends Logging {
     StructType(st.map { field =>
       if (hasCharVarchar(field.dataType)) {
         val metadata = new MetadataBuilder().withMetadata(field.metadata)
-          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.sql).build()
+          .putString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, field.dataType.catalogString).build()
         field.copy(dataType = replaceCharVarcharWithString(field.dataType), metadata = metadata)
       } else {
         field
@@ -114,17 +114,20 @@ object CharVarcharUtils extends Logging {
     attr.withMetadata(cleaned)
   }
 
+  def getRawTypeString(metadata: Metadata): Option[String] = {
+    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
+      Some(metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY))
+    } else {
+      None
+    }
+  }
+
   /**
    * Re-construct the original data type from the type string in the given metadata.
    * This is needed when dealing with char/varchar columns/fields.
    */
   def getRawType(metadata: Metadata): Option[DataType] = {
-    if (metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)) {
-      Some(CatalystSqlParser.parseDataType(
-        metadata.getString(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY)))
-    } else {
-      None
-    }
+    getRawTypeString(metadata).map(CatalystSqlParser.parseDataType)
   }
 
   /**
@@ -135,73 +138,6 @@ object CharVarcharUtils extends Logging {
       getRawType(field.metadata).map(dt => field.copy(dataType = dt)).getOrElse(field)
     }
     StructType(fields)
-  }
-
-  /**
-   * Returns expressions to apply read-side char type padding for the given attributes.
-   *
-   * For a CHAR(N) column/field and the length of string value is M
-   * If M > N, raise runtime error
-   * If M <= N, the value should be right-padded to N characters.
-   *
-   * For a VARCHAR(N) column/field and the length of string value is M
-   * If M > N, raise runtime error
-   * If M <= N, the value should be remained.
-   */
-  def paddingWithLengthCheck(output: Seq[AttributeReference]): Seq[NamedExpression] = {
-    output.map { attr =>
-      getRawType(attr.metadata).filter { rawType =>
-        rawType.existsRecursively(dt => dt.isInstanceOf[CharType] || dt.isInstanceOf[VarcharType])
-      }.map { rawType =>
-        Alias(paddingWithLengthCheck(attr, rawType), attr.name)(
-          explicitMetadata = Some(attr.metadata))
-      }.getOrElse(attr)
-    }
-  }
-
-  private def paddingWithLengthCheck(expr: Expression, dt: DataType): Expression = dt match {
-    case CharType(length) =>
-      StaticInvoke(
-        classOf[CharVarcharCodegenUtils],
-        StringType,
-        "charTypeReadSideCheck",
-        expr :: Literal(length) :: Nil,
-        propagateNull = false)
-
-    case VarcharType(length) =>
-      StaticInvoke(
-        classOf[CharVarcharCodegenUtils],
-        StringType,
-        "varcharTypeReadSideCheck",
-        expr :: Literal(length) :: Nil,
-        propagateNull = false)
-
-    case StructType(fields) =>
-      val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>
-        Seq(Literal(f.name),
-          paddingWithLengthCheck(GetStructField(expr, i, Some(f.name)), f.dataType))
-      })
-      if (expr.nullable) {
-        If(IsNull(expr), Literal(null, struct.dataType), struct)
-      } else {
-        struct
-      }
-
-    case ArrayType(et, containsNull) => charTypePaddingInArray(expr, et, containsNull)
-
-    case MapType(kt, vt, valueContainsNull) =>
-      val newKeys = charTypePaddingInArray(MapKeys(expr), kt, containsNull = false)
-      val newValues = charTypePaddingInArray(MapValues(expr), vt, valueContainsNull)
-      MapFromArrays(newKeys, newValues)
-
-    case _ => expr
-  }
-
-  private def charTypePaddingInArray(
-      arr: Expression, et: DataType, containsNull: Boolean): Expression = {
-    val param = NamedLambdaVariable("x", replaceCharVarcharWithString(et), containsNull)
-    val func = LambdaFunction(paddingWithLengthCheck(param, et), Seq(param))
-    ArrayTransform(arr, func)
   }
 
   /**
@@ -223,7 +159,7 @@ object CharVarcharUtils extends Logging {
           StringType,
           "charTypeWriteSideCheck",
           expr :: Literal(length) :: Nil,
-          propagateNull = false)
+          returnNullable = false)
 
       case VarcharType(length) =>
         StaticInvoke(
@@ -231,7 +167,7 @@ object CharVarcharUtils extends Logging {
           StringType,
           "varcharTypeWriteSideCheck",
           expr :: Literal(length) :: Nil,
-          propagateNull = false)
+          returnNullable = false)
 
       case StructType(fields) =>
         val struct = CreateNamedStruct(fields.zipWithIndex.flatMap { case (f, i) =>

@@ -117,9 +117,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
       bucketValues: Seq[Any],
       filterCondition: Column,
       originalDataFrame: DataFrame): Unit = {
-    // This test verifies parts of the plan. Disable whole stage codegen.
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
+    // This test verifies parts of the plan. Disable whole stage codegen,
+    // automatically bucketed scan, and filter push down for json data source.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "false",
+      SQLConf.JSON_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      val bucketedDataFrame = spark.table("bucketed_table")
       val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
       // Limit: bucket pruning only works when the bucket column has one and only one column
       assert(bucketColumnNames.length == 1)
@@ -148,11 +151,41 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
         if (invalidBuckets.nonEmpty) {
           fail(s"Buckets ${invalidBuckets.mkString(",")} should have been pruned from:\n$plan")
         }
+
+        withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
+          // Bucket pruning should still work without bucketed scan
+          val planWithoutBucketedScan = bucketedDataFrame.filter(filterCondition)
+            .queryExecution.executedPlan
+          val fileScan = getFileScan(planWithoutBucketedScan)
+          assert(!fileScan.bucketedScan, s"except no bucketed scan but found\n$fileScan")
+
+          val bucketColumnType = bucketedDataFrame.schema.apply(bucketColumnIndex).dataType
+          val rowsWithInvalidBuckets = fileScan.execute().filter(row => {
+            // Return rows should have been pruned
+            val bucketColumnValue = row.get(bucketColumnIndex, bucketColumnType)
+            val bucketId = BucketingUtils.getBucketIdFromValue(
+              bucketColumn, numBuckets, bucketColumnValue)
+            !matchedBuckets.get(bucketId)
+          }).collect()
+
+          if (rowsWithInvalidBuckets.nonEmpty) {
+            fail(s"Rows ${rowsWithInvalidBuckets.mkString(",")} should have been pruned from:\n" +
+              s"$planWithoutBucketedScan")
+          }
+        }
       }
 
+      val expectedDataFrame = originalDataFrame.filter(filterCondition).orderBy("i", "j", "k")
+        .select("i", "j", "k")
       checkAnswer(
-        bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
-        originalDataFrame.filter(filterCondition).orderBy("i", "j", "k"))
+        bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k").select("i", "j", "k"),
+        expectedDataFrame)
+
+      withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
+        checkAnswer(
+          bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k").select("i", "j", "k"),
+          expectedDataFrame)
+      }
     }
   }
 
@@ -160,7 +193,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils with Adapti
     withTable("bucketed_table") {
       val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
-      // json does not support predicate push-down, and thus json is used here
       df.write
         .format("json")
         .partitionBy("i")

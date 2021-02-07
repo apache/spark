@@ -506,6 +506,13 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
+  private[spark] val STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT =
+    ConfigBuilder("spark.storage.blockManagerMasterDriverHeartbeatTimeoutMs")
+      .doc("A timeout used for block manager master's driver heartbeat endpoint.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("10m")
+
   private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
     ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
       .version("0.7.0")
@@ -1672,6 +1679,13 @@ package object config {
       .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
+
+  private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
+    ConfigBuilder("spark.io.compression.zstd.bufferPool.enabled")
+      .doc("If true, enable buffer pool of ZSTD JNI library.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")

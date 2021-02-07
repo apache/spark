@@ -19,8 +19,8 @@ package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util.{Calendar, GregorianCalendar, Properties}
-import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
@@ -613,13 +613,7 @@ class JDBCSuite extends QueryTest
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    val epochMillis = java.time.LocalTime.ofNanoOfDay(
-      TimeUnit.MILLISECONDS.toNanos(rows(0).getAs[Int](0)))
-      .atDate(java.time.LocalDate.ofEpochDay(0))
-      .atZone(java.time.ZoneId.systemDefault())
-      .toInstant()
-      .toEpochMilli()
-    cal.setTime(new Date(epochMillis))
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
     assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
     assert(cal.get(Calendar.MINUTE) === 34)
     assert(cal.get(Calendar.SECOND) === 56)
@@ -638,20 +632,15 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
-  test("SPARK-33888: test TIME types") {
+  test("SPARK-34357: test TIME types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
     val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
       .cache().collect()
-    val expectedTimeRaw = java.sql.Time.valueOf("12:34:56")
-    val expectedTimeMillis = Math.toIntExact(
-      java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-        expectedTimeRaw.toLocalTime().toNanoOfDay()
-      )
-    )
-    assert(rows(0).getAs[Int](0) === expectedTimeMillis)
-    assert(rows(1).getAs[Int](0) === expectedTimeMillis)
-    assert(cachedRows(0).getAs[Int](0) === expectedTimeMillis)
+    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
   }
 
   test("test DATE types") {
@@ -1029,6 +1018,19 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(rows(0).getAs[java.sql.Timestamp](2)
       === java.sql.Timestamp.valueOf("2002-02-20 11:22:33.543543"))
+  }
+
+  test("SPARK-33867: Test DataFrame.where for LocalDate and Instant") {
+    // Test for SPARK-33867
+    val timestamp = Instant.parse("2001-02-20T11:22:33.543543Z")
+    val date = LocalDate.parse("1995-01-01")
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val jdbcDf = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      val rows = jdbcDf.where($"B" > date && $"C" > timestamp).collect()
+      assert(rows(0).getAs[LocalDate](1) === LocalDate.parse("1996-01-01"))
+      // 8 hour difference since saved time was America/Los_Angeles and Instant is GMT
+      assert(rows(0).getAs[Instant](2) === Instant.parse("2002-02-20T19:22:33.543543Z"))
+    }
   }
 
   test("test credentials in the properties are not in plan output") {

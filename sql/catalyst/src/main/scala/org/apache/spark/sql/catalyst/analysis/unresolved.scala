@@ -336,6 +336,10 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     nameParts.corresponds(qualifierList)(resolver)
   }
 
+  def isQualifiedByTable(input: LogicalPlan, resolver: Resolver): Boolean = {
+    target.exists(nameParts => input.output.exists(matchedQualifier(_, nameParts, resolver)))
+  }
+
   override def expand(
       input: LogicalPlan,
       resolver: Resolver): Seq[NamedExpression] = {
