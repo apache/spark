@@ -130,7 +130,6 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
   }
 
-
   def getPartitionLocation(tableName: String, part: String): String = {
     val idents = tableName.split('.')
     val table = idents.last
