@@ -80,9 +80,11 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
         val context = TaskContext.get
         val sorter = new ExternalSorter[K, V, V](context, None, None, Some(ordering))
         sorter.insertAll(iter)
-        context.taskMetrics.incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics.incMemoryBytesSpilled(sorter.memoryBytesSpilled)
+        context.taskMetrics.incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics.incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+        // Use completion callback to stop sorter if task was finished/cancelled.
+        context.addTaskCompletionListener[Unit](_ => sorter.stop)
         val outputIter = new InterruptibleIterator(context,
           sorter.iterator.asInstanceOf[Iterator[(K, V)]])
         CompletionIterator[(K, V), Iterator[(K, V)]](outputIter, sorter.stop)
