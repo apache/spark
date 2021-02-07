@@ -113,7 +113,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
       case udaf: UserDefinedAggregator[_, _, _] =>
         def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
         functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
+        udaf
       case other =>
         def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
         functionRegistry.createOrReplaceTempFunction(name, builder)
