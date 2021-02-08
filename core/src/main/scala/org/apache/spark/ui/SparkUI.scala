@@ -81,10 +81,11 @@ private[spark] class SparkUI private (
     val jobsTab = new JobsTab(this, store)
     attachTab(jobsTab)
     val stagesTab = new StagesTab(this, store)
+    val executorsTab = new ExecutorsTab(this)
     attachTab(stagesTab)
     attachTab(new StorageTab(this, store))
     attachTab(new EnvironmentTab(this, store))
-    attachTab(new ExecutorsTab(this))
+    attachTab(executorsTab)
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
@@ -97,6 +98,10 @@ private[spark] class SparkUI private (
       "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = Set("GET", "POST")))
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
+      httpMethods = Set("GET", "POST")))
+
+    attachHandler(createRedirectHandler(
+      "/executors/forceKill", "/executors/", executorsTab.handleKillExecutorRequest,
       httpMethods = Set("GET", "POST")))
   }
 
@@ -193,6 +198,9 @@ private[spark] class SparkUI private (
 
 private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   extends WebUITab(parent, prefix) {
+  val killEnabled = parent.killEnabled
+  val conf = parent.conf
+  val sc = parent.sc
 
   def appName: String = parent.appName
 

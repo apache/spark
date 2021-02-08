@@ -48,6 +48,22 @@ function formatBytes(bytes, type) {
   var i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
+
+function createConfirm(id, actionType) {
+  var confirm = "if (window.confirm('Are you sure you want to " + actionType + " " + id + " ?')) " +
+  "{ this.parentNode.submit(); return true; } else { return false; }";
+  return confirm;
+}
+
+function getKillExecutorURI(id, baseURI) {
+  var newURI  = '';
+  if (baseURI != null && baseURI != '') {
+    newURI += baseURI;
+    newURI += "?executorId=" + id;
+  }
+  return newURI;
+}
+
 /* eslint-enable no-unused-vars */
 
 function padZeroes(num) {

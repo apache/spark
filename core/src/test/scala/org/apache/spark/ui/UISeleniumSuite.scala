@@ -562,6 +562,20 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     }
   }
 
+  test("kill executor POST/GET response is correct") {
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map { x => Thread.sleep(10000); x }.countAsync()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        val url = new URL(
+          sc.ui.get.webUrl.stripSuffix("/") +
+            "/executors/forceKill/?executorId=driver")
+        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
+        TestUtils.httpResponseCode(url, "GET") should be(200)
+        TestUtils.httpResponseCode(url, "POST") should be(200)
+      }
+    }
+  }
+
   test("stage & job retention") {
     val conf = new SparkConf()
       .setMaster("local")

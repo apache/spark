@@ -21,10 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.ui.{SparkUI, SparkUITab, UIUtils, WebUIPage}
 
-private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
+private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors")
+  with Logging {
 
   init()
 
@@ -38,6 +40,26 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
     }
   }
 
+  def handleKillExecutorRequest(request: HttpServletRequest): Unit = {
+    if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      Option(request.getParameter("executorId")).foreach { exeId =>
+        // note: To reduce interaction with driver we may NOT check the executor is active,
+        // the killAndReplaceExecutor will do nothing when it's dead.
+        sc.map(_.killAndReplaceExecutor(exeId)).foreach { r =>
+          if (r) {
+            logInfo(s"Killed the executorId $exeId via the Web UI.")
+          } else {
+            logWarning(s"Could NOT kill the executorId $exeId via the Web UI.")
+          }
+        }
+        // Do a quick pause here to give Spark time to kill the executorId so it shows up as
+        // killed after the refresh. Note that this will block the serving thread so the
+        // time should be limited in duration.
+        Thread.sleep(100)
+      }
+    }
+  }
 }
 
 private[ui] class ExecutorsPage(
@@ -52,6 +74,7 @@ private[ui] class ExecutorsPage(
         <script src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
         <script src={UIUtils.prependBaseUri(request, "/static/executorspage.js")}></script> ++
         <script>setThreadDumpEnabled({threadDumpEnabled})</script>
+        <script>setKillExecutorEnabled({parent.killEnabled})</script>
       }
 
     UIUtils.headerSparkPage(request, "Executors", content, parent, useDataTables = true)

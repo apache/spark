@@ -147,8 +147,20 @@ private[spark] object JettyUtils extends Logging {
       private def doRequest(request: HttpServletRequest, response: HttpServletResponse): Unit = {
         beforeRedirect(request)
         // Make sure we don't end up with "//" in the middle
-        val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
-        response.sendRedirect(newUrl)
+        val requestURL = request.getRequestURL.toString
+        val oldUrl = new URL(new URL(requestURL), prefixedDestPath).toString
+        var newUrl: Option[String] = None
+        if (destPath == "/executors/") {
+          val forceKill = "/executors/forceKill"
+          val exeId = request.getParameter("executorId")
+          require(exeId != null && exeId.nonEmpty,
+            "Missing executor id when kill an executor")
+          if (requestURL.contains(forceKill)) {
+            newUrl = Option(new URL(new URL(requestURL.replace(forceKill,
+              "")), destPath).toString)
+          }
+        }
+        response.sendRedirect(newUrl.getOrElse(oldUrl))
       }
       // SPARK-5983 ensure TRACE is not supported
       protected override def doTrace(req: HttpServletRequest, res: HttpServletResponse): Unit = {

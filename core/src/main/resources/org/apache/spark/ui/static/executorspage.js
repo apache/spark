@@ -16,10 +16,11 @@
  */
 
 /* global $, Mustache, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, */
-/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, */
+/* global createTemplateURI, formatBytes, formatDuration, formatLogsCells, getStandAloneAppId, createConfirm, getKillExecutorURI, */
 /* global jQuery, setDataTableDefaults */
 
 var threadDumpEnabled = false;
+var killExecutorEnabled = false;
 
 /* eslint-disable no-unused-vars */
 function setThreadDumpEnabled(val) {
@@ -29,6 +30,27 @@ function setThreadDumpEnabled(val) {
 
 function getThreadDumpEnabled() {
   return threadDumpEnabled;
+}
+
+/* eslint-disable no-unused-vars */
+function setKillExecutorEnabled(val) {
+  killExecutorEnabled = val;
+}
+/* eslint-enable no-unused-vars */
+
+function getKillExecutorEnabled() {
+  return killExecutorEnabled;
+}
+
+function getKillExecutorBaseURI() {
+  var newURI = '';
+  if (getKillExecutorEnabled()) {
+    var queryString = document.baseURI.split('/executors');
+    if (queryString.length > 0) {
+      newURI = queryString[0] + "/executors/forceKill";
+    }
+  }
+  return newURI;
 }
 
 function formatLossReason(removeReason) {
@@ -390,6 +412,7 @@ $(document).ready(function () {
       var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
       $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
+        var killExecutorBaseURI = getKillExecutorBaseURI();
         executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
         var selector = "#active-executors-table";
         var conf = {
@@ -546,6 +569,17 @@ $(document).ready(function () {
             {data: 'totalShuffleRead', render: formatBytes},
             {data: 'totalShuffleWrite', render: formatBytes},
             {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
+            {
+              data : function (row, type) {
+                if (getKillExecutorEnabled() && row.isActive && row.id != 'driver' && type === 'display') {
+                  return "<a href=" + getKillExecutorURI(row.id, killExecutorBaseURI) +
+                    " onclick=\"" + createConfirm(row.id, 'kill executor') + "\" >kill</a>";
+                } else {
+                  return "";
+                }
+              },
+              name: "Kill"
+            },
             {
               name: 'threadDumpCol',
               data: 'id', render: function (data, type) {

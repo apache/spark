@@ -29,10 +29,6 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[ui] class StagesTab(val parent: SparkUI, val store: AppStatusStore)
   extends SparkUITab(parent, "stages") {
 
-  val sc = parent.sc
-  val conf = parent.conf
-  val killEnabled = parent.killEnabled
-
   attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this, store))
   attachPage(new PoolPage(this))
