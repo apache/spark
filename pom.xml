@@ -48,7 +48,7 @@
       <id>matei</id>
       <name>Matei Zaharia</name>
       <email>matei.zaharia@gmail.com</email>
-      <url>http://www.cs.berkeley.edu/~matei</url>
+      <url>https://cs.stanford.edu/people/matei</url>
       <organization>Apache Software Foundation</organization>
       <organizationUrl>http://spark.apache.org</organizationUrl>
     </developer>
