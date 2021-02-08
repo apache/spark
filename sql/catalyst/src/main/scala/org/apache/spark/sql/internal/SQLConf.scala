@@ -25,8 +25,11 @@ import java.util.zip.Deflater
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.Try
+import scala.util.control.NonFatal
 import scala.util.matching.Regex
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -42,8 +45,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
-
-import scala.util.control.NonFatal
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -3808,8 +3809,10 @@ class SQLConf extends Serializable with Logging {
   private def loadDefinedConfs(): Unit = {
     if (!definedConfsLoaded) {
       definedConfsLoaded = true
+      // Force to register static SQL configurations
       StaticSQLConf
       try {
+        // Force to register SQL configurations from Hive module
         val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
         ScalaReflection.mirror.reflectModule(symbol).instance
       } catch {
