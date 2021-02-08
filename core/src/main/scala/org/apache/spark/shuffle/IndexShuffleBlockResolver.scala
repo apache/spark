@@ -56,7 +56,8 @@ private[spark] class IndexShuffleBlockResolver(
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 
-  private val remoteShuffleMaxDisk: Option[Long] = conf.get(config.STORAGE_REMOTE_SHUFFLE_MAX_DISK)
+  private val remoteShuffleMaxDisk: Option[Long] =
+    conf.get(config.STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE)
 
   def getDataFile(shuffleId: Int, mapId: Long): File = getDataFile(shuffleId, mapId, None)
 

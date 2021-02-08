@@ -488,13 +488,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val STORAGE_REMOTE_SHUFFLE_MAX_DISK =
-    ConfigBuilder("spark.storage.remote.shuffle.maxDisk")
+  private[spark] val STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE =
+    ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxDiskSize")
       .doc("Maximum disk space to use to store shuffle blocks before rejecting remote " +
-        "shuffle blocks. Rejecting remote shuffle blocks means that an exec will not receive any " +
-        " shuffle migrations, and if there are no execs avaialble for migration then " +
-        s"decommissioning will block unless ${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} " +
-        "is configured")
+        "shuffle blocks. Rejecting remote shuffle blocks means that an executor will not receive " +
+        "any shuffle migrations, and if there are no other executors available for migration " +
+        "then shuffle blocks will be lost unless " +
+        s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} is configured.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
       .createOptional

@@ -1932,9 +1932,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
-  private def testShuffleBlockDecommissioning(maxShuffle: Option[Int], migrate: Boolean) = {
-    maxShuffle.foreach{ b =>
-      conf.set(STORAGE_REMOTE_SHUFFLE_MAX_DISK.key, s"${b}b")
+  private def testShuffleBlockDecommissioning(maxShuffleSize: Option[Int], willReject: Boolean) = {
+    maxShuffleSize.foreach{ size =>
+      conf.set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE.key, s"${size}b")
     }
     val shuffleManager1 = makeSortShuffleManager(Some(conf))
     val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
@@ -1968,7 +1968,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
       decomManager.refreshOffloadingShuffleBlocks()
 
-      if (migrate) {
+      if (willReject) {
         eventually(timeout(1.second), interval(10.milliseconds)) {
           assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
         }
@@ -1995,7 +1995,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     testShuffleBlockDecommissioning(Some(10000), true)
   }
 
-  test("test migration of shuffle blocks during decommissioning - small limit") {
+  test("[SPARK-34363]test migration of shuffle blocks during decommissioning - small limit") {
     testShuffleBlockDecommissioning(Some(1), false)
   }
 
