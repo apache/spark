@@ -26,15 +26,14 @@ import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.Try
 import scala.util.matching.Regex
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkConf, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -42,7 +41,9 @@ import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.{SparkConfRegisterLoader, Utils}
+import org.apache.spark.util.Utils
+
+import scala.util.control.NonFatal
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -3799,6 +3800,25 @@ class SQLConf extends Serializable with Logging {
     }
   }
 
+  private var definedConfsLoaded = false
+  /**
+   * init [[StaticSQLConf]] and [[org.apache.spark.sql.hive.HiveUtils]] so that all the defined
+   * SQL Configurations will be registered to SQLConf
+   */
+  private def loadDefinedConfs(): Unit = {
+    if (!definedConfsLoaded) {
+      definedConfsLoaded = true
+      StaticSQLConf
+      try {
+        val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
+        ScalaReflection.mirror.reflectModule(symbol).instance
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Cannot load sql configurations from hive module", e)
+      }
+    }
+  }
+
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
@@ -3811,8 +3831,7 @@ class SQLConf extends Serializable with Logging {
    * definition contains key, defaultValue and doc.
    */
   def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
-    // Eagerly load conf objects to force the conf entries registering
-    SparkConfRegisterLoader.load(Utils.getContextOrSparkClassLoader)
+    loadDefinedConfs()
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
