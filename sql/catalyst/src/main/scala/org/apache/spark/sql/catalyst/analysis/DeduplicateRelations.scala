@@ -118,6 +118,12 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
      */
     def collectConflictPlans(plan: LogicalPlan): Seq[(LogicalPlan, LogicalPlan)] = plan match {
       // Handle base relations that might appear more than once.
+      case oldVersion: MultiInstanceRelation
+          if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+        val newVersion = oldVersion.newInstance()
+        newVersion.copyTagsFrom(oldVersion)
+        Seq((oldVersion, newVersion))
+
       case oldVersion: SerializeFromObject
           if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
         Seq((oldVersion, oldVersion.copy(
