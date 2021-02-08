@@ -3803,7 +3803,7 @@ class SQLConf extends Serializable with Logging {
 
   private var definedConfsLoaded = false
   /**
-   * init [[StaticSQLConf]] and [[org.apache.spark.sql.hive.HiveUtils]] so that all the defined
+   * Init [[StaticSQLConf]] and [[org.apache.spark.sql.hive.HiveUtils]] so that all the defined
    * SQL Configurations will be registered to SQLConf
    */
   private def loadDefinedConfs(): Unit = {
@@ -3817,7 +3817,7 @@ class SQLConf extends Serializable with Logging {
         ScalaReflection.mirror.reflectModule(symbol).instance
       } catch {
         case NonFatal(e) =>
-          logWarning("Cannot load sql configurations from hive module", e)
+          logWarning("SQL configurations from Hive module is not loaded", e)
       }
     }
   }
