@@ -2592,14 +2592,16 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         Row("d1") :: Row("d2") :: Row("default") :: Nil)
       checkAnswer(sql("SELECT * from show_namespaces('spark_catalog', 'd1*')"),
         Row("d1") :: Nil)
-      sql("SET spark.sql.legacy.keepCommandOutputSchema=true")
-      val e = intercept[AnalysisException] {
-        sql("SELECT * from show_namespaces()")
-      }.getMessage
-      assert(e.contains(
-        """error: table-valued function show_namespaces only can be used when
-          |config `spark.sql.legacy.keepCommandOutputSchema` is false.
-          |""".stripMargin))
+
+      withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+        val e = intercept[AnalysisException] {
+          sql("SELECT * from show_namespaces()")
+        }.getMessage
+        assert(e.contains(
+          """error: table-valued function show_namespaces only can be used when
+            |config `spark.sql.legacy.keepCommandOutputSchema` is false.
+            |""".stripMargin))
+      }
     }
   }
 }
