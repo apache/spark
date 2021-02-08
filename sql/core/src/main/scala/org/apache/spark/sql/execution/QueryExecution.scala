@@ -254,12 +254,14 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
-      optimizedPlan.transformExpressions {
-        case subqueryExpression: SubqueryExpression =>
-          // trigger subquery's child plan stats propagation
-          subqueryExpression.plan.stats
-          subqueryExpression
-        case e => e
+      optimizedPlan.transform {
+        case p => p.transformExpressions {
+          case subqueryExpression: SubqueryExpression =>
+            // trigger subquery's child plan stats propagation
+            subqueryExpression.plan.stats
+            subqueryExpression
+          case e => e
+        }
       }
       optimizedPlan.stats
     } catch {
