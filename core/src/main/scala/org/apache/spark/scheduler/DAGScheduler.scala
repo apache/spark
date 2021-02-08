@@ -1530,7 +1530,7 @@ private[spark] class DAGScheduler(
     if (job.properties == null) {
       false
     } else {
-        job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
+      job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
     }
   }
 
