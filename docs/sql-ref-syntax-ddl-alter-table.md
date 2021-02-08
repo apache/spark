@@ -103,6 +103,8 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
 `ALTER TABLE ADD` statement adds partition to the partitioned table.
 
+If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
+
 ##### Syntax
 
 ```sql
@@ -127,6 +129,8 @@ ALTER TABLE table_identifier ADD [IF NOT EXISTS]
 #### DROP PARTITION
 
 `ALTER TABLE DROP` statement drops the partition of the table.
+
+If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
 
 ##### Syntax
 
@@ -186,6 +190,8 @@ ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
 
 `ALTER TABLE SET` command can also be used for changing the file location and file format for 
 existing tables. 
+
+If the table is cached, the `ALTER TABLE .. SET LOCATION` command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
 
 ##### Syntax
 
