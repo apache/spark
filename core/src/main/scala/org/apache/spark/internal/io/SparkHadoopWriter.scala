@@ -96,8 +96,7 @@ object SparkHadoopWriter extends Logging {
           iterator = iter)
       })
 
-      committer.commitJob(jobContext, ret)
-      logInfo(s"Job ${jobContext.getJobID} committed.")
+      commitJob(jobContext, jobContext.getJobID.toString, committer, ret)
     } catch {
       case cause: Throwable =>
         logError(s"Aborting job ${jobContext.getJobID}.", cause)
