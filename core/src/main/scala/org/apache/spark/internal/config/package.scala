@@ -1685,7 +1685,7 @@ package object config {
       .doc("If true, enable buffer pool of ZSTD JNI library.")
       .version("3.2.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val IO_COMPRESSION_ZSTD_LEVEL =
     ConfigBuilder("spark.io.compression.zstd.level")

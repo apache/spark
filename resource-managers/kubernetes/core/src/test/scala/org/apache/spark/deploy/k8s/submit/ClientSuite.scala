@@ -141,7 +141,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)

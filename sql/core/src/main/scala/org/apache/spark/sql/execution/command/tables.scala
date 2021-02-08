@@ -825,21 +825,9 @@ case class DescribeColumnCommand(
 case class ShowTablesCommand(
     databaseName: Option[String],
     tableIdentifierPattern: Option[String],
+    override val output: Seq[Attribute],
     isExtended: Boolean = false,
     partitionSpec: Option[TablePartitionSpec] = None) extends RunnableCommand {
-
-  // The result of SHOW TABLES/SHOW TABLE has three basic columns: database, tableName and
-  // isTemporary. If `isExtended` is true, append column `information` to the output columns.
-  override val output: Seq[Attribute] = {
-    val tableExtendedInfo = if (isExtended) {
-      AttributeReference("information", StringType, nullable = false)() :: Nil
-    } else {
-      Nil
-    }
-    AttributeReference("database", StringType, nullable = false)() ::
-      AttributeReference("tableName", StringType, nullable = false)() ::
-      AttributeReference("isTemporary", BooleanType, nullable = false)() :: tableExtendedInfo
-  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we need to return a Seq of rows, we will call getTables directly

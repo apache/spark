@@ -98,7 +98,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val defaultProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     when(taskScheduler.sc).thenReturn(sc)
     when(sc.conf).thenReturn(sparkConf)
     when(sc.resourceProfileManager).thenReturn(resourceProfileManager)
