@@ -1184,6 +1184,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
       "spark configs have higher priority than spark.hadoop configs")
   }
+
+  test("SPARK-34400: Check spark.job.interruptOnCancel value is illegal before submit job") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    val sc = SparkContext.getOrCreate(conf)
+    val msg = intercept[IllegalArgumentException] {
+      sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false1")
+    }.getMessage
+    assert(msg.contains(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} value is invalid: false1"))
+    sc.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+    assert(!sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL).toBoolean)
+    sc.stop()
+  }
 }
 
 object SparkContextSuite {
