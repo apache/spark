@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelpe
 import org.apache.spark.sql.connector.catalog.TableCatalog
 
 /**
- * A rule for resolving table properties such as handling non-existent properties.
+ * A rule for resolving AlterTableUnsetProperties to handle non-existent properties.
  */
 object ResolveTableProperties extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
