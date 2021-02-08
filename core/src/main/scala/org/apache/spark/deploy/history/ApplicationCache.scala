@@ -25,7 +25,7 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.github.benmanes.caffeine.cache.{CacheLoader, CacheWriter, Caffeine, LoadingCache, RemovalCause, RemovalListener}
+import com.github.benmanes.caffeine.cache.{CacheLoader, CacheWriter, Caffeine, LoadingCache, RemovalCause}
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
