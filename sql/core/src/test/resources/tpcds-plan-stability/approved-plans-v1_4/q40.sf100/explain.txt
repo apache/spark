@@ -138,7 +138,7 @@ Input [2]: [d_date_sk#17, d_date#18]
 
 (23) Filter [codegen id : 6]
 Input [2]: [d_date_sk#17, d_date#18]
-Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 10997)) AND (d_date#18 <= 11057)) AND isnotnull(d_date_sk#17))
+Condition : (((isnotnull(d_date#18) AND (d_date#18 >= 2000-02-10)) AND (d_date#18 <= 2000-04-10)) AND isnotnull(d_date_sk#17))
 
 (24) BroadcastExchange
 Input [2]: [d_date_sk#17, d_date#18]
@@ -183,7 +183,7 @@ Input [7]: [cs_warehouse_sk#1, cs_sales_price#4, cr_refunded_cash#10, i_item_id#
 (33) HashAggregate [codegen id : 8]
 Input [5]: [cs_sales_price#4, cr_refunded_cash#10, w_state#21, i_item_id#14, d_date#18]
 Keys [2]: [w_state#21, i_item_id#14]
-Functions [2]: [partial_sum(CASE WHEN (d_date#18 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#18 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
+Functions [2]: [partial_sum(CASE WHEN (d_date#18 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), partial_sum(CASE WHEN (d_date#18 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
 Aggregate Attributes [4]: [sum#23, isEmpty#24, sum#25, isEmpty#26]
 Results [6]: [w_state#21, i_item_id#14, sum#27, isEmpty#28, sum#29, isEmpty#30]
 
@@ -194,9 +194,9 @@ Arguments: hashpartitioning(w_state#21, i_item_id#14, 5), ENSURE_REQUIREMENTS, [
 (35) HashAggregate [codegen id : 9]
 Input [6]: [w_state#21, i_item_id#14, sum#27, isEmpty#28, sum#29, isEmpty#30]
 Keys [2]: [w_state#21, i_item_id#14]
-Functions [2]: [sum(CASE WHEN (d_date#18 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), sum(CASE WHEN (d_date#18 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
-Aggregate Attributes [2]: [sum(CASE WHEN (d_date#18 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#32, sum(CASE WHEN (d_date#18 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#33]
-Results [4]: [w_state#21, i_item_id#14, sum(CASE WHEN (d_date#18 < 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#32 AS sales_before#34, sum(CASE WHEN (d_date#18 >= 11027) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#33 AS sales_after#35]
+Functions [2]: [sum(CASE WHEN (d_date#18 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END), sum(CASE WHEN (d_date#18 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#18 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#32, sum(CASE WHEN (d_date#18 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#33]
+Results [4]: [w_state#21, i_item_id#14, sum(CASE WHEN (d_date#18 < 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#32 AS sales_before#34, sum(CASE WHEN (d_date#18 >= 2000-03-11) THEN CheckOverflow((promote_precision(cast(cs_sales_price#4 as decimal(13,2))) - promote_precision(cast(coalesce(cast(cr_refunded_cash#10 as decimal(12,2)), 0.00) as decimal(13,2)))), DecimalType(13,2), true) ELSE 0.00 END)#33 AS sales_after#35]
 
 (36) TakeOrderedAndProject
 Input [4]: [w_state#21, i_item_id#14, sales_before#34, sales_after#35]
