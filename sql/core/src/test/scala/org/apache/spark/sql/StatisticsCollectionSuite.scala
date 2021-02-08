@@ -26,7 +26,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
@@ -676,52 +675,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             nullCount = Some(0),
             avgLen = Some(LongType.defaultSize),
             maxLen = Some(LongType.defaultSize))))
-      }
-    }
-  }
-
-  test("SPARK-34137: Update suquery's stats when build LogicalPlan's stats") {
-    withTable("t1", "t2") {
-      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
-        sql("create table t1 using parquet as select id as a, id as b from range(1000)")
-        sql("create table t2 using parquet as select id as c, id as d from range(2000)")
-
-        sql("ANALYZE TABLE t1 COMPUTE STATISTICS FOR ALL COLUMNS")
-        sql("ANALYZE TABLE t2 COMPUTE STATISTICS FOR ALL COLUMNS")
-
-        val df = sql(
-          """
-            |WITH max_store_sales AS
-            |(
-            |  SELECT max(csales) tpcds_cmax
-            |  FROM (
-            |    SELECT sum(b) csales
-            |    FROM t1 WHERE a < 100
-            |  ) x
-            |),
-            |best_ss_customer AS
-            |(
-            |  SELECT c
-            |  FROM t2
-            |  WHERE d > (SELECT * FROM max_store_sales)
-            |)
-            |SELECT c FROM best_ss_customer
-            |""".stripMargin)
-        df.queryExecution.stringWithStats
-        val subqueryExpression = mutable.ArrayBuffer.empty[SubqueryExpression]
-        df.queryExecution.optimizedPlan.asInstanceOf[Project].child.transformExpressions {
-          case e: SubqueryExpression =>
-            subqueryExpression.append(e)
-            e
-        }
-        subqueryExpression.foreach { expr =>
-          expr.plan.transform {
-            case p =>
-              assert(p.verboseStringWithSuffix(
-                SQLConf.get.maxMetadataStringLength).contains("Statistics(sizeInBytes="))
-              p
-          }
-        }
       }
     }
   }
