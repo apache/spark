@@ -140,7 +140,7 @@ class BasicWriteJobStatsTracker(
   }
 
   override def processCommitDuration(duration: Long): Unit = {
-    metrics(BasicWriteJobStatsTracker.DURATION_FILE_COMMIT).add(duration)
+    metrics(BasicWriteJobStatsTracker.DURATION_FILE_COMMIT).set(duration)
   }
 
   override def processStats(stats: Seq[WriteTaskStats]): Unit = {
@@ -183,7 +183,7 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      DURATION_FILE_COMMIT-> SQLMetrics.createMetric(sparkContext, "duration of commit files")
+      DURATION_FILE_COMMIT-> SQLMetrics.createTimingMetric(sparkContext, "duration of commit files")
     )
   }
 }
