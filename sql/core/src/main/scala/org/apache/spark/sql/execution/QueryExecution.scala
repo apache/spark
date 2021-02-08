@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
@@ -253,6 +254,13 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
+      optimizedPlan.transformExpressions {
+        case subqueryExpression: SubqueryExpression =>
+          // trigger subquery's child plan stats propagation
+          subqueryExpression.plan.stats
+          subqueryExpression
+        case e => e
+      }
       optimizedPlan.stats
     } catch {
       case e: AnalysisException => append(e.toString + "\n")

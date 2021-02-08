@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-
 /**
  * A visitor pattern for traversing a [[LogicalPlan]] tree and computing some properties.
  */
 trait LogicalPlanVisitor[T] {
 
-  def visit(p: LogicalPlan): T = visitSubqueryExpression(p) match {
+  def visit(p: LogicalPlan): T = p match {
     case p: Aggregate => visitAggregate(p)
     case p: Distinct => visitDistinct(p)
     case p: Except => visitExcept(p)
@@ -48,16 +46,6 @@ trait LogicalPlanVisitor[T] {
   }
 
   def default(p: LogicalPlan): T
-
-  def visitSubqueryExpression(p: LogicalPlan): LogicalPlan = {
-    p.transformExpressions {
-      case subqueryExpression: SubqueryExpression =>
-        // trigger subquery's child plan stats propagation
-        subqueryExpression.plan.stats
-        subqueryExpression
-      case e => e
-    }
-  }
 
   def visitAggregate(p: Aggregate): T
 
