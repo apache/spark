@@ -3034,7 +3034,6 @@ class HiveDDLSuite
       }
     }
   }
-  
 
   test("SPARK-34261: Avoid side effect if create exists temporary function") {
     withUserDefinedFunction("f1" -> true) {
