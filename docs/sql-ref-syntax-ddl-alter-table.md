@@ -27,6 +27,10 @@ license: |
 
 `ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database.
 
+If the table is cached, the commands clear cached data of the table and all its dependents that refer to it.
+  * In the case of partition renaming, the cache will be lazily filled when the next time the table or the dependents are accessed.
+  * The table renaming command leaves table dependents as uncached till they are cached again explicitly.
+
 #### Syntax
 
 ```sql
