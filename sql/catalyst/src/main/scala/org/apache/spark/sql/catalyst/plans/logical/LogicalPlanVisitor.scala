@@ -50,7 +50,7 @@ trait LogicalPlanVisitor[T] {
   def default(p: LogicalPlan): T
 
   def visitSubqueryExpression(p: LogicalPlan): LogicalPlan = {
-    p.transformExpressionsDown {
+    p.transformExpressions {
       case subqueryExpression: SubqueryExpression =>
         // trigger subquery's child plan stats propagation
         subqueryExpression.plan.stats
