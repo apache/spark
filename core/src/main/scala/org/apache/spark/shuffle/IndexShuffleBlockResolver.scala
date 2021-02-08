@@ -77,9 +77,7 @@ private[spark] class IndexShuffleBlockResolver(
     val shuffleFiles: Seq[File] = getStoredShuffles().map {
       si => getDataFile(si.shuffleId, si.mapId)
     }
-    shuffleFiles.foldLeft[Long](0: Long) { (acc: Long, f: File) =>
-      acc + f.length()
-    }
+    shuffleFiles.map(_.length()).sum
   }
 
   /**
