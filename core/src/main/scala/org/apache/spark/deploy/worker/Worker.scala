@@ -758,7 +758,7 @@ private[deploy] class Worker(
     master match {
       case Some(masterRef) =>
         try {
-          // SPARK-34245: We use async `send` to send the state previously. In that case, the
+          // SPARK-34245: We used async `send` to send the state previously. In that case, the
           // finished executor can be leaked if Worker fails to send `ExecutorStateChanged`
           // message to Master due to some unexpected errors, e.g., temporary network error.
           // In the worst case, the application can get hang if the leaked executor is the only
