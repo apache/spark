@@ -112,12 +112,12 @@ object SparkHadoopWriterUtils extends Logging {
 
   def commitJob(
       job: JobContext,
-      uuid: String,
+      jobId: String,
       committer: FileCommitProtocol,
       commitMsgs: Seq[TaskCommitMessage]): Long = {
-    logInfo(s"Start to commit write Job ${uuid}.")
+    logInfo(s"Start to commit write Job ${jobId}.")
     val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
-    logInfo(s"Write Job ${uuid} committed. Elapsed time: $duration ms.")
+    logInfo(s"Write Job ${jobId} committed. Elapsed time: $duration ms.")
     duration
   }
 
