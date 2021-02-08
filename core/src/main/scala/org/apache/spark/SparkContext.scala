@@ -729,9 +729,9 @@ class SparkContext(config: SparkConf) extends Logging {
       try {
         value.toBoolean
       } catch {
-        case e: IllegalArgumentException =>
-          throw new SparkException(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} " +
-            s"is invalid: $value. Please use 'true' or 'false'.", e)
+        case _: IllegalArgumentException =>
+          throw new IllegalArgumentException(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} " +
+            s"value is invalid: $value. Please use 'true' or 'false'.")
       }
     }
   }
