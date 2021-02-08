@@ -6,13 +6,6 @@ SHOW TBLPROPERTIES tbl;
 SHOW TBLPROPERTIES tbl("p1");
 SHOW TBLPROPERTIES tbl("p3");
 
-set spark.sql.legacy.keepCommandOutputSchema=true;
-
-SHOW TBLPROPERTIES tbl("p1");
-SHOW TBLPROPERTIES tbl("p3");
-
-set spark.sql.legacy.keepCommandOutputSchema=false;
-
 DROP TABLE tbl;
 
 -- create a view with properties
