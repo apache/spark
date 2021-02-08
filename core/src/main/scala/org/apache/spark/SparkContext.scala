@@ -719,7 +719,20 @@ class SparkContext(config: SparkConf) extends Logging {
     if (value == null) {
       localProperties.get.remove(key)
     } else {
+      checkLocalProperty(key, value)
       localProperties.get.setProperty(key, value)
+    }
+  }
+
+  private def checkLocalProperty(key: String, value: String): Unit = {
+    if (key == SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) {
+      try {
+        value.toBoolean
+      } catch {
+        case e: IllegalArgumentException =>
+          throw new SparkException(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} " +
+            s"is invalid: $value. Please use 'true' or 'false'.", e)
+      }
     }
   }
 

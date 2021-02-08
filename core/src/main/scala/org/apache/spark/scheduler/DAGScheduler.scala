@@ -1532,14 +1532,7 @@ private[spark] class DAGScheduler(
     } else {
       val shouldInterruptThread =
         job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
-      try {
-        shouldInterruptThread.toBoolean
-      } catch {
-        case e: IllegalArgumentException =>
-          logWarning(s"${SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL} in Job ${job.jobId} " +
-            s"is invalid: $shouldInterruptThread. Using 'false' instead", e)
-          false
-      }
+      shouldInterruptThread.toBoolean
     }
   }
 
