@@ -43,7 +43,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   override def beforeEach(): Unit = {
     super.beforeEach()
     tempDir = Utils.createTempDir()
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(

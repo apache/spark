@@ -86,7 +86,7 @@ Input [2]: [d_date_sk#10, d_date#11]
 
 (13) Filter [codegen id : 2]
 Input [2]: [d_date_sk#10, d_date#11]
-Condition : (((isnotnull(d_date#11) AND (d_date#11 >= 10997)) AND (d_date#11 <= 11057)) AND isnotnull(d_date_sk#10))
+Condition : (((isnotnull(d_date#11) AND (d_date#11 >= 2000-02-10)) AND (d_date#11 <= 2000-04-10)) AND isnotnull(d_date_sk#10))
 
 (14) BroadcastExchange
 Input [2]: [d_date_sk#10, d_date#11]
@@ -131,7 +131,7 @@ Input [6]: [inv_warehouse_sk#2, inv_quantity_on_hand#3, i_item_id#7, d_date#11, 
 (23) HashAggregate [codegen id : 4]
 Input [4]: [inv_quantity_on_hand#3, w_warehouse_name#14, i_item_id#7, d_date#11]
 Keys [2]: [w_warehouse_name#14, i_item_id#7]
-Functions [2]: [partial_sum(CASE WHEN (d_date#11 < 11027) THEN inv_quantity_on_hand#3 ELSE 0 END), partial_sum(CASE WHEN (d_date#11 >= 11027) THEN inv_quantity_on_hand#3 ELSE 0 END)]
+Functions [2]: [partial_sum(CASE WHEN (d_date#11 < 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END), partial_sum(CASE WHEN (d_date#11 >= 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)]
 Aggregate Attributes [2]: [sum#16, sum#17]
 Results [4]: [w_warehouse_name#14, i_item_id#7, sum#18, sum#19]
 
@@ -142,9 +142,9 @@ Arguments: hashpartitioning(w_warehouse_name#14, i_item_id#7, 5), ENSURE_REQUIRE
 (25) HashAggregate [codegen id : 5]
 Input [4]: [w_warehouse_name#14, i_item_id#7, sum#18, sum#19]
 Keys [2]: [w_warehouse_name#14, i_item_id#7]
-Functions [2]: [sum(CASE WHEN (d_date#11 < 11027) THEN inv_quantity_on_hand#3 ELSE 0 END), sum(CASE WHEN (d_date#11 >= 11027) THEN inv_quantity_on_hand#3 ELSE 0 END)]
-Aggregate Attributes [2]: [sum(CASE WHEN (d_date#11 < 11027) THEN inv_quantity_on_hand#3 ELSE 0 END)#21, sum(CASE WHEN (d_date#11 >= 11027) THEN inv_quantity_on_hand#3 ELSE 0 END)#22]
-Results [4]: [w_warehouse_name#14, i_item_id#7, sum(CASE WHEN (d_date#11 < 11027) THEN inv_quantity_on_hand#3 ELSE 0 END)#21 AS inv_before#23, sum(CASE WHEN (d_date#11 >= 11027) THEN inv_quantity_on_hand#3 ELSE 0 END)#22 AS inv_after#24]
+Functions [2]: [sum(CASE WHEN (d_date#11 < 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END), sum(CASE WHEN (d_date#11 >= 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)]
+Aggregate Attributes [2]: [sum(CASE WHEN (d_date#11 < 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)#21, sum(CASE WHEN (d_date#11 >= 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)#22]
+Results [4]: [w_warehouse_name#14, i_item_id#7, sum(CASE WHEN (d_date#11 < 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)#21 AS inv_before#23, sum(CASE WHEN (d_date#11 >= 2000-03-11) THEN inv_quantity_on_hand#3 ELSE 0 END)#22 AS inv_after#24]
 
 (26) Filter [codegen id : 5]
 Input [4]: [w_warehouse_name#14, i_item_id#7, inv_before#23, inv_after#24]

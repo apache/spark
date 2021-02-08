@@ -52,6 +52,7 @@ import org.apache.spark.util.SerializableConfiguration
  * @param readDataSchema Required schema of Parquet files.
  * @param partitionSchema Schema of partitions.
  * @param filters Filters to be pushed down in the batch scan.
+ * @param parquetOptions The options of Parquet datasource that are set for the read.
  */
 case class ParquetPartitionReaderFactory(
     sqlConf: SQLConf,
@@ -59,7 +60,8 @@ case class ParquetPartitionReaderFactory(
     dataSchema: StructType,
     readDataSchema: StructType,
     partitionSchema: StructType,
-    filters: Array[Filter]) extends FilePartitionReaderFactory with Logging {
+    filters: Array[Filter],
+    parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   private val resultSchema = StructType(partitionSchema.fields ++ readDataSchema.fields)
   private val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
@@ -74,6 +76,8 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+  private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
+  private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.parquetVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -174,10 +178,10 @@ case class ParquetPartitionReaderFactory(
     }
     val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
       footerFileMetaData.getKeyValueMetaData.get,
-      SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
+      datetimeRebaseModeInRead)
     val int96RebaseMode = DataSourceUtils.int96RebaseMode(
       footerFileMetaData.getKeyValueMetaData.get,
-      SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ))
+      int96RebaseModeInRead)
     val reader = buildReaderFunc(
       split,
       file.partitionValues,
