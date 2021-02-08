@@ -1530,9 +1530,7 @@ private[spark] class DAGScheduler(
     if (job.properties == null) {
       false
     } else {
-      val shouldInterruptThread =
-        job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
-      shouldInterruptThread.toBoolean
+        job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
     }
   }
 
