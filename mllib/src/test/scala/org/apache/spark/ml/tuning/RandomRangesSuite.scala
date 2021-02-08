@@ -33,17 +33,6 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
     }
   }
 
-  test("natural numbers to log range") {
-    checkCornerCase(Limits(Long.MaxValue - 1L, Long.MaxValue))
-    checkCornerCase(Limits(Int.MaxValue - 1L, Int.MaxValue))
-  }
-
-  private def checkCornerCase(extreme: Limits[Long]): Assertion = {
-    val gen = RandomRanges(extreme)
-    val result = gen.randomTLog(10)
-    assert(result >= extreme.x && result <= extreme.y)
-  }
-
   test("random BigInt generation does not go into infinite loop") {
     assert(randomBigInt0To(0) == BigInt(0))
   }
