@@ -912,7 +912,7 @@ case class ShowTablePropertiesCommand(
           val propValue = catalogTable
             .properties
             .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-          if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+          if (output.length == 1) {
             Seq(Row(propValue))
           } else {
             Seq(Row(p, propValue))
