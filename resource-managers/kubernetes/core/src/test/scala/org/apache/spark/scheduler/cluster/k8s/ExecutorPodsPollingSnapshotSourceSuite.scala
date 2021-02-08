@@ -59,7 +59,7 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   private var pollingSourceUnderTest: ExecutorPodsPollingSnapshotSource = _
 
   before {
-    MockitoAnnotations.openMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     pollingExecutor = new DeterministicScheduler()
     pollingSourceUnderTest = new ExecutorPodsPollingSnapshotSource(
       sparkConf,
