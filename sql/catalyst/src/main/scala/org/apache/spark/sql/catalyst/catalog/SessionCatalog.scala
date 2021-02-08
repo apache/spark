@@ -28,7 +28,7 @@ import scala.util.{Failure, Success, Try}
 
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.{Cache, CacheBuilder}
+import com.google.common.cache.Cache
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
