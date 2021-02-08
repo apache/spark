@@ -23,7 +23,6 @@ import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
@@ -710,7 +709,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           |""".stripMargin)
       val optimizedPlan = df.queryExecution.optimizedPlan
       optimizedPlan.stats
-      val subqueryExpression = ArrayBuffer.empty[SubqueryExpression]
+      val subqueryExpression = mutable.ArrayBuffer.empty[SubqueryExpression]
       optimizedPlan.asInstanceOf[Project].child.transformExpressions {
         case e: SubqueryExpression =>
           subqueryExpression.append(e)
