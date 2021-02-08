@@ -25,7 +25,9 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.guava.CaffeinatedGuava
+import com.google.common.cache.CacheLoader
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, InternalCompilerException, SimpleCompiler}
@@ -1489,23 +1491,24 @@ object CodeGenerator extends Logging {
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
    */
-  private val cache = Caffeine.newBuilder()
-    .maximumSize(SQLConf.get.codegenCacheMaxEntries)
-    .build(
+  private val cache = {
+    val builder = Caffeine.newBuilder().maximumSize(SQLConf.get.codegenCacheMaxEntries)
+    CaffeinatedGuava.build(builder,
       new CacheLoader[CodeAndComment, (GeneratedClass, ByteCodeStats)]() {
         override def load(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
-          val startTime = System.nanoTime()
-          val result = doCompile(code)
-          val endTime = System.nanoTime()
-          val duration = endTime - startTime
-          val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
-          CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
-          CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-          logInfo(s"Code generated in $timeMs ms")
-          _compileTime.add(duration)
-          result
-        }
-      })
+        val startTime = System.nanoTime()
+        val result = doCompile(code)
+        val endTime = System.nanoTime()
+        val duration = endTime - startTime
+        val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
+        CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
+        CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
+        logInfo(s"Code generated in $timeMs ms")
+        _compileTime.add(duration)
+        result
+      }
+    })
+  }
 
   /**
    * Name of Java primitive data type

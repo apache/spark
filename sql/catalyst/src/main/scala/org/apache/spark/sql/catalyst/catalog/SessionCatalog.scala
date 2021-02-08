@@ -26,7 +26,9 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-import com.github.benmanes.caffeine.cache.{Cache, Caffeine}
+import com.github.benmanes.caffeine.cache.Caffeine
+import com.github.benmanes.caffeine.guava.CaffeinatedGuava
+import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -147,7 +149,7 @@ class SessionCatalog(
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
     }
 
-    builder.build[QualifiedTableName, LogicalPlan]()
+    CaffeinatedGuava.build(builder)
   }
 
   /** This method provides a way to get a cached plan. */

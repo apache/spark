@@ -18,14 +18,14 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.CompletionException
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
+import com.github.benmanes.caffeine.cache.{CacheLoader, CacheWriter, Caffeine, LoadingCache, RemovalCause, RemovalListener}
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.eclipse.jetty.servlet.FilterHolder
 
@@ -58,14 +58,15 @@ private[history] class ApplicationCache(
 
   }
 
-  private val removalListener = new RemovalListener[CacheKey, CacheEntry] {
+  private val cacheWriter = new CacheWriter[CacheKey, CacheEntry] {
+    override def write(key: CacheKey, value: CacheEntry): Unit = {}
 
     /**
      * Removal event notifies the provider to detach the UI.
      * @param key removal key
      * @param value removal value
      */
-    override def onRemoval(key: CacheKey, value: CacheEntry,
+    override def delete(key: CacheKey, value: CacheEntry,
         cause: RemovalCause): Unit = {
       metrics.evictionCount.inc()
       logDebug(s"Evicting entry $key")
@@ -76,7 +77,7 @@ private[history] class ApplicationCache(
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
     Caffeine.newBuilder()
         .maximumSize(retainedApplications)
-        .removalListener(removalListener)
+        .writer(cacheWriter)
         .build(appLoader)
   }
 
@@ -87,9 +88,9 @@ private[history] class ApplicationCache(
 
   def get(appId: String, attemptId: Option[String] = None): CacheEntry = {
     try {
-      appCache.get(CacheKey(appId, attemptId))
+      appCache.get(new CacheKey(appId, attemptId))
     } catch {
-      case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
+      case e @ (_: CompletionException | _: UncheckedExecutionException) =>
         throw Option(e.getCause()).getOrElse(e)
     }
   }
