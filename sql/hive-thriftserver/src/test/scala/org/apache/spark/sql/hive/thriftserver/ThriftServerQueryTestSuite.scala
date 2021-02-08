@@ -61,7 +61,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
   }
 
   /** List of test cases to ignore, in lower cases. */
-  override val ignoreList: Set[String] = super.ignoreList ++ Set(
+  override def ignoreList: Set[String] = super.ignoreList ++ Set(
     // Missing UDF
     "postgreSQL/boolean.sql",
     "postgreSQL/case.sql",
