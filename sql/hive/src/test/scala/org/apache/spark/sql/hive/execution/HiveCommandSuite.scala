@@ -152,6 +152,16 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("`prop2Key`", "prop2Val"))
   }
 
+  test("SPARK-34240 Unify output of SHOW TBLPROPERTIES and pass output attributes properly") {
+    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2").filter("key != 'transient_lastDdlTime'"),
+        Row("prop1Key", "prop1Val") :: Row("`prop2Key`", "prop2Val") :: Nil)
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Val"))
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"),
+        Row("prop2Val"))
+    }
+  }
+
   Seq(true, false).foreach { local =>
     val loadQuery = if (local) "LOAD DATA LOCAL" else "LOAD DATA"
     test(loadQuery) {
