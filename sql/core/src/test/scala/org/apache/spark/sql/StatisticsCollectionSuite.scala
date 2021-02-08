@@ -707,10 +707,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           |)
           |SELECT c FROM best_ss_customer
           |""".stripMargin)
-      val optimizedPlan = df.queryExecution.optimizedPlan
-      optimizedPlan.stats
+      df.queryExecution.stringWithStats
       val subqueryExpression = mutable.ArrayBuffer.empty[SubqueryExpression]
-      optimizedPlan.asInstanceOf[Project].child.transformExpressions {
+      df.queryExecution.optimizedPlan.asInstanceOf[Project].child.transformExpressions {
         case e: SubqueryExpression =>
           subqueryExpression.append(e)
           e
