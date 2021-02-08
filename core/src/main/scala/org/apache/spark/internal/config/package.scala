@@ -1950,8 +1950,8 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
-  private[spark] val EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL =
-    ConfigBuilder("spark.executor.decommission.cleanupInterval")
+  private[spark] val EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT =
+    ConfigBuilder("spark.executor.decommission.forceKillTimeout")
       .doc("Duration after which a Spark will force a decommissioning executor to exit." +
         " this should be set to a high value in most situations as low values will prevent " +
         " block migrations from having enough time to complete.")

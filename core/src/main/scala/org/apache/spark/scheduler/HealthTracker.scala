@@ -65,7 +65,8 @@ private[scheduler] class HealthTracker (
   val EXCLUDE_ON_FAILURE_TIMEOUT_MILLIS = HealthTracker.getExludeOnFailureTimeout(conf)
   private val EXCLUDE_FETCH_FAILURE_ENABLED =
     conf.get(config.EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED)
-  private val decommission = conf.get(config.EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED)
+  private val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
+    conf.get(config.EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED)
 
   /**
    * A map from executorId to information on task failures. Tracks the time of each task failure,
@@ -156,11 +157,16 @@ private[scheduler] class HealthTracker (
   }
 
   private def killExecutor(exec: String, msg: String): Unit = {
+    val fullMsg = if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
+      s"${msg} (actually decommissioning)"
+    } else {
+      msg
+    }
     allocationClient match {
       case Some(a) =>
-        logInfo(msg)
-        if (decommission) {
-          a.decommissionExecutor(exec, ExecutorDecommissionInfo(msg),
+        logInfo(fullMsg)
+        if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
+          a.decommissionExecutor(exec, ExecutorDecommissionInfo(fullMsg),
             adjustTargetNumExecutors = false)
         } else {
           a.killExecutors(Seq(exec), adjustTargetNumExecutors = false, countFailures = false,
@@ -189,13 +195,15 @@ private[scheduler] class HealthTracker (
     if (conf.get(config.EXCLUDE_ON_FAILURE_KILL_ENABLED)) {
       allocationClient match {
         case Some(a) =>
-          logInfo(s"Killing all executors on excluded host $node " +
-            s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
-          if (decommission) {
+          if (EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED) {
+            logInfo(s"Decommissioning all executors on excluded host $node " +
+              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
             if (!a.decommissionExecutorsOnHost(node)) {
               logError(s"Decommissioning executors on $node failed.")
             }
           } else {
+            logInfo(s"Killing all executors on excluded host $node " +
+              s"since ${config.EXCLUDE_ON_FAILURE_KILL_ENABLED.key} is set.")
             if (!a.killExecutorsOnHost(node)) {
               logError(s"Killing executors on node $node failed.")
             }

@@ -116,7 +116,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
 
   private val cleanupService: Option[ScheduledExecutorService] =
-    conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map { _ =>
+    conf.get(EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT).map { _ =>
       ThreadUtils.newDaemonSingleThreadScheduledExecutor("cleanup-decommission-execs")
     }
 
@@ -520,7 +520,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    conf.get(EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL).map { cleanupInterval =>
+    conf.get(EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT).map { cleanupInterval =>
       val cleanupTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
           val stragglers = CoarseGrainedSchedulerBackend.this.synchronized {

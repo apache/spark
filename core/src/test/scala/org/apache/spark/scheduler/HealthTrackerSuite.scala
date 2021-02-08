@@ -594,8 +594,7 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
       "Killing excluded executor id 2 since spark.excludeOnFailure.killExcludedExecutors is set."
     verify(allocationClientMock).decommissionExecutor(
       "2", ExecutorDecommissionInfo(msg2), false, false)
-    verify(allocationClientMock).decommissionExecutorsOnHost(
-      "hostA")
+    verify(allocationClientMock).decommissionExecutorsOnHost("hostA")
   }
 
   test("fetch failure excluding kills executors, configured by EXCLUDE_ON_FAILURE_KILL_ENABLED") {
