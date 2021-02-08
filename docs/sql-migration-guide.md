@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 3.1 to 3.2
 
-  - Since Spark 3.2, all the supported JDBC dialects use StringType for ROWID. Previously, Oracle dialect uses StringType and the other dialects use LongType for ROWID.
+  - Since Spark 3.2, all the supported JDBC dialects use StringType for ROWID. Previously, Oracle dialect uses StringType and the other dialects use LongType.
 
   - In Spark 3.2, `spark.sql.adaptive.enabled` is enabled by default. To restore the behavior before Spark 3.2, you can set `spark.sql.adaptive.enabled` to `false`.
 
