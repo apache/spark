@@ -102,7 +102,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     }
   }
 
-  test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
+  test("SPARK-34157: Unify output of SHOW TABLES and pass output attributes properly") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
       sql(s"USE $catalog.ns")
