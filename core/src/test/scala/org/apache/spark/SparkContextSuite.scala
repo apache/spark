@@ -1155,11 +1155,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     val testKey = "hadoop.tmp.dir"
     val bufferKey = "io.file.buffer.size"
     val hadoopConf0 = new Configuration()
+    hadoopConf0.set(testKey, "/tmp/hive_zero")
 
     val hiveConfFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     assert(hiveConfFile != null)
     hadoopConf0.addResource(hiveConfFile)
-    assert(hadoopConf0.get(testKey) === "/tmp/hive_one")
+    assert(hadoopConf0.get(testKey) === "/tmp/hive_zero")
     assert(hadoopConf0.get(bufferKey) === "201811")
 
     val sparkConf = new SparkConf()
