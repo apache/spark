@@ -46,7 +46,6 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorMetricsUp
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{ThreadUtils, Utils}
 
-
 class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
   test("Only one SparkContext may be active at a time") {
@@ -1150,6 +1149,40 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-34346: hadoop configuration priority for spark/hive/hadoop configs") {
+    val testKey = "hadoop.tmp.dir"
+    val bufferKey = "io.file.buffer.size"
+    val hadoopConf0 = new Configuration()
+    hadoopConf0.set(testKey, "/tmp/hive_zero")
+
+    val hiveConfFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    assert(hiveConfFile != null)
+    hadoopConf0.addResource(hiveConfFile)
+    assert(hadoopConf0.get(testKey) === "/tmp/hive_zero")
+    assert(hadoopConf0.get(bufferKey) === "201811")
+
+    val sparkConf = new SparkConf()
+      .setAppName("test")
+      .setMaster("local")
+      .set(BUFFER_SIZE, 65536)
+    sc = new SparkContext(sparkConf)
+    assert(sc.hadoopConfiguration.get(testKey) === "/tmp/hive_one",
+      "hive configs have higher priority than hadoop ones ")
+    assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
+      "spark configs have higher priority than hive ones")
+
+    resetSparkContext()
+
+    sparkConf
+      .set("spark.hadoop.hadoop.tmp.dir", "/tmp/hive_two")
+      .set(s"spark.hadoop.$bufferKey", "20181117")
+    sc = new SparkContext(sparkConf)
+    assert(sc.hadoopConfiguration.get(testKey) === "/tmp/hive_two",
+      "spark.hadoop configs have higher priority than hive/hadoop ones")
+    assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
+      "spark configs have higher priority than spark.hadoop configs")
   }
 }
 

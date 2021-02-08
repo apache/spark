@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.ViewType
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
@@ -268,29 +267,6 @@ case class AlterTableRenameColumnStatement(
 case class AlterTableDropColumnsStatement(
     tableName: Seq[String],
     columnsToDrop: Seq[Seq[String]]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... SET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterTableSetPropertiesStatement(
-    tableName: Seq[String],
-    properties: Map[String, String]) extends ParsedStatement
-
-/**
- * ALTER TABLE ... UNSET TBLPROPERTIES command, as parsed from SQL.
- */
-case class AlterTableUnsetPropertiesStatement(
-    tableName: Seq[String],
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends ParsedStatement
-
-/**
- * ALTER TABLE ... SET LOCATION command, as parsed from SQL.
- */
-case class AlterTableSetLocationStatement(
-    tableName: Seq[String],
-    partitionSpec: Option[TablePartitionSpec],
-    location: String) extends ParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.

@@ -210,6 +210,7 @@ private[sql] object AvroUtils extends Logging {
    *
    * @param avroSchema The schema in which to search for the field. Must be of type RECORD.
    * @param name The name of the field to search for.
+   * @param avroPath The seq of parent field names leading to `avroSchema`.
    * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
    * @throws IncompatibleSchemaException if `avroSchema` is not a RECORD or contains multiple
    *                                     fields matching `name` (i.e., case-insensitive matching
@@ -218,7 +219,8 @@ private[sql] object AvroUtils extends Logging {
    */
   private[avro] def getAvroFieldByName(
       avroSchema: Schema,
-      name: String): Option[Schema.Field] = {
+      name: String,
+      avroPath: Seq[String]): Option[Schema.Field] = {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
@@ -226,10 +228,20 @@ private[sql] object AvroUtils extends Logging {
     avroSchema.getFields.asScala.filter(f => SQLConf.get.resolver(f.name(), name)).toSeq match {
       case Seq(avroField) => Some(avroField)
       case Seq() => None
-      case matches => throw new IncompatibleSchemaException(
-        s"Searching for '$name' in Avro schema gave ${matches.size} matches. Candidates: " +
-            matches.map(_.name()).mkString("[", ", ", "]")
+      case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
+          s"schema at ${toFieldStr(avroPath)} gave ${matches.size} matches. Candidates: " +
+          matches.map(_.name()).mkString("[", ", ", "]")
       )
     }
+  }
+
+  /**
+   * Convert a sequence of hierarchical field names (like `Seq(foo, bar)`) into a human-readable
+   * string representing the field, like "field 'foo.bar'". If `names` is empty, the string
+   * "top-level record" is returned.
+   */
+  private[avro] def toFieldStr(names: Seq[String]): String = names match {
+    case Seq() => "top-level record"
+    case n => s"field '${n.mkString(".")}'"
   }
 }

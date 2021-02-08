@@ -340,6 +340,7 @@ Functions
     avg
     base64
     bin
+    bitwise_not
     bitwiseNOT
     broadcast
     bround
@@ -358,6 +359,7 @@ Functions
     cos
     cosh
     count
+    count_distinct
     countDistinct
     covar_pop
     covar_samp
@@ -482,9 +484,9 @@ Functions
     sequence
     sha1
     sha2
-    shiftLeft
-    shiftRight
-    shiftRightUnsigned
+    shiftleft
+    shiftright
+    shiftrightunsigned
     shuffle
     signum
     sin
@@ -504,6 +506,7 @@ Functions
     substring
     substring_index
     sum
+    sum_distinct
     sumDistinct
     tan
     tanh
