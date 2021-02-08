@@ -176,7 +176,7 @@ case class ShuffleQueryStageExec(
     val reuse = ShuffleQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, shuffle),
-      shuffle.canonicalized)
+      _canonicalized)
     reuse._resultOption = this._resultOption
     reuse
   }
@@ -246,7 +246,7 @@ case class BroadcastQueryStageExec(
     val reuse = BroadcastQueryStageExec(
       newStageId,
       ReusedExchangeExec(newOutput, broadcast),
-      broadcast.canonicalized)
+      _canonicalized)
     reuse._resultOption = this._resultOption
     reuse
   }
