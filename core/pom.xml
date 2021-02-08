@@ -52,7 +52,7 @@
       <artifactId>caffeine</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.github.ben-manes.caffeine </groupId>
+      <groupId>com.github.ben-manes.caffeine</groupId>
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
