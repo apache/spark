@@ -33,6 +33,17 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
     }
   }
 
+  test("natural numbers to log range") {
+    checkCornerCase(Limits(Long.MaxValue - 1L, Long.MaxValue))
+    checkCornerCase(Limits(Int.MaxValue - 1L, Int.MaxValue))
+  }
+
+  private def checkCornerCase(extreme: Limits[Long]): Assertion = {
+    val gen = RandomRanges(extreme)
+    val result = gen.randomTLog(10)
+    assert(result >= extreme.x && result <= extreme.y)
+  }
+
   test("random BigInt generation does not go into infinite loop") {
     assert(randomBigInt0To(0) == BigInt(0))
   }
@@ -87,27 +98,29 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
 
   abstract class RandomFn[T: Numeric: Generator] {
     def apply(genRandom: RandomT[T]): T = genRandom.randomT()
-    def appropriate(t: T): Boolean
+    def appropriate(x: T, y: T): Boolean
   }
   def Linear[T: Numeric: Generator]: RandomFn[T] = new RandomFn {
     override def apply(genRandom: RandomT[T]): T = genRandom.randomT()
-    override def appropriate(t: T): Boolean = true
+    override def appropriate(x: T, y: T): Boolean = true
   }
   def Log10[T: Numeric: Generator]: RandomFn[T] = new RandomFn {
     override def apply(genRandom: RandomT[T]): T = genRandom.randomTLog(10)
     val ops: Numeric[T] = implicitly[Numeric[T]]
-    override def appropriate(t: T): Boolean = ops.gt(t, ops.zero)
+    override def appropriate(x: T, y: T): Boolean = {
+      ops.gt(x, ops.zero) && ops.gt(y, ops.zero) && x != y
+    }
   }
 
   def checkRange[T: Numeric: Generator: Choose: TypeTag: Arbitrary](rand: RandomFn[T]): Assertion = {
     forAll { (x: T, y: T) =>
-      if (rand.appropriate(x) && rand.appropriate(y)) {
+      if (rand.appropriate(x, y)) {
         val ops: Numeric[T]     = implicitly[Numeric[T]]
         val limit:  Limits[T]   = Limits(x, y)
         val gen:    RandomT[T]  = RandomRanges(limit)
         val result: T           = rand(gen)
         val ordered             = lowerUpper(x, y)
-        println(s"result = $result [${result.getClass}], ordered._1 = ${ordered._1} [${ordered._1.getClass}], , ordered._1 = ${ordered._2} [${ordered._2.getClass}]")
+        println(s"result = $result, ordered = $ordered, x = $x, y = $y, ${x == y}")
         assert(ops.gteq(result, ordered._1) && ops.lteq(result, ordered._2))
       } else Succeeded
     }
