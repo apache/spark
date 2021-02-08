@@ -22,13 +22,13 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.{Path, RawLocalFileSystem}
-import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, AclStatus, FsAction, FsPermission}
+import org.apache.hadoop.fs.permission.{AclEntry, AclStatus}
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, NoSuchPartitionException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -1663,159 +1663,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("truncate table - datasource table") {
-    import testImplicits._
-
-    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
-    // Test both a Hive compatible and incompatible code path.
-    Seq("json", "parquet").foreach { format =>
-      withTable("rectangles") {
-        data.write.format(format).saveAsTable("rectangles")
-        assert(spark.table("rectangles").collect().nonEmpty,
-          "bad test; table was empty to begin with")
-
-        sql("TRUNCATE TABLE rectangles")
-        assert(spark.table("rectangles").collect().isEmpty)
-
-        // not supported since the table is not partitioned
-        assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
-      }
-    }
-  }
-
-  test("truncate partitioned table - datasource table") {
-    import testImplicits._
-
-    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // supported since partitions are stored in the metastore
-      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
-      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
-    }
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // support partial partition spec
-      sql("TRUNCATE TABLE partTable PARTITION (width=1)")
-      assert(spark.table("partTable").collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
-    }
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // do nothing if no partition is matched for the given partial partition spec
-      sql("TRUNCATE TABLE partTable PARTITION (width=100)")
-      assert(spark.table("partTable").count() == data.count())
-
-      // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
-        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
-      }
-
-      // throw exception if the column in partition spec is not a partition column.
-      val e = intercept[AnalysisException] {
-        sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
-      }
-      assert(e.message.contains("unknown is not a valid partition column"))
-    }
-  }
-
-  test("SPARK-30312: truncate table - keep acl/permission") {
-    val ignorePermissionAcl = Seq(true, false)
-
-    ignorePermissionAcl.foreach { ignore =>
-      withSQLConf(
-        "fs.file.impl" -> classOf[FakeLocalFsFileSystem].getName,
-        "fs.file.impl.disable.cache" -> "true",
-        SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> ignore.toString) {
-        withTable("tab1") {
-          sql("CREATE TABLE tab1 (col INT) USING parquet")
-          sql("INSERT INTO tab1 SELECT 1")
-          checkAnswer(spark.table("tab1"), Row(1))
-
-          val tablePath = new Path(spark.sessionState.catalog
-            .getTableMetadata(TableIdentifier("tab1")).storage.locationUri.get)
-
-          val hadoopConf = spark.sessionState.newHadoopConf()
-          val fs = tablePath.getFileSystem(hadoopConf)
-          val fileStatus = fs.getFileStatus(tablePath);
-
-          fs.setPermission(tablePath, new FsPermission("777"))
-          assert(fileStatus.getPermission().toString() == "rwxrwxrwx")
-
-          // Set ACL to table path.
-          val customAcl = new java.util.ArrayList[AclEntry]()
-          customAcl.add(new AclEntry.Builder()
-            .setName("test")
-            .setType(AclEntryType.USER)
-            .setScope(AclEntryScope.ACCESS)
-            .setPermission(FsAction.READ).build())
-          fs.setAcl(tablePath, customAcl)
-          assert(fs.getAclStatus(tablePath).getEntries().get(0) == customAcl.get(0))
-
-          sql("TRUNCATE TABLE tab1")
-          assert(spark.table("tab1").collect().isEmpty)
-
-          val fileStatus2 = fs.getFileStatus(tablePath)
-          if (ignore) {
-            assert(fileStatus2.getPermission().toString() != "rwxrwxrwx")
-          } else {
-            assert(fileStatus2.getPermission().toString() == "rwxrwxrwx")
-          }
-          val aclEntries = fs.getAclStatus(tablePath).getEntries()
-          if (ignore) {
-            assert(aclEntries.size() == 0)
-          } else {
-            assert(aclEntries.size() == 4)
-            assert(aclEntries.get(0) == customAcl.get(0))
-
-            // Setting ACLs will also set user/group/other permissions
-            // as ACL entries.
-            val user = new AclEntry.Builder()
-              .setType(AclEntryType.USER)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL).build()
-            val group = new AclEntry.Builder()
-              .setType(AclEntryType.GROUP)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL).build()
-            val other = new AclEntry.Builder()
-              .setType(AclEntryType.OTHER)
-              .setScope(AclEntryScope.ACCESS)
-              .setPermission(FsAction.ALL).build()
-            assert(aclEntries.get(1) == user)
-            assert(aclEntries.get(2) == group)
-            assert(aclEntries.get(3) == other)
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-31163: acl/permission should handle non-existed path when truncating table") {
-    withSQLConf(SQLConf.TRUNCATE_TABLE_IGNORE_PERMISSION_ACL.key -> "false") {
-      withTable("tab1") {
-        sql("CREATE TABLE tab1 (col1 STRING, col2 INT) USING parquet PARTITIONED BY (col2)")
-        sql("INSERT INTO tab1 SELECT 'one', 1")
-        checkAnswer(spark.table("tab1"), Row("one", 1))
-        val part = spark.sessionState.catalog.listPartitions(TableIdentifier("tab1")).head
-        val path = new File(part.location.getPath)
-        sql("TRUNCATE TABLE tab1")
-        // simulate incomplete/unsuccessful truncate
-        assert(path.exists())
-        path.delete()
-        assert(!path.exists())
-        // execute without java.io.FileNotFoundException
-        sql("TRUNCATE TABLE tab1")
-        // partition path should be re-created
-        assert(path.exists())
-      }
-    }
-  }
-
   test("create temporary view with mismatched schema") {
     withTable("tab1") {
       spark.range(10).write.saveAsTable("tab1")
@@ -1856,35 +1703,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW t_temp (c3 int, c4 string) USING JSON")
       }.getMessage
       assert(e.contains("Temporary view 't_temp' already exists"))
-    }
-  }
-
-  test("truncate table - external table, temporary table, view (not allowed)") {
-    import testImplicits._
-    withTempPath { tempDir =>
-      withTable("my_ext_tab") {
-        (("a", "b") :: Nil).toDF().write.parquet(tempDir.getCanonicalPath)
-        (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
-        sql(s"CREATE TABLE my_ext_tab using parquet LOCATION '${tempDir.toURI}'")
-        sql(s"CREATE VIEW my_view AS SELECT 1")
-        val e1 = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE my_temp_tab")
-        }.getMessage
-        assert(e1.contains("my_temp_tab is a temp view. 'TRUNCATE TABLE' expects a table"))
-        assertUnsupported("TRUNCATE TABLE my_ext_tab")
-        val e2 = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE my_view")
-        }.getMessage
-        assert(e2.contains("default.my_view is a view. 'TRUNCATE TABLE' expects a table"))
-      }
-    }
-  }
-
-  test("truncate table - non-partitioned table (not allowed)") {
-    withTable("my_tab") {
-      sql("CREATE TABLE my_tab (age INT, name STRING) using parquet")
-      sql("INSERT INTO my_tab values (10, 'a')")
-      assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
     }
   }
 

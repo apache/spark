@@ -148,7 +148,7 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView(v2) {
+      withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         val part3Loc = copyPartition(t, "part=0", "part=3")
