@@ -55,7 +55,7 @@ import org.apache.spark.sql.types._
  *     the following operators. The data type of the operator is the tightest common precedent
  *     data type.
  *       * In
- *       * Except(odd)
+ *       * Except
  *       * Intersect
  *       * Greatest
  *       * Least

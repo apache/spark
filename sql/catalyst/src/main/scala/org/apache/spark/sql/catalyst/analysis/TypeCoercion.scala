@@ -107,19 +107,6 @@ abstract class TypeCoercionBase {
     case _ => None
   }
 
-  /**
-   * The method finds a common type for data types that differ only in nullable flags, including
-   * `nullable`, `containsNull` of [[ArrayType]] and `valueContainsNull` of [[MapType]].
-   * If the input types are different besides nullable flags, None is returned.
-   */
-  def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
-    if (t1 == t2) {
-      Some(t1)
-    } else {
-      findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)
-    }
-  }
-
   def findCommonTypeDifferentOnlyInNullFlags(types: Seq[DataType]): Option[DataType] = {
     if (types.isEmpty) {
       None
@@ -170,17 +157,6 @@ abstract class TypeCoercionBase {
     })
   }
 
-
-  /**
-   * Whether the data type contains StringType.
-   */
-  def hasStringType(dt: DataType): Boolean = dt match {
-    case StringType => true
-    case ArrayType(et, _) => hasStringType(et)
-    // Add StructType if we support string promotion for struct fields in the future.
-    case _ => false
-  }
-
   /**
    * Check whether the given types are equal ignoring nullable, containsNull and valueContainsNull.
    */
@@ -202,30 +178,32 @@ abstract class TypeCoercionBase {
   }
 
   /**
-   * Widens numeric types and converts strings to numbers when appropriate.
+   * Widens the data types of the children of Union/Except/Intersect.
+   * 1. When ANSI mode is off:
+   *   Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
    *
-   * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
+   *   The implicit conversion rules can be summarized as follows:
+   *     - Any integral numeric type can be implicitly converted to a wider type.
+   *     - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be
+   *       implicitly converted to DOUBLE.
+   *     - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
+   *     - BOOLEAN types cannot be converted to any other type.
+   *     - Any integral numeric type can be implicitly converted to decimal type.
+   *     - two different decimal types will be converted into a wider decimal type for both of them.
+   *     - decimal type will be converted into double if there float or double together with it.
    *
-   * The implicit conversion rules can be summarized as follows:
-   *   - Any integral numeric type can be implicitly converted to a wider type.
-   *   - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be implicitly
-   *     converted to DOUBLE.
-   *   - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
-   *   - BOOLEAN types cannot be converted to any other type.
-   *   - Any integral numeric type can be implicitly converted to decimal type.
-   *   - two different decimal types will be converted into a wider decimal type for both of them.
-   *   - decimal type will be converted into double if there float or double together with it.
+   *   All types when UNION-ed with strings will be promoted to
+   *   strings. Other string conversions are handled by PromoteStrings.
    *
-   * Additionally when ANSI mode is off, all types when UNION-ed with strings will be promoted to
-   * strings. Other string conversions are handled by PromoteStrings.
+   *   Widening types might result in loss of precision in the following cases:
+   *   - IntegerType to FloatType
+   *   - LongType to FloatType
+   *   - LongType to DoubleType
+   *   - DecimalType to Double
    *
-   * Widening types might result in loss of precision in the following cases:
-   * - IntegerType to FloatType
-   * - LongType to FloatType
-   * - LongType to DoubleType
-   * - DecimalType to Double
-   *
-   * This rule is only applied to Union/Except/Intersect
+   * 2. When ANSI mode is on:
+   *   The implicit conversion is determined by the closest common data type from the precedent
+   *   lists from left and right child. See the comments of Object `AnsiTypeCoercion` for details.
    */
   object WidenSetOperationTypes extends TypeCoercionRule {
 
@@ -1042,6 +1020,29 @@ object TypeCoercion extends TypeCoercionBase {
       case _ => null
     }
     Option(ret)
+  }
+
+  /**
+   * The method finds a common type for data types that differ only in nullable flags, including
+   * `nullable`, `containsNull` of [[ArrayType]] and `valueContainsNull` of [[MapType]].
+   * If the input types are different besides nullable flags, None is returned.
+   */
+  def findCommonTypeDifferentOnlyInNullFlags(t1: DataType, t2: DataType): Option[DataType] = {
+    if (t1 == t2) {
+      Some(t1)
+    } else {
+      findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)
+    }
+  }
+
+  /**
+   * Whether the data type contains StringType.
+   */
+  def hasStringType(dt: DataType): Boolean = dt match {
+    case StringType => true
+    case ArrayType(et, _) => hasStringType(et)
+    // Add StructType if we support string promotion for struct fields in the future.
+    case _ => false
   }
 
   /**
