@@ -17,12 +17,12 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.mapreduce.Job
-
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.{WriteJobDescription, WriteTaskResult}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
+import org.apache.spark.util.Utils
 
 class FileBatchWrite(
     job: Job,
@@ -31,7 +31,9 @@ class FileBatchWrite(
   extends BatchWrite with Logging {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     val results = messages.map(_.asInstanceOf[WriteTaskResult])
-    SparkHadoopWriterUtils.commitJob(job, description.uuid, committer, results.map(_.commitMsg))
+    logInfo(s"Start to commit write Job ${description.uuid}.")
+    val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, results.map(_.commitMsg)) }
+    logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
     processStats(description.statsTrackers, results.map(_.summary.stats))
     logInfo(s"Finished processing stats for write job ${description.uuid}.")
