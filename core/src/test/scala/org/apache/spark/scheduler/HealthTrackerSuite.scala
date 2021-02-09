@@ -575,7 +575,8 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude2.execToFailures)
 
     val msg1 =
-      "Killing excluded executor id 1 since spark.excludeOnFailure.killExcludedExecutors is set."
+      "Killing excluded executor id 1 since spark.excludeOnFailure.killExcludedExecutors is set." +
+      " (actually decommissioning)"
 
     verify(allocationClientMock).decommissionExecutor(
       "1", ExecutorDecommissionInfo(msg1), false)
@@ -591,7 +592,8 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
     healthTracker.updateExcludedForSuccessfulTaskSet(0, 0, taskSetExclude3.execToFailures)
 
     val msg2 =
-      "Killing excluded executor id 2 since spark.excludeOnFailure.killExcludedExecutors is set."
+      "Killing excluded executor id 2 since spark.excludeOnFailure.killExcludedExecutors is set." +
+      " (actually decommissioning)"
     verify(allocationClientMock).decommissionExecutor(
       "2", ExecutorDecommissionInfo(msg2), false, false)
     verify(allocationClientMock).decommissionExecutorsOnHost("hostA")
