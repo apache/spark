@@ -48,7 +48,7 @@ class OptimizerSuite extends PlanTest {
             DecrementLiterals) :: Nil
       }
 
-      val message1 = intercept[AnalysisException] {
+      val message1 = intercept[RuntimeException] {
         optimizer.execute(analyzed)
       }.getMessage
       assert(message1.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
@@ -64,7 +64,7 @@ class OptimizerSuite extends PlanTest {
         }
       }
 
-      val message2 = intercept[AnalysisException] {
+      val message2 = intercept[RuntimeException] {
         optimizer.execute(analyzed)
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterationsNotEnough) reached for batch " +
