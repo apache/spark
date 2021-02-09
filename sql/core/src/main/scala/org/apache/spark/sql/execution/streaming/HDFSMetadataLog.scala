@@ -250,10 +250,8 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
       // avoid using list if we only need to purge at most 3 elements
       possibleTargetBatchIds.foreach { batchId =>
         val path = batchIdToPath(batchId)
-        if (fileManager.exists(path)) {
-          fileManager.delete(path)
-          logTrace(s"Removed metadata log file: $path")
-        }
+        fileManager.delete(path)
+        logTrace(s"Removed metadata log file: $path")
       }
     } else {
       // using list to retrieve all elements
