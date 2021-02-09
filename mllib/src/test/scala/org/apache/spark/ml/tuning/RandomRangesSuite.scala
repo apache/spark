@@ -20,10 +20,10 @@ package org.apache.spark.ml.tuning
 import scala.reflect.runtime.universe.TypeTag
 
 import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen.Choose
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.matchers.must.Matchers
+import org.scalacheck.Gen.Choose
 import org.scalatest.{Assertion, Succeeded}
+import org.scalatest.matchers.must.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.SparkFunSuite
