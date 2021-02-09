@@ -129,6 +129,8 @@ object RandomRanges {
  * observations lies within the top 5% of the true maximum, with 95% probability"
  * - Evaluating Machine Learning Models by Alice Zheng
  * https://www.oreilly.com/library/view/evaluating-machine-learning/9781492048756/ch04.html
+ *
+ * Note: if you want more sophisticated hyperparameter tuning, consider Python libraries such as Hyperopt.
  */
 class ParamRandomBuilder extends ParamGridBuilder {
 
