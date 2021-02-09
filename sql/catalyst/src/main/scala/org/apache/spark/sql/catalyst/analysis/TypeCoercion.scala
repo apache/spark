@@ -107,17 +107,6 @@ abstract class TypeCoercionBase {
     case _ => None
   }
 
-  def findCommonTypeDifferentOnlyInNullFlags(types: Seq[DataType]): Option[DataType] = {
-    if (types.isEmpty) {
-      None
-    } else {
-      types.tail.foldLeft[Option[DataType]](Some(types.head)) {
-        case (Some(t1), t2) => findCommonTypeDifferentOnlyInNullFlags(t1, t2)
-        case _ => None
-      }
-    }
-  }
-
   /**
    * Finds a wider type when one or both types are decimals. If the wider decimal type exceeds
    * system limitation, this rule will truncate the decimal type. If a decimal and other fractional
@@ -1032,6 +1021,17 @@ object TypeCoercion extends TypeCoercionBase {
       Some(t1)
     } else {
       findTypeForComplex(t1, t2, findCommonTypeDifferentOnlyInNullFlags)
+    }
+  }
+
+  def findCommonTypeDifferentOnlyInNullFlags(types: Seq[DataType]): Option[DataType] = {
+    if (types.isEmpty) {
+      None
+    } else {
+      types.tail.foldLeft[Option[DataType]](Some(types.head)) {
+        case (Some(t1), t2) => findCommonTypeDifferentOnlyInNullFlags(t1, t2)
+        case _ => None
+      }
     }
   }
 
