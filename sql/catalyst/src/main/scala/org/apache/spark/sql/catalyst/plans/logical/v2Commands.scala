@@ -743,12 +743,13 @@ case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends
  */
 case class ShowColumns(
     child: LogicalPlan,
-    namespace: Option[Seq[String]]) extends Command {
+    namespace: Option[Seq[String]],
+    override val output: Seq[Attribute] = ShowColumns.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
 
-  override val output: Seq[Attribute] = {
-    AttributeReference("col_name", StringType, nullable = false)() :: Nil
-  }
+object ShowColumns {
+  val OUTPUT: Seq[Attribute] = Seq(AttributeReference("col_name", StringType, nullable = false)())
 }
 
 /**
