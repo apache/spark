@@ -667,7 +667,8 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
-    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None):
+    def parquet(self, path, mergeSchema=None, pathGlobFilter=None, recursiveFileLookup=None,
+                datetimeRebaseMode=None, int96RebaseMode=None):
         """
         Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
 
@@ -688,6 +689,30 @@ class DataStreamReader(OptionUtils):
             recursively scan a directory for files. Using this option
             disables
             `partition discovery <https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#partition-discovery>`_.  # noqa
+        datetimeRebaseMode : str, optional
+            the rebasing mode for the values of the ``DATE``, ``TIMESTAMP_MICROS``,
+            ``TIMESTAMP_MILLIS`` logical types from the Julian to Proleptic Gregorian calendar.
+
+                * ``EXCEPTION``: Spark fails in reads of ancient dates/timestamps
+                                 that are ambiguous between the two calendars.
+                *  ``CORRECTED``: loading of dates/timestamps without rebasing.
+                *  ``LEGACY``: perform rebasing of ancient dates/timestamps from the Julian
+                               to Proleptic Gregorian calendar.
+
+            If None is set, the value of the SQL config
+            ``spark.sql.legacy.parquet.datetimeRebaseModeInRead`` is used by default.
+        int96RebaseMode : str, optional
+            the rebasing mode for ``INT96`` timestamps from the Julian to
+            Proleptic Gregorian calendar.
+
+                * ``EXCEPTION``: Spark fails in reads of ancient ``INT96`` timestamps
+                                 that are ambiguous between the two calendars.
+                *  ``CORRECTED``: loading of ``INT96`` timestamps without rebasing.
+                *  ``LEGACY``: perform rebasing of ancient ``INT96`` timestamps from the Julian
+                               to Proleptic Gregorian calendar.
+
+            If None is set, the value of the SQL config
+            ``spark.sql.legacy.parquet.int96RebaseModeInRead`` is used by default.
 
         Examples
         --------
@@ -698,7 +723,8 @@ class DataStreamReader(OptionUtils):
         True
         """
         self._set_opts(mergeSchema=mergeSchema, pathGlobFilter=pathGlobFilter,
-                       recursiveFileLookup=recursiveFileLookup)
+                       recursiveFileLookup=recursiveFileLookup,
+                       datetimeRebaseMode=datetimeRebaseMode, int96RebaseMode=int96RebaseMode)
         if isinstance(path, str):
             return self._df(self._jreader.parquet(path))
         else:

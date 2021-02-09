@@ -32,7 +32,6 @@ class FileBatchWrite(
   extends BatchWrite with Logging {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     val results = messages.map(_.asInstanceOf[WriteTaskResult])
-
     logInfo(s"Start to commit write Job ${description.uuid}.")
     val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, results.map(_.commitMsg)) }
     logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")

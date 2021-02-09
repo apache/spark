@@ -407,7 +407,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         s.output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
-    case s @ ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns) =>
+    case s @ ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
       val v1TableName = ident.asTableIdentifier
       val resolver = conf.resolver
       val db = ns match {
@@ -415,7 +415,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
           throw QueryCompilationErrors.showColumnsWithConflictDatabasesError(db, v1TableName)
         case _ => ns.map(_.head)
       }
-      ShowColumnsCommand(db, v1TableName, s.output)
+      ShowColumnsCommand(db, v1TableName, output)
 
     case AlterTableRecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
       AlterTableRecoverPartitionsCommand(

@@ -69,6 +69,19 @@ class ParquetOptions(
     .get(MERGE_SCHEMA)
     .map(_.toBoolean)
     .getOrElse(sqlConf.isParquetSchemaMergingEnabled)
+
+  /**
+   * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
+   */
+  def datetimeRebaseModeInRead: String = parameters
+    .get(DATETIME_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ))
+  /**
+   * The rebasing mode for INT96 timestamp values in reads.
+   */
+  def int96RebaseModeInRead: String = parameters
+    .get(INT96_REBASE_MODE)
+    .getOrElse(sqlConf.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ))
 }
 
 
@@ -89,4 +102,16 @@ object ParquetOptions {
   def getParquetCompressionCodecName(name: String): String = {
     shortParquetCompressionCodecNames(name).name()
   }
+
+  // The option controls rebasing of the DATE and TIMESTAMP values between
+  // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Parquet
+  // datasource similarly to the SQL config `spark.sql.legacy.parquet.datetimeRebaseModeInRead`,
+  // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
+  val DATETIME_REBASE_MODE = "datetimeRebaseMode"
+
+  // The option controls rebasing of the INT96 timestamp values between Julian and Proleptic
+  // Gregorian calendars. It impacts on the behaviour of the Parquet datasource similarly to
+  // the SQL config `spark.sql.legacy.parquet.int96RebaseModeInRead`.
+  // The valid option values are: `EXCEPTION`, `LEGACY` or `CORRECTED`.
+  val INT96_REBASE_MODE = "int96RebaseMode"
 }
