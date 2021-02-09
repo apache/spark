@@ -17,11 +17,11 @@
 
 package org.apache.spark.ml.tuning
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, TestParams}
-
 import org.scalatest.matchers.must.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, TestParams}
 
 class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropertyChecks
   with Matchers {

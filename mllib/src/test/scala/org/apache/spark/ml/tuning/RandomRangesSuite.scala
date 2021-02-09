@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
-import org.apache.spark.SparkFunSuite
+import scala.reflect.runtime.universe.TypeTag
 
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen.Choose
@@ -26,7 +26,7 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatest.{Assertion, Succeeded}
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
-import scala.reflect.runtime.universe.TypeTag
+import org.apache.spark.SparkFunSuite
 
 class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyChecks with Matchers {
 
