@@ -827,6 +827,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val EXCLUDE_ON_FAILURE_DECOMMISSION_ENABLED =
+    ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors.decommission")
+      .doc("Attempt decommission of excluded nodes instead of going directly to kill")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val EXCLUDE_ON_FAILURE_LEGACY_TIMEOUT_CONF =
     ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
@@ -1958,12 +1965,22 @@ package object config {
 
   private[spark] val EXECUTOR_DECOMMISSION_KILL_INTERVAL =
     ConfigBuilder("spark.executor.decommission.killInterval")
-      .doc("Duration after which a decommissioned executor will be killed forcefully." +
+      .doc("Duration after which a decommissioned executor will be killed forcefully " +
+        "*by an outside* (e.g. non-spark) service. " +
         "This config is useful for cloud environments where we know in advance when " +
         "an executor is going to go down after decommissioning signal i.e. around 2 mins " +
         "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
         "used to decide what tasks running on decommission executors to speculate.")
       .version("3.1.0")
+      .timeConf(TimeUnit.SECONDS)
+      .createOptional
+
+  private[spark] val EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT =
+    ConfigBuilder("spark.executor.decommission.forceKillTimeout")
+      .doc("Duration after which a Spark will force a decommissioning executor to exit." +
+        " this should be set to a high value in most situations as low values will prevent " +
+        " block migrations from having enough time to complete.")
+      .version("3.2.0")
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
