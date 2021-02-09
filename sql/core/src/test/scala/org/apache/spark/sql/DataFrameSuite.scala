@@ -2736,6 +2736,20 @@ class DataFrameSuite extends QueryTest
     val col2 = df.colRegex("test\n_table.`tes.*\n.*mn`")
     checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
   }
+
+  test("SC-13495: Self union in PropagateEmptyRelation") {
+    val rowRDD1 = sparkContext.parallelize(Seq(Row(100, "OK"), Row(200, "OK")))
+    val schema1 = StructType(Array(StructField("id", IntegerType, false),
+      StructField("status", StringType, false)))
+    val df_source = spark.createDataFrame(rowRDD1, schema1)
+    val df_to_update = df_source.where("true")
+    val df_not_to_update = df_source.except(df_to_update)
+    val df_updated = df_to_update.selectExpr("*", "'ERROR' as status_temp")
+    val df_renamed = df_updated.drop("status").withColumnRenamed("status_temp", "status")
+    val df_all_error = df_not_to_update.union(df_renamed)
+
+    checkAnswer(df_all_error, Row(200, "ERROR") :: Row(100, "ERROR") :: Nil)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

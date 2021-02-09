@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -42,6 +43,22 @@ class RemoveNoopOperatorsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, testRelation)
+  }
+
+  test("Do not remove projections with non-attribute expressions that reuse expr ids") {
+    val base = testRelation
+      .select('a, 'b, 'c)
+      .analyze
+
+    // Replace a with a literal but reuse its expression id
+    val Seq(a, b, c) = base.output
+    val input = base.select(Alias(Literal("x"), "a")(exprId = a.exprId), b, c).analyze
+
+    val optimized = Optimize.execute(input)
+
+    val expected = testRelation.select(Alias(Literal("x"), "a")(), 'b, 'c).analyze
+
+    comparePlans(optimized, expected)
   }
 
   test("Remove all redundant windows in one iteration") {
