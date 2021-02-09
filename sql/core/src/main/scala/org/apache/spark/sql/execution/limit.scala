@@ -53,7 +53,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    val singlePartitionRDD = if (childRDD.getNumPartitions > 1) {
+    val singlePartitionRDD = if (childRDD.getNumPartitions != 1) {
       val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
       new ShuffledRowRDD(
         ShuffleExchangeExec.prepareShuffleDependency(
@@ -205,7 +205,7 @@ case class TakeOrderedAndProjectExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val childRDD = child.execute()
-    val singlePartitionRDD = if (childRDD.getNumPartitions > 1) {
+    val singlePartitionRDD = if (childRDD.getNumPartitions != 1) {
       val localTopK = childRDD.mapPartitions { iter =>
         org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       }
