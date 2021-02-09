@@ -159,7 +159,7 @@ private[deploy] class Worker(
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
 
-  // Record the consecutive failure attempts of executor stage change syncing with Master,
+  // Record the consecutive failure attempts of executor state change syncing with Master,
   // so we don't try it endless. We will exit the Worker process at the end if the failure
   // attempts reach the max attempts(10). In that case, it's highly possible the Worker
   // suffers a severe network issue, and the Worker would exit finally either reaches max
