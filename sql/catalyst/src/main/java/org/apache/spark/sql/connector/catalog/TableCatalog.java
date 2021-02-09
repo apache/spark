@@ -211,17 +211,4 @@ public interface TableCatalog extends CatalogPlugin {
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)
       throws NoSuchTableException, TableAlreadyExistsException;
-
-  /**
-   * Truncate a table in the catalog by removing all rows from the table or its partition(s).
-   *
-   * @param ident a table identifier
-   * @return true if a table was truncated successfully otherwise false
-   * @throws UnsupportedOperationException If table truncation is not supported
-   *
-   * @since 3.2.0
-   */
-  default boolean truncateTable(Identifier ident) throws UnsupportedOperationException {
-    throw new UnsupportedOperationException("Truncate table is not supported.");
-  }
 }

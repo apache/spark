@@ -893,28 +893,18 @@ class TableCatalogSuite extends SparkFunSuite {
   test("truncate non-partitioned table") {
     val catalog = newCatalog()
 
-    val errMsg = intercept[NoSuchTableException] {
-      catalog.truncateTable(testIdent)
-    }.getMessage
-    assert(errMsg.matches(s"Table $testIdent not found"))
-
     val table = catalog.createTable(testIdent, schema, Array.empty, emptyProps)
       .asInstanceOf[InMemoryTable]
     table.withData(Array(
       new BufferedRows("3").withRow(InternalRow(0, "abc", "3")),
       new BufferedRows("4").withRow(InternalRow(1, "def", "4"))))
-    catalog.truncateTable(testIdent)
+    table.truncateTable()
     assert(table.rows.isEmpty)
   }
 
   test("truncate partitioned table") {
     val partCatalog = new InMemoryPartitionTableCatalog
     partCatalog.initialize("test", CaseInsensitiveStringMap.empty())
-
-    val errMsg = intercept[NoSuchTableException] {
-      partCatalog.truncateTable(testIdent)
-    }.getMessage
-    assert(errMsg.matches(s"Table $testIdent not found"))
 
     val table = partCatalog.createTable(
       testIdent,
@@ -934,7 +924,7 @@ class TableCatalogSuite extends SparkFunSuite {
     ))
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(!partTable.rows.isEmpty)
-    partTable.truncate()
+    partTable.truncateTable()
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 0)
     assert(partTable.rows.isEmpty)
   }

@@ -132,8 +132,8 @@ class InMemoryPartitionTable(
     }
   }
 
-  override def truncate(): Boolean = {
+  override def truncateTable(): Boolean = {
     memoryTablePartitions.clear()
-    super.truncate()
+    super.truncateTable()
   }
 }

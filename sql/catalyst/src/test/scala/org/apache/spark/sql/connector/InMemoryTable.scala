@@ -51,7 +51,7 @@ class InMemoryTable(
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
-      with SupportsMetadataColumns {
+      with SupportsMetadataColumns with TruncatableTable {
 
   private object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
@@ -394,7 +394,7 @@ class InMemoryTable(
     dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
   }
 
-  def truncate(): Boolean = dataMap.synchronized {
+  override def truncateTable(): Boolean = dataMap.synchronized {
     dataMap.clear()
     dataMap.isEmpty
   }
