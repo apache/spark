@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 import java.io.File
 
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
@@ -121,15 +122,20 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
 
   test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
     withTempPath { path =>
-      val dir = path.getCanonicalPath
+      // create a sub-directory with long name so that each root path will always exceed the limit
+      // this is to ensure we always test the case for the path truncation
+      val dataDirName = Random.alphanumeric.take(100).toList.mkString
+      val dataDir = new File(path, dataDirName)
+      dataDir.mkdir()
+
       val partitionCol = "partitionCol"
       spark.range(10)
         .select("id", "id")
         .toDF("value", partitionCol)
         .write
         .partitionBy(partitionCol)
-        .orc(dir)
-      val paths = (0 to 9).map(i => new File(dir, s"$partitionCol=$i").getCanonicalPath)
+        .orc(dataDir.getCanonicalPath)
+      val paths = (0 to 9).map(i => new File(dataDir, s"$partitionCol=$i").getCanonicalPath)
       val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
       val location = plan collectFirst {
         case f: FileSourceScanExec => f.metadata("Location")
@@ -137,9 +143,22 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(location.isDefined)
       // The location metadata should at least contain one path
       assert(location.get.contains(paths.head))
-      // If the temp path length is larger than 100, the metadata length should not exceed
-      // twice of the length; otherwise, the metadata length should be controlled within 200.
-      assert(location.get.length < Math.max(paths.head.length, 100) * 2)
+
+      // The location metadata should have the number of root paths
+      assert(location.get.contains("(10 paths)"))
+
+      // The location metadata should have bracket wrapping paths
+      assert(location.get.indexOf('[') > -1)
+      assert(location.get.indexOf(']') > -1)
+
+      // extract paths in location metadata (removing classname, brackets, separators)
+      val pathsInLocation = location.get.substring(
+        location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
+
+      // the only one path should be available
+      assert(pathsInLocation.size == 2)
+      // indicator ("...") should be available
+      assert(pathsInLocation.exists(_.contains("...")))
     }
   }
 }

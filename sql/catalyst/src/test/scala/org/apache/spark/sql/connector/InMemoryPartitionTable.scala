@@ -122,4 +122,13 @@ class InMemoryPartitionTable(
         renamePartitionKey(partitionSchema, from.toSeq(schema), to.toSeq(schema))
     }
   }
+
+  override def truncatePartition(ident: InternalRow): Boolean = {
+    if (memoryTablePartitions.containsKey(ident)) {
+      clearPartition(ident.toSeq(schema))
+      true
+    } else {
+      throw new NoSuchPartitionException(name, ident, partitionSchema)
+    }
+  }
 }
