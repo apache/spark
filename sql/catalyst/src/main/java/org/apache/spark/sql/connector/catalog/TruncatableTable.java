@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Evolving;
  * Represents a table which can be atomically truncated.
  */
 @Evolving
-public interface TruncatableTable {
+public interface TruncatableTable extends Table {
   /**
    * Truncate a table by removing all rows from the table atomically.
    * If the table supports partitions, the method removes all existing partitions.
