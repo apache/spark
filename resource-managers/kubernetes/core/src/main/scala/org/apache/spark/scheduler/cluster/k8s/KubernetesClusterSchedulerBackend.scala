@@ -81,7 +81,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   override def stop(): Unit = {
-    super.stop()
+    // When `CoarseGrainedSchedulerBackend.stop` throws `SparkException`,
+    // K8s cluster scheduler should log and proceed in order to delete the K8s cluster resources.
+    Utils.tryLogNonFatalError {
+      super.stop()
+    }
 
     Utils.tryLogNonFatalError {
       snapshotsStore.stop()
