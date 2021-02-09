@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.hadoop.mapreduce.Job
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, PhysicalWriteInfo, WriterCommitMessage}

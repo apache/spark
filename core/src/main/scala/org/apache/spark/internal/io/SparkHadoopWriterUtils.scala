@@ -24,21 +24,17 @@ import scala.util.{DynamicVariable, Random}
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.{JobConf, JobID}
-import org.apache.hadoop.mapreduce.JobContext
 
 import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.OutputMetrics
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
-import org.apache.spark.util.Utils
 
 /**
  * A helper object that provide common utils used during saving an RDD using a Hadoop OutputFormat
  * (both from the old mapred API and the new mapreduce API)
  */
 private[spark]
-object SparkHadoopWriterUtils extends Logging {
+object SparkHadoopWriterUtils {
 
   private val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
   private val RAND = new Random()
