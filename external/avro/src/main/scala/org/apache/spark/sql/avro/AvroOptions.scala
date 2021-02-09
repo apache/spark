@@ -97,7 +97,7 @@ private[sql] class AvroOptions(
   /**
    * The rebasing mode for the DATE and TIMESTAMP_MICROS, TIMESTAMP_MILLIS values in reads.
    */
-  def datetimeRebaseModeInRead: String = parameters
+  val datetimeRebaseModeInRead: String = parameters
     .get(AvroOptions.DATETIME_REBASE_MODE)
     .getOrElse(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
 }
