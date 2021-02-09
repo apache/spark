@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -268,26 +267,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
           case other => other
         }
         p.makeCopy(Array(a, newList))
-
-      case Abs(e @ StringType()) if e.foldable => Abs(Cast(e, DoubleType))
-      case Sum(e @ StringType()) if e.foldable => Sum(Cast(e, DoubleType))
-      case Average(e @ StringType()) if e.foldable => Average(Cast(e, DoubleType))
-      case s @ StddevPop(e @ StringType(), _) if e.foldable =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case s @ StddevSamp(e @ StringType(), _) if e.foldable =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>
-        m.withNewChildren(Seq(Cast(e, DoubleType)))
-      case UnaryPositive(e @ StringType()) if e.foldable =>
-        UnaryPositive(Cast(e, DoubleType))
-      case v @ VariancePop(e @ StringType(), _) if e.foldable =>
-        v.withNewChildren(Seq(Cast(e, DoubleType)))
-      case v @ VarianceSamp(e @ StringType(), _) if e.foldable =>
-        v.withNewChildren(Seq(Cast(e, DoubleType)))
-      case s @ Skewness(e @ StringType(), _) if e.foldable =>
-        s.withNewChildren(Seq(Cast(e, DoubleType)))
-      case k @ Kurtosis(e @ StringType(), _) if e.foldable =>
-        k.withNewChildren(Seq(Cast(e, DoubleType)))
     }
   }
 }

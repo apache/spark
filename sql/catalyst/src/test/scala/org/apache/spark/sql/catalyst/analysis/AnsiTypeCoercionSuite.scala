@@ -1319,4 +1319,53 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     ruleTest(AnsiTypeCoercion.IntegralDivision, IntegralDivide(2, 1L),
       IntegralDivide(Cast(2, LongType), 1L))
   }
+
+  test("Promote string literals") {
+    val rule = AnsiTypeCoercion.PromoteStringLiterals
+    val stringLiteral = Literal("123")
+    val castStringLiteralAsInt = Cast(stringLiteral, IntegerType)
+    val castStringLiteralAsDouble = Cast(stringLiteral, DoubleType)
+    val castStringLiteralAsDate = Cast(stringLiteral, DateType)
+    val castStringLiteralAsTimestamp = Cast(stringLiteral, TimestampType)
+    ruleTest(rule,
+      GreaterThan(stringLiteral, Literal(1)),
+      GreaterThan(castStringLiteralAsInt, Literal(1)))
+    ruleTest(rule,
+      LessThan(Literal(true), stringLiteral),
+      LessThan(Literal(true), Cast(stringLiteral, BooleanType)))
+    ruleTest(rule,
+      EqualTo(Literal(Array(1, 2)), stringLiteral),
+      EqualTo(Literal(Array(1, 2)), stringLiteral))
+    ruleTest(rule,
+      GreaterThan(stringLiteral, Literal(0.5)),
+      GreaterThan(castStringLiteralAsDouble, Literal(0.5)))
+
+    val dateLiteral = Literal(java.sql.Date.valueOf("2021-01-01"))
+    ruleTest(rule,
+      EqualTo(stringLiteral, dateLiteral),
+      EqualTo(castStringLiteralAsDate, dateLiteral))
+
+    val timestampLiteral = Literal(Timestamp.valueOf("2021-01-01 00:00:00"))
+    ruleTest(rule,
+      EqualTo(stringLiteral, timestampLiteral),
+      EqualTo(castStringLiteralAsTimestamp, timestampLiteral))
+
+    ruleTest(rule, Add(stringLiteral, Literal(1)),
+      Add(castStringLiteralAsDouble, Literal(1)))
+    ruleTest(rule, Divide(stringLiteral, Literal(1)),
+      Divide(castStringLiteralAsDouble, Literal(1)))
+
+    ruleTest(rule,
+      In(Literal(1), Seq(stringLiteral, Literal(2))),
+      In(Literal(1), Seq(castStringLiteralAsInt, Literal(2))))
+    ruleTest(rule,
+      In(Literal(1.0), Seq(stringLiteral, Literal(2.2))),
+      In(Literal(1.0), Seq(castStringLiteralAsDouble, Literal(2.2))))
+    ruleTest(rule,
+      In(dateLiteral, Seq(stringLiteral)),
+      In(dateLiteral, Seq(castStringLiteralAsDate)))
+    ruleTest(rule,
+      In(timestampLiteral, Seq(stringLiteral)),
+      In(timestampLiteral, Seq(castStringLiteralAsTimestamp)))
+  }
 }
