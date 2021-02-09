@@ -131,7 +131,8 @@ object RandomRanges {
  * - Evaluating Machine Learning Models by Alice Zheng
  * https://www.oreilly.com/library/view/evaluating-machine-learning/9781492048756/ch04.html
  *
- * Note: if you want more sophisticated hyperparameter tuning, consider Python libraries such as Hyperopt.
+ * Note: if you want more sophisticated hyperparameter tuning, consider Python libraries
+ * such as Hyperopt.
  */
 @Since("3.1.0")
 class ParamRandomBuilder extends ParamGridBuilder {
