@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 import java.util.{Collections, Locale}
 
+import scala.collection.JavaConverters._
+
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
@@ -52,6 +54,7 @@ class PlanResolutionSuite extends AnalysisTest {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
+    when(t.properties()).thenReturn(Map("test" ->"test", "comment" -> "new_comment").asJava)
     t
   }
 
@@ -67,6 +70,7 @@ class PlanResolutionSuite extends AnalysisTest {
     when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
     when(t.tableType).thenReturn(CatalogTableType.MANAGED)
     when(t.provider).thenReturn(Some(v1Format))
+    when(t.properties).thenReturn(Map("test" ->"test", "comment" -> "new_comment"))
     V1Table(t)
   }
 
@@ -752,10 +756,15 @@ class PlanResolutionSuite extends AnalysisTest {
           "'comment' = 'new_comment')"
         val sql2 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('comment', 'test')"
         val sql3 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
+        val sql4 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('unknown')"
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
         val parsed3 = parseAndResolve(sql3)
+        val e = intercept[AnalysisException] {
+          parseAndResolve(sql4)
+        }
+        e.getMessage.contains("Attempted to unset non-existent property 'unknown'")
 
         if (useV1Command) {
           val tableIdent = TableIdentifier(tblName, Some("default"))

@@ -278,12 +278,13 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      ResolveTableProperties ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Apply Char Padding", Once,
       ApplyCharTypePadding),
     Batch("Post-Hoc Resolution", Once,
-      Seq(ResolveCommandsWithIfExists, ResolveTableProperties) ++
+      Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
