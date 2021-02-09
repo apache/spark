@@ -1,4 +1,6 @@
 --SET spark.sql.cbo.enabled=true
+--SET spark.sql.maxMetadataStringLength = 500
+
 CREATE TABLE t1(a INT, b INT) USING PARQUET;
 CREATE TABLE t2(c INT, d INT) USING PARQUET;
 

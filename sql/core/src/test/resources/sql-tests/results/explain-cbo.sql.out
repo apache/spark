@@ -76,5 +76,5 @@ AdaptiveSparkPlan isFinalPlan=false
       :                    +- HashAggregate(keys=[], functions=[partial_sum(b#x)], output=[sum#xL])
       :                       +- Project [b#x]
       :                          +- Filter (isnotnull(a#x) AND (a#x < 100))
-      :                             +- FileScan parquet default.t1[a#x,b#x] Batched: true, DataFilters: [isnotnull(a#x), (a#x < 100)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/Users/yi.zhu/Documents/project/Angerszhuuuu/spark/sql/core/spark..., PartitionFilters: [], PushedFilters: [IsNotNull(a), LessThan(a,100)], ReadSchema: struct<a:int,b:int>
-      +- FileScan parquet default.t2[c#x,d#x] Batched: true, DataFilters: [isnotnull(d#x)], Format: Parquet, Location: InMemoryFileIndex(1 paths)[file:/Users/yi.zhu/Documents/project/Angerszhuuuu/spark/sql/core/spark..., PartitionFilters: [], PushedFilters: [IsNotNull(d)], ReadSchema: struct<c:int,d:int>
+      :                             +- FileScan parquet default.t1[a#x,b#x] Batched: true, DataFilters: [isnotnull(a#x), (a#x < 100)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t1], PartitionFilters: [], PushedFilters: [IsNotNull(a), LessThan(a,100)], ReadSchema: struct<a:int,b:int>
+      +- FileScan parquet default.t2[c#x,d#x] Batched: true, DataFilters: [isnotnull(d#x)], Format: Parquet, Location [not included in comparison]/{warehouse_dir}/t2], PartitionFilters: [], PushedFilters: [IsNotNull(d)], ReadSchema: struct<c:int,d:int>
