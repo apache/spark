@@ -191,8 +191,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   }
 
   test("SPARK-34407: CoarseGrainedSchedulerBackend.stop may throw SparkException") {
-    val backend = spy(schedulerBackendUnderTest)
-    backend.start()
+    schedulerBackendUnderTest.start()
 
     when(driverEndpointRef.askSync[Boolean](StopDriver)).thenThrow(new RuntimeException)
     schedulerBackendUnderTest.stop()
