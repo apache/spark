@@ -24,8 +24,8 @@ import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
-import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class ParquetRebaseDatetimeSuite
@@ -97,6 +97,27 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
+  private def inReadConfToOptions(
+      conf: String,
+      mode: LegacyBehaviorPolicy.Value): Map[String, String] = conf match {
+    case SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key =>
+      Map(ParquetOptions.INT96_REBASE_MODE -> mode.toString)
+    case _ => Map(ParquetOptions.DATETIME_REBASE_MODE -> mode.toString)
+  }
+
+  private def runInMode(
+      conf: String,
+      modes: Seq[LegacyBehaviorPolicy.Value])(f: Map[String, String] => Unit): Unit = {
+    modes.foreach { mode =>
+      withSQLConf(conf -> mode.toString) { f(Map.empty) }
+    }
+    withSQLConf(conf -> EXCEPTION.toString) {
+      modes.foreach { mode =>
+        f(inReadConfToOptions(conf, mode))
+      }
+    }
+  }
+
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     val N = 8
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
@@ -132,9 +153,9 @@ abstract class ParquetRebaseDatetimeSuite
         }
         // For Parquet files written by Spark 3.0, we know the writer info and don't need the
         // config to guide the rebase behavior.
-        withSQLConf(inReadConf -> LEGACY.toString) {
+        runInMode(inReadConf, Seq(LEGACY)) { options =>
           checkAnswer(
-            spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
+            spark.read.format("parquet").options(options).load(path2_4, path3_0, path3_0_rebase),
             (0 until N).flatMap { i =>
               val (dictS, plainS) = rowFunc(i)
               Seq.tabulate(3) { _ =>
@@ -235,12 +256,10 @@ abstract class ParquetRebaseDatetimeSuite
               withAllParquetReaders {
                 // The file metadata indicates if it needs rebase or not, so we can always get the
                 // correct result regardless of the "rebase mode" config.
-                Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-                  withSQLConf(inReadConf -> mode.toString) {
-                    checkAnswer(
-                      spark.read.parquet(path),
-                      Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
-                  }
+                runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+                  checkAnswer(
+                    spark.read.options(options).parquet(path),
+                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
                 }
 
                 // Force to not rebase to prove the written datetime values are rebased
@@ -275,12 +294,12 @@ abstract class ParquetRebaseDatetimeSuite
         withAllParquetReaders {
           // The file metadata indicates if it needs rebase or not, so we can always get the
           // correct result regardless of the "rebase mode" config.
-          Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-            withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-              checkAnswer(
-                spark.read.parquet(path),
-                Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
-            }
+          runInMode(
+            SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key,
+            Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+            checkAnswer(
+              spark.read.options(options).parquet(path),
+              Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
           }
 
           // Force to not rebase to prove the written datetime values are rebased and we will get
