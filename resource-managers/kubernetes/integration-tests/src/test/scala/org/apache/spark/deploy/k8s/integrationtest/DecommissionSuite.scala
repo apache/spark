@@ -129,7 +129,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // Set super high so the timeout is triggered
       .set("spark.storage.decommission.replicationReattemptInterval", "8640000")
       // Set super low so the timeout is triggered
-      .set(config.EXECUTOR_DECOMMISSION_CLEANUP_INTERVAL.key, "10")
+      .set(config.EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT.key, "10")
 
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
