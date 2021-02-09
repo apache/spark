@@ -2737,7 +2737,7 @@ class DataFrameSuite extends QueryTest
     checkAnswer(df.select(col2), Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
-  test("SC-13495: Self union in PropagateEmptyRelation") {
+  test("SPARK-34412: Self union in PropagateEmptyRelation & RemoveNoopOperators") {
     val rowRDD1 = sparkContext.parallelize(Seq(Row(100, "OK"), Row(200, "OK")))
     val schema1 = StructType(Array(StructField("id", IntegerType, false),
       StructField("status", StringType, false)))
