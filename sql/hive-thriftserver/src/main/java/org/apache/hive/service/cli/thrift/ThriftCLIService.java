@@ -188,6 +188,10 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   @Override
   public synchronized void stop() {
     if (isStarted && !isEmbedded) {
+      if (serverThread != null) {
+        serverThread.interrupt();
+        serverThread = null;
+      }
       if(server != null) {
         server.stop();
         LOG.info("Thrift server has stopped");
@@ -199,10 +203,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
         } catch (Exception e) {
           LOG.error("Error stopping Http server: ", e);
         }
-      }
-      if (serverThread != null) {
-        serverThread.interrupt();
-        serverThread = null;
       }
       isStarted = false;
     }
