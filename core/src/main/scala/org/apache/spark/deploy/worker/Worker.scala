@@ -28,7 +28,6 @@ import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
 import scala.util.Random
 import scala.util.control.NonFatal
-
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
@@ -36,7 +35,7 @@ import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.internal.config.Worker._
@@ -45,6 +44,8 @@ import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.rpc._
 import org.apache.spark.util.{SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
+
+import scala.collection.mutable
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -158,6 +159,16 @@ private[deploy] class Worker(
   val finishedDrivers = new LinkedHashMap[String, DriverRunner]
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
+
+  // Record the consecutive failure attempts of executor stage change syncing with Master,
+  // so we don't try it endless. We will exit the Worker process at the end if the failure
+  // attempts reach the max attempts(10). In that case, it's highly possible the Worker
+  // suffers a severe network issue, and the Worker would exit finally either reaches max
+  // re-register attempts or max state syncing attempts.
+  // Map from executor fullId to its consecutive failure attempts number. It's supposed
+  // to be very small since it's only used for the temporary network drop, which doesn't
+  // happen frequently and recover soon.
+  private val executorStateSyncFailureAttempts = new HashMap[String, Int]()
 
   val retainedExecutors = conf.get(WORKER_UI_RETAINED_EXECUTORS)
   val retainedDrivers = conf.get(WORKER_UI_RETAINED_DRIVERS)
@@ -757,6 +768,7 @@ private[deploy] class Worker(
   private def syncExecutorStateWithMaster(newState: ExecutorStateChanged): Unit = {
     master match {
       case Some(masterRef) =>
+        val fullId = s"${newState.appId}/${newState.execId}"
         try {
           // SPARK-34245: We used async `send` to send the state previously. In that case, the
           // finished executor can be leaked if Worker fails to send `ExecutorStateChanged`
@@ -765,13 +777,22 @@ private[deploy] class Worker(
           // or last executor for the application. Therefore, we switch to `askSync` to ensure
           // the state is handled by Master.
           masterRef.askSync[Boolean](newState)
+          executorStateSyncFailureAttempts.remove(fullId)
         } catch {
           case t: Throwable =>
-            logError(s"Failed to send $newState to Master $masterRef, will retry.", t)
-            // In case of the error is caused by a non-transient network error, we should leave
-            // some time for Worker to handle ReregisterWithMaster messages.
-            Thread.sleep(100)
-            self.send(newState)
+            val failures = executorStateSyncFailureAttempts.getOrElseUpdate(fullId, 0) + 1
+            if (failures < 10) {
+              logError(s"Failed to send $newState to Master $masterRef, " +
+                s"will retry ($failures/10).", t)
+              executorStateSyncFailureAttempts(fullId) = failures
+              // In case of the error is caused by a non-transient network error, we should leave
+              // some time for Worker to handle ReregisterWithMaster messages.
+              Thread.sleep(100)
+              self.send(newState)
+            } else {
+              logError(s"Failed to send $newState to Master $masterRef for 10 times. Giving up.")
+              System.exit(1)
+            }
         }
 
       case None =>
