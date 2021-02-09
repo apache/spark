@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tuning
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
 
 case class Limits[T: Numeric](x: T, y: T)
@@ -132,8 +133,9 @@ object RandomRanges {
  *
  * Note: if you want more sophisticated hyperparameter tuning, consider Python libraries such as Hyperopt.
  */
+@Since("3.1.0")
 class ParamRandomBuilder extends ParamGridBuilder {
-
+  @Since("3.1.0")
   def addRandom[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
     addGrid(param, (1 to n).map { _: Int => gen.randomT() })
