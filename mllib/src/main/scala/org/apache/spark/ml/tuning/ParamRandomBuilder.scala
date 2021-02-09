@@ -65,7 +65,7 @@ object RandomRanges {
         RandomRanges.randomLog(lower, upper, n)
 
       override def randomT(): Double =
-        randomBigDecimalBetween(BigDecimal(lower), BigDecimal(upper)).doubleValue()
+        randomBigDecimalBetween(BigDecimal(lower), BigDecimal(upper)).doubleValue
     }
   }
 
@@ -79,7 +79,7 @@ object RandomRanges {
         RandomRanges.randomLog(lower, upper, n).toFloat
 
       override def randomT(): Float =
-        randomBigDecimalBetween(BigDecimal(lower), BigDecimal(upper)).floatValue()
+        randomBigDecimalBetween(BigDecimal(lower), BigDecimal(upper)).floatValue
     }
   }
 
@@ -93,7 +93,7 @@ object RandomRanges {
         RandomRanges.randomLog(lower, upper, n).toInt
 
       override def randomT(): Int =
-        bigIntBetween(BigInt(lower), BigInt(upper)).intValue()
+        bigIntBetween(BigInt(lower), BigInt(upper)).intValue
     }
   }
 
@@ -107,7 +107,7 @@ object RandomRanges {
         RandomRanges.randomLog(lower, upper, n).toLong
 
       override def randomT(): Long =
-        bigIntBetween(BigInt(lower), BigInt(upper)).longValue()
+        bigIntBetween(BigInt(lower), BigInt(upper)).longValue
     }
   }
 
