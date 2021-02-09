@@ -17,25 +17,29 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `TRUNCATE TABLE` command to check V2 table catalogs.
  */
 class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase {
-  import testImplicits._
+
   // TODO(SPARK-34290): Support v2 TRUNCATE TABLE
   test("truncation of v2 tables is not supported") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
       sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
       sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
-      Seq.empty[(Int, Int)].toDF("id", "part")
-        .write
-        .partitionBy("part")
-        .mode("overwrite")
-        .insertInto(t)
-      checkAnswer(sql(s"SELECT * FROM $t"), Nil)
+
+      Seq(
+        s"TRUNCATE TABLE $t PARTITION (part=1)",
+        s"TRUNCATE TABLE $t").foreach { truncateCmd =>
+        val errMsg = intercept[AnalysisException] {
+          sql(truncateCmd)
+        }.getMessage
+        assert(errMsg.contains("TRUNCATE TABLE is not supported for v2 tables"))
+      }
     }
   }
 }
