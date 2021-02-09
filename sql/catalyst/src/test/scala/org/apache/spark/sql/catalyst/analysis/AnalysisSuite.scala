@@ -817,7 +817,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"a" / $"d" as "div4",
         $"e" / $"e" as "div5")
 
-      val message = intercept[AnalysisException] {
+      val message = intercept[RuntimeException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
@@ -979,7 +979,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"a" / $"d" as "div4",
         $"e" / $"e" as "div5")
 
-      val message1 = intercept[AnalysisException] {
+      val message1 = intercept[RuntimeException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
@@ -995,7 +995,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         }
       }
 
-      val message2 = intercept[AnalysisException] {
+      val message2 = intercept[RuntimeException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +

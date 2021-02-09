@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
@@ -156,7 +157,7 @@ case class ExplainCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val outputString = sparkSession.sessionState.executePlan(logicalPlan).explainString(mode)
     Seq(Row(outputString))
-  } catch { case cause: AnalysisException =>
+  } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 }
@@ -178,7 +179,7 @@ case class StreamingExplainCommand(
         queryExecution.simpleString
       }
     Seq(Row(outputString))
-  } catch { case cause: AnalysisException =>
+  } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
   }
 }

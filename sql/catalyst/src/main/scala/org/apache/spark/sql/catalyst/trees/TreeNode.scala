@@ -504,7 +504,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new AnalysisException(
+        throw new IllegalStateException(
           s"""
              |Failed to copy node.
              |Is otherCopyArgs specified correctly for $nodeName.
