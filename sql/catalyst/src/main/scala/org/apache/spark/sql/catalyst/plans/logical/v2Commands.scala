@@ -562,10 +562,13 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
  */
 case class ShowTableProperties(
     table: LogicalPlan,
-    propertyKey: Option[String]) extends Command {
+    propertyKey: Option[String],
+    override val output: Seq[Attribute] = ShowTableProperties.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowTableProperties {
+  val OUTPUT: Seq[Attribute] = Seq(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
 }
