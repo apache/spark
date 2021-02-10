@@ -204,6 +204,27 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCast(checkedType, StringType)
   }
 
+  test("implicit type cast - unfoldable StringType") {
+    val input = AttributeReference("s", StringType)()
+    assert(AnsiTypeCoercion.implicitCast(input, StringType) == Some(input))
+    assert(AnsiTypeCoercion.implicitCast(input, NumericType).isEmpty)
+    assert(AnsiTypeCoercion.implicitCast(input, DecimalType).isEmpty)
+    allTypes.filterNot(_ == StringType).foreach { dt =>
+      assert(AnsiTypeCoercion.implicitCast(input, dt).isEmpty)
+    }
+  }
+
+  test("implicit type cast - foldable StringType") {
+    val input = Literal("1")
+    assert(AnsiTypeCoercion.implicitCast(input, StringType) == Some(input))
+    assert(AnsiTypeCoercion.implicitCast(input, NumericType) == Some(Cast(input, DoubleType)))
+    assert(AnsiTypeCoercion.implicitCast(input, DecimalType) ==
+      Some(Cast(input, DecimalType.defaultConcreteType)))
+    (numericTypes ++ datetimeTypes ++ Seq(BinaryType)).foreach { dt =>
+      assert(AnsiTypeCoercion.implicitCast(input, dt) == Some(Cast(input, dt)))
+    }
+  }
+
   test("implicit type cast - StringType") {
     val checkedType = StringType
     val nonCastableTypes =
@@ -231,7 +252,7 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - ArrayType(StringType)") {
+  test("implicit type cast - unfoldable rrayType(StringType)") {
     val checkedType = ArrayType(StringType)
     val nonCastableTypes = allTypes.filterNot(_ == StringType)
     checkTypeCasting(checkedType,
@@ -242,6 +263,15 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCast(checkedType, DecimalType)
     shouldNotCast(checkedType, NumericType)
     shouldNotCast(checkedType, IntegralType)
+  }
+
+  test("implicit type cast - foldable rrayType(StringType)") {
+    val input = Literal(Array("1"))
+    assert(AnsiTypeCoercion.implicitCast(input, ArrayType(StringType)) == Some(input))
+    (numericTypes ++ datetimeTypes ++ Seq(BinaryType)).foreach { dt =>
+      assert(AnsiTypeCoercion.implicitCast(input, ArrayType(dt)) ==
+        Some(Cast(input, ArrayType(dt))))
+    }
   }
 
   test("implicit type cast between two Map types") {

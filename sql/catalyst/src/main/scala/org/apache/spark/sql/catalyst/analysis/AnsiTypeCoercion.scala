@@ -150,6 +150,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (_ @ StringType(), NumericType) if e.foldable =>
         Some(Cast(e, DoubleType))
 
+      case (_ @ StringType(), DecimalType) if e.foldable =>
+        Some(Cast(e, DecimalType.SYSTEM_DEFAULT))
+
       case _ =>
         implicitCast(e.dataType, expectedType).map { dt =>
           if (dt == e.dataType) e else Cast(e, dt)
