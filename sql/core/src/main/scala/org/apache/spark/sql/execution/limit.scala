@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.metric.{SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
+import org.apache.spark.util.collection.Utils
 
 /**
  * The operator takes limited number of elements from its child operator.
@@ -53,20 +54,24 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
   override lazy val metrics = readMetrics ++ writeMetrics
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
-    val singlePartitionRDD = if (childRDD.getNumPartitions != 1) {
-      val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
-      new ShuffledRowRDD(
-        ShuffleExchangeExec.prepareShuffleDependency(
-          locallyLimited,
-          child.output,
-          SinglePartition,
-          serializer,
-          writeMetrics),
-        readMetrics)
+    if (childRDD.getNumPartitions == 0) {
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
-      childRDD
+      val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
+        childRDD
+      } else {
+        val locallyLimited = childRDD.mapPartitionsInternal(_.take(limit))
+        new ShuffledRowRDD(
+          ShuffleExchangeExec.prepareShuffleDependency(
+            locallyLimited,
+            child.output,
+            SinglePartition,
+            serializer,
+            writeMetrics),
+          readMetrics)
+      }
+      singlePartitionRDD.mapPartitionsInternal(_.take(limit))
     }
-    singlePartitionRDD.mapPartitionsInternal(_.take(limit))
   }
 }
 
@@ -205,28 +210,32 @@ case class TakeOrderedAndProjectExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val childRDD = child.execute()
-    val singlePartitionRDD = if (childRDD.getNumPartitions != 1) {
-      val localTopK = childRDD.mapPartitions { iter =>
-        org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-      }
-      new ShuffledRowRDD(
-        ShuffleExchangeExec.prepareShuffleDependency(
-          localTopK,
-          child.output,
-          SinglePartition,
-          serializer,
-          writeMetrics),
-        readMetrics)
+    if (childRDD.getNumPartitions == 0) {
+      sparkContext.parallelize(Array.empty[InternalRow], 1)
     } else {
-      childRDD
-    }
-    singlePartitionRDD.mapPartitions { iter =>
-      val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
-      if (projectList != child.output) {
-        val proj = UnsafeProjection.create(projectList, child.output)
-        topK.map(r => proj(r))
+      val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
+        childRDD
       } else {
-        topK
+        val localTopK = childRDD.mapPartitions { iter =>
+          Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        }
+        new ShuffledRowRDD(
+          ShuffleExchangeExec.prepareShuffleDependency(
+            localTopK,
+            child.output,
+            SinglePartition,
+            serializer,
+            writeMetrics),
+          readMetrics)
+      }
+      singlePartitionRDD.mapPartitions { iter =>
+        val topK = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
+        if (projectList != child.output) {
+          val proj = UnsafeProjection.create(projectList, child.output)
+          topK.map(r => proj(r))
+        } else {
+          topK
+        }
       }
     }
   }
