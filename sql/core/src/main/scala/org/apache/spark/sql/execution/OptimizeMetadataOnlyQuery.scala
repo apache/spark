@@ -52,8 +52,10 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     plan.transform {
       case a @ Aggregate(_, aggExprs, child @ PhysicalOperation(
           projectList, filters, PartitionedRelation(partAttrs, rel))) =>
-        // We only apply this optimization when only partitioned attributes are scanned.
-        if (AttributeSet((projectList ++ filters).flatMap(_.references)).subsetOf(partAttrs)) {
+        // We only apply this optimization when only partitioned attributes are scanned and filters
+        // are deterministic.
+        if (AttributeSet((projectList ++ filters).flatMap(_.references)).subsetOf(partAttrs)
+          && filters.map(_.deterministic).forall(identity)) {
           // The project list and filters all only refer to partition attributes, which means the
           // the Aggregator operator can also only refer to partition attributes, and filters are
           // all partition filters. This is a metadata only query we can optimize.
