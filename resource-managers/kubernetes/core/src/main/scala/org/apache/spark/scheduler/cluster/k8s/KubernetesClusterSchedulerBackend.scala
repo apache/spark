@@ -95,11 +95,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
     podAllocator.start(applicationId())
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    setUpExecutorConfigMap()
+    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      setUpExecutorConfigMap()
+    }
   }
 
   override def stop(): Unit = {
-    super.stop()
+    // When `CoarseGrainedSchedulerBackend.stop` throws `SparkException`,
+    // K8s cluster scheduler should log and proceed in order to delete the K8s cluster resources.
+    Utils.tryLogNonFatalError {
+      super.stop()
+    }
 
     Utils.tryLogNonFatalError {
       snapshotsStore.stop()
@@ -121,12 +127,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .delete()
       }
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .configMaps()
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
+      if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .configMaps()
+            .withLabel(SPARK_APP_ID_LABEL, applicationId())
+            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+            .delete()
+        }
       }
     }
 

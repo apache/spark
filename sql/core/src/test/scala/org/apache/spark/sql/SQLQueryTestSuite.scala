@@ -154,10 +154,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
+  // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+  // here we need to ignore it.
+  private val otherIgnoreList =
+    if (TestUtils.testCommandAvailable("/bin/bash")) Nil else Set("transform.sql")
   /** List of test cases to ignore, in lower cases. */
   protected def ignoreList: Set[String] = Set(
-    "ignored.sql"   // Do NOT remove this one. It is here to test the ignore functionality.
-  )
+    "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
+  ) ++ otherIgnoreList
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
@@ -260,9 +264,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       newLine.startsWith("--") && !newLine.startsWith("--QUERY-DELIMITER")
     }
 
-    // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
-    // here we need to check command available
-    assume(TestUtils.testCommandAvailable("/bin/bash"))
     val input = fileToString(new File(testCase.inputFile))
 
     val (comments, code) = splitCommentsAndCodes(input)

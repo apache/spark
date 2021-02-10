@@ -22,7 +22,6 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -56,7 +55,7 @@ private[sql] class SharedState(
   private[sql] val (conf, hadoopConf) = {
     // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
     // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
-    val initialConfigsWithoutWarehouse = SharedState.loadHiveConfFile(
+    val initialConfigsWithoutWarehouse = SharedState.resolveWarehousePath(
       sparkContext.conf, sparkContext.hadoopConfiguration, initialConfigs)
 
     val confClone = sparkContext.conf.clone()
@@ -220,31 +219,27 @@ object SharedState extends Logging {
   }
 
   /**
-   * Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
-   * the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
+   * Determine the warehouse path using the key `spark.sql.warehouse.dir` in the [[SparkConf]]
+   * or the initial options from the very first created SparkSession instance, and
+   * `hive.metastore.warehouse.dir` in hadoop [[Configuration]].
+   * The priority order is:
+   * s.s.w.d in initialConfigs
+   *   > s.s.w.d in spark conf (user specified)
+   *   > h.m.w.d in hadoop conf (user specified)
+   *   > s.s.w.d in spark conf (default)
+   *
+   * After resolved, the final value will be application wide reachable in the sparkConf and
+   * hadoopConf from [[SparkContext]].
+   *
+   * @return a map contain the rest of initial options with the warehouses keys cleared
    */
-  def loadHiveConfFile(
+  def resolveWarehousePath(
       sparkConf: SparkConf,
       hadoopConf: Configuration,
       initialConfigs: scala.collection.Map[String, String] = Map.empty)
     : scala.collection.Map[String, String] = {
 
-    def containsInSparkConf(key: String): Boolean = {
-      sparkConf.contains(key) || sparkConf.contains("spark.hadoop." + key) ||
-        (key.startsWith("hive") && sparkConf.contains("spark." + key))
-    }
-
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
-    val configFile = Utils.getContextOrSparkClassLoader.getResourceAsStream("hive-site.xml")
-    if (configFile != null) {
-      logInfo(s"loading hive config file: $configFile")
-      val hadoopConfTemp = new Configuration()
-      hadoopConfTemp.clear()
-      hadoopConfTemp.addResource(configFile)
-      for (entry <- hadoopConfTemp.asScala if !containsInSparkConf(entry.getKey)) {
-        hadoopConf.set(entry.getKey, entry.getValue)
-      }
-    }
     val sparkWarehouseOption =
       initialConfigs.get(WAREHOUSE_PATH.key).orElse(sparkConf.getOption(WAREHOUSE_PATH.key))
     if (initialConfigs.contains(hiveWarehouseKey)) {

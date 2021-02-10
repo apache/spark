@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -34,9 +33,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
  * resolved.
  */
-class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String)
-  extends TreeNodeException(
-    tree, QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError(function), null)
+class UnresolvedException(function: String) extends AnalysisException(
+  QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError(function))
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.

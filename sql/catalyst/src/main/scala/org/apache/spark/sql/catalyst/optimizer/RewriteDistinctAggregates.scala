@@ -39,8 +39,8 @@ import org.apache.spark.sql.types.IntegerType
  *
  *   val agg = data.groupBy($"key")
  *     .agg(
- *       countDistinct($"cat1").as("cat1_cnt"),
- *       countDistinct($"cat2").as("cat2_cnt"),
+ *       count_distinct($"cat1").as("cat1_cnt"),
+ *       count_distinct($"cat2").as("cat2_cnt"),
  *       sum($"value").as("total"))
  * }}}
  *
@@ -292,7 +292,7 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
           // Final aggregate
           val operators = expressions.map { e =>
             val af = e.aggregateFunction
-            val condition = e.filter.map(distinctAggFilterAttrLookup.get(_)).flatten
+            val condition = e.filter.flatMap(distinctAggFilterAttrLookup.get)
             val naf = if (af.children.forall(_.foldable)) {
               // If aggregateFunction's children are all foldable, we only put the first child in
               // distinctAggGroups. So here we only need to rewrite the first child to
