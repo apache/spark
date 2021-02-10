@@ -1,0 +1,253 @@
+First attempt on STB:
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[success] Total time: 0 s, completed Feb 28, 2020 1:47:12 PM
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[info] Updating ...
+[info] Updating core...
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[info] Done updating.
+[info] Done updating.
+[warn] There may be incompatibilities among your library dependencies; run 'evicted' to see detailed eviction warnings.
+[info] Updating kafka_0_8...
+[info] Compiling 36 Scala sources and 1 Java source to /Users/holden/public_repos/spark-testing-base/core/target/scala-2.12/classes ...
+[info] Done updating.
+[warn] There may be incompatibilities among your library dependencies; run 'evicted' to see detailed eviction warnings.
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/DataframeGenerator.scala:100:25: match may not be exhaustive.
+[warn] It would fail on the following inputs: None, Some((x: com.holdenkarau.spark.testing.ColumnGenerator forSome x not in (com.holdenkarau.spark.testing.Column, com.holdenkarau.spark.testing.ColumnList)))
+[warn]         generatorMap.get(fields(index).name) match {
+[warn]                         ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/JavaSuiteBase.scala:26:5: Exhaustivity analysis reached max recursion depth, not all missing cases are reported.
+[warn] (Please try with scalac -Ypatmat-exhaust-depth 40 or -Ypatmat-exhaust-depth off.)
+[warn]     (i1, i2) match {
+[warn]     ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/JavaStreamingSuitebase.scala:184:7: object JavaConversions in package collection is deprecated (since 2.12.0): use JavaConverters
+[warn]       input1.length, input2.length)
+[warn]       ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/JavaStreamingSuitebase.scala:184:22: object JavaConversions in package collection is deprecated (since 2.12.0): use JavaConverters
+[warn]       input1.length, input2.length)
+[warn]                      ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/JavaStreamingSuitebase.scala:209:50: object JavaConversions in package collection is deprecated (since 2.12.0): use JavaConverters
+[warn]   private def toSeq[U](input: JList[JList[U]]) = input.map(_.toSeq).toSeq
+[warn]                                                  ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/JavaStreamingSuitebase.scala:209:60: object JavaConversions in package collection is deprecated (since 2.12.0): use JavaConverters
+[warn]   private def toSeq[U](input: JList[JList[U]]) = input.map(_.toSeq).toSeq
+[warn]                                                            ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/StreamingSuiteCommon.scala:154:36: trait SynchronizedBuffer in package mutable is deprecated (since 2.11.0): Synchronization via traits is deprecated as it is inherently unreliable. Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.
+[warn]       new ArrayBuffer[Seq[V]] with SynchronizedBuffer[Seq[V]])
+[warn]                                    ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/StreamingSuiteCommon.scala:178:36: trait SynchronizedBuffer in package mutable is deprecated (since 2.11.0): Synchronization via traits is deprecated as it is inherently unreliable. Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.
+[warn]       new ArrayBuffer[Seq[W]] with SynchronizedBuffer[Seq[W]])
+[warn]                                    ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/StreamingSuiteCommon.scala:202:36: trait SynchronizedBuffer in package mutable is deprecated (since 2.11.0): Synchronization via traits is deprecated as it is inherently unreliable. Consider java.util.concurrent.ConcurrentLinkedQueue as an alternative.
+[warn]       new ArrayBuffer[Seq[W]] with SynchronizedBuffer[Seq[W]])
+[warn]                                    ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/Utils.scala:236:34: object JavaConversions in package collection is deprecated (since 2.12.0): use JavaConverters
+[warn]      case e: MultiException => e.getThrowables.exists(isBindCollision)
+[warn]                                  ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/main/1.3/scala/com/holdenkarau/spark/testing/YARNCluster.scala:133:7: object JavaConversions in package collection is deprecated (since 2.12.0): use JavaConverters
+[warn]       iterableAsScalaIterable(config).foreach { e =>
+[warn]       ^
+[warn] there were three feature warnings; re-run with -feature for details
+[warn] 12 warnings found
+[info] Done compiling.
+[success] Total time: 15 s, completed Feb 28, 2020 1:47:27 PM
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[info] Compiling 20 Scala sources and 4 Java sources to /Users/holden/public_repos/spark-testing-base/core/target/scala-2.12/test-classes ...
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:23:43: Unused import
+[warn] import org.apache.spark.streaming.dstream._
+[warn]                                           ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:24:25: Unused import
+[warn] import org.apache.spark._
+[warn]                         ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:26:38: Unused import
+[warn] import org.apache.spark.SparkContext._
+[warn]                                      ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:29:33: Unused import
+[warn] import org.scalatest.exceptions.TestFailedException
+[warn]                                 ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/HDFSClusterTest.scala:6:39: imported `RDDComparisons' is permanently hidden by definition of trait RDDComparisons in package testing
+[warn] import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext}
+[warn]                                       ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/HDFSClusterTest.scala:6:55: imported `SharedSparkContext' is permanently hidden by definition of trait SharedSparkContext in package testing
+[warn] import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext}
+[warn]                                                       ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleDataFrameTest.scala:95:8: value registerTempTable is not a member of org.apache.spark.sql.DataFrame
+[error]     df.registerTempTable("pandaTemp")
+[error]        ^
+[info] ScalaTest
+[info] Run completed in 36 milliseconds.
+[info] Total number of tests run: 0
+[info] Suites: completed 0, aborted 0
+[info] Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+[info] No tests were executed.
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleDataFrameTest.scala:128:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:156:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:170:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:189:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:219:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:275:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:290:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:306:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:338:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleStreamingActionTest.scala:28:18: value accumulator is not a member of org.apache.spark.SparkContext
+[error]     val acc = sc.accumulator(0)
+[error]                  ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleStreamingActionTest.scala:34:29: not found: type Accumulator
+[error]   def countWordsLength(acc: Accumulator[Int]): (DStream[String] => Unit) = {
+[error]                             ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleStreamingActionTest.scala:19:25: Unused import
+[warn] import org.apache.spark._
+[warn]                         ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/PrettifyTest.scala:17:22: constructor SQLContext in class SQLContext cannot be accessed in class PrettifyTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/PrettifyTest.scala:44:22: constructor SQLContext in class SQLContext cannot be accessed in class PrettifyTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/PrettifyTest.scala:47:77: Unable to find encoder for type (String, Int). An implicit Encoder[(String, Int)] is needed to store (String, Int) instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]     val datasetGen = DatasetGenerator.genDataset[(String, Int)](sqlContext) {
+[error]                                                                             ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/PrettifyTest.scala:45:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:13:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleDatasetGeneratorTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:18:56: Unable to find encoder for type String. An implicit Encoder[String] is needed to store String instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]         DatasetGenerator.genDataset[String](sqlContext)(
+[error]                                                        ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:27:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleDatasetGeneratorTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:32:69: Unable to find encoder for type (Int, String). An implicit Encoder[(Int, String)] is needed to store (Int, String) instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]         DatasetGenerator.genSizedDataset[(Int, String)](sqlContext) { size =>
+[error]                                                                     ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:47:22: constructor SQLContext in class SQLContext cannot be accessed in class SampleDatasetGeneratorTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:51:52: Unable to find encoder for type com.holdenkarau.spark.testing.Car. An implicit Encoder[com.holdenkarau.spark.testing.Car] is needed to store com.holdenkarau.spark.testing.Car instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]       DatasetGenerator.genDataset[Car](sqlContext) {
+[error]                                                    ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:62:31: Unable to find encoder for type Int. An implicit Encoder[Int] is needed to store Int instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]         dataset => dataset.map(_.speed).count() == dataset.count()
+[error]                               ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:14:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:28:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:48:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/DatasetGeneratorSizeSpecial.scala:13:22: constructor SQLContext in class SQLContext cannot be accessed in class DatasetGeneratorSizeSpecial
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/DatasetGeneratorSizeSpecial.scala:20:62: Unable to find encoder for type Seq[com.holdenkarau.spark.testing.Car]. An implicit Encoder[Seq[com.holdenkarau.spark.testing.Car]] is needed to store Seq[com.holdenkarau.spark.testing.Car] instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]       DatasetGenerator.genSizedDataset[Seq[Car]](sqlContext) { size =>
+[error]                                                              ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/DatasetGeneratorSizeSpecial.scala:41:34: Unable to find encoder for type com.holdenkarau.spark.testing.Car. An implicit Encoder[com.holdenkarau.spark.testing.Car] is needed to store com.holdenkarau.spark.testing.Car instances in a Dataset. Primitive types (Int, String, etc) and Product types (case classes) are supported by importing spark.implicits._  Support for serializing other types will be added in future releases.
+[error]       forAll(carGen.map(_.flatMap(identity))) {
+[error]                                  ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/DatasetGeneratorSizeSpecial.scala:14:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/MLScalaCheckTest.scala:16:22: constructor SQLContext in class SQLContext cannot be accessed in class MLScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/MLScalaCheckTest.scala:31:22: constructor SQLContext in class SQLContext cannot be accessed in class MLScalaCheckTest
+[error]     val sqlContext = new SQLContext(sc)
+[error]                      ^
+[warn] 13 warnings found
+[error] 26 errors found
+[error] (core / Test / compileIncremental) Compilation failed
+[error] Total time: 4 s, completed Feb 28, 2020 1:47:32 PM
+
+
+2nd run in test:copmpile
+
+[info] Done compiling.
+[success] Total time: 7 s, completed Feb 28, 2020 3:51:23 PM
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sbtcredentials does not exist
+[warn] Credentials file /Users/holden/.ivy2/.sparkcredentials does not exist
+[info] Compiling 20 Scala sources and 4 Java sources to /Users/holden/public_repos/spark-testing-base/core/target/scala-2.12/test-classes ...
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:23:43: Unused import
+[warn] import org.apache.spark.streaming.dstream._
+[warn]                                           ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:24:25: Unused import
+[warn] import org.apache.spark._
+[warn]                         ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:26:38: Unused import
+[warn] import org.apache.spark.SparkContext._
+[warn]                                      ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/ArtisinalStreamingTest.scala:29:33: Unused import
+[warn] import org.scalatest.exceptions.TestFailedException
+[warn]                                 ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/HDFSClusterTest.scala:6:39: imported `RDDComparisons' is permanently hidden by definition of trait RDDComparisons in package testing
+[warn] import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext}
+[warn]                                       ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/HDFSClusterTest.scala:6:55: imported `SharedSparkContext' is permanently hidden by definition of trait SharedSparkContext in package testing
+[warn] import com.holdenkarau.spark.testing.{RDDComparisons, SharedSparkContext}
+[warn]                                                       ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleDataFrameTest.scala:95:8: value registerTempTable is not a member of org.apache.spark.sql.DataFrame
+[error]     df.registerTempTable("pandaTemp")
+[error]        ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleDataFrameTest.scala:128:33: Unused import
+[warn]     import sqlContext.implicits._
+[warn]                                 ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleScalaCheckTest.scala:20:46: Unused import
+[warn] import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+[warn]                                              ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleStreamingActionTest.scala:28:18: value accumulator is not a member of org.apache.spark.SparkContext
+[error]     val acc = sc.accumulator(0)
+[error]                  ^
+[error] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleStreamingActionTest.scala:34:29: not found: type Accumulator
+[error]   def countWordsLength(acc: Accumulator[Int]): (DStream[String] => Unit) = {
+[error]                             ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.3/scala/com/holdenkarau/spark/testing/SampleStreamingActionTest.scala:19:25: Unused import
+[warn] import org.apache.spark._
+[warn]                         ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/PrettifyTest.scala:3:29: Unused import
+[warn] import org.apache.spark.sql.SQLContext
+[warn]                             ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/1.6/scala/com/holdenkarau/spark/testing/SampleDatasetGeneratorTest.scala:3:39: Unused import
+[warn] import org.apache.spark.sql.{Dataset, SQLContext}
+[warn]                                       ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/DatasetGeneratorSizeSpecial.scala:3:39: Unused import
+[warn] import org.apache.spark.sql.{Dataset, SQLContext}
+[warn]                                       ^
+[warn] /Users/holden/public_repos/spark-testing-base/core/src/test/2.0/scala/com/holdenkarau/spark/testing/MLScalaCheckTest.scala:4:29: Unused import
+[warn] import org.apache.spark.sql.SQLContext
+[warn]                             ^
+[warn] 13 warnings found
+[error] three errors found
+[error] (core / Test / compileIncremental) Compilation failed
+[error] Total time: 2 s, completed Feb 28, 2020 3:51:25 PM

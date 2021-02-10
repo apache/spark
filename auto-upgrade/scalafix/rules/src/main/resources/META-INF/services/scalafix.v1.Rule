@@ -1,0 +1,5 @@
+fix.SparkAutoUpgrade
+fix.MigrateHiveContext
+fix.MigrateToSparkSessionBuilder
+fix.MigrateDeprecatedDataFrameReaderFuns
+fix.AccumulatorUpgrade
