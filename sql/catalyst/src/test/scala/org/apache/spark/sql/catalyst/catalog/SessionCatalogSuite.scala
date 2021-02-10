@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Command, Range, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, Project, Range, SubqueryAlias, View}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -634,6 +634,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     }
   }
 
+  private def getViewPlan(metadata: CatalogTable): LogicalPlan = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    val projectList = metadata.schema.map { field =>
+      UpCast(field.name.attr, field.dataType).as(field.name)
+    }
+    Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
+  }
+
   test("look up view relation") {
     withBasicCatalog { catalog =>
       val props = CatalogTable.catalogAndNamespaceToProps("cat1", Seq("ns1"))
@@ -646,8 +654,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
       // Look up a view.
       catalog.setCurrentDatabase("default")
-      val view = View(desc = metadata, output = metadata.schema.toAttributes,
-        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
       comparePlans(catalog.lookupRelation(TableIdentifier("view1", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view1"), view))
       // Look up a view using current database of the session catalog.
@@ -666,8 +673,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(metadata.viewText.isDefined)
       assert(metadata.viewCatalogAndNamespace == Seq(CatalogManager.SESSION_CATALOG_NAME, "db2"))
 
-      val view = View(desc = metadata, output = metadata.schema.toAttributes,
-        child = CatalystSqlParser.parsePlan(metadata.viewText.get))
+      val view = View(desc = metadata, isTempView = false, child = getViewPlan(metadata))
       comparePlans(catalog.lookupRelation(TableIdentifier("view2", Some("db3"))),
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))
     }
@@ -1618,26 +1624,28 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
     import org.apache.spark.sql.catalyst.dsl.plans._
 
     Seq(true, false) foreach { caseSensitive =>
-      val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
-      val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry, conf)
-      catalog.setCurrentDatabase("db1")
-      try {
-        val analyzer = new Analyzer(catalog, conf)
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val catalog = new SessionCatalog(newBasicCatalog(), new SimpleFunctionRegistry)
+        catalog.setCurrentDatabase("db1")
+        try {
+          val analyzer = new Analyzer(catalog)
 
-        // The analyzer should report the undefined function rather than the undefined table first.
-        val cause = intercept[AnalysisException] {
-          analyzer.execute(
-            UnresolvedRelation(TableIdentifier("undefined_table")).select(
-              UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+          // The analyzer should report the undefined function
+          // rather than the undefined table first.
+          val cause = intercept[AnalysisException] {
+            analyzer.execute(
+              UnresolvedRelation(TableIdentifier("undefined_table")).select(
+                UnresolvedFunction("undefined_fn", Nil, isDistinct = false)
+              )
             )
-          )
-        }
+          }
 
-        assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
-        // SPARK-21318: the error message should contains the current database name
-        assert(cause.getMessage.contains("db1"))
-      } finally {
-        catalog.reset()
+          assert(cause.getMessage.contains("Undefined function: 'undefined_fn'"))
+          // SPARK-21318: the error message should contains the current database name
+          assert(cause.getMessage.contains("db1"))
+        } finally {
+          catalog.reset()
+        }
       }
     }
   }
@@ -1676,6 +1684,22 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         // And the cache is gone.
         assert(catalog.getCachedTable(table) === null)
       }
+    }
+  }
+
+  test("SPARK-34197: refreshTable should not invalidate the relation cache for temporary views") {
+    withBasicCatalog { catalog =>
+      catalog.createTempView("tbl1", Range(1, 10, 1, 10), false)
+      val qualifiedName1 = QualifiedTableName("default", "tbl1")
+      catalog.cacheTable(qualifiedName1, Range(1, 10, 1, 10))
+      catalog.refreshTable(TableIdentifier("tbl1"))
+      assert(catalog.getCachedTable(qualifiedName1) != null)
+
+      catalog.createGlobalTempView("tbl2", Range(2, 10, 1, 10), false)
+      val qualifiedName2 = QualifiedTableName(catalog.globalTempViewManager.database, "tbl2")
+      catalog.cacheTable(qualifiedName2, Range(2, 10, 1, 10))
+      catalog.refreshTable(TableIdentifier("tbl2", Some(catalog.globalTempViewManager.database)))
+      assert(catalog.getCachedTable(qualifiedName2) != null)
     }
   }
 }

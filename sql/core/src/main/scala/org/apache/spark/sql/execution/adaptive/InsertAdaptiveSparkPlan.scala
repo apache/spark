@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ListQuery, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ListQuery, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.UnspecifiedDistribution
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -38,8 +38,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 case class InsertAdaptiveSparkPlan(
     adaptiveExecutionContext: AdaptiveExecutionContext) extends Rule[SparkPlan] {
-
-  private val conf = adaptiveExecutionContext.session.sessionState.conf
 
   override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
 
@@ -100,10 +98,8 @@ case class InsertAdaptiveSparkPlan(
   }
 
   private def supportAdaptive(plan: SparkPlan): Boolean = {
-    // TODO migrate dynamic-partition-pruning onto adaptive execution.
     sanityCheck(plan) &&
       !plan.logicalLink.exists(_.isStreaming) &&
-      !plan.expressions.exists(_.find(_.isInstanceOf[DynamicPruningSubquery]).isDefined) &&
     plan.children.forall(supportAdaptive)
   }
 
@@ -115,20 +111,31 @@ case class InsertAdaptiveSparkPlan(
    * For each sub-query, generate the adaptive execution plan for each sub-query by applying this
    * rule, or reuse the execution plan from another sub-query of the same semantics if possible.
    */
-  private def buildSubqueryMap(plan: SparkPlan): Map[Long, SubqueryExec] = {
-    val subqueryMap = mutable.HashMap.empty[Long, SubqueryExec]
+  private def buildSubqueryMap(plan: SparkPlan): Map[Long, BaseSubqueryExec] = {
+    val subqueryMap = mutable.HashMap.empty[Long, BaseSubqueryExec]
     plan.foreach(_.expressions.foreach(_.foreach {
       case expressions.ScalarSubquery(p, _, exprId)
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(p)
         verifyAdaptivePlan(executedPlan, p)
-        val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
+        val subquery = SubqueryExec.createForScalarSubquery(
+          s"subquery#${exprId.id}", executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case expressions.InSubquery(_, ListQuery(query, _, exprId, _))
           if !subqueryMap.contains(exprId.id) =>
         val executedPlan = compileSubquery(query)
         verifyAdaptivePlan(executedPlan, query)
         val subquery = SubqueryExec(s"subquery#${exprId.id}", executedPlan)
+        subqueryMap.put(exprId.id, subquery)
+      case expressions.DynamicPruningSubquery(value, buildPlan,
+          buildKeys, broadcastKeyIndex, onlyInBroadcast, exprId)
+          if !subqueryMap.contains(exprId.id) =>
+        val executedPlan = compileSubquery(buildPlan)
+        verifyAdaptivePlan(executedPlan, buildPlan)
+
+        val name = s"dynamicpruning#${exprId.id}"
+        val subquery = SubqueryAdaptiveBroadcastExec(
+          name, broadcastKeyIndex, buildKeys, executedPlan)
         subqueryMap.put(exprId.id, subquery)
       case _ =>
     }))

@@ -38,8 +38,7 @@ class OptimizerLoggingSuite extends PlanTest {
 
   private def verifyLog(expectedLevel: Level, expectedRulesOrBatches: Seq[String]): Unit = {
     val logAppender = new LogAppender("optimizer rules")
-    withLogAppender(logAppender,
-        loggerName = Some(Optimize.getClass.getName.dropRight(1)), level = Some(Level.TRACE)) {
+    withLogAppender(logAppender, level = Some(Level.TRACE)) {
       val input = LocalRelation('a.int, 'b.string, 'c.double)
       val query = input.select('a, 'b).select('a).where('a > 1).analyze
       val expected = input.where('a > 1).select('a).analyze
@@ -79,7 +78,7 @@ class OptimizerLoggingSuite extends PlanTest {
       "deBUG" -> Level.DEBUG)
 
     levels.foreach { level =>
-      withSQLConf(SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> level._1) {
+      withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level._1) {
         verifyLog(
           level._2,
           Seq(
@@ -98,10 +97,10 @@ class OptimizerLoggingSuite extends PlanTest {
 
     levels.foreach { level =>
       val error = intercept[IllegalArgumentException] {
-        withSQLConf(SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> level) {}
+        withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {}
       }
       assert(error.getMessage.contains(
-        "Invalid value for 'spark.sql.optimizer.planChangeLog.level'."))
+        "Invalid value for 'spark.sql.planChangeLog.level'."))
     }
   }
 
@@ -128,8 +127,8 @@ class OptimizerLoggingSuite extends PlanTest {
 
     rulesSeq.foreach { case (rulesConf, expectedRules) =>
       withSQLConf(
-        SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES.key -> rulesConf,
-        SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+        SQLConf.PLAN_CHANGE_LOG_RULES.key -> rulesConf,
+        SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
         verifyLog(Level.INFO, expectedRules)
       }
     }
@@ -137,16 +136,16 @@ class OptimizerLoggingSuite extends PlanTest {
 
   test("test log batches which change the plan") {
     withSQLConf(
-      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_BATCHES.key -> "Optimizer Batch",
-      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+      SQLConf.PLAN_CHANGE_LOG_BATCHES.key -> "Optimizer Batch",
+      SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
       verifyLog(Level.INFO, Seq("Optimizer Batch"))
     }
   }
 
   test("test log batches which do not change the plan") {
     withSQLConf(
-      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_BATCHES.key -> "Batch Has No Effect",
-      SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+      SQLConf.PLAN_CHANGE_LOG_BATCHES.key -> "Batch Has No Effect",
+      SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
       verifyLog(Level.INFO, Seq("Batch Has No Effect"))
     }
   }

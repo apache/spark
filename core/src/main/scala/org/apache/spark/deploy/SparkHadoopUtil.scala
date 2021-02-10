@@ -392,7 +392,7 @@ private[spark] class SparkHadoopUtil extends Logging {
 
 }
 
-private[spark] object SparkHadoopUtil {
+private[spark] object SparkHadoopUtil extends Logging {
 
   private lazy val instance = new SparkHadoopUtil
 
@@ -450,6 +450,7 @@ private[spark] object SparkHadoopUtil {
           hadoopConf.set("fs.s3a.session.token", sessionToken)
         }
       }
+      loadHiveConfFile(conf, hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
       appendSparkHiveConfigs(conf, hadoopConf)
       val bufferSize = conf.get(BUFFER_SIZE).toString
@@ -457,10 +458,21 @@ private[spark] object SparkHadoopUtil {
     }
   }
 
+  private def loadHiveConfFile(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      logInfo(s"Loading hive config file: $configFile")
+      hadoopConf.addResource(configFile)
+    }
+  }
+
   private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
     for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
       hadoopConf.set(key.substring("spark.hadoop.".length), value)
+    }
+    if (conf.getOption("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version").isEmpty) {
+      hadoopConf.set("mapreduce.fileoutputcommitter.algorithm.version", "1")
     }
   }
 

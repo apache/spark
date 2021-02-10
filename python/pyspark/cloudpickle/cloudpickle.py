@@ -828,3 +828,15 @@ def _get_bases(typ):
         # For regular class objects
         bases_attr = '__bases__'
     return getattr(typ, bases_attr)
+
+
+def _make_dict_keys(obj):
+    return dict.fromkeys(obj).keys()
+
+
+def _make_dict_values(obj):
+    return {i: _ for i, _ in enumerate(obj)}.values()
+
+
+def _make_dict_items(obj):
+    return obj.items()

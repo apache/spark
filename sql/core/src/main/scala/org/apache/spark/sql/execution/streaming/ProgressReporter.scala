@@ -71,6 +71,8 @@ trait ProgressReporter extends Logging {
   private var currentTriggerEndTimestamp = -1L
   private var currentTriggerStartOffsets: Map[SparkDataStream, String] = _
   private var currentTriggerEndOffsets: Map[SparkDataStream, String] = _
+  private var currentTriggerLatestOffsets: Map[SparkDataStream, String] = _
+
   // TODO: Restore this from the checkpoint when possible.
   private var lastTriggerStartTimestamp = -1L
 
@@ -119,6 +121,7 @@ trait ProgressReporter extends Logging {
     currentTriggerStartTimestamp = triggerClock.getTimeMillis()
     currentTriggerStartOffsets = null
     currentTriggerEndOffsets = null
+    currentTriggerLatestOffsets = null
     currentDurationsMs.clear()
   }
 
@@ -126,9 +129,13 @@ trait ProgressReporter extends Logging {
    * Record the offsets range this trigger will process. Call this before updating
    * `committedOffsets` in `StreamExecution` to make sure that the correct range is recorded.
    */
-  protected def recordTriggerOffsets(from: StreamProgress, to: StreamProgress): Unit = {
+  protected def recordTriggerOffsets(
+      from: StreamProgress,
+      to: StreamProgress,
+      latest: StreamProgress): Unit = {
     currentTriggerStartOffsets = from.mapValues(_.json).toMap
     currentTriggerEndOffsets = to.mapValues(_.json).toMap
+    currentTriggerLatestOffsets = latest.mapValues(_.json).toMap
   }
 
   private def updateProgress(newProgress: StreamingQueryProgress): Unit = {
@@ -151,7 +158,8 @@ trait ProgressReporter extends Logging {
    *                    though the sources don't have any new data.
    */
   protected def finishTrigger(hasNewData: Boolean, hasExecuted: Boolean): Unit = {
-    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null)
+    assert(currentTriggerStartOffsets != null && currentTriggerEndOffsets != null &&
+      currentTriggerLatestOffsets != null)
     currentTriggerEndTimestamp = triggerClock.getTimeMillis()
 
     val executionStats = extractExecutionStats(hasNewData, hasExecuted)
@@ -161,7 +169,7 @@ trait ProgressReporter extends Logging {
     val inputTimeSec = if (lastTriggerStartTimestamp >= 0) {
       (currentTriggerStartTimestamp - lastTriggerStartTimestamp).toDouble / MILLIS_PER_SECOND
     } else {
-      Double.NaN
+      Double.PositiveInfinity
     }
     logDebug(s"Execution stats: $executionStats")
 
@@ -171,6 +179,7 @@ trait ProgressReporter extends Logging {
         description = source.toString,
         startOffset = currentTriggerStartOffsets.get(source).orNull,
         endOffset = currentTriggerEndOffsets.get(source).orNull,
+        latestOffset = currentTriggerLatestOffsets.get(source).orNull,
         numInputRows = numRecords,
         inputRowsPerSecond = numRecords / inputTimeSec,
         processedRowsPerSecond = numRecords / processingTimeSec

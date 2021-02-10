@@ -41,7 +41,7 @@ select_statement [ { UNION | INTERSECT | EXCEPT } [ ALL | DISTINCT ] select_stat
 
 While `select_statement` is defined as
 ```sql
-SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
+SELECT [ hints , ... ] [ ALL | DISTINCT ] { [ named_expression | regex_column_names ] [ , ... ] }
     FROM { from_item [ , ... ] }
     [ PIVOT clause ]
     [ LATERAL VIEW clause ] [ ... ] 
@@ -85,6 +85,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
      * [Table-value function](sql-ref-syntax-qry-select-tvf.html)
      * [Inline table](sql-ref-syntax-qry-select-inline-table.html)
      * Subquery
+     * [File](sql-ref-syntax-qry-select-file.html)
      
 * **PIVOT**
 
@@ -150,6 +151,18 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 
      Specifies aliases for one or more source window specifications. The source window specifications can
      be referenced in the widow definitions in the query.
+     
+* **regex_column_names**
+
+     When `spark.sql.parser.quotedRegexColumnNames` is true, quoted identifiers (using backticks) in `SELECT`
+     statement are interpreted as regular expressions and `SELECT` statement can take regex-based column specification.
+     For example, below SQL will only take column `c`:
+
+     ```sql
+     SELECT `(a|b)?+.+` FROM (
+       SELECT 1 as a, 2 as b, 3 as c
+     )
+     ```
 
 ### Related Statements
 
@@ -164,6 +177,7 @@ SELECT [ hints , ... ] [ ALL | DISTINCT ] { named_expression [ , ... ] }
 * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
 * [Hints](sql-ref-syntax-qry-select-hints.html)
 * [Inline Table](sql-ref-syntax-qry-select-inline-table.html)
+* [File](sql-ref-syntax-qry-select-file.html)
 * [JOIN](sql-ref-syntax-qry-select-join.html)
 * [LIKE Predicate](sql-ref-syntax-qry-select-like.html)
 * [Set Operators](sql-ref-syntax-qry-select-setops.html)

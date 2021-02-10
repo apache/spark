@@ -32,12 +32,14 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
+import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
+import org.apache.orc.OrcConf
 import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.{SPARK_VERSION_SHORT, TaskContext}
@@ -47,7 +49,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.OrcOptions
+import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types._
@@ -75,7 +77,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConf()),
+        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
         ignoreCorruptFiles
       )
     }
@@ -139,7 +141,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
+      OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
@@ -296,7 +298,7 @@ private[orc] class OrcOutputWriter(
 
   override def close(): Unit = {
     if (recordWriterInstantiated) {
-      // Hive 1.2.1 ORC initializes its private `writer` field at the first write.
+      // Hive ORC initializes its private `writer` field at the first write.
       OrcFileFormat.addSparkVersionMetadata(recordWriter)
       recordWriter.close(Reporter.NULL)
     }
@@ -323,13 +325,19 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val deserializer = new OrcSerde
     val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
         case (field, ordinal) =>
-          var ref = oi.getStructFieldRef(field.name)
-          if (ref == null) {
-            ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
+          var ref: objectinspector.StructField = null
+          if (forcePositionalEvolution) {
+            ref = oi.getAllStructFieldRefs.get(dataSchema.fieldIndex(field.name))
+          } else {
+            ref = oi.getStructFieldRef(field.name)
+            if (ref == null) {
+              ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
+            }
           }
           ref -> ordinal
       }.unzip

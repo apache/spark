@@ -33,9 +33,11 @@ import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DRIVER_RESOURCES_FILE, SPARK_DRIVER_PREFIX}
+import org.apache.spark.internal.config.UI.UI_REVERSE_PROXY
 import org.apache.spark.internal.config.Worker.WORKER_DRIVER_TERMINATE_TIMEOUT
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{Clock, ShutdownHookManager, SystemClock, Utils}
 
 /**
@@ -50,6 +52,7 @@ private[deploy] class DriverRunner(
     val driverDesc: DriverDescription,
     val worker: RpcEndpointRef,
     val workerUrl: String,
+    val workerWebUiUrl: String,
     val securityManager: SecurityManager,
     val resources: Map[String, ResourceInformation] = Map.empty)
   extends Logging {
@@ -160,7 +163,6 @@ private[deploy] class DriverRunner(
         driverDesc.jarUrl,
         driverDir,
         conf,
-        securityManager,
         SparkHadoopUtil.get.newConfiguration(conf),
         System.currentTimeMillis(),
         useCache = false)
@@ -189,6 +191,14 @@ private[deploy] class DriverRunner(
     // TODO: If we add ability to submit multiple jars they should also be added here
     val builder = CommandUtils.buildProcessBuilder(driverDesc.command.copy(javaOpts = javaOpts),
       securityManager, driverDesc.mem, sparkHome.getAbsolutePath, substituteVariables)
+
+    // add WebUI driver log url to environment
+    val reverseProxy = conf.get(UI_REVERSE_PROXY)
+    val workerUrlRef = UIUtils.makeHref(reverseProxy, driverId, workerWebUiUrl)
+    builder.environment.put("SPARK_DRIVER_LOG_URL_STDOUT",
+      s"$workerUrlRef/logPage?driverId=$driverId&logType=stdout")
+    builder.environment.put("SPARK_DRIVER_LOG_URL_STDERR",
+      s"$workerUrlRef/logPage?driverId=$driverId&logType=stderr")
 
     runDriver(builder, driverDir, driverDesc.supervise)
   }

@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources._
  * @param storage storage format used to describe how the query result is stored.
  * @param provider the data source type to be used
  * @param query the logical plan representing data to write to
- * @param overwrite whthere overwrites existing directory
+ * @param overwrite whether overwrites existing directory
  */
 case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,

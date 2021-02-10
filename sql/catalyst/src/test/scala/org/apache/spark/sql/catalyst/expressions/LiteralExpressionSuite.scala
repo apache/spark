@@ -209,6 +209,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkMapLiteral(Map("a" -> 1, "b" -> 2, "c" -> 3))
     checkMapLiteral(Map("1" -> 1.0, "2" -> 2.0, "3" -> 3.0))
+    assert(Literal.create(Map("a" -> 1)).toString === "map(keys: [a], values: [1])")
   }
 
   test("struct") {
@@ -236,6 +237,15 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    checkEvaluation(Literal(Array('h', 'e', 'l', 'l', 'o')), "hello")
+    checkEvaluation(Literal(Array("hello".toCharArray)), Array("hello"))
+    // scalastyle:off
+    checkEvaluation(Literal(Array('测','试')), "测试")
+    checkEvaluation(Literal(Array('a', '测', 'b', '试', 'c')), "a测b试c")
+    // scalastyle:on
   }
 
   test("construct literals from java.time.LocalDate") {
@@ -314,6 +324,29 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val expected = "DATE '2019-03-21'"
       val literalStr = Literal.create(date).sql
       assert(literalStr === expected)
+    }
+  }
+
+  test("SPARK-33860: Make CatalystTypeConverters.convertToCatalyst match special Array value") {
+    assert(Literal(Array(1, 2, 3)) == Literal.create(Array(1, 2, 3), ArrayType(IntegerType)))
+    assert(Literal(Array(1L, 2L, 3L)) == Literal.create(Array(1L, 2L, 3L), ArrayType(LongType)))
+    assert(Literal(Array(1D, 2D, 3D)) == Literal.create(Array(1D, 2D, 3D), ArrayType(DoubleType)))
+    assert(Literal("123") == Literal.create(Array('1', '2', '3'), StringType))
+    assert(Literal(Array(1.toByte, 2.toByte, 3.toByte)) ==
+      Literal.create(Array(1.toByte, 2.toByte, 3.toByte), BinaryType))
+    assert(Literal(Array("1", "2", "3")) ==
+      Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
+  }
+
+  test("SPARK-34342: Date/Timestamp toString") {
+    assert(Literal.default(DateType).toString === "1970-01-01")
+    assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00")
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+        .atZone(ZoneOffset.UTC)
+        .toInstant
+      val literalStr = Literal.create(timestamp).toString
+      assert(literalStr === "2021-02-03 17:50:03.456")
     }
   }
 }

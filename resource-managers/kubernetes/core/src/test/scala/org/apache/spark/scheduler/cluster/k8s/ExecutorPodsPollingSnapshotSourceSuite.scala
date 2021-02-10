@@ -59,7 +59,7 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   private var pollingSourceUnderTest: ExecutorPodsPollingSnapshotSource = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     pollingExecutor = new DeterministicScheduler()
     pollingSourceUnderTest = new ExecutorPodsPollingSnapshotSource(
       sparkConf,
@@ -77,13 +77,15 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
   }
 
   test("Items returned by the API should be pushed to the event queue") {
+    val exec1 = runningExecutor(1)
+    val exec2 = runningExecutor(2)
     when(activeExecutorPods.list())
       .thenReturn(new PodListBuilder()
         .addToItems(
-          runningExecutor(1),
-          runningExecutor(2))
+          exec1,
+          exec2)
         .build())
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
-    verify(eventQueue).replaceSnapshot(Seq(runningExecutor(1), runningExecutor(2)))
+    verify(eventQueue).replaceSnapshot(Seq(exec1, exec2))
   }
 }

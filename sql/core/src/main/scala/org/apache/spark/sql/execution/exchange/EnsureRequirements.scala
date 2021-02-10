@@ -25,7 +25,6 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
@@ -34,7 +33,7 @@ import org.apache.spark.sql.internal.SQLConf
  * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
  * the input partition ordering requirements are met.
  */
-case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+object EnsureRequirements extends Rule[SparkPlan] {
 
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
@@ -85,11 +84,16 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
       val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
-        // Here we pick the max number of partitions among these non-shuffle children as the
-        // expected number of shuffle partitions. However, if it's smaller than
-        // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
-        // expected number of shuffle partitions.
-        math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+        if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
+          // Here we pick the max number of partitions among these non-shuffle children.
+          nonShuffleChildrenNumPartitions.max
+        } else {
+          // Here we pick the max number of partitions among these non-shuffle children as the
+          // expected number of shuffle partitions. However, if it's smaller than
+          // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
+          // expected number of shuffle partitions.
+          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+        }
       } else {
         childrenNumPartitions.max
       }
@@ -130,9 +134,14 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       leftKeys: IndexedSeq[Expression],
       rightKeys: IndexedSeq[Expression],
       expectedOrderOfKeys: Seq[Expression],
-      currentOrderOfKeys: Seq[Expression]): (Seq[Expression], Seq[Expression]) = {
+      currentOrderOfKeys: Seq[Expression]): Option[(Seq[Expression], Seq[Expression])] = {
     if (expectedOrderOfKeys.size != currentOrderOfKeys.size) {
-      return (leftKeys, rightKeys)
+      return None
+    }
+
+    // Check if the current order already satisfies the expected order.
+    if (expectedOrderOfKeys.zip(currentOrderOfKeys).forall(p => p._1.semanticEquals(p._2))) {
+      return Some(leftKeys, rightKeys)
     }
 
     // Build a lookup between an expression and the positions its holds in the current key seq.
@@ -159,10 +168,10 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           rightKeysBuffer += rightKeys(index)
         case _ =>
           // The expression cannot be found, or we have exhausted all indices for that expression.
-          return (leftKeys, rightKeys)
+          return None
       }
     }
-    (leftKeysBuffer.toSeq, rightKeysBuffer.toSeq)
+    Some(leftKeysBuffer.toSeq, rightKeysBuffer.toSeq)
   }
 
   private def reorderJoinKeys(
@@ -171,16 +180,45 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       leftPartitioning: Partitioning,
       rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
     if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
-      (leftPartitioning, rightPartitioning) match {
-        case (HashPartitioning(leftExpressions, _), _) =>
-          reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leftExpressions, leftKeys)
-        case (_, HashPartitioning(rightExpressions, _)) =>
-          reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
-        case _ =>
-          (leftKeys, rightKeys)
-      }
+      reorderJoinKeysRecursively(
+        leftKeys,
+        rightKeys,
+        Some(leftPartitioning),
+        Some(rightPartitioning))
+        .getOrElse((leftKeys, rightKeys))
     } else {
       (leftKeys, rightKeys)
+    }
+  }
+
+  /**
+   * Recursively reorders the join keys based on partitioning. It starts reordering the
+   * join keys to match HashPartitioning on either side, followed by PartitioningCollection.
+   */
+  private def reorderJoinKeysRecursively(
+      leftKeys: Seq[Expression],
+      rightKeys: Seq[Expression],
+      leftPartitioning: Option[Partitioning],
+      rightPartitioning: Option[Partitioning]): Option[(Seq[Expression], Seq[Expression])] = {
+    (leftPartitioning, rightPartitioning) match {
+      case (Some(HashPartitioning(leftExpressions, _)), _) =>
+        reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leftExpressions, leftKeys)
+          .orElse(reorderJoinKeysRecursively(
+            leftKeys, rightKeys, None, rightPartitioning))
+      case (_, Some(HashPartitioning(rightExpressions, _))) =>
+        reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, rightExpressions, rightKeys)
+          .orElse(reorderJoinKeysRecursively(
+            leftKeys, rightKeys, leftPartitioning, None))
+      case (Some(PartitioningCollection(partitionings)), _) =>
+        partitionings.foldLeft(Option.empty[(Seq[Expression], Seq[Expression])]) { (res, p) =>
+          res.orElse(reorderJoinKeysRecursively(leftKeys, rightKeys, Some(p), rightPartitioning))
+        }.orElse(reorderJoinKeysRecursively(leftKeys, rightKeys, None, rightPartitioning))
+      case (_, Some(PartitioningCollection(partitionings))) =>
+        partitionings.foldLeft(Option.empty[(Seq[Expression], Seq[Expression])]) { (res, p) =>
+          res.orElse(reorderJoinKeysRecursively(leftKeys, rightKeys, leftPartitioning, Some(p)))
+        }.orElse(None)
+      case _ =>
+        None
     }
   }
 

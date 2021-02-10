@@ -25,6 +25,7 @@ import scala.concurrent.duration._
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
@@ -60,11 +61,12 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
 
   Seq(
     (OperationState.CANCELED, (_: SparkExecuteStatementOperation).cancel()),
+    (OperationState.TIMEDOUT, (_: SparkExecuteStatementOperation).timeoutCancel()),
     (OperationState.CLOSED, (_: SparkExecuteStatementOperation).close())
   ).foreach { case (finalState, transition) =>
     test("SPARK-32057 SparkExecuteStatementOperation should not transiently become ERROR " +
       s"before being set to $finalState") {
-      val hiveSession = new HiveSessionImpl(ThriftserverShimUtils.testedProtocolVersions.head,
+      val hiveSession = new HiveSessionImpl(TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
       "username", "password", new HiveConf, "ip address")
       hiveSession.open(new util.HashMap)
 
@@ -108,7 +110,7 @@ class SparkExecuteStatementOperationSuite extends SparkFunSuite with SharedSpark
       signal: Semaphore,
       finalState: OperationState)
     extends SparkExecuteStatementOperation(sqlContext, hiveSession, statement,
-      new util.HashMap, false) {
+      new util.HashMap, false, 0) {
 
     override def cleanup(): Unit = {
       super.cleanup()

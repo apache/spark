@@ -22,6 +22,7 @@ import org.scalatest.Suite
 import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -56,10 +57,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
-
-  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
-  protected def conf = SQLConf.get
+trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { self: Suite =>
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -86,7 +84,7 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
     }
   }
 
-  private def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
+  protected def rewriteNameFromAttrNullability(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressions {
       case a @ AttributeReference(name, _, false, _) =>
         a.copy(name = s"*$name")(exprId = a.exprId, qualifier = a.qualifier)
@@ -167,35 +165,5 @@ trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
     comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()), checkAnalysis = false)
-  }
-
-  /** Fails the test if the join order in the two plans do not match */
-  protected def compareJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
-    val normalized1 = normalizePlan(normalizeExprIds(plan1))
-    val normalized2 = normalizePlan(normalizeExprIds(plan2))
-    if (!sameJoinPlan(normalized1, normalized2)) {
-      fail(
-        s"""
-           |== FAIL: Plans do not match ===
-           |${sideBySide(
-             rewriteNameFromAttrNullability(normalized1).treeString,
-             rewriteNameFromAttrNullability(normalized2).treeString).mkString("\n")}
-         """.stripMargin)
-    }
-  }
-
-  /** Consider symmetry for joins when comparing plans. */
-  private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
-    (plan1, plan2) match {
-      case (j1: Join, j2: Join) =>
-        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)
-          && j1.hint.leftHint == j2.hint.leftHint && j1.hint.rightHint == j2.hint.rightHint) ||
-          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left)
-            && j1.hint.leftHint == j2.hint.rightHint && j1.hint.rightHint == j2.hint.leftHint)
-      case (p1: Project, p2: Project) =>
-        p1.projectList == p2.projectList && sameJoinPlan(p1.child, p2.child)
-      case _ =>
-        plan1 == plan2
-    }
   }
 }

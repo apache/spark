@@ -77,7 +77,7 @@ struct<max_324_78:float>
 -- !query
 SELECT stddev_pop(b) FROM aggtest
 -- !query schema
-struct<stddev_pop(CAST(b AS DOUBLE)):double>
+struct<stddev_pop(b):double>
 -- !query output
 131.10703231895047
 
@@ -85,7 +85,7 @@ struct<stddev_pop(CAST(b AS DOUBLE)):double>
 -- !query
 SELECT stddev_samp(b) FROM aggtest
 -- !query schema
-struct<stddev_samp(CAST(b AS DOUBLE)):double>
+struct<stddev_samp(b):double>
 -- !query output
 151.38936080399804
 
@@ -93,7 +93,7 @@ struct<stddev_samp(CAST(b AS DOUBLE)):double>
 -- !query
 SELECT var_pop(b) FROM aggtest
 -- !query schema
-struct<var_pop(CAST(b AS DOUBLE)):double>
+struct<var_pop(b):double>
 -- !query output
 17189.053923482323
 
@@ -101,7 +101,7 @@ struct<var_pop(CAST(b AS DOUBLE)):double>
 -- !query
 SELECT var_samp(b) FROM aggtest
 -- !query schema
-struct<var_samp(CAST(b AS DOUBLE)):double>
+struct<var_samp(b):double>
 -- !query output
 22918.738564643096
 
@@ -109,7 +109,7 @@ struct<var_samp(CAST(b AS DOUBLE)):double>
 -- !query
 SELECT stddev_pop(CAST(b AS Decimal(38,0))) FROM aggtest
 -- !query schema
-struct<stddev_pop(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
+struct<stddev_pop(CAST(b AS DECIMAL(38,0))):double>
 -- !query output
 131.18117242958306
 
@@ -117,7 +117,7 @@ struct<stddev_pop(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query
 SELECT stddev_samp(CAST(b AS Decimal(38,0))) FROM aggtest
 -- !query schema
-struct<stddev_samp(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
+struct<stddev_samp(CAST(b AS DECIMAL(38,0))):double>
 -- !query output
 151.47497042966097
 
@@ -125,7 +125,7 @@ struct<stddev_samp(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query
 SELECT var_pop(CAST(b AS Decimal(38,0))) FROM aggtest
 -- !query schema
-struct<var_pop(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
+struct<var_pop(CAST(b AS DECIMAL(38,0))):double>
 -- !query output
 17208.5
 
@@ -133,7 +133,7 @@ struct<var_pop(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query
 SELECT var_samp(CAST(b AS Decimal(38,0))) FROM aggtest
 -- !query schema
-struct<var_samp(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
+struct<var_samp(CAST(b AS DECIMAL(38,0))):double>
 -- !query output
 22944.666666666668
 
@@ -141,17 +141,17 @@ struct<var_samp(CAST(CAST(b AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query
 SELECT var_pop(1.0), var_samp(2.0)
 -- !query schema
-struct<var_pop(CAST(1.0 AS DOUBLE)):double,var_samp(CAST(2.0 AS DOUBLE)):double>
+struct<var_pop(1.0):double,var_samp(2.0):double>
 -- !query output
-0.0	NaN
+0.0	NULL
 
 
 -- !query
 SELECT stddev_pop(CAST(3.0 AS Decimal(38,0))), stddev_samp(CAST(4.0 AS Decimal(38,0)))
 -- !query schema
-struct<stddev_pop(CAST(CAST(3.0 AS DECIMAL(38,0)) AS DOUBLE)):double,stddev_samp(CAST(CAST(4.0 AS DECIMAL(38,0)) AS DOUBLE)):double>
+struct<stddev_pop(CAST(3.0 AS DECIMAL(38,0))):double,stddev_samp(CAST(4.0 AS DECIMAL(38,0))):double>
 -- !query output
-0.0	NaN
+0.0	NULL
 
 
 -- !query
@@ -291,7 +291,7 @@ struct<avg(CAST(x AS DOUBLE)):double,var_pop(CAST(x AS DOUBLE)):double>
 -- !query
 SELECT covar_pop(b, a), covar_samp(b, a) FROM aggtest
 -- !query schema
-struct<covar_pop(CAST(b AS DOUBLE), CAST(a AS DOUBLE)):double,covar_samp(CAST(b AS DOUBLE), CAST(a AS DOUBLE)):double>
+struct<covar_pop(b, a):double,covar_samp(b, a):double>
 -- !query output
 653.6289553875104	871.5052738500139
 
@@ -299,7 +299,7 @@ struct<covar_pop(CAST(b AS DOUBLE), CAST(a AS DOUBLE)):double,covar_samp(CAST(b 
 -- !query
 SELECT corr(b, a) FROM aggtest
 -- !query schema
-struct<corr(CAST(b AS DOUBLE), CAST(a AS DOUBLE)):double>
+struct<corr(b, a):double>
 -- !query output
 0.1396345165178734
 
@@ -381,8 +381,8 @@ struct<>
 org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
-Expression in where clause: [(sum(DISTINCT CAST((outer(a.`four`) + b.`four`) AS BIGINT)) = CAST(b.`four` AS BIGINT))]
-Invalid expressions: [sum(DISTINCT CAST((outer(a.`four`) + b.`four`) AS BIGINT))];
+Expression in where clause: [(sum(DISTINCT (outer(a.`four`) + b.`four`)) = CAST(b.`four` AS BIGINT))]
+Invalid expressions: [sum(DISTINCT (outer(a.`four`) + b.`four`))]
 
 
 -- !query

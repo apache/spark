@@ -21,13 +21,23 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., 2019-GA-ubuntu-16.04):
+ * {{{
+ *   MSSQLSERVER_DOCKER_IMAGE_NAME=2019-GA-ubuntu-16.04
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.MsSqlServerIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mcr.microsoft.com/mssql/server:2019-GA-ubuntu-16.04"
+    override val imageName = sys.env.getOrElse("MSSQLSERVER_DOCKER_IMAGE_NAME",
+      "mcr.microsoft.com/mssql/server:2019-GA-ubuntu-16.04")
     override val env = Map(
       "SA_PASSWORD" -> "Sapass123",
       "ACCEPT_EULA" -> "Y"
@@ -98,6 +108,37 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
         |'the', 'lazy',
         |'dog')
       """.stripMargin).executeUpdate()
+    conn.prepareStatement(
+      """
+        |CREATE TABLE spatials (
+        |point geometry,
+        |line geometry,
+        |circle geometry,
+        |curve geography,
+        |polygon geometry,
+        |curve_polygon geography,
+        |multi_point geometry,
+        |multi_line geometry,
+        |multi_polygon geometry,
+        |geometry_collection geometry)
+      """.stripMargin).executeUpdate()
+    conn.prepareStatement(
+      """
+        |INSERT INTO spatials VALUES (
+        |'POINT(3 4 7 2.5)',
+        |'LINESTRING(1 0, 0 1, -1 0)',
+        |'CIRCULARSTRING(
+        |  -122.358 47.653, -122.348 47.649, -122.348 47.658, -122.358 47.658, -122.358 47.653)',
+        |'COMPOUNDCURVE(
+        |  CIRCULARSTRING(-122.358 47.653, -122.348 47.649,
+        |    -122.348 47.658, -122.358 47.658, -122.358 47.653))',
+        |'POLYGON((-20 -20, -20 20, 20 20, 20 -20, -20 -20), (10 0, 0 10, 0 -10, 10 0))',
+        |'CURVEPOLYGON((-122.3 47, 122.3 47, 125.7 49, 121 38, -122.3 47))',
+        |'MULTIPOINT((2 3), (7 8 9.5))',
+        |'MULTILINESTRING((0 2, 1 1), (1 0, 1 1))',
+        |'MULTIPOLYGON(((2 2, 2 -2, -2 -2, -2 2, 2 2)),((1 1, 3 1, 3 3, 1 3, 1 1)))',
+        |'GEOMETRYCOLLECTION(LINESTRING(1 1, 3 5),POLYGON((-1 -1, -1 -5, -5 -5, -5 -1, -1 -1)))')
+      """.stripMargin).executeUpdate()
   }
 
   test("Basic test") {
@@ -166,24 +207,26 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Date types") {
-    val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val row = rows(0)
-    val types = row.toSeq.map(x => x.getClass.toString)
-    assert(types.length == 6)
-    assert(types(0).equals("class java.sql.Date"))
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
-    assert(types(3).equals("class java.lang.String"))
-    assert(types(4).equals("class java.sql.Timestamp"))
-    assert(types(5).equals("class java.sql.Timestamp"))
-    assert(row.getAs[Date](0).equals(Date.valueOf("1991-11-09")))
-    assert(row.getAs[Timestamp](1).equals(Timestamp.valueOf("1999-01-01 13:23:35.0")))
-    assert(row.getAs[Timestamp](2).equals(Timestamp.valueOf("9999-12-31 23:59:59.0")))
-    assert(row.getString(3).equals("1901-05-09 23:59:59.0000000 +14:00"))
-    assert(row.getAs[Timestamp](4).equals(Timestamp.valueOf("1996-01-01 23:24:00.0")))
-    assert(row.getAs[Timestamp](5).equals(Timestamp.valueOf("1900-01-01 13:31:24.0")))
+    withDefaultTimeZone(UTC) {
+      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+      val rows = df.collect()
+      assert(rows.length == 1)
+      val row = rows(0)
+      val types = row.toSeq.map(x => x.getClass.toString)
+      assert(types.length == 6)
+      assert(types(0).equals("class java.sql.Date"))
+      assert(types(1).equals("class java.sql.Timestamp"))
+      assert(types(2).equals("class java.sql.Timestamp"))
+      assert(types(3).equals("class java.lang.String"))
+      assert(types(4).equals("class java.sql.Timestamp"))
+      assert(types(5).equals("class java.sql.Timestamp"))
+      assert(row.getAs[Date](0).equals(Date.valueOf("1991-11-09")))
+      assert(row.getAs[Timestamp](1).equals(Timestamp.valueOf("1999-01-01 13:23:35.0")))
+      assert(row.getAs[Timestamp](2).equals(Timestamp.valueOf("9999-12-31 23:59:59.0")))
+      assert(row.getString(3).equals("1901-05-09 23:59:59.0000000 +14:00"))
+      assert(row.getAs[Timestamp](4).equals(Timestamp.valueOf("1996-01-01 23:24:00.0")))
+      assert(row.getAs[Timestamp](5).equals(Timestamp.valueOf("1970-01-01 13:31:24.0")))
+    }
   }
 
   test("String types") {
@@ -222,5 +265,95 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationSuite {
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+  }
+
+  test("SPARK-33813: MsSqlServerDialect should support spatial types") {
+    val df = spark.read.jdbc(jdbcUrl, "spatials", new Properties)
+    val rows = df.collect()
+    assert(rows.length == 1)
+    val row = rows(0)
+    val types = row.toSeq.map(x => x.getClass.toString)
+    assert(types.length == 10)
+    assert(types(0) == "class [B")
+    assert(row.getAs[Array[Byte]](0) ===
+      Array(0, 0, 0, 0, 1, 15, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0,
+        16, 64, 0, 0, 0, 0, 0, 0, 28, 64, 0, 0, 0, 0, 0, 0, 4, 64))
+    assert(types(1) == "class [B")
+    assert(row.getAs[Array[Byte]](1) ===
+      Array[Byte](0, 0, 0, 0, 1, 4, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, -16, 63, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        -16, 63, 0, 0, 0, 0, 0, 0, -16, -65, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 2))
+    assert(types(2) == "class [B")
+    assert(row.getAs[Array[Byte]](2) ===
+      Array[Byte](0, 0, 0, 0, 2, 4, 5, 0, 0, 0, -12, -3, -44, 120, -23, -106,
+        94, -64, -35, 36, 6, -127, -107, -45, 71, 64, -125, -64, -54, -95, 69,
+        -106, 94, -64, 80, -115, -105, 110, 18, -45, 71, 64, -125, -64, -54,
+        -95, 69, -106, 94, -64, 78, 98, 16, 88, 57, -44, 71, 64, -12, -3, -44,
+        120, -23, -106, 94, -64, 78, 98, 16, 88, 57, -44, 71, 64, -12, -3, -44,
+        120, -23, -106, 94, -64, -35, 36, 6, -127, -107, -45, 71, 64, 1, 0, 0,
+        0, 2, 0, 0, 0, 0, 1, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 8))
+    assert(types(3) == "class [B")
+    assert(row.getAs[Array[Byte]](3) ===
+      Array[Byte](-26, 16, 0, 0, 2, 4, 5, 0, 0, 0, -35, 36, 6, -127, -107, -45,
+        71, 64, -12, -3, -44, 120, -23, -106, 94, -64, 80, -115, -105, 110, 18,
+        -45, 71, 64, -125, -64, -54, -95, 69, -106, 94, -64, 78, 98, 16, 88, 57,
+        -44, 71, 64, -125, -64, -54, -95, 69, -106, 94, -64, 78, 98, 16, 88, 57,
+        -44, 71, 64, -12, -3, -44, 120, -23, -106, 94, -64, -35, 36, 6, -127, -107,
+        -45, 71, 64, -12, -3, -44, 120, -23, -106, 94, -64, 1, 0, 0, 0, 3, 0, 0,
+        0, 0, 1, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 9, 2, 0, 0, 0, 3, 1))
+    assert(types(5) == "class [B")
+    assert(row.getAs[Array[Byte]](4) ===
+      Array[Byte](0, 0, 0, 0, 1, 4, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 52, -64, 0, 0,
+        0, 0, 0, 0, 52, -64, 0, 0, 0, 0, 0, 0, 52, -64, 0, 0, 0, 0, 0, 0, 52, 64,
+        0, 0, 0, 0, 0, 0, 52, 64, 0, 0, 0, 0, 0, 0, 52, 64, 0, 0, 0, 0, 0, 0, 52,
+        64, 0, 0, 0, 0, 0, 0, 52, -64, 0, 0, 0, 0, 0, 0, 52, -64, 0, 0, 0, 0, 0,
+        0, 52, -64, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 36, -64, 0, 0, 0, 0, 0, 0, 36, 64, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0,
+        0, 2, 0, 0, 0, 0, 0, 5, 0, 0, 0, 1, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 3))
+    assert(types(6) === "class [B")
+    assert(row.getAs[Array[Byte]](5) ===
+      Array[Byte](-26, 16, 0, 0, 2, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, -128, 71, 64, 51,
+        51, 51, 51, 51, -109, 94, -64, 0, 0, 0, 0, 0, -128, 71, 64, 51, 51, 51, 51,
+        51, -109, 94, 64, 0, 0, 0, 0, 0, -128, 72, 64, -51, -52, -52, -52, -52, 108,
+        95, 64, 0, 0, 0, 0, 0, 0, 67, 64, 0, 0, 0, 0, 0, 64, 94, 64, 0, 0, 0, 0, 0,
+        -128, 71, 64, 51, 51, 51, 51, 51, -109, 94, -64, 1, 0, 0, 0, 1, 0, 0, 0, 0,
+        1, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 10))
+    assert(types(6) === "class [B")
+    assert(row.getAs[Array[Byte]](6) ===
+      Array[Byte](0, 0, 0, 0, 1, 5, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0,
+        0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 28, 64, 0, 0, 0, 0, 0, 0, 32, 64, 0, 0, 0, 0,
+        0, 0, -8, -1, 0, 0, 0, 0, 0, 0, 35, 64, 2, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0,
+        0, 0, 3, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+        0, 0, 0, 0, 1, 0, 0, 0, 1))
+    assert(types(6) === "class [B")
+    assert(row.getAs[Array[Byte]](7) ===
+      Array[Byte](0, 0, 0, 0, 1, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 64, 0, 0, 0, 0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, -16, 63, 0, 0, 0,
+        0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -16, 63, 0, 0,
+        0, 0, 0, 0, -16, 63, 2, 0, 0, 0, 1, 0, 0, 0, 0, 1, 2, 0, 0, 0, 3, 0, 0, 0,
+        -1, -1, -1, -1, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1, 0, 0, 0, 2))
+    assert(types(6) === "class [B")
+    assert(row.getAs[Array[Byte]](8) ===
+      Array[Byte](0, 0, 0, 0, 1, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0,
+        0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, -64, 0, 0, 0,
+        0, 0, 0, 0, -64, 0, 0, 0, 0, 0, 0, 0, -64, 0, 0, 0, 0, 0, 0, 0, -64, 0, 0,
+        0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0,
+        0, 0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, 8, 64, 0,
+        0, 0, 0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 8, 64, 0,
+        0, 0, 0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, -16, 63,
+        0, 0, 0, 0, 0, 0, -16, 63, 2, 0, 0, 0, 2, 0, 0, 0, 0, 2, 5, 0, 0, 0, 3, 0,
+        0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 1, 0, 0, 0, 3))
+    assert(types(6) === "class [B")
+    assert(row.getAs[Array[Byte]](9) ===
+      Array[Byte](0, 0, 0, 0, 1, 4, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, -16, 63, 0, 0, 0,
+        0, 0, 0, -16, 63, 0, 0, 0, 0, 0, 0, 8, 64, 0, 0, 0, 0, 0, 0, 20, 64, 0, 0,
+        0, 0, 0, 0, -16, -65, 0, 0, 0, 0, 0, 0, -16, -65, 0, 0, 0, 0, 0, 0, -16, -65,
+        0, 0, 0, 0, 0, 0, 20, -64, 0, 0, 0, 0, 0, 0, 20, -64, 0, 0, 0, 0, 0, 0, 20,
+        -64, 0, 0, 0, 0, 0, 0, 20, -64, 0, 0, 0, 0, 0, 0, -16, -65, 0, 0, 0, 0, 0, 0,
+        -16, -65, 0, 0, 0, 0, 0, 0, -16, -65, 2, 0, 0, 0, 1, 0, 0, 0, 0, 2, 2, 0, 0,
+        0, 3, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0,
+        0, 0, 0, 1, 0, 0, 0, 3))
   }
 }

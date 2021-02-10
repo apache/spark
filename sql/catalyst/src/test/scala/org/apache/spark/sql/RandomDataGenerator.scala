@@ -204,7 +204,7 @@ object RandomDataGenerator {
             specialDates.map(java.sql.Date.valueOf))
         }
       case TimestampType =>
-        def uniformMicorsRand(rand: Random): Long = {
+        def uniformMicrosRand(rand: Random): Long = {
           var milliseconds = rand.nextLong() % 253402329599999L
           // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
           // for "0001-01-01 00:00:00.000000". We need to find a
@@ -225,7 +225,7 @@ object RandomDataGenerator {
         if (SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)) {
           randomNumeric[Instant](
             rand,
-            (rand: Random) => DateTimeUtils.microsToInstant(uniformMicorsRand(rand)),
+            (rand: Random) => DateTimeUtils.microsToInstant(uniformMicrosRand(rand)),
             specialTs.map { s =>
               val ldt = LocalDateTime.parse(s.replace(" ", "T"))
               ldt.atZone(ZoneId.systemDefault()).toInstant
@@ -235,7 +235,7 @@ object RandomDataGenerator {
             rand,
             (rand: Random) => {
               // DateTimeUtils.toJavaTimestamp takes microsecond.
-              val ts = DateTimeUtils.toJavaTimestamp(uniformMicorsRand(rand))
+              val ts = DateTimeUtils.toJavaTimestamp(uniformMicrosRand(rand))
               // The generated `ts` is based on the hybrid calendar Julian + Gregorian since
               // 1582-10-15 but it should be valid in Proleptic Gregorian calendar too which is used
               // by Spark SQL since version 3.0 (see SPARK-26651). We try to convert `ts` to
@@ -260,10 +260,10 @@ object RandomDataGenerator {
           new MathContext(precision)).bigDecimal)
       case DoubleType => randomNumeric[Double](
         rand, r => longBitsToDouble(r.nextLong()), Seq(Double.MinValue, Double.MinPositiveValue,
-          Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0))
+          Double.MaxValue, Double.PositiveInfinity, Double.NegativeInfinity, Double.NaN, 0.0, -0.0))
       case FloatType => randomNumeric[Float](
         rand, r => intBitsToFloat(r.nextInt()), Seq(Float.MinValue, Float.MinPositiveValue,
-          Float.MaxValue, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f))
+          Float.MaxValue, Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN, 0.0f, -0.0f))
       case ByteType => randomNumeric[Byte](
         rand, _.nextInt().toByte, Seq(Byte.MinValue, Byte.MaxValue, 0.toByte))
       case IntegerType => randomNumeric[Int](

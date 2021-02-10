@@ -199,7 +199,7 @@ class HDFSMetadataLogSuite extends SharedSparkSession {
     intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
     intercept[IllegalStateException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
 
-    // Related to SPARK-26629, this capatures the behavior for verifyBatchIds when startId > endId
+    // Related to SPARK-26629, this captures the behavior for verifyBatchIds when startId > endId
     intercept[IllegalStateException](verifyBatchIds(Seq(), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(2), Some(2L), Some(1L)))
     intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))

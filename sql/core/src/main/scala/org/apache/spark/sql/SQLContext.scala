@@ -29,8 +29,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
+import org.apache.spark.sql.catalyst.analysis.UnresolvedNamespace
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.catalyst.plans.logical.ShowTables
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
@@ -641,8 +642,8 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a `DataFrame`. The dialect that is
-   * used for SQL parsing can be configured with 'spark.sql.dialect'.
+   * Executes a SQL query using Spark, returning the result as a `DataFrame`.
+   * This API eagerly runs DDL/DML commands, but not for SELECT queries.
    *
    * @group basic
    * @since 1.3.0
@@ -661,26 +662,26 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the current database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops
    * @since 1.3.0
    */
   def tables(): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
+    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Nil), None))
   }
 
   /**
    * Returns a `DataFrame` containing names of existing tables in the given database.
-   * The returned DataFrame has two columns, tableName and isTemporary (a Boolean
+   * The returned DataFrame has three columns, database, tableName and isTemporary (a Boolean
    * indicating if a table is a temporary one or not).
    *
    * @group ddl_ops
    * @since 1.3.0
    */
   def tables(databaseName: String): DataFrame = {
-    Dataset.ofRows(sparkSession, ShowTablesCommand(Some(databaseName), None))
+    Dataset.ofRows(sparkSession, ShowTables(UnresolvedNamespace(Seq(databaseName)), None))
   }
 
   /**

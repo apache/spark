@@ -24,6 +24,7 @@ import java.util.{Properties, TimeZone}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCRelation}
@@ -40,7 +41,7 @@ import org.apache.spark.tags.DockerTest
  *    Pull oracle $ORACLE_DOCKER_IMAGE_NAME image - docker pull $ORACLE_DOCKER_IMAGE_NAME
  * 3. Start docker - sudo service docker start
  * 4. Run spark test - ./build/sbt -Pdocker-integration-tests
- *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * An actual sequence of commands to run the test is as follows
  *
@@ -51,7 +52,7 @@ import org.apache.spark.tags.DockerTest
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
- *    "test-only org.apache.spark.sql.jdbc.OracleIntegrationSuite"
+ *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
  *
  * It has been validated with 18.4.0 Express Edition.
  */
@@ -288,23 +289,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     }
   }
 
-  /**
-   * Change the Time Zone `timeZoneId` of JVM before executing `f`, then switches back to the
-   * original after `f` returns.
-   * @param timeZoneId the ID for a TimeZone, either an abbreviation such as "PST", a full name such
-   *                   as "America/Los_Angeles", or a custom ID such as "GMT-8:00".
-   */
-  private def withTimeZone(timeZoneId: String)(f: => Unit): Unit = {
-    val originalLocale = TimeZone.getDefault
-    try {
-      // Add Locale setting
-      TimeZone.setDefault(TimeZone.getTimeZone(timeZoneId))
-      f
-    } finally {
-      TimeZone.setDefault(originalLocale)
-    }
-  }
-
   test("Column TIMESTAMP with TIME ZONE(JVM timezone)") {
     def checkRow(row: Row, ts: String): Unit = {
       assert(row.getTimestamp(1).equals(Timestamp.valueOf(ts)))
@@ -312,14 +296,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
 
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> TimeZone.getDefault.getID) {
       val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
-      withTimeZone("PST") {
+      withDefaultTimeZone(PST) {
         assert(dfRead.collect().toSet ===
           Set(
             Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 03:00:00")),
             Row(BigDecimal.valueOf(2), java.sql.Timestamp.valueOf("1999-12-01 12:00:00"))))
       }
 
-      withTimeZone("UTC") {
+      withDefaultTimeZone(UTC) {
         assert(dfRead.collect().toSet ===
           Set(
             Row(BigDecimal.valueOf(1), java.sql.Timestamp.valueOf("1999-12-01 11:00:00")),
@@ -401,7 +385,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
     val values = rows(0)
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
-    assert(values.getBoolean(2).equals(false))
+    assert(values.getBoolean(2) == false)
   }
 
   test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
@@ -517,5 +501,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
          |   oracle.jdbc.mapDateToTimestamp false)
        """.stripMargin.replaceAll("\n", " "))
     assert(sql("select id, d, t from queryOption").collect.toSet == expectedResult)
+  }
+
+  test("SPARK-32992: map Oracle's ROWID type to StringType") {
+    val rows = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", "SELECT ROWID from datetime")
+      .load()
+      .collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.lang.String"))
+    assert(!rows(0).getString(0).isEmpty)
   }
 }

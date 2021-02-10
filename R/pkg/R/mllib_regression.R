@@ -475,7 +475,7 @@ setMethod("write.ml", signature(object = "IsotonicRegressionModel", path = "char
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.survreg} returns a fitted AFT survival regression model.
 #' @rdname spark.survreg
-#' @seealso survival: \url{https://cran.r-project.org/package=survival}
+#' @seealso survival: \url{https://cran.r-project.org/web/packages/survival/index.html}
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(ovarian)

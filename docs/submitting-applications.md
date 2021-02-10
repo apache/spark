@@ -76,7 +76,7 @@ locally on your laptop), it is common to use `cluster` mode to minimize network 
 the drivers and the executors. Currently, the standalone mode does not support cluster mode for Python
 applications.
 
-For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
+For Python applications, simply pass a `.py` file in the place of `<application-jar>`,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
 
 There are a few options available that are specific to the

@@ -770,7 +770,7 @@ class SparseVector @Since("2.0.0") (
       currentIdx += 1
       i_v
     }.unzip
-    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+    new SparseVector(selectedIndices.length, sliceInds, sliceVals)
   }
 
   private[spark] override def iterator: Iterator[(Int, Double)] = {
@@ -786,7 +786,7 @@ class SparseVector @Since("2.0.0") (
 
       override def hasNext: Boolean = i < localSize
 
-      override def next: (Int, Double) = {
+      override def next(): (Int, Double) = {
         val v = if (i == k) {
           j += 1
           k = if (j < localNumActives) localIndices(j) else -1

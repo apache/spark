@@ -28,11 +28,12 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, Offset => OffsetV2, PartitionOffset, ReadLimit}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
-import org.apache.spark.sql.execution.streaming.{StreamingRelationV2, _}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.Clock
 
@@ -64,7 +65,8 @@ class ContinuousExecution(
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _) =>
+      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _, _, _) =>
+        val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
         if (!table.supports(TableCapability.CONTINUOUS_READ)) {
           throw new UnsupportedOperationException(
             s"Data source $sourceName does not support continuous processing.")
@@ -73,7 +75,7 @@ class ContinuousExecution(
         v2ToRelationMap.getOrElseUpdate(s, {
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
           nextSourceId += 1
-          logInfo(s"Reading table [$table] from DataSourceV2 named '$sourceName' [$ds]")
+          logInfo(s"Reading table [$table] from DataSourceV2 named '$sourceName' $dsStr")
           // TODO: operator pushdown.
           val scan = table.newScanBuilder(options).build()
           val stream = scan.toContinuousStream(metadataPath)
@@ -330,7 +332,7 @@ class ContinuousExecution(
 
     synchronized {
       // Record offsets before updating `committedOffsets`
-      recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+      recordTriggerOffsets(from = committedOffsets, to = availableOffsets, latest = latestOffsets)
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch, CommitMetadata())
         val offset =

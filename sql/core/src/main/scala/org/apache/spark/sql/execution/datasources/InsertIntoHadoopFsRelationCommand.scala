@@ -25,6 +25,7 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -59,7 +60,6 @@ case class InsertIntoHadoopFsRelationCommand(
     fileIndex: Option[FileIndex],
     outputColumnNames: Seq[String])
   extends DataWritingCommand {
-  import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
   private lazy val parameters = CaseInsensitiveMap(options)
 
@@ -106,9 +106,10 @@ case class InsertIntoHadoopFsRelationCommand(
         fs, catalogTable.get, qualifiedOutputPath, matchingPartitions)
     }
 
+    val jobId = java.util.UUID.randomUUID().toString
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
-      jobId = java.util.UUID.randomUUID().toString,
+      jobId = jobId,
       outputPath = outputPath.toString,
       dynamicPartitionOverwrite = dynamicPartitionOverwrite)
 
@@ -163,6 +164,15 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
+      // For dynamic partition overwrite, FileOutputCommitter's output path is staging path, files
+      // will be renamed from staging path to final output path during commit job
+      val committerOutputPath = if (dynamicPartitionOverwrite) {
+        FileCommitProtocol.getStagingDir(outputPath.toString, jobId)
+          .makeQualified(fs.getUri, fs.getWorkingDirectory)
+      } else {
+        qualifiedOutputPath
+      }
+
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -170,7 +180,7 @@ case class InsertIntoHadoopFsRelationCommand(
           fileFormat = fileFormat,
           committer = committer,
           outputSpec = FileFormatWriter.OutputSpec(
-            qualifiedOutputPath.toString, customPartitionLocations, outputColumns),
+            committerOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
           bucketSpec = bucketSpec,
@@ -216,12 +226,7 @@ case class InsertIntoHadoopFsRelationCommand(
       committer: FileCommitProtocol): Unit = {
     val staticPartitionPrefix = if (staticPartitions.nonEmpty) {
       "/" + partitionColumns.flatMap { p =>
-        staticPartitions.get(p.name) match {
-          case Some(value) =>
-            Some(escapePathName(p.name) + "=" + escapePathName(value))
-          case None =>
-            None
-        }
+        staticPartitions.get(p.name).map(getPartitionPathString(p.name, _))
       }.mkString("/")
     } else {
       ""

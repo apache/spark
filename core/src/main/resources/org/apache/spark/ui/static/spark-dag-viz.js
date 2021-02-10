@@ -334,7 +334,7 @@ function preprocessGraphLayout(g, forJob) {
 }
 
 /*
- * Helper function to size the SVG appropriately such that all elements are displyed.
+ * Helper function to size the SVG appropriately such that all elements are displayed.
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {

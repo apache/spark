@@ -3,32 +3,34 @@ CollectLimit
     Project
       BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
         Project [cs_sold_date_sk]
-          BroadcastHashJoin [(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6))),cs_ext_discount_amt,cs_item_sk,i_item_sk]
+          BroadcastHashJoin [i_item_sk,cs_item_sk,cs_ext_discount_amt,(1.3 * avg(cs_ext_discount_amt))]
             InputAdapter
               BroadcastExchange #1
                 WholeStageCodegen (4)
-                  Project [(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6))),i_item_sk]
-                    BroadcastHashJoin [cs_item_sk,i_item_sk]
+                  Project [i_item_sk,(1.3 * avg(cs_ext_discount_amt))]
+                    BroadcastHashJoin [i_item_sk,cs_item_sk]
                       InputAdapter
                         BroadcastExchange #2
                           WholeStageCodegen (1)
                             Project [i_item_sk]
-                              Filter [i_item_sk,i_manufact_id]
+                              Filter [i_manufact_id,i_item_sk]
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.item [i_item_sk,i_manufact_id]
-                      Filter [(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6)))]
-                        HashAggregate [count,cs_item_sk,sum] [(CAST(1.3 AS DECIMAL(11,6)) * CAST(avg(cs_ext_discount_amt) AS DECIMAL(11,6))),avg(UnscaledValue(cs_ext_discount_amt)),count,cs_item_sk,sum]
+                      Filter [(1.3 * avg(cs_ext_discount_amt))]
+                        HashAggregate [cs_item_sk,sum,count] [avg(UnscaledValue(cs_ext_discount_amt)),(1.3 * avg(cs_ext_discount_amt)),cs_item_sk,sum,count]
                           InputAdapter
                             Exchange [cs_item_sk] #3
                               WholeStageCodegen (3)
-                                HashAggregate [cs_ext_discount_amt,cs_item_sk] [count,count,sum,sum]
-                                  Project [cs_ext_discount_amt,cs_item_sk]
+                                HashAggregate [cs_item_sk,cs_ext_discount_amt] [sum,count,sum,count]
+                                  Project [cs_item_sk,cs_ext_discount_amt]
                                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                                      Filter [cs_item_sk,cs_sold_date_sk]
+                                      Filter [cs_item_sk]
                                         ColumnarToRow
                                           InputAdapter
-                                            Scan parquet default.catalog_sales [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
+                                            Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
+                                              SubqueryBroadcast [d_date_sk] #1
+                                                ReusedExchange [d_date_sk] #4
                                       InputAdapter
                                         BroadcastExchange #4
                                           WholeStageCodegen (2)
@@ -36,10 +38,11 @@ CollectLimit
                                               Filter [d_date,d_date_sk]
                                                 ColumnarToRow
                                                   InputAdapter
-                                                    Scan parquet default.date_dim [d_date,d_date_sk]
-            Filter [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
+                                                    Scan parquet default.date_dim [d_date_sk,d_date]
+            Filter [cs_item_sk,cs_ext_discount_amt]
               ColumnarToRow
                 InputAdapter
-                  Scan parquet default.catalog_sales [cs_ext_discount_amt,cs_item_sk,cs_sold_date_sk]
+                  Scan parquet default.catalog_sales [cs_item_sk,cs_ext_discount_amt,cs_sold_date_sk]
+                    ReusedSubquery [d_date_sk] #1
         InputAdapter
           ReusedExchange [d_date_sk] #4

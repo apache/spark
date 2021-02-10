@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
+import org.apache.hadoop.yarn.api.records.ContainerId
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 
 import org.apache.spark.SparkConf

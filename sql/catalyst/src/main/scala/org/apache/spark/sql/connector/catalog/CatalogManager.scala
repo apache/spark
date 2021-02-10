@@ -18,9 +18,9 @@
 package org.apache.spark.sql.connector.catalog
 
 import scala.collection.mutable
-import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -38,9 +38,8 @@ import org.apache.spark.sql.internal.SQLConf
 //       need to track current database at all.
 private[sql]
 class CatalogManager(
-    conf: SQLConf,
     defaultSessionCatalog: CatalogPlugin,
-    val v1SessionCatalog: SessionCatalog) extends Logging {
+    val v1SessionCatalog: SessionCatalog) extends SQLConfHelper with Logging {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 
@@ -79,18 +78,11 @@ class CatalogManager(
    * This catalog is a v2 catalog that delegates to the v1 session catalog. it is used when the
    * session catalog is responsible for an identifier, but the source requires the v2 catalog API.
    * This happens when the source implementation extends the v2 TableProvider API and is not listed
-   * in the fallback configuration, spark.sql.sources.write.useV1SourceList
+   * in the fallback configuration, spark.sql.sources.useV1SourceList
    */
   private[sql] def v2SessionCatalog: CatalogPlugin = {
-    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { customV2SessionCatalog =>
-      try {
-        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
-      } catch {
-        case NonFatal(_) =>
-          logError(
-            "Fail to instantiate the custom v2 session catalog: " + customV2SessionCatalog)
-          defaultSessionCatalog
-      }
+    conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION).map { _ =>
+      catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
     }.getOrElse(defaultSessionCatalog)
   }
 

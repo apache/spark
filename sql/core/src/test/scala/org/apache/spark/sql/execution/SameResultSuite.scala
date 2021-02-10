@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -120,8 +120,8 @@ class SameResultSuite extends QueryTest with SharedSparkSession {
     val df2 = spark.range(10).agg(sum($"id"))
     assert(df1.queryExecution.executedPlan.sameResult(df2.queryExecution.executedPlan))
 
-    val df3 = spark.range(10).agg(sumDistinct($"id"))
-    val df4 = spark.range(10).agg(sumDistinct($"id"))
+    val df3 = spark.range(10).agg(sum_distinct($"id"))
+    val df4 = spark.range(10).agg(sum_distinct($"id"))
     assert(df3.queryExecution.executedPlan.sameResult(df4.queryExecution.executedPlan))
   }
 

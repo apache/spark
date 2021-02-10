@@ -21,7 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
 
 /**
  * Physical plan node for dropping a namespace.

@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -94,7 +95,7 @@ private[this] object JsonPathParser extends RegexParsers {
       case Success(result, _) =>
         Some(result)
 
-      case NoSuccess(msg, next) =>
+      case _ =>
         None
     }
   }
@@ -119,7 +120,8 @@ private[this] object SharedFactory {
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
   """,
-  group = "json_funcs")
+  group = "json_funcs",
+  since = "1.5.0")
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -343,7 +345,8 @@ case class GetJsonObject(json: Expression, path: Expression)
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1	2
   """,
-  group = "json_funcs")
+  group = "json_funcs",
+  since = "1.6.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -488,7 +491,7 @@ case class JsonTuple(children: Seq[Expression])
         // a special case that needs to be handled outside of this method.
         // if a requested field is null, the result must be null. the easiest
         // way to achieve this is just by ignoring null tokens entirely
-        throw new IllegalStateException("Do not attempt to copy a null field")
+        throw QueryExecutionErrors.copyNullFieldNotAllowedError
 
       case _ =>
         // handle other types including objects, arrays, booleans and numbers
@@ -569,8 +572,7 @@ case class JsonToStructs(
     val parsedOptions = new JSONOptions(options, timeZoneId.get, nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new IllegalArgumentException(s"from_json() doesn't support the ${mode.name} mode. " +
-        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_json", mode)
     }
     val (parserSchema, actualSchema) = nullableSchema match {
       case s: StructType =>
@@ -739,9 +741,9 @@ case class StructsToJson(
   examples = """
     Examples:
       > SELECT _FUNC_('[{"col":0}]');
-       array<struct<col:bigint>>
+       ARRAY<STRUCT<`col`: BIGINT>>
       > SELECT _FUNC_('[{"col":01}]', map('allowNumericLeadingZeros', 'true'));
-       array<struct<col:bigint>>
+       ARRAY<STRUCT<`col`: BIGINT>>
   """,
   group = "json_funcs",
   since = "2.4.0")
@@ -799,17 +801,17 @@ case class SchemaOfJson(
       }
     }
 
-    UTF8String.fromString(dt.catalogString)
+    UTF8String.fromString(dt.sql)
   }
 
   override def prettyName: String = "schema_of_json"
 }
 
 /**
- * A function that returns the number of elements in the outmost JSON array.
+ * A function that returns the number of elements in the outermost JSON array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outmost JSON array.",
+  usage = "_FUNC_(jsonArray) - Returns the number of elements in the outermost JSON array.",
   arguments = """
     Arguments:
       * jsonArray - A JSON array. `NULL` is returned in case of any other valid JSON string,
@@ -875,13 +877,13 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
 }
 
 /**
- * A function which returns all the keys of the outmost JSON object.
+ * A function which returns all the keys of the outermost JSON object.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(json_object) - Returns all the keys of the outmost JSON object as an array.",
+  usage = "_FUNC_(json_object) - Returns all the keys of the outermost JSON object as an array.",
   arguments = """
     Arguments:
-      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outmost
+      * json_object - A JSON object. If a valid JSON object is given, all the keys of the outermost
           object will be returned as an array. If it is any other valid JSON string, an invalid JSON
           string or an empty string, the function returns null.
   """,
@@ -919,7 +921,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
           if (parser.nextToken() == null || parser.currentToken() != JsonToken.START_OBJECT) {
             return null
           }
-          // Parse the JSON string to get all the keys of outmost JSON object
+          // Parse the JSON string to get all the keys of outermost JSON object
           getJsonKeys(parser, input)
         }
       }

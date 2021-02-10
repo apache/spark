@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -180,7 +181,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           assert(probes.toDouble > 1.0)
         } else {
           val mainValue = probes.split("\n").apply(1).stripPrefix("(").stripSuffix(")")
-          // Extract min, med, max from the string and strip off everthing else.
+          // Extract min, med, max from the string and strip off everything else.
           val index = mainValue.indexOf(" (", 0)
           mainValue.slice(0, index).split(", ").foreach {
             probe => assert(probe.toDouble > 1.0)
@@ -208,14 +209,41 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // 2 partitions and each partition contains 2 keys
     val df2 = testData2.groupBy('a).agg(collect_set('a))
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> (("ObjectHashAggregate", Map("number of output rows" -> 4L))),
+      2L -> (("ObjectHashAggregate", Map(
+        "number of output rows" -> 4L,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))),
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
         "local blocks read" -> 4L,
         "remote blocks read" -> 0L))),
-      0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
+      0L -> (("ObjectHashAggregate", Map(
+        "number of output rows" -> 3L,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))))
     )
+
+    // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
+    withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+      val df3 = testData2.groupBy('a).agg(collect_set('a))
+      testSparkPlanMetrics(df3, 1, Map(
+        2L -> (("ObjectHashAggregate", Map(
+          "number of output rows" -> 4L,
+          "number of tasks fall-backed to sort-based aggregation" -> 2L))),
+        0L -> (("ObjectHashAggregate", Map(
+          "number of output rows" -> 3L,
+          "number of tasks fall-backed to sort-based aggregation" -> 1L))))
+      )
+      testSparkPlanMetricsWithPredicates(df3, 1, Map(
+        2L -> (("ObjectHashAggregate", Map(
+          "spill size" -> {
+            _.toString.matches(sizeMetricPattern)
+          }))),
+        0L -> (("ObjectHashAggregate", Map(
+          "spill size" -> {
+            _.toString.matches(sizeMetricPattern)
+          }))))
+      )
+    }
   }
 
   test("Sort metrics") {
@@ -361,6 +389,41 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           enableWholeStage
         )
       }
+  }
+
+  test("SPARK-32629: ShuffledHashJoin(full outer) metrics") {
+    val uniqueLeftDf = Seq(("1", "1"), ("11", "11")).toDF("key", "value")
+    val nonUniqueLeftDf = Seq(("1", "1"), ("1", "2"), ("11", "11")).toDF("key", "value")
+    val rightDf = (1 to 10).map(i => (i.toString, i.toString)).toDF("key2", "value")
+    Seq(
+      // Test unique key on build side
+      (uniqueLeftDf, rightDf, 11, 134228048, 10, 134221824),
+      // Test non-unique key on build side
+      (nonUniqueLeftDf, rightDf, 12, 134228552, 11, 134221824)
+    ).foreach { case (leftDf, rightDf, fojRows, fojBuildSize, rojRows, rojBuildSize) =>
+      val fojDf = leftDf.hint("shuffle_hash").join(
+        rightDf, $"key" === $"key2", "full_outer")
+      fojDf.collect()
+      val fojPlan = fojDf.queryExecution.executedPlan.collectFirst {
+        case s: ShuffledHashJoinExec => s
+      }
+      assert(fojPlan.isDefined, "The query plan should have shuffled hash join")
+      testMetricsInSparkPlanOperator(fojPlan.get,
+        Map("numOutputRows" -> fojRows, "buildDataSize" -> fojBuildSize))
+
+      // Test right outer join as well to verify build data size to be different
+      // from full outer join. This makes sure we take extra BitSet/OpenHashSet
+      // for full outer join into account.
+      val rojDf = leftDf.hint("shuffle_hash").join(
+        rightDf, $"key" === $"key2", "right_outer")
+      rojDf.collect()
+      val rojPlan = rojDf.queryExecution.executedPlan.collectFirst {
+        case s: ShuffledHashJoinExec => s
+      }
+      assert(rojPlan.isDefined, "The query plan should have shuffled hash join")
+      testMetricsInSparkPlanOperator(rojPlan.get,
+        Map("numOutputRows" -> rojRows, "buildDataSize" -> rojBuildSize))
+    }
   }
 
   test("BroadcastHashJoin(outer) metrics") {
@@ -669,7 +732,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
       sql("CACHE TABLE inMemoryTable")
       testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
-        Map(1L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
+        Map(1L -> (("Scan In-memory table inMemoryTable", Map.empty)))
       )
 
       sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
@@ -686,16 +749,6 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-28332: SQLMetric merge should handle -1 properly") {
-    def checkSparkPlanMetrics(plan: SparkPlan, expected: Map[String, Long]): Unit = {
-      expected.foreach { case (metricName: String, metricValue: Long) =>
-        assert(plan.metrics.contains(metricName), s"The query plan should have metric $metricName")
-        val actualMetric = plan.metrics.get(metricName).get
-        assert(actualMetric.value == metricValue,
-          s"The query plan metric $metricName did not match, " +
-            s"expected:$metricValue, actual:${actualMetric.value}")
-      }
-    }
-
     val df = testData.join(testData2.filter('b === 0), $"key" === $"a", "left_outer")
     df.collect()
     val plan = df.queryExecution.executedPlan
@@ -706,7 +759,27 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
     assert(exchanges.size == 2, "The query plan should have two shuffle exchanges")
 
-    checkSparkPlanMetrics(exchanges(0), Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
-    checkSparkPlanMetrics(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
+    testMetricsInSparkPlanOperator(exchanges.head,
+      Map("dataSize" -> 3200, "shuffleRecordsWritten" -> 100))
+    testMetricsInSparkPlanOperator(exchanges(1), Map("dataSize" -> 0, "shuffleRecordsWritten" -> 0))
+  }
+
+  test("Add numRows to metric of BroadcastExchangeExec") {
+    withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+      withTable("t1", "t2") {
+        spark.range(2).write.saveAsTable("t1")
+        spark.range(2).write.saveAsTable("t2")
+        val df = sql("SELECT t1.* FROM t1 JOIN t2 ON t1.id = t2.id")
+        df.collect()
+        val plan = df.queryExecution.executedPlan
+
+        val exchanges = plan.collect {
+          case s: BroadcastExchangeExec => s
+        }
+
+        assert(exchanges.size === 1)
+        testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
+      }
+    }
   }
 }

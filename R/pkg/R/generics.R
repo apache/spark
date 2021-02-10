@@ -638,7 +638,7 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
 #' @rdname unionByName
-setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
+setGeneric("unionByName", function(x, y, ...) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
@@ -675,6 +675,12 @@ setGeneric("broadcast", function(x) { standardGeneric("broadcast") })
 #' @rdname columnfunctions
 setGeneric("asc", function(x) { standardGeneric("asc") })
 
+#' @rdname columnfunctions
+setGeneric("asc_nulls_first", function(x) { standardGeneric("asc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("asc_nulls_last", function(x) { standardGeneric("asc_nulls_last") })
+
 #' @rdname between
 setGeneric("between", function(x, bounds) { standardGeneric("between") })
 
@@ -688,6 +694,12 @@ setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
 #' @rdname columnfunctions
 setGeneric("desc", function(x) { standardGeneric("desc") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_first", function(x) { standardGeneric("desc_nulls_first") })
+
+#' @rdname columnfunctions
+setGeneric("desc_nulls_last", function(x) { standardGeneric("desc_nulls_last") })
 
 #' @rdname endsWith
 setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
@@ -729,6 +741,12 @@ setGeneric("over", function(x, window) { standardGeneric("over") })
 #' @rdname eq_null_safe
 setGeneric("%<=>%", function(x, value) { standardGeneric("%<=>%") })
 
+#' @rdname withField
+setGeneric("withField", function(x, fieldName, col) { standardGeneric("withField") })
+
+#' @rdname dropFields
+setGeneric("dropFields", function(x, ...) { standardGeneric("dropFields") })
+
 ###################### WindowSpec Methods ##########################
 
 #' @rdname partitionBy
@@ -762,7 +780,8 @@ setGeneric("approxCountDistinct", function(x, ...) { standardGeneric("approxCoun
 
 #' @rdname column_collection_functions
 #' @name NULL
-setGeneric("array_aggregate", function(x, zero, merge, ...) { standardGeneric("array_aggregate") })
+setGeneric("array_aggregate",
+           function(x, initialValue, merge, ...) { standardGeneric("array_aggregate") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -820,6 +839,10 @@ setGeneric("array_repeat", function(x, count) { standardGeneric("array_repeat") 
 #' @name NULL
 setGeneric("array_sort", function(x) { standardGeneric("array_sort") })
 
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("array_to_vector", function(x) { standardGeneric("array_to_vector") })
+
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("array_transform", function(x, f) { standardGeneric("array_transform") })
@@ -844,6 +867,10 @@ setGeneric("arrays_zip_with", function(x, y, f) { standardGeneric("arrays_zip_wi
 #' @name NULL
 setGeneric("ascii", function(x) { standardGeneric("ascii") })
 
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("assert_true", function(x, errMsg = NULL) { standardGeneric("assert_true") })
+
 #' @param x Column to compute on or a GroupedData object.
 #' @param ... additional argument(s) when \code{x} is a GroupedData object.
 #' @rdname avg
@@ -856,6 +883,10 @@ setGeneric("base64", function(x) { standardGeneric("base64") })
 #' @rdname column_math_functions
 #' @name NULL
 setGeneric("bin", function(x) { standardGeneric("bin") })
+
+#' @rdname column_nonaggregate_functions
+#' @name NULL
+setGeneric("bitwise_not", function(x) { standardGeneric("bitwise_not") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
@@ -898,6 +929,10 @@ setGeneric("conv", function(x, fromBase, toBase) { standardGeneric("conv") })
 
 #' @rdname column_aggregate_functions
 #' @name NULL
+setGeneric("count_distinct", function(x, ...) { standardGeneric("count_distinct") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
 setGeneric("countDistinct", function(x, ...) { standardGeneric("countDistinct") })
 
 #' @rdname column_misc_functions
@@ -927,7 +962,6 @@ setGeneric("current_date", function(x = "missing") { standardGeneric("current_da
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("current_timestamp", function(x = "missing") { standardGeneric("current_timestamp") })
-
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -992,6 +1026,10 @@ setGeneric("expr", function(x) { standardGeneric("expr") })
 #' @rdname column_collection_functions
 #' @name NULL
 setGeneric("flatten", function(x) { standardGeneric("flatten") })
+
+#' @rdname column_avro_functions
+#' @name NULL
+setGeneric("from_avro", function(x, ...) { standardGeneric("from_avro") })
 
 #' @rdname column_datetime_diff_functions
 #' @name NULL
@@ -1161,6 +1199,10 @@ setGeneric("months_between", function(y, x, ...) { standardGeneric("months_betwe
 #' @rdname count
 setGeneric("n", function(x) { standardGeneric("n") })
 
+#' @rdname column_window_functions
+#' @name NULL
+setGeneric("nth_value", function(x, offset, ...) { standardGeneric("nth_value") })
+
 #' @rdname column_nonaggregate_functions
 #' @name NULL
 setGeneric("nanvl", function(y, x) { standardGeneric("nanvl") })
@@ -1212,6 +1254,10 @@ setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer")
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })
+
+#' @rdname column_misc_functions
+#' @name NULL
+setGeneric("raise_error", function(x) { standardGeneric("raise_error") })
 
 #' @rdname column_nonaggregate_functions
 #' @name NULL
@@ -1288,11 +1334,23 @@ setGeneric("shiftLeft", function(y, x) { standardGeneric("shiftLeft") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("shiftleft", function(y, x) { standardGeneric("shiftleft") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("shiftRight", function(y, x) { standardGeneric("shiftRight") })
 
 #' @rdname column_math_functions
 #' @name NULL
+setGeneric("shiftright", function(y, x) { standardGeneric("shiftright") })
+
+#' @rdname column_math_functions
+#' @name NULL
 setGeneric("shiftRightUnsigned", function(y, x) { standardGeneric("shiftRightUnsigned") })
+
+#' @rdname column_math_functions
+#' @name NULL
+setGeneric("shiftrightunsigned", function(y, x) { standardGeneric("shiftrightunsigned") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1352,7 +1410,19 @@ setGeneric("substring_index", function(x, delim, count) { standardGeneric("subst
 
 #' @rdname column_aggregate_functions
 #' @name NULL
+setGeneric("sum_distinct", function(x) { standardGeneric("sum_distinct") })
+
+#' @rdname column_aggregate_functions
+#' @name NULL
 setGeneric("sumDistinct", function(x) { standardGeneric("sumDistinct") })
+
+#' @rdname column_datetime_functions
+#' @name timestamp_seconds
+setGeneric("timestamp_seconds", function(x) { standardGeneric("timestamp_seconds") })
+
+#' @rdname column_avro_functions
+#' @name NULL
+setGeneric("to_avro", function(x, ...) { standardGeneric("to_avro") })
 
 #' @rdname column_collection_functions
 #' @name NULL
@@ -1437,6 +1507,10 @@ setGeneric("var_pop", function(x) { standardGeneric("var_pop") })
 #' @rdname column_aggregate_functions
 #' @name NULL
 setGeneric("var_samp", function(x) { standardGeneric("var_samp") })
+
+#' @rdname column_ml_functions
+#' @name NULL
+setGeneric("vector_to_array", function(x, ...) { standardGeneric("vector_to_array") })
 
 #' @rdname column_datetime_functions
 #' @name NULL

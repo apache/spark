@@ -24,18 +24,22 @@ import java.util.Date
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.StringUtils
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 /**
@@ -141,7 +145,7 @@ case class CatalogTablePartition(
   /** Return the partition location, assuming it is specified. */
   def location: URI = storage.locationUri.getOrElse {
     val specString = spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
-    throw new AnalysisException(s"Partition [$specString] did not specify locationUri")
+    throw QueryCompilationErrors.partitionNotSpecifyLocationUriError(specString)
   }
 
   /**
@@ -175,13 +179,11 @@ case class CatalogTablePartition(
 case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String]) {
-  def conf: SQLConf = SQLConf.get
+    sortColumnNames: Seq[String]) extends SQLConfHelper {
 
   if (numBuckets <= 0 || numBuckets > conf.bucketingMaxBuckets) {
-    throw new AnalysisException(
-      s"Number of buckets should be greater than 0 but less than or equal to " +
-        s"bucketing.maxBuckets (`${conf.bucketingMaxBuckets}`). Got `$numBuckets`")
+    throw QueryCompilationErrors.invalidBucketNumberError(
+      conf.bucketingMaxBuckets, numBuckets)
   }
 
   override def toString: String = {
@@ -271,12 +273,12 @@ case class CatalogTable(
 
   /** Return the database this table was specified to belong to, assuming it exists. */
   def database: String = identifier.database.getOrElse {
-    throw new AnalysisException(s"table $identifier did not specify database")
+    throw QueryCompilationErrors.tableNotSpecifyDatabaseError(identifier)
   }
 
   /** Return the table location, assuming it is specified. */
   def location: URI = storage.locationUri.getOrElse {
-    throw new AnalysisException(s"table $identifier did not specify locationUri")
+    throw QueryCompilationErrors.tableNotSpecifyLocationUriError(identifier)
   }
 
   /** Return the fully qualified name of this table, assuming the database was specified. */
@@ -292,8 +294,7 @@ case class CatalogTable(
       (0 until numParts).map { index =>
         properties.getOrElse(
           s"$VIEW_CATALOG_AND_NAMESPACE_PART_PREFIX$index",
-          throw new AnalysisException("Corrupted table name context in catalog: " +
-            s"$numParts parts expected, but part $index is missing.")
+          throw QueryCompilationErrors.corruptedTableNameContextInCatalogError(numParts, index)
         )
       }
     } else if (properties.contains(VIEW_DEFAULT_DATABASE)) {
@@ -301,6 +302,21 @@ case class CatalogTable(
       Seq(CatalogManager.SESSION_CATALOG_NAME, properties(VIEW_DEFAULT_DATABASE))
     } else {
       Nil
+    }
+  }
+
+  /**
+   * Return the SQL configs of when the view was created, the configs are applied when parsing and
+   * analyzing the view, should be empty if the CatalogTable is not a View or created by older
+   * versions of Spark(before 3.1.0).
+   */
+  def viewSQLConfigs: Map[String, String] = {
+    try {
+      for ((key, value) <- properties if key.startsWith(CatalogTable.VIEW_SQL_CONFIG_PREFIX))
+        yield (key.substring(CatalogTable.VIEW_SQL_CONFIG_PREFIX.length), value)
+    } catch {
+      case e: Exception =>
+        throw QueryCompilationErrors.corruptedViewSQLConfigsInCatalogError(e)
     }
   }
 
@@ -315,9 +331,40 @@ case class CatalogTable(
       index <- 0 until numCols.toInt
     } yield properties.getOrElse(
       s"$VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX$index",
-      throw new AnalysisException("Corrupted view query output column names in catalog: " +
-        s"$numCols parts expected, but part $index is missing.")
+      throw QueryCompilationErrors.corruptedViewQueryOutputColumnsInCatalogError(numCols, index)
     )
+  }
+
+  /**
+   * Return temporary view names the current view was referred. should be empty if the
+   * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.1.0).
+   */
+  def viewReferredTempViewNames: Seq[Seq[String]] = {
+    try {
+      properties.get(VIEW_REFERRED_TEMP_VIEW_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map { namePartsJson =>
+          namePartsJson.asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+        }
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw QueryCompilationErrors.corruptedViewReferredTempViewInCatalogError(e)
+    }
+  }
+
+  /**
+   * Return temporary function names the current view was referred. should be empty if the
+   * CatalogTable is not a Temporary View or created by older versions of Spark(before 3.1.0).
+   */
+  def viewReferredTempFunctionNames: Seq[String] = {
+    try {
+      properties.get(VIEW_REFERRED_TEMP_FUNCTION_NAMES).map { json =>
+        parse(json).asInstanceOf[JArray].arr.map(_.asInstanceOf[JString].s)
+      }.getOrElse(Seq.empty)
+    } catch {
+      case e: Exception =>
+        throw QueryCompilationErrors.corruptedViewReferredTempFunctionsInCatalogError(e)
+    }
   }
 
   /** Syntactic sugar to update a field in `storage`. */
@@ -335,7 +382,8 @@ case class CatalogTable(
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
-    val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val tableProperties = properties.toSeq.sortBy(_._1)
+      .map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
     val partitionColumns = partitionColumnNames.map(quoteIdentifier).mkString("[", ", ", "]")
     val lastAccess = {
       if (lastAccessTime <= 0) "UNKNOWN" else new Date(lastAccessTime).toString
@@ -410,9 +458,85 @@ object CatalogTable {
     props.toMap
   }
 
+  val VIEW_SQL_CONFIG_PREFIX = VIEW_PREFIX + "sqlConfig."
+
   val VIEW_QUERY_OUTPUT_PREFIX = VIEW_PREFIX + "query.out."
   val VIEW_QUERY_OUTPUT_NUM_COLUMNS = VIEW_QUERY_OUTPUT_PREFIX + "numCols"
   val VIEW_QUERY_OUTPUT_COLUMN_NAME_PREFIX = VIEW_QUERY_OUTPUT_PREFIX + "col."
+
+  val VIEW_REFERRED_TEMP_VIEW_NAMES = VIEW_PREFIX + "referredTempViewNames"
+  val VIEW_REFERRED_TEMP_FUNCTION_NAMES = VIEW_PREFIX + "referredTempFunctionsNames"
+
+  def splitLargeTableProp(
+      key: String,
+      value: String,
+      addProp: (String, String) => Unit,
+      defaultThreshold: Int): Unit = {
+    val threshold = SQLConf.get.getConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD)
+      .getOrElse(defaultThreshold)
+    if (value.length <= threshold) {
+      addProp(key, value)
+    } else {
+      val parts = value.grouped(threshold).toSeq
+      addProp(s"$key.numParts", parts.length.toString)
+      parts.zipWithIndex.foreach { case (part, index) =>
+        addProp(s"$key.part.$index", part)
+      }
+    }
+  }
+
+  def readLargeTableProp(props: Map[String, String], key: String): Option[String] = {
+    props.get(key).orElse {
+      if (props.filterKeys(_.startsWith(key)).isEmpty) {
+        None
+      } else {
+        val numParts = props.get(s"$key.numParts")
+        if (numParts.isEmpty) {
+          throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(key)
+        } else {
+          val parts = (0 until numParts.get.toInt).map { index =>
+            props.getOrElse(s"$key.part.$index", {
+              throw QueryCompilationErrors.cannotReadCorruptedTablePropertyError(
+                key, s"Missing part $index, $numParts parts are expected.")
+            })
+          }
+          Some(parts.mkString)
+        }
+      }
+    }
+  }
+
+  def isLargeTableProp(originalKey: String, propKey: String): Boolean = {
+    propKey == originalKey || propKey == s"$originalKey.numParts" ||
+      propKey.startsWith(s"$originalKey.part.")
+  }
+
+  def normalize(table: CatalogTable): CatalogTable = {
+    val nondeterministicProps = Set(
+      "CreateTime",
+      "transient_lastDdlTime",
+      "grantTime",
+      "lastUpdateTime",
+      "last_modified_by",
+      "last_modified_time",
+      "Owner:",
+      // The following are hive specific schema parameters which we do not need to match exactly.
+      "totalNumberFiles",
+      "maxFileSize",
+      "minFileSize"
+    )
+
+    table.copy(
+      createTime = 0L,
+      lastAccessTime = 0L,
+      properties = table.properties
+        .filterKeys(!nondeterministicProps.contains(_))
+        .map(identity)
+        .toMap,
+      stats = None,
+      ignoredProperties = Map.empty
+    )
+  }
 }
 
 /**
@@ -487,7 +611,11 @@ case class CatalogColumnStat(
     min.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
     max.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
     histogram.foreach { h =>
-      map.put(s"${colName}.${CatalogColumnStat.KEY_HISTOGRAM}", HistogramSerializer.serialize(h))
+      CatalogTable.splitLargeTableProp(
+        s"$colName.${CatalogColumnStat.KEY_HISTOGRAM}",
+        HistogramSerializer.serialize(h),
+        map.put,
+        4000)
     }
     map.toMap
   }
@@ -549,8 +677,8 @@ object CatalogColumnStat extends Logging {
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case BinaryType | StringType => null
       case _ =>
-        throw new AnalysisException("Column statistics deserialization is not supported for " +
-          s"column $name of data type: $dataType.")
+        throw QueryCompilationErrors.columnStatisticsDeserializationNotSupportedError(
+          name, dataType)
     }
   }
 
@@ -566,8 +694,8 @@ object CatalogColumnStat extends Logging {
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case _ =>
-        throw new AnalysisException("Column statistics serialization is not supported for " +
-          s"column $colName of data type: $dataType.")
+        throw QueryCompilationErrors.columnStatisticsSerializationNotSupportedError(
+          colName, dataType)
     }
     externalValue.toString
   }
@@ -591,7 +719,8 @@ object CatalogColumnStat extends Logging {
         nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
         avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
         maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
-        histogram = map.get(s"${colName}.${KEY_HISTOGRAM}").map(HistogramSerializer.deserialize),
+        histogram = CatalogTable.readLargeTableProp(map, s"$colName.$KEY_HISTOGRAM")
+          .map(HistogramSerializer.deserialize),
         version = map(s"${colName}.${KEY_VERSION}").toInt
       ))
     } catch {
@@ -639,8 +768,20 @@ object CatalogTypes {
  * A placeholder for a table relation, which will be replaced by concrete relation like
  * `LogicalRelation` or `HiveTableRelation`, during analysis.
  */
-case class UnresolvedCatalogRelation(tableMeta: CatalogTable) extends LeafNode {
+case class UnresolvedCatalogRelation(
+    tableMeta: CatalogTable,
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty(),
+    override val isStreaming: Boolean = false) extends LeafNode {
   assert(tableMeta.identifier.database.isDefined)
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * A wrapper to store the temporary view info, will be kept in `SessionCatalog`
+ * and will be transformed to `View` during analysis
+ */
+case class TemporaryViewRelation(tableMeta: CatalogTable) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
@@ -667,27 +808,61 @@ case class HiveTableRelation(
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
   override def doCanonicalize(): HiveTableRelation = copy(
-    tableMeta = tableMeta.copy(
-      storage = CatalogStorageFormat.empty,
-      createTime = -1
-    ),
+    tableMeta = CatalogTable.normalize(tableMeta),
     dataCols = dataCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index))
     },
     partitionCols = partitionCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
-    }
+    },
+    tableStats = None
   )
 
   override def computeStats(): Statistics = {
     tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled))
       .orElse(tableStats)
       .getOrElse {
-      throw new IllegalStateException("table stats must be specified.")
+      throw QueryExecutionErrors.tableStatsNotSpecifiedError
     }
   }
 
   override def newInstance(): HiveTableRelation = copy(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
+
+  override def simpleString(maxFields: Int): String = {
+    val catalogTable = tableMeta.storage.serde match {
+      case Some(serde) => tableMeta.identifier :: serde :: Nil
+      case _ => tableMeta.identifier :: Nil
+    }
+
+    var metadata = Map(
+      "CatalogTable" -> catalogTable.mkString(", "),
+      "Data Cols" -> truncatedString(dataCols, "[", ", ", "]", maxFields),
+      "Partition Cols" -> truncatedString(partitionCols, "[", ", ", "]", maxFields)
+    )
+
+    if (prunedPartitions.nonEmpty) {
+      metadata += ("Pruned Partitions" -> {
+        val parts = prunedPartitions.get.map { part =>
+          val spec = part.spec.map { case (k, v) => s"$k=$v" }.mkString(", ")
+          if (part.storage.serde.nonEmpty && part.storage.serde != tableMeta.storage.serde) {
+            s"($spec, ${part.storage.serde.get})"
+          } else {
+            s"($spec)"
+          }
+        }
+        truncatedString(parts, "[", ", ", "]", maxFields)
+      })
+    }
+
+    val metadataEntries = metadata.toSeq.map {
+      case (key, value) if key == "CatalogTable" => value
+      case (key, value) =>
+        key + ": " + StringUtils.abbreviate(value, SQLConf.get.maxMetadataStringLength)
+    }
+
+    val metadataStr = truncatedString(metadataEntries, "[", ", ", "]", maxFields)
+    s"$nodeName $metadataStr"
+  }
 }

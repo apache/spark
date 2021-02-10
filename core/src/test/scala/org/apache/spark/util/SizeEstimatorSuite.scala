@@ -94,7 +94,7 @@ class SizeEstimatorSuite
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true so that SizeEstimator
-    // provides identical results accross all systems in these tests.
+    // provides identical results across all systems in these tests.
     reinitializeSizeEstimator("amd64", "true")
   }
 

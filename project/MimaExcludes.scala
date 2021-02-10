@@ -34,8 +34,48 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.2.x
+  lazy val v32excludes = v31excludes ++ Seq(
+    // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.write.V1WriteBuilder"),
+
+    // [SPARK-33955] Add latest offsets to source progress
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.SourceProgress.this")
+  )
+
   // Exclude rules for 3.1.x
   lazy val v31excludes = v30excludes ++ Seq(
+    // mima plugin update caused new incompatibilities to be detected
+    // core module
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.shuffle.sort.io.LocalDiskShuffleMapOutputWriter.commitAllPartitions"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.shuffle.api.ShuffleMapOutputWriter.commitAllPartitions"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.api.ShuffleMapOutputWriter.commitAllPartitions"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.environmentDetails"),
+    // mllib module
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionTrainingSummary.totalIterations"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionTrainingSummary.$init$"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.labels"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.truePositiveRateByLabel"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.falsePositiveRateByLabel"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.precisionByLabel"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.recallByLabel"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.fMeasureByLabel"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.fMeasureByLabel"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.accuracy"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightedTruePositiveRate"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightedFalsePositiveRate"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightedRecall"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightedPrecision"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightedFMeasure"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.LogisticRegressionSummary.weightedFMeasure"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.roc"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.areaUnderROC"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.pr"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.fMeasureByThreshold"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.precisionByThreshold"),
+    ProblemFilters.exclude[NewMixinForwarderProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.recallByThreshold"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.classification.FMClassifier.trainImpl"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.FMRegressor.trainImpl"),
     // [SPARK-31077] Remove ChiSqSelector dependency on mllib.ChiSqSelectorModel
     // private constructor
     ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.feature.ChiSqSelectorModel.this"),
@@ -71,11 +111,20 @@ object MimaExcludes {
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.org$apache$spark$ml$classification$BinaryClassificationSummary$$sparkSession"),
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.org$apache$spark$ml$classification$ClassificationSummary$_setter_$org$apache$spark$ml$classification$ClassificationSummary$$multiclassMetrics_="),
     ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.org$apache$spark$ml$classification$ClassificationSummary$$multiclassMetrics"),
-    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.weightCol")
+    ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.classification.BinaryLogisticRegressionSummary.weightCol"),
+
+    // [SPARK-32879] Pass SparkSession.Builder options explicitly to SparkSession
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.SparkSession.this")
   )
 
   // Exclude rules for 3.0.x
   lazy val v30excludes = v24excludes ++ Seq(
+    // [SPARK-23429][CORE] Add executor memory metrics to heartbeat and expose in executors REST API
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate.apply"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate.copy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate.this"),
+    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate$"),
+
     // [SPARK-29306] Add support for Stage level scheduling for executors
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#RetrieveSparkAppConfig.productElement"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages#RetrieveSparkAppConfig.productArity"),
@@ -500,12 +549,6 @@ object MimaExcludes {
 
   // Exclude rules for 2.4.x
   lazy val v24excludes = v23excludes ++ Seq(
-    // [SPARK-23429][CORE] Add executor memory metrics to heartbeat and expose in executors REST API
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate.apply"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate.copy"),
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate.this"),
-    ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate$"),
-
     // [SPARK-25248] add package private methods to TaskContext
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.markTaskFailed"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.markInterrupted"),
@@ -1696,7 +1739,7 @@ object MimaExcludes {
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.RandomForestRegressionModel.numTrees"),
       ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.ml.regression.RandomForestRegressionModel.setFeatureSubsetStrategy")
     ) ++ Seq(
-      // [SPARK-21680][ML][MLLIB]optimzie Vector coompress
+      // [SPARK-21680][ML][MLLIB]optimize Vector compress
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.toSparseWithSize"),
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.linalg.Vector.toSparseWithSize")
     ) ++ Seq(
@@ -1708,6 +1751,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.2") => v32excludes
     case v if v.startsWith("3.1") => v31excludes
     case v if v.startsWith("3.0") => v30excludes
     case v if v.startsWith("2.4") => v24excludes

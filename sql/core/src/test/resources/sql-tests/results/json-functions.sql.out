@@ -72,7 +72,7 @@ select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options;; line 1 pos 7
+Must use a map() function for options; line 1 pos 7
 
 
 -- !query
@@ -81,7 +81,7 @@ select to_json(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
 
 
 -- !query
@@ -115,7 +115,7 @@ select from_json('{"a":1}', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The expression '1' is not a valid schema string.;; line 1 pos 7
+The expression '1' is not a valid schema string.; line 1 pos 7
 
 
 -- !query
@@ -124,7 +124,14 @@ select from_json('{"a":1}', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
+Cannot parse the data type: 
+extraneous input 'InvalidType' expecting <EOF>(line 1, pos 2)
 
+== SQL ==
+a InvalidType
+--^^^
+
+Failed fallback parsing: 
 DataType invalidtype is not supported.(line 1, pos 2)
 
 == SQL ==
@@ -139,7 +146,7 @@ select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options;; line 1 pos 7
+Must use a map() function for options; line 1 pos 7
 
 
 -- !query
@@ -148,7 +155,7 @@ select from_json('{"a":1}', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
 
 
 -- !query
@@ -213,7 +220,7 @@ select schema_of_json('{"c1":0, "c2":[1]}')
 -- !query schema
 struct<schema_of_json({"c1":0, "c2":[1]}):string>
 -- !query output
-struct<c1:bigint,c2:array<bigint>>
+STRUCT<`c1`: BIGINT, `c2`: ARRAY<BIGINT>>
 
 
 -- !query
@@ -352,7 +359,7 @@ select schema_of_json('{"c1":1}', map('primitivesAsString', 'true'))
 -- !query schema
 struct<schema_of_json({"c1":1}):string>
 -- !query output
-struct<c1:string>
+STRUCT<`c1`: STRING>
 
 
 -- !query
@@ -360,7 +367,7 @@ select schema_of_json('{"c1":01, "c2":0.1}', map('allowNumericLeadingZeros', 'tr
 -- !query schema
 struct<schema_of_json({"c1":01, "c2":0.1}):string>
 -- !query output
-struct<c1:bigint,c2:decimal(1,1)>
+STRUCT<`c1`: BIGINT, `c2`: DECIMAL(1,1)>
 
 
 -- !query
@@ -392,7 +399,7 @@ cannot resolve 'schema_of_json(jsontable.`jsonField`)' due to data type mismatch
 -- !query
 select json_array_length(null)
 -- !query schema
-struct<json_array_length(CAST(NULL AS STRING)):int>
+struct<json_array_length(NULL):int>
 -- !query output
 NULL
 
@@ -491,7 +498,7 @@ Invalid number of arguments for function json_object_keys. Expected: 1; Found: 0
 -- !query
 select json_object_keys(null)
 -- !query schema
-struct<json_object_keys(CAST(NULL AS STRING)):array<string>>
+struct<json_object_keys(NULL):array<string>>
 -- !query output
 NULL
 

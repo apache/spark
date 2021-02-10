@@ -107,6 +107,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       FilterCompat.Filter filter = getFilter(configuration);
       blocks = filterRowGroups(filter, footer.getBlocks(), fileSchema);
     } else {
+      // SPARK-33532: After SPARK-13883 and SPARK-13989, the parquet read process will
+      // no longer enter this branch because `ParquetInputSplit` only be constructed in
+      // `ParquetFileFormat.buildReaderWithPartitionValues` and
+      // `ParquetPartitionReaderFactory.buildReaderBase` method,
+      // and the `rowGroupOffsets` in `ParquetInputSplit` set to null explicitly.
+      // We didn't delete this branch because PARQUET-131 wanted to move this to the
+      // parquet-mr project.
       // otherwise we find the row groups that were selected on the client
       footer = readFooter(configuration, file, NO_FILTER);
       Set<Long> offsets = new HashSet<>();
@@ -146,10 +153,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.reader = new ParquetFileReader(
         configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
+    this.totalRowCount = reader.getFilteredRecordCount();
 
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
@@ -225,10 +229,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(
         config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
+    this.totalRowCount = reader.getFilteredRecordCount();
   }
 
   @Override

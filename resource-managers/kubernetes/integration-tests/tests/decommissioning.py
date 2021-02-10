@@ -28,7 +28,7 @@ if __name__ == "__main__":
     print("Starting decom test")
     spark = SparkSession \
         .builder \
-        .appName("PyMemoryTest") \
+        .appName("DecomTest") \
         .getOrCreate()
     sc = spark._sc
     acc = sc.accumulator(0)

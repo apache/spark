@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient val parameters: CaseInsensitiveMap[String])
+    val parameters: CaseInsensitiveMap[String])
   extends Serializable with Logging {
 
   import JDBCOptions._
@@ -206,10 +206,12 @@ class JDBCOptions(
   }
   // The principal name of user's keytab file
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+
+  val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "").toString
 }
 
 class JdbcOptionsInWrite(
-    @transient override val parameters: CaseInsensitiveMap[String])
+    override val parameters: CaseInsensitiveMap[String])
   extends JDBCOptions(parameters) {
 
   import JDBCOptions._
@@ -260,4 +262,5 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
+  val JDBC_TABLE_COMMENT = newOption("tableComment")
 }

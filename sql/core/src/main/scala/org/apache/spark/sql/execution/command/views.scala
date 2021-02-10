@@ -19,16 +19,20 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable
 
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-import org.apache.spark.sql.internal.StaticSQLConf
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -107,24 +111,53 @@ case class CreateViewCommand(
 
     // When creating a permanent view, not allowed to reference temporary objects.
     // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
-    verifyTemporaryObjectsNotExists(catalog)
+    verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
 
     if (viewType == LocalTempView) {
-      if (replace && catalog.getTempView(name.table).isDefined) {
-        logDebug(s"Try to uncache ${name.quotedString} before replacing.")
+      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
+      if (replace && catalog.getRawTempView(name.table).isDefined &&
+          !catalog.getRawTempView(name.table).get.sameResult(aliasedPlan)) {
+        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+        checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      catalog.createTempView(name.table, aliasedPlan, overrideIfExists = replace)
-    } else if (viewType == GlobalTempView) {
-      if (replace && catalog.getGlobalTempView(name.table).isDefined) {
-        val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
-        val globalTempView = TableIdentifier(name.table, Option(db))
-        logDebug(s"Try to uncache ${globalTempView.quotedString} before replacing.")
-        CommandUtils.uncacheTableOrView(sparkSession, globalTempView.quotedString)
+      // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
+      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+        TemporaryViewRelation(
+          prepareTemporaryView(
+            name,
+            sparkSession,
+            analyzedPlan,
+            aliasedPlan.schema,
+            originalText,
+            child))
+      } else {
+        aliasedPlan
       }
+      catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
+    } else if (viewType == GlobalTempView) {
+      val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
+      val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      catalog.createGlobalTempView(name.table, aliasedPlan, overrideIfExists = replace)
+      if (replace && catalog.getRawGlobalTempView(name.table).isDefined &&
+          !catalog.getRawGlobalTempView(name.table).get.sameResult(aliasedPlan)) {
+        logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
+        checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
+      }
+      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+        TemporaryViewRelation(
+          prepareTemporaryView(
+            viewIdent,
+            sparkSession,
+            analyzedPlan,
+            aliasedPlan.schema,
+            originalText,
+            child))
+      } else {
+        aliasedPlan
+      }
+      catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
       val tableMetadata = catalog.getTableMetadata(name)
       if (allowExisting) {
@@ -160,39 +193,6 @@ case class CreateViewCommand(
   }
 
   /**
-   * Permanent views are not allowed to reference temp objects, including temp function and views
-   */
-  private def verifyTemporaryObjectsNotExists(catalog: SessionCatalog): Unit = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    if (!isTemporary) {
-      // This func traverses the unresolved plan `child`. Below are the reasons:
-      // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
-      // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
-      // added/generated from a temporary view.
-      // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
-      // package (e.g., HiveGenericUDF).
-      def verify(child: LogicalPlan) {
-        child.collect {
-          // Disallow creating permanent views based on temporary views.
-          case UnresolvedRelation(nameParts) if catalog.isTempView(nameParts) =>
-            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-              s"referencing a temporary view ${nameParts.quoted}. " +
-              "Please create a temp view instead by CREATE TEMP VIEW")
-          case other if !other.resolved => other.expressions.flatMap(_.collect {
-            // Traverse subquery plan for any unresolved relations.
-            case e: SubqueryExpression => verify(e.plan)
-            // Disallow creating permanent views based on temporary UDFs.
-            case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
-              throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-                s"referencing a temporary function `${e.name}`")
-          })
-        }
-      }
-      verify(child)
-    }
-  }
-
-  /**
    * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
    * else return the analyzed plan directly.
    */
@@ -220,7 +220,8 @@ case class CreateViewCommand(
       throw new AnalysisException(
         "It is not allowed to create a persisted view from the Dataset API")
     }
-    val aliasedSchema = aliasPlan(session, analyzedPlan).schema
+    val aliasedSchema = CharVarcharUtils.getRawSchema(
+      aliasPlan(session, analyzedPlan).schema)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan, aliasedSchema.fieldNames)
 
@@ -264,20 +265,28 @@ case class AlterViewAsCommand(
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
-    if (session.sessionState.catalog.alterTempViewDefinition(name, analyzedPlan)) {
-      // a local/global temp view has been altered, we are done.
+    if (session.sessionState.catalog.isTempView(name)) {
+      alterTemporaryView(session, analyzedPlan)
     } else {
       alterPermanentView(session, analyzedPlan)
     }
-
     Seq.empty[Row]
+  }
+
+  private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+    val tableDefinition = if (conf.storeAnalyzedPlanForView) {
+      analyzedPlan
+    } else {
+      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      TemporaryViewRelation(
+        prepareTemporaryView(
+          name, session, analyzedPlan, analyzedPlan.schema, Some(originalText), query))
+    }
+    session.sessionState.catalog.alterTempViewDefinition(name, tableDefinition)
   }
 
   private def alterPermanentView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
     val viewMeta = session.sessionState.catalog.getTableMetadata(name)
-    if (viewMeta.tableType != CatalogTableType.VIEW) {
-      throw new AnalysisException(s"${viewMeta.identifier} is not a view.")
-    }
 
     // Detect cyclic view reference on ALTER VIEW.
     val viewIdent = viewMeta.identifier
@@ -286,8 +295,9 @@ case class AlterViewAsCommand(
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
 
+    val newSchema = CharVarcharUtils.getRawSchema(analyzedPlan.schema)
     val updatedViewMeta = viewMeta.copy(
-      schema = analyzedPlan.schema,
+      schema = newSchema,
       properties = newProperties,
       viewOriginalText = Some(originalText),
       viewText = Some(originalText))
@@ -323,7 +333,7 @@ case class ShowViewsCommand(
     views.map { tableIdent =>
       val namespace = tableIdent.database.toArray.quoted
       val tableName = tableIdent.table
-      val isTemp = catalog.isTemporaryTable(tableIdent)
+      val isTemp = catalog.isTempView(tableIdent)
 
       Row(namespace, tableName, isTemp)
     }
@@ -331,6 +341,18 @@ case class ShowViewsCommand(
 }
 
 object ViewHelper {
+
+  private val configPrefixDenyList = Seq(
+    SQLConf.MAX_NESTED_VIEW_DEPTH.key,
+    "spark.sql.optimizer.",
+    "spark.sql.codegen.",
+    "spark.sql.execution.",
+    "spark.sql.shuffle.",
+    "spark.sql.adaptive.")
+
+  private def shouldCaptureConfig(key: String): Boolean = {
+    !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
+  }
 
   import CatalogTable._
 
@@ -360,10 +382,64 @@ object ViewHelper {
   }
 
   /**
+   * Convert the view SQL configs to `properties`.
+   */
+  private def sqlConfigsToProps(conf: SQLConf): Map[String, String] = {
+    val modifiedConfs = conf.getAllConfs.filter { case (k, _) =>
+      conf.isModifiable(k) && shouldCaptureConfig(k)
+    }
+    val props = new mutable.HashMap[String, String]
+    for ((key, value) <- modifiedConfs) {
+      props.put(s"$VIEW_SQL_CONFIG_PREFIX$key", value)
+    }
+    props.toMap
+  }
+
+  /**
+   * Remove the view SQL configs in `properties`.
+   */
+  private def removeSQLConfigs(properties: Map[String, String]): Map[String, String] = {
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    properties.filterNot { case (key, _) =>
+      key.startsWith(VIEW_SQL_CONFIG_PREFIX)
+    }
+  }
+
+  /**
+   * Convert the temporary object names to `properties`.
+   */
+  private def referredTempNamesToProps(
+      viewNames: Seq[Seq[String]], functionsNames: Seq[String]): Map[String, String] = {
+    val viewNamesJson =
+      JArray(viewNames.map(nameParts => JArray(nameParts.map(JString).toList)).toList)
+    val functionsNamesJson = JArray(functionsNames.map(JString).toList)
+
+    val props = new mutable.HashMap[String, String]
+    props.put(VIEW_REFERRED_TEMP_VIEW_NAMES, compact(render(viewNamesJson)))
+    props.put(VIEW_REFERRED_TEMP_FUNCTION_NAMES, compact(render(functionsNamesJson)))
+    props.toMap
+  }
+
+  /**
+   * Remove the temporary object names in `properties`.
+   */
+  private def removeReferredTempNames(properties: Map[String, String]): Map[String, String] = {
+    // We can't use `filterKeys` here, as the map returned by `filterKeys` is not serializable,
+    // while `CatalogTable` should be serializable.
+    properties.filterNot { case (key, _) =>
+      key.startsWith(VIEW_REFERRED_TEMP_VIEW_NAMES) ||
+        key.startsWith(VIEW_REFERRED_TEMP_FUNCTION_NAMES)
+    }
+  }
+
+
+  /**
    * Generate the view properties in CatalogTable, including:
    * 1. view default database that is used to provide the default database name on view resolution.
    * 2. the output column names of the query that creates a view, this is used to map the output of
    *    the view child to the view output during view resolution.
+   * 3. the SQL configs when creating the view.
    *
    * @param properties the `properties` in CatalogTable.
    * @param session the spark session.
@@ -374,20 +450,26 @@ object ViewHelper {
       properties: Map[String, String],
       session: SparkSession,
       analyzedPlan: LogicalPlan,
-      fieldNames: Array[String]): Map[String, String] = {
+      fieldNames: Array[String],
+      tempViewNames: Seq[Seq[String]] = Seq.empty,
+      tempFunctionNames: Seq[String] = Seq.empty): Map[String, String] = {
     // for createViewCommand queryOutput may be different from fieldNames
     val queryOutput = analyzedPlan.schema.fieldNames
+
+    val conf = session.sessionState.conf
 
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
     SchemaUtils.checkColumnNameDuplication(
-      fieldNames, "in the view definition", session.sessionState.conf.resolver)
+      fieldNames, "in the view definition", conf.resolver)
 
-    // Generate the view default catalog and namespace.
+    // Generate the view default catalog and namespace, as well as captured SQL configs.
     val manager = session.sessionState.catalogManager
-    removeQueryColumnNames(properties) ++
+    removeReferredTempNames(removeSQLConfigs(removeQueryColumnNames(properties))) ++
       catalogAndNamespaceToProps(manager.currentCatalog.name, manager.currentNamespace) ++
-      generateQueryColumnNames(queryOutput)
+      sqlConfigsToProps(conf) ++
+      generateQueryColumnNames(queryOutput) ++
+      referredTempNamesToProps(tempViewNames, tempFunctionNames)
   }
 
   /**
@@ -437,5 +519,93 @@ object ViewHelper {
         case _ => // Do nothing.
       }
     }
+  }
+
+
+  /**
+   * Permanent views are not allowed to reference temp objects, including temp function and views
+   */
+  def verifyTemporaryObjectsNotExists(
+      catalog: SessionCatalog,
+      isTemporary: Boolean,
+      name: TableIdentifier,
+      child: LogicalPlan): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    if (!isTemporary) {
+      val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
+      tempViews.foreach { nameParts =>
+        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+          s"referencing a temporary view ${nameParts.quoted}. " +
+          "Please create a temp view instead by CREATE TEMP VIEW")
+      }
+      tempFunctions.foreach { funcName =>
+        throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+          s"referencing a temporary function `${funcName}`")
+      }
+    }
+  }
+
+  /**
+   * Collect all temporary views and functions and return the identifiers separately
+   * This func traverses the unresolved plan `child`. Below are the reasons:
+   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+   * added/generated from a temporary view.
+   * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+   * package (e.g., HiveGenericUDF).
+   */
+  private def collectTemporaryObjects(
+      catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
+    def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
+      child.collect {
+        case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
+          Seq(nameParts)
+        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+          case e: SubqueryExpression => collectTempViews(e.plan)
+        }).flatten
+      }.flatten.distinct
+    }
+
+    def collectTempFunctions(child: LogicalPlan): Seq[String] = {
+      child.collect {
+        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+          case e: SubqueryExpression => collectTempFunctions(e.plan)
+          case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
+            Seq(e.name.funcName)
+        }).flatten
+      }.flatten.distinct
+    }
+    (collectTempViews(child), collectTempFunctions(child))
+  }
+
+
+  /**
+   * Returns a [[CatalogTable]] that contains information for temporary view.
+   * Generate the view-specific properties(e.g. view default database, view query output
+   * column names) and store them as properties in the CatalogTable, and also creates
+   * the proper schema for the view.
+   */
+  def prepareTemporaryView(
+      viewName: TableIdentifier,
+      session: SparkSession,
+      analyzedPlan: LogicalPlan,
+      viewSchema: StructType,
+      originalText: Option[String],
+      child: LogicalPlan): CatalogTable = {
+
+    val catalog = session.sessionState.catalog
+    val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
+    // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
+    // generating temporary view properties
+    val newProperties = generateViewProperties(
+      Map.empty, session, analyzedPlan, viewSchema.fieldNames, tempViews, tempFunctions)
+
+    CatalogTable(
+      identifier = viewName,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = viewSchema,
+      viewText = originalText,
+      properties = newProperties)
   }
 }

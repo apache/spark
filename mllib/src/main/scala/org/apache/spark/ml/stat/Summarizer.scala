@@ -435,7 +435,7 @@ private[spark] class SummarizerBuffer(
   private var currMax: Array[Double] = null
   private var currMin: Array[Double] = null
 
-  def this() {
+  def this() = {
     this(
       Seq(
         SummaryBuilderImpl.Mean,

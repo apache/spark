@@ -20,7 +20,7 @@ User-defined function related classes and functions
 import functools
 import sys
 
-from pyspark import SparkContext, since
+from pyspark import SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
@@ -49,9 +49,11 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
 
-    .. note:: The constructor of this class is not supposed to be directly called.
-        Use :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
-        to create this instance.
+    Notes
+    -----
+    The constructor of this class is not supposed to be directly called.
+    Use :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
+    to create this instance.
     """
     def __init__(self, func,
                  returnType=StringType(),
@@ -232,26 +234,39 @@ class UDFRegistration(object):
     def __init__(self, sparkSession):
         self.sparkSession = sparkSession
 
-    @since("1.3.1")
     def register(self, name, f, returnType=None):
         """Register a Python function (including lambda function) or a user-defined function
         as a SQL function.
 
-        :param name: name of the user-defined function in SQL statements.
-        :param f: a Python function, or a user-defined function. The user-defined function can
+        .. versionadded:: 1.3.1
+
+        Parameters
+        ----------
+        name : str,
+            name of the user-defined function in SQL statements.
+        f : function, :meth:`pyspark.sql.functions.udf` or :meth:`pyspark.sql.functions.pandas_udf`
+            a Python function, or a user-defined function. The user-defined function can
             be either row-at-a-time or vectorized. See :meth:`pyspark.sql.functions.udf` and
             :meth:`pyspark.sql.functions.pandas_udf`.
-        :param returnType: the return type of the registered user-defined function. The value can
+        returnType : :class:`pyspark.sql.types.DataType` or str, optional
+            the return type of the registered user-defined function. The value can
             be either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
-        :return: a user-defined function.
+            `returnType` can be optionally specified when `f` is a Python function but not
+            when `f` is a user-defined function. Please see the examples below.
 
+        Returns
+        -------
+        function
+            a user-defined function
+
+        Notes
+        -----
         To register a nondeterministic Python function, users need to first build
         a nondeterministic user-defined function for the Python function and then register it
         as a SQL function.
 
-        `returnType` can be optionally specified when `f` is a Python function but not
-        when `f` is a user-defined function. Please see below.
-
+        Examples
+        --------
         1. When `f` is a Python function:
 
             `returnType` defaults to string type and can be optionally specified. The produced
@@ -275,7 +290,7 @@ class UDFRegistration(object):
             >>> spark.sql("SELECT stringLengthInt('test')").collect()
             [Row(stringLengthInt(test)=4)]
 
-        2. When `f` is a user-defined function:
+        2. When `f` is a user-defined function (from Spark 2.3.0):
 
             Spark uses the return type of the given user-defined function as the return type of
             the registered user-defined function. `returnType` should not be specified.
@@ -315,8 +330,6 @@ class UDFRegistration(object):
             >>> spark.sql(q).collect()  # doctest: +SKIP
             [Row(sum_udf(v1)=1), Row(sum_udf(v1)=5)]
 
-            .. note:: Registration for a user-defined function (case 2.) was added from
-                Spark 2.3.0.
         """
 
         # This is to check whether the input function is from a user-defined function or
@@ -348,18 +361,26 @@ class UDFRegistration(object):
         self.sparkSession._jsparkSession.udf().registerPython(name, register_udf._judf)
         return return_udf
 
-    @since(2.3)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
         """Register a Java user-defined function as a SQL function.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not specified we would infer it via reflection.
 
-        :param name: name of the user-defined function
-        :param javaClassName: fully qualified name of java class
-        :param returnType: the return type of the registered Java function. The value can be either
+        .. versionadded:: 2.3.0
+
+        Parameters
+        ----------
+        name : str
+            name of the user-defined function
+        javaClassName : str
+            fully qualified name of java class
+        returnType : :class:`pyspark.sql.types.DataType` or str, optional
+            the return type of the registered Java function. The value can be either
             a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
+        Examples
+        --------
         >>> from pyspark.sql.types import IntegerType
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
@@ -387,13 +408,18 @@ class UDFRegistration(object):
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
-    @since(2.3)
     def registerJavaUDAF(self, name, javaClassName):
         """Register a Java user-defined aggregate function as a SQL function.
 
-        :param name: name of the user-defined aggregate function
-        :param javaClassName: fully qualified name of java class
+        .. versionadded:: 2.3.0
 
+        name : str
+            name of the user-defined aggregate function
+        javaClassName : str
+            fully qualified name of java class
+
+        Examples
+        --------
         >>> spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
         ... # doctest: +SKIP
         >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])

@@ -1,4 +1,7 @@
--- Test filter clause for aggregate expression.
+-- Test filter clause for aggregate expression with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
 --CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
@@ -43,6 +46,14 @@ SELECT SUM(salary), COUNT(DISTINCT id), COUNT(DISTINCT id) FILTER (WHERE hiredat
 SELECT COUNT(DISTINCT 1) FILTER (WHERE a = 1) FROM testData;
 SELECT COUNT(DISTINCT id) FILTER (WHERE true) FROM emp;
 SELECT COUNT(DISTINCT id) FILTER (WHERE false) FROM emp;
+SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id = 40) FROM emp;
+SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id = 40) FROM emp;
+SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id > 0) FROM emp;
+SELECT COUNT(DISTINCT 2), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id > 0) FROM emp;
+SELECT COUNT(DISTINCT id), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id = 40) FROM emp;
+SELECT COUNT(DISTINCT id), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id = 40) FROM emp;
+SELECT COUNT(DISTINCT id), COUNT(DISTINCT 2,3) FILTER (WHERE dept_id > 0) FROM emp;
+SELECT COUNT(DISTINCT id), COUNT(DISTINCT 3,2) FILTER (WHERE dept_id > 0) FROM emp;
 
 -- Aggregate with filter and non-empty GroupBy expressions.
 SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData GROUP BY a;

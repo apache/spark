@@ -19,10 +19,11 @@ package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
 
-import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
+import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, BroadcastQueryStageExec, DisableAdaptiveExecution, EliminateJoinToEmptyRelation}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
@@ -172,6 +173,8 @@ abstract class DynamicPartitionPruningSuiteBase
       df: DataFrame,
       withSubquery: Boolean,
       withBroadcast: Boolean): Unit = {
+    df.collect()
+
     val plan = df.queryExecution.executedPlan
     val dpExprs = collectDynamicPruningExpressions(plan)
     val hasSubquery = dpExprs.exists {
@@ -192,6 +195,7 @@ abstract class DynamicPartitionPruningSuiteBase
     subqueryBroadcast.foreach { s =>
       s.child match {
         case _: ReusedExchangeExec => // reuse check ok.
+        case BroadcastQueryStageExec(_, _: ReusedExchangeExec, _) =>
         case b: BroadcastExchangeExec =>
           val hasReuse = plan.find {
             case ReusedExchangeExec(_, e) => e eq b
@@ -205,7 +209,11 @@ abstract class DynamicPartitionPruningSuiteBase
 
     val isMainQueryAdaptive = plan.isInstanceOf[AdaptiveSparkPlanExec]
     subqueriesAll(plan).filterNot(subqueryBroadcast.contains).foreach { s =>
-      assert(s.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
+      val subquery = s match {
+        case r: ReusedSubqueryExec => r.child
+        case o => o
+      }
+      assert(subquery.find(_.isInstanceOf[AdaptiveSparkPlanExec]).isDefined == isMainQueryAdaptive)
     }
   }
 
@@ -213,6 +221,8 @@ abstract class DynamicPartitionPruningSuiteBase
    * Check if the plan has the given number of distinct broadcast exchange subqueries.
    */
   def checkDistinctSubqueries(df: DataFrame, n: Int): Unit = {
+    df.collect()
+
     val buf = collectDynamicPruningExpressions(df.queryExecution.executedPlan).collect {
       case InSubqueryExec(_, b: SubqueryBroadcastExec, _, _) =>
         b.index
@@ -224,7 +234,7 @@ abstract class DynamicPartitionPruningSuiteBase
    * Collect the children of all correctly pushed down dynamic pruning expressions in a spark plan.
    */
   private def collectDynamicPruningExpressions(plan: SparkPlan): Seq[Expression] = {
-    plan.flatMap {
+    flatMap(plan) {
       case s: FileSourceScanExec => s.partitionFilters.collect {
         case d: DynamicPruningExpression => d.child
       }
@@ -236,7 +246,7 @@ abstract class DynamicPartitionPruningSuiteBase
    * Check if the plan contains unpushed dynamic pruning filters.
    */
   def checkUnpushedFilters(df: DataFrame): Boolean = {
-    df.queryExecution.executedPlan.find {
+    find(df.queryExecution.executedPlan) {
       case FilterExec(condition, _) =>
         splitConjunctivePredicates(condition).exists {
           case _: DynamicPruningExpression => true
@@ -249,33 +259,20 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    * Test the result of a simple join on mock-up tables
    */
-  test("simple inner join triggers DPP with mock-up tables") {
+  test("simple inner join triggers DPP with mock-up tables",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-      withTable("df1", "df2") {
-        spark.range(1000)
-          .select(col("id"), col("id").as("k"))
-          .write
-          .partitionBy("k")
-          .format(tableFormat)
-          .mode("overwrite")
-          .saveAsTable("df1")
+      val df = sql(
+        """
+          |SELECT f.date_id, f.store_id FROM fact_sk f
+          |JOIN dim_store s ON f.store_id = s.store_id AND s.country = 'NL'
+        """.stripMargin)
 
-        spark.range(100)
-          .select(col("id"), col("id").as("k"))
-          .write
-          .partitionBy("k")
-          .format(tableFormat)
-          .mode("overwrite")
-          .saveAsTable("df2")
+      checkPartitionPruningPredicate(df, true, false)
 
-        val df = sql("SELECT df1.id, df2.k FROM df1 JOIN df2 ON df1.k = df2.k AND df2.id < 2")
-
-        checkPartitionPruningPredicate(df, true, false)
-
-        checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
-      }
+      checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
     }
   }
 
@@ -314,7 +311,8 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    * Check the static scan metrics with and without DPP
    */
-  test("static scan metrics") {
+  test("static scan metrics",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -339,7 +337,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
         def getFactScan(plan: SparkPlan): SparkPlan = {
           val scanOption =
-            find(plan) {
+            plan.find {
               case s: FileSourceScanExec =>
                 s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
               case _ => false
@@ -358,6 +356,7 @@ abstract class DynamicPartitionPruningSuiteBase
         val allFilesNum = scan1.metrics("numFiles").value
         val allFilesSize = scan1.metrics("filesSize").value
         assert(scan1.metrics("numPartitions").value === numPartitions)
+        assert(scan1.metrics("pruningTime").value === -1)
 
         // No dynamic partition pruning, so no static metrics
         // Only files from fid = 5 partition are scanned
@@ -371,6 +370,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(0 < partFilesNum && partFilesNum < allFilesNum)
         assert(0 < partFilesSize && partFilesSize < allFilesSize)
         assert(scan2.metrics("numPartitions").value === 1)
+        assert(scan2.metrics("pruningTime").value === -1)
 
         // Dynamic partition pruning is used
         // Static metrics are as-if reading the whole fact table
@@ -383,6 +383,7 @@ abstract class DynamicPartitionPruningSuiteBase
         assert(scan3.metrics("numFiles").value == partFilesNum)
         assert(scan3.metrics("filesSize").value == partFilesSize)
         assert(scan3.metrics("numPartitions").value === 1)
+        assert(scan3.metrics("pruningTime").value !== -1)
       }
     }
   }
@@ -414,7 +415,8 @@ abstract class DynamicPartitionPruningSuiteBase
    * (2) DPP should be triggered only for certain join types
    * (3) DPP should trigger only when we have attributes on both sides of the join condition
    */
-  test("DPP triggers only for certain types of query") {
+  test("DPP triggers only for certain types of query",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
       Given("dynamic partition pruning disabled")
@@ -466,6 +468,19 @@ abstract class DynamicPartitionPruningSuiteBase
         checkPartitionPruningPredicate(df, true, false)
       }
 
+      Given("left-semi join with partition column on the right side")
+      withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+        val df = sql(
+          """
+            |SELECT * FROM dim_store s
+            |LEFT SEMI JOIN fact_sk f
+            |ON f.store_id = s.store_id AND s.country = 'NL'
+          """.stripMargin)
+
+        checkPartitionPruningPredicate(df, true, false)
+      }
+
       Given("left outer with partition column on the left side")
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
         val df = sql(
@@ -495,7 +510,8 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    * The filtering policy has a fallback when the stats are unavailable
    */
-  test("filtering ratio policy fallback") {
+  test("filtering ratio policy fallback",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -565,7 +581,8 @@ abstract class DynamicPartitionPruningSuiteBase
   /**
    *  The filtering ratio policy performs best when it uses cardinality estimates
    */
-  test("filtering ratio policy with stats when the broadcast pruning is disabled") {
+  test("filtering ratio policy with stats when the broadcast pruning is disabled",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
@@ -758,7 +775,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("partition pruning in broadcast hash joins") {
+  test("partition pruning in broadcast hash joins",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     Given("disable broadcast pruning and disable subquery duplication")
     withSQLConf(
       SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
@@ -1065,7 +1083,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("avoid reordering broadcast join keys to match input hash partitioning") {
+  test("avoid reordering broadcast join keys to match input hash partitioning",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTable("large", "dimTwo", "dimThree") {
@@ -1156,7 +1175,7 @@ abstract class DynamicPartitionPruningSuiteBase
   test("cleanup any DPP filter that isn't pushed down due to expression id clashes") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       withTable("fact", "dim") {
-        spark.range(1000).select($"id".as("A"), $"id".as("AA"))
+        spark.range(20).select($"id".as("A"), $"id".as("AA"))
           .write.partitionBy("A").format(tableFormat).mode("overwrite").saveAsTable("fact")
         spark.range(10).select($"id".as("B"), $"id".as("BB"))
           .write.format(tableFormat).mode("overwrite").saveAsTable("dim")
@@ -1189,7 +1208,8 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("join key with multiple references on the filtering plan") {
+  test("join key with multiple references on the filtering plan",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
@@ -1239,14 +1259,23 @@ abstract class DynamicPartitionPruningSuiteBase
 
       val plan = df.queryExecution.executedPlan
       val countSubqueryBroadcasts =
-        plan.collectWithSubqueries({ case _: SubqueryBroadcastExec => 1 }).sum
+        collectWithSubqueries(plan)({ case _: SubqueryBroadcastExec => 1 }).sum
 
-      assert(countSubqueryBroadcasts == 2)
+      if (adaptiveExecutionOn) {
+        val countReusedSubqueryBroadcasts =
+          collectWithSubqueries(plan)({ case ReusedSubqueryExec(_: SubqueryBroadcastExec) => 1}).sum
+
+        assert(countSubqueryBroadcasts == 1)
+        assert(countReusedSubqueryBroadcasts == 1)
+      } else {
+        assert(countSubqueryBroadcasts == 2)
+      }
     }
   }
 
   test("SPARK-32509: Unused Dynamic Pruning filter shouldn't affect " +
-    "canonicalization and exchange reuse") {
+    "canonicalization and exchange reuse",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val df = sql(
@@ -1311,51 +1340,52 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 
   test("SPARK-32659: Fix the data issue when pruning DPP on non-atomic type") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "2", // Make sure insert DPP
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false") {
-      withTable("df1", "df2") {
-        spark.range(1000)
-          .select(col("id"), col("id").as("k"))
-          .write
-          .partitionBy("k")
-          .format(tableFormat)
-          .mode("overwrite")
-          .saveAsTable("df1")
+    Seq(NO_CODEGEN, CODEGEN_ONLY).foreach { mode =>
+      Seq(true, false).foreach { pruning =>
+        withSQLConf(
+          SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString,
+          SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> s"$pruning") {
+          Seq("struct", "array").foreach { dataType =>
+            val df = sql(
+              s"""
+                 |SELECT f.date_id, f.product_id, f.units_sold, f.store_id FROM fact_stats f
+                 |JOIN dim_stats s
+                 |ON $dataType(f.store_id) = $dataType(s.store_id) WHERE s.country = 'DE'
+              """.stripMargin)
 
-        spark.range(100)
-          .select(col("id"), col("id").as("k"))
-          .write
-          .partitionBy("k")
-          .format(tableFormat)
-          .mode("overwrite")
-          .saveAsTable("df2")
-
-        Seq(CodegenObjectFactoryMode.NO_CODEGEN,
-          CodegenObjectFactoryMode.CODEGEN_ONLY).foreach { mode =>
-          Seq(true, false).foreach { pruning =>
-            withSQLConf(
-              SQLConf.CODEGEN_FACTORY_MODE.key -> mode.toString,
-              SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> s"$pruning") {
-              val df = sql(
-                """
-                  |SELECT df1.id, df2.k
-                  |FROM df1
-                  |  JOIN df2
-                  |  ON struct(df1.k) = struct(df2.k)
-                  |    AND df2.id < 2
-                  |""".stripMargin)
-              if (pruning) {
-                checkPartitionPruningPredicate(df, true, false)
-              } else {
-                checkPartitionPruningPredicate(df, false, false)
-              }
-
-              checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+            if (pruning) {
+              checkPartitionPruningPredicate(df, false, true)
+            } else {
+              checkPartitionPruningPredicate(df, false, false)
             }
+
+            checkAnswer(df,
+              Row(1030, 2, 10, 3) ::
+              Row(1040, 2, 50, 3) ::
+              Row(1050, 2, 50, 3) ::
+              Row(1060, 2, 50, 3) :: Nil
+            )
           }
         }
       }
+    }
+  }
+
+  test("SPARK-32817: DPP throws error when the broadcast side is empty") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+      SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key -> EliminateJoinToEmptyRelation.ruleName) {
+      val df = sql(
+        """
+          |SELECT * FROM fact_sk f
+          |JOIN dim_store s
+          |ON f.store_id = s.store_id WHERE s.country = 'XYZ'
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+
+      checkAnswer(df, Nil)
     }
   }
 

@@ -27,7 +27,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{monotonically_increasing_id, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
-import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType, TimestampType}
+import org.apache.spark.sql.types.{ByteType, Decimal, DecimalType}
 
 /**
  * Benchmark to measure read performance with Filter pushdown.

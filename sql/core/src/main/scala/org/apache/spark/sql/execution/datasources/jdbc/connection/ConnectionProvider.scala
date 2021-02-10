@@ -18,60 +18,49 @@
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
-import java.util.Properties
+import java.util.ServiceLoader
+
+import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
-
-/**
- * Connection provider which opens connection toward various databases (database specific instance
- * needed). If kerberos authentication required then it's the provider's responsibility to set all
- * the parameters.
- */
-private[jdbc] trait ConnectionProvider {
-  /**
-   * Additional properties for data connection (Data source property takes precedence).
-   */
-  def getAdditionalProperties(): Properties = new Properties()
-
-  /**
-   * Opens connection toward the database.
-   */
-  def getConnection(): Connection
-}
+import org.apache.spark.security.SecurityConfigurationLock
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
+import org.apache.spark.util.Utils
 
 private[jdbc] object ConnectionProvider extends Logging {
-  def create(driver: Driver, options: JDBCOptions): ConnectionProvider = {
-    if (options.keytab == null || options.principal == null) {
-      logDebug("No authentication configuration found, using basic connection provider")
-      new BasicConnectionProvider(driver, options)
-    } else {
-      logDebug("Authentication configuration found, using database specific connection provider")
-      options.driverClass match {
-        case PostgresConnectionProvider.driverClass =>
-          logDebug("Postgres connection provider found")
-          new PostgresConnectionProvider(driver, options)
+  private val providers = loadProviders()
 
-        case MariaDBConnectionProvider.driverClass =>
-          logDebug("MariaDB connection provider found")
-          new MariaDBConnectionProvider(driver, options)
+  def loadProviders(): Seq[JdbcConnectionProvider] = {
+    val loader = ServiceLoader.load(classOf[JdbcConnectionProvider],
+      Utils.getContextOrSparkClassLoader)
+    val providers = mutable.ArrayBuffer[JdbcConnectionProvider]()
 
-        case DB2ConnectionProvider.driverClass =>
-          logDebug("DB2 connection provider found")
-          new DB2ConnectionProvider(driver, options)
-
-        case MSSQLConnectionProvider.driverClass =>
-          logDebug("MS SQL connection provider found")
-          new MSSQLConnectionProvider(driver, options)
-
-        case OracleConnectionProvider.driverClass =>
-          logDebug("Oracle connection provider found")
-          new OracleConnectionProvider(driver, options)
-
-        case _ =>
-          throw new IllegalArgumentException(s"Driver ${options.driverClass} does not support " +
-            "Kerberos authentication")
+    val iterator = loader.iterator
+    while (iterator.hasNext) {
+      try {
+        val provider = iterator.next
+        logDebug(s"Loaded built-in provider: $provider")
+        providers += provider
+      } catch {
+        case t: Throwable =>
+          logError("Failed to load built-in provider.")
+          logInfo("Loading of the provider failed with the exception:", t)
       }
+    }
+
+    val disabledProviders = Utils.stringToSeq(SQLConf.get.disabledJdbcConnectionProviders)
+    // toSeq seems duplicate but it's needed for Scala 2.13
+    providers.filterNot(p => disabledProviders.contains(p.name)).toSeq
+  }
+
+  def create(driver: Driver, options: Map[String, String]): Connection = {
+    val filteredProviders = providers.filter(_.canHandle(driver, options))
+    require(filteredProviders.size == 1,
+      "JDBC connection initiated but not exactly one connection provider found which can handle " +
+        s"it. Found active providers: ${filteredProviders.mkString(", ")}")
+    SecurityConfigurationLock.synchronized {
+      filteredProviders.head.getConnection(driver, options)
     }
   }
 }

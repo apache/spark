@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.CheckAnalysis
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNode}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.util.Utils
 
 
@@ -33,7 +32,7 @@ import org.apache.spark.util.Utils
  * analyzed flag set to true.
  *
  * The analyzer rules should use the various resolve methods, in lieu of the various transform
- * methods defined in [[TreeNode]] and [[QueryPlan]].
+ * methods defined in [[org.apache.spark.sql.catalyst.trees.TreeNode]] and [[QueryPlan]].
  *
  * To prevent accidental use of the transform methods, this trait also overrides the transform
  * methods to throw exceptions in test mode, if they are used in the analyzer.
@@ -44,9 +43,10 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
 
   /**
    * Recursively marks all nodes in this plan tree as analyzed.
-   * This should only be called by [[CheckAnalysis]].
+   * This should only be called by
+   * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]].
    */
-  private[catalyst] def setAnalyzed(): Unit = {
+  private[sql] def setAnalyzed(): Unit = {
     if (!_analyzed) {
       _analyzed = true
       children.foreach(_.setAnalyzed())
@@ -121,6 +121,28 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
   }
 
   /**
+   * A variant of `transformUpWithNewOutput`, which skips touching already analyzed plan.
+   */
+  def resolveOperatorsUpWithNewOutput(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])])
+  : LogicalPlan = {
+    if (!analyzed) {
+      transformUpWithNewOutput(rule, skipCond = _.analyzed, canGetOutput = _.resolved)
+    } else {
+      self
+    }
+  }
+
+  override def transformUpWithNewOutput(
+      rule: PartialFunction[LogicalPlan, (LogicalPlan, Seq[(Attribute, Attribute)])],
+      skipCond: LogicalPlan => Boolean,
+      canGetOutput: LogicalPlan => Boolean): LogicalPlan = {
+    AnalysisHelper.allowInvokingTransformsInAnalyzer {
+      super.transformUpWithNewOutput(rule, skipCond, canGetOutput)
+    }
+  }
+
+  /**
    * Recursively transforms the expressions of a tree, skipping nodes that have already
    * been analyzed.
    */
@@ -142,7 +164,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
    * In analyzer, use [[resolveOperatorsDown()]] instead. If this is used in the analyzer,
    * an exception will be thrown in test mode. It is however OK to call this function within
    * the scope of a [[resolveOperatorsDown()]] call.
-   * @see [[TreeNode.transformDown()]].
+   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformDown()]].
    */
   override def transformDown(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     assertNotAnalysisRule()
@@ -151,7 +173,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
 
   /**
    * Use [[resolveOperators()]] in the analyzer.
-   * @see [[TreeNode.transformUp()]]
+   * @see [[org.apache.spark.sql.catalyst.trees.TreeNode.transformUp()]]
    */
   override def transformUp(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
     assertNotAnalysisRule()
@@ -167,6 +189,11 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     super.transformAllExpressions(rule)
   }
 
+  override def clone(): LogicalPlan = {
+    val cloned = super.clone()
+    if (analyzed) cloned.setAnalyzed()
+    cloned
+  }
 }
 
 

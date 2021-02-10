@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.SQLConf
  * The basic mechanism for DPP inserts a duplicated subquery with the filter from the other side,
  * when the following conditions are met:
  *    (1) the table to prune is partitioned by the JOIN key
- *    (2) the join operation is one of the following types: INNER, LEFT SEMI (partitioned on left),
+ *    (2) the join operation is one of the following types: INNER, LEFT SEMI,
  *    LEFT OUTER (partitioned on right), or RIGHT OUTER (partitioned on left)
  *
  * In order to enable partition pruning directly in broadcasts, we use a custom DynamicPruning
@@ -85,10 +85,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      hasBenefit: Boolean): LogicalPlan = {
+      partScan: LogicalRelation): LogicalPlan = {
     val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
-    if (hasBenefit || reuseEnabled) {
+    lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
+    if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
         DynamicPruningSubquery(
@@ -96,7 +97,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
           filteringPlan,
           joinKeys,
           index,
-          !hasBenefit || SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly),
+          SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
@@ -192,7 +193,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def canPruneRight(joinType: JoinType): Boolean = joinType match {
-    case Inner | LeftOuter => true
+    case Inner | LeftSemi | LeftOuter => true
     case _ => false
   }
 
@@ -234,14 +235,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
-              val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, hasBenefit)
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get)
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
-                val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit)
+                newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get)
               }
             }
           case _ =>

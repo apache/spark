@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.util.Utils
 
 case class QueryExecutionTestRecord(
     c0: Int, c1: Int, c2: Int, c3: Int, c4: Int,
@@ -36,8 +37,9 @@ case class QueryExecutionTestRecord(
 class QueryExecutionSuite extends SharedSparkSession {
   import testImplicits._
 
-  def checkDumpedPlans(path: String, expected: Int): Unit = {
-    assert(Source.fromFile(path).getLines.toList
+  def checkDumpedPlans(path: String, expected: Int): Unit = Utils.tryWithResource(
+    Source.fromFile(path)) { source =>
+    assert(source.getLines.toList
       .takeWhile(_ != "== Whole Stage Codegen ==") == List(
       "== Parsed Logical Plan ==",
       s"Range (0, $expected, step=1, splits=Some(2))",
@@ -99,7 +101,8 @@ class QueryExecutionSuite extends SharedSparkSession {
       val path = dir.getCanonicalPath + "/plans.txt"
       val df = spark.range(0, 10)
       df.queryExecution.debug.toFile(path, explainMode = Option("formatted"))
-      assert(Source.fromFile(path).getLines.toList
+      val lines = Utils.tryWithResource(Source.fromFile(path))(_.getLines().toList)
+      assert(lines
         .takeWhile(_ != "== Whole Stage Codegen ==").map(_.replaceAll("#\\d+", "#x")) == List(
         "== Physical Plan ==",
         s"* Range (1)",
@@ -135,9 +138,10 @@ class QueryExecutionSuite extends SharedSparkSession {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26)))
       ds.queryExecution.debug.toFile(path)
-      val localRelations = Source.fromFile(path).getLines().filter(_.contains("LocalRelation"))
-
-      assert(!localRelations.exists(_.contains("more fields")))
+      Utils.tryWithResource(Source.fromFile(path)) { source =>
+        val localRelations = source.getLines().filter(_.contains("LocalRelation"))
+        assert(!localRelations.exists(_.contains("more fields")))
+      }
     }
   }
 
@@ -210,5 +214,18 @@ class QueryExecutionSuite extends SharedSparkSession {
     val tag5 = new TreeNodeTag[String]("e")
     df.queryExecution.executedPlan.setTagValue(tag5, "v")
     assertNoTag(tag5, df.queryExecution.sparkPlan)
+  }
+
+  test("Logging plan changes for execution") {
+    val testAppender = new LogAppender("plan changes")
+    withLogAppender(testAppender) {
+      withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "INFO") {
+        spark.range(1).groupBy("id").count().queryExecution.executedPlan
+      }
+    }
+    Seq("=== Applying Rule org.apache.spark.sql.execution",
+        "=== Result of Batch Preparations ===").foreach { expectedMsg =>
+      assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
+    }
   }
 }

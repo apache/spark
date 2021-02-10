@@ -31,7 +31,7 @@ private[spark] class UninterruptibleThread(
     target: Runnable,
     name: String) extends Thread(target, name) {
 
-  def this(name: String) {
+  def this(name: String) = {
     this(null, name)
   }
 

@@ -385,7 +385,7 @@ WITH test AS (SELECT 42) INSERT INTO test VALUES (1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table not found: test;
+Table not found: test; line 1 pos 37
 
 
 -- !query

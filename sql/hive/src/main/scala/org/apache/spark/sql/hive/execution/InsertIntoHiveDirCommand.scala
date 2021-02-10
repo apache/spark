@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -63,12 +64,16 @@ case class InsertIntoHiveDirCommand(
       s"when inserting into ${storage.locationUri.get}",
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
+    val table = CatalogTable(
       identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
+      provider = Some(DDLUtils.HIVE_PROVIDER),
       tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
       storage = storage,
       schema = outputColumns.toStructType
-    ))
+    )
+    DDLUtils.checkDataColNames(table)
+
+    val hiveTable = HiveClientImpl.toHiveTable(table)
     hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
 

@@ -71,15 +71,6 @@ public class ExternalShuffleBlockResolverSuite {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
     }
 
-    // Invalid shuffle manager
-    try {
-      resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", 1, 1, 0);
-      fail("Should have failed");
-    } catch (UnsupportedOperationException e) {
-      // pass
-    }
-
     // Nonexistent shuffle block
     resolver.registerExecutor("app0", "exec3",
       dataContext.createExecutorInfo(SORT_MANAGER));

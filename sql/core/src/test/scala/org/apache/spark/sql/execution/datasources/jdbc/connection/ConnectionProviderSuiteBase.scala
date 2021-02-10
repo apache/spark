@@ -42,7 +42,7 @@ abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndA
     JDBCOptions.JDBC_PRINCIPAL -> "principal"
   ))
 
-  override def afterEach(): Unit = {
+  protected override def afterEach(): Unit = {
     try {
       Configuration.setConfiguration(null)
     } finally {
@@ -50,20 +50,25 @@ abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndA
     }
   }
 
-  protected def testSecureConnectionProvider(provider: SecureConnectionProvider): Unit = {
+  protected def testSecureConnectionProvider(
+      provider: SecureConnectionProvider,
+      driver: Driver,
+      options: JDBCOptions): Unit = {
+    val providerAppEntry = provider.appEntry(driver, options)
+
     // Make sure no authentication for the database is set
-    assert(Configuration.getConfiguration.getAppConfigurationEntry(provider.appEntry) == null)
+    assert(Configuration.getConfiguration.getAppConfigurationEntry(providerAppEntry) == null)
 
     // Make sure the first call sets authentication properly
     val savedConfig = Configuration.getConfiguration
-    provider.setAuthenticationConfigIfNeeded()
+    provider.setAuthenticationConfigIfNeeded(driver, options)
     val config = Configuration.getConfiguration
     assert(savedConfig != config)
-    val appEntry = config.getAppConfigurationEntry(provider.appEntry)
+    val appEntry = config.getAppConfigurationEntry(providerAppEntry)
     assert(appEntry != null)
 
     // Make sure a second call is not modifying the existing authentication
-    provider.setAuthenticationConfigIfNeeded()
-    assert(config.getAppConfigurationEntry(provider.appEntry) === appEntry)
+    provider.setAuthenticationConfigIfNeeded(driver, options)
+    assert(config.getAppConfigurationEntry(providerAppEntry) === appEntry)
   }
 }

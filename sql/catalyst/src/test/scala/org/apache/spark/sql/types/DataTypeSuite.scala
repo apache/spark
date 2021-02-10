@@ -249,6 +249,12 @@ class DataTypeSuite extends SparkFunSuite {
   checkDataTypeFromJson(MapType(IntegerType, ArrayType(DoubleType), false))
   checkDataTypeFromDDL(MapType(IntegerType, ArrayType(DoubleType), false))
 
+  checkDataTypeFromJson(CharType(1))
+  checkDataTypeFromDDL(CharType(1))
+
+  checkDataTypeFromJson(VarcharType(10))
+  checkDataTypeFromDDL(VarcharType(11))
+
   val metadata = new MetadataBuilder()
     .putString("name", "age")
     .build()
@@ -310,6 +316,10 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(MapType(IntegerType, StringType, true), 24)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 12)
   checkDefaultSize(structType, 20)
+  checkDefaultSize(CharType(5), 5)
+  checkDefaultSize(CharType(100), 100)
+  checkDefaultSize(VarcharType(5), 5)
+  checkDefaultSize(VarcharType(10), 10)
 
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
@@ -423,10 +433,15 @@ class DataTypeSuite extends SparkFunSuite {
   checkCatalogString(MapType(IntegerType, StringType))
   checkCatalogString(MapType(IntegerType, createStruct(40)))
 
-  def checkEqualsStructurally(from: DataType, to: DataType, expected: Boolean): Unit = {
-    val testName = s"equalsStructurally: (from: $from, to: $to)"
+  def checkEqualsStructurally(
+      from: DataType,
+      to: DataType,
+      expected: Boolean,
+      ignoreNullability: Boolean = false): Unit = {
+    val testName = s"equalsStructurally: (from: $from, to: $to, " +
+      s"ignoreNullability: $ignoreNullability)"
     test(testName) {
-      assert(DataType.equalsStructurally(from, to) === expected)
+      assert(DataType.equalsStructurally(from, to, ignoreNullability) === expected)
     }
   }
 
@@ -453,6 +468,105 @@ class DataTypeSuite extends SparkFunSuite {
     new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
     new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
     false)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType, false)),
+    new StructType().add("f2", IntegerType).add("g", new StructType().add("f1", StringType)),
+    true,
+    ignoreNullability = true)
+  checkEqualsStructurally(
+    new StructType().add("f1", IntegerType).add("f", new StructType().add("f2", StringType)),
+    new StructType().add("f2", IntegerType, nullable = false)
+      .add("g", new StructType().add("f1", StringType)),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(IntegerType, true), true),
+    ArrayType(
+      ArrayType(IntegerType, true), true),
+    true,
+     ignoreNullability = false)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(IntegerType, true), false),
+    ArrayType(
+      ArrayType(IntegerType, true), true),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(IntegerType, true), true),
+    ArrayType(
+      ArrayType(IntegerType, false), true),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(IntegerType, true), false),
+    ArrayType(
+      ArrayType(IntegerType, true), true),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    ArrayType(
+      ArrayType(IntegerType, true), false),
+    ArrayType(
+      ArrayType(IntegerType, false), true),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    true,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
+    false,
+    ignoreNullability = false)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), false),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, false), true),
+    true,
+    ignoreNullability = true)
+
+  checkEqualsStructurally(
+    MapType(
+      ArrayType(IntegerType, false), ArrayType(IntegerType, true), true),
+    MapType(
+      ArrayType(IntegerType, true), ArrayType(IntegerType, true), true),
+    true,
+    ignoreNullability = true)
 
   test("SPARK-25031: MapType should produce current formatted string for complex types") {
     val keyType: DataType = StructType(Seq(

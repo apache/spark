@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 
-from pyspark.ml.param.shared import *
-from pyspark.ml.util import *
+from pyspark import since
+from pyspark.ml.param import Params
+from pyspark.ml.param.shared import HasCheckpointInterval, HasSeed, HasWeightCol, Param, \
+    TypeConverters, HasMaxIter, HasStepSize, HasValidationIndicatorCol
 from pyspark.ml.wrapper import JavaPredictionModel
 from pyspark.ml.common import inherit_doc
 
@@ -65,7 +67,8 @@ class _DecisionTreeParams(HasCheckpointInterval, HasSeed, HasWeightCol):
                     typeConverter=TypeConverters.toString)
 
     maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., " +
-                     "depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
+                     "depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes. " +
+                     "Must be in range [0, 30].",
                      typeConverter=TypeConverters.toInt)
 
     maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous " +

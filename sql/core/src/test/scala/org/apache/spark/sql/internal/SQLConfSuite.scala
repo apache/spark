@@ -19,8 +19,6 @@ package org.apache.spark.sql.internal
 
 import java.util.TimeZone
 
-import scala.language.reflectiveCalls
-
 import org.apache.hadoop.fs.Path
 import org.apache.log4j.Level
 
@@ -192,7 +190,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get("spark.app.id") === appId, "Should not change spark core ones")
     // spark core conf w/ entry registered
     val e1 = intercept[AnalysisException](sql("RESET spark.executor.cores"))
-    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores;")
+    assert(e1.getMessage === "Cannot modify the value of a Spark config: spark.executor.cores")
 
     // user defined settings
     sql("SET spark.abc=xyz")
@@ -212,14 +210,14 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     sql(s"RESET ${SQLConf.OPTIMIZER_EXCLUDED_RULES.key}")
     assert(spark.conf.get(SQLConf.OPTIMIZER_EXCLUDED_RULES) ===
       Some("org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation"))
-    sql(s"SET ${SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES.key}=abc")
-    sql(s"RESET ${SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES.key}")
-    assert(spark.conf.get(SQLConf.OPTIMIZER_PLAN_CHANGE_LOG_RULES).isEmpty)
+    sql(s"SET ${SQLConf.PLAN_CHANGE_LOG_RULES.key}=abc")
+    sql(s"RESET ${SQLConf.PLAN_CHANGE_LOG_RULES.key}")
+    assert(spark.conf.get(SQLConf.PLAN_CHANGE_LOG_RULES).isEmpty)
 
     // static sql configs
     val e2 = intercept[AnalysisException](sql(s"RESET ${StaticSQLConf.WAREHOUSE_PATH.key}"))
     assert(e2.getMessage ===
-      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key};")
+      s"Cannot modify the value of a static config: ${StaticSQLConf.WAREHOUSE_PATH.key}")
 
   }
 
@@ -284,23 +282,23 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
   }
 
   test("static SQL conf comes from SparkConf") {
-    val previousValue = sparkContext.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
+    val previousValue = sparkContext.conf.get(GLOBAL_TEMP_DATABASE)
     try {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, 2000)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, "a")
       val newSession = new SparkSession(sparkContext)
-      assert(newSession.conf.get(SCHEMA_STRING_LENGTH_THRESHOLD) == 2000)
+      assert(newSession.conf.get(GLOBAL_TEMP_DATABASE) == "a")
       checkAnswer(
-        newSession.sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}"),
-        Row(SCHEMA_STRING_LENGTH_THRESHOLD.key, "2000"))
+        newSession.sql(s"SET ${GLOBAL_TEMP_DATABASE.key}"),
+        Row(GLOBAL_TEMP_DATABASE.key, "a"))
     } finally {
-      sparkContext.conf.set(SCHEMA_STRING_LENGTH_THRESHOLD, previousValue)
+      sparkContext.conf.set(GLOBAL_TEMP_DATABASE, previousValue)
     }
   }
 
   test("cannot set/unset static SQL conf") {
-    val e1 = intercept[AnalysisException](sql(s"SET ${SCHEMA_STRING_LENGTH_THRESHOLD.key}=10"))
+    val e1 = intercept[AnalysisException](sql(s"SET ${GLOBAL_TEMP_DATABASE.key}=10"))
     assert(e1.message.contains("Cannot modify the value of a static config"))
-    val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
+    val e2 = intercept[AnalysisException](spark.conf.unset(GLOBAL_TEMP_DATABASE.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
 

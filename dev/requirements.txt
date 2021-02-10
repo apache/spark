@@ -6,3 +6,4 @@ sphinx
 pydata_sphinx_theme
 ipython
 nbsphinx
+numpydoc

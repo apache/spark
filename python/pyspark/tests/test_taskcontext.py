@@ -124,12 +124,12 @@ class TaskContextTests(PySparkTestCase):
 
         def context_barrier(x):
             tc = BarrierTaskContext.get()
-            time.sleep(random.randint(1, 10))
+            time.sleep(random.randint(1, 5) * 2)
             tc.barrier()
             return time.time()
 
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
-        self.assertTrue(max(times) - min(times) < 1)
+        self.assertTrue(max(times) - min(times) < 2)
 
     def test_all_gather(self):
         """
@@ -232,7 +232,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
 
         def context_barrier(x):
             tc = BarrierTaskContext.get()
-            time.sleep(random.randint(1, 10))
+            time.sleep(random.randint(1, 5) * 2)
             tc.barrier()
             return (time.time(), os.getpid())
 
@@ -240,7 +240,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         times = list(map(lambda x: x[0], result))
         pids = list(map(lambda x: x[1], result))
         # check both barrier and worker reuse effect
-        self.assertTrue(max(times) - min(times) < 1)
+        self.assertTrue(max(times) - min(times) < 2)
         for pid in pids:
             self.assertTrue(pid in worker_pids)
 
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     from pyspark.tests.test_taskcontext import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

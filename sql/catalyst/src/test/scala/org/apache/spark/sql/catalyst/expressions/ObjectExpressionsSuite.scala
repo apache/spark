@@ -28,7 +28,7 @@ import scala.util.Random
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.ScroogeLikeExample
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -37,9 +37,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.UTF8String
 
 class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
@@ -213,9 +212,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val initializeWithNonexistingMethod = InitializeJavaBean(
       Literal.fromObject(new java.util.LinkedList[Int]),
-      Map("nonexisting" -> Literal(1)))
+      Map("nonexistent" -> Literal(1)))
     checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
-      """A method named "nonexisting" is not declared in any enclosing class """ +
+      """A method named "nonexistent" is not declared in any enclosing class """ +
         "nor any supertype")
 
     val initializeWithWrongParamType = InitializeJavaBean(
@@ -270,7 +269,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   private def checkObjectExprEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
-    val resolver = ResolveTimeZone(new SQLConf)
+    val resolver = ResolveTimeZone
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     checkEvaluationWithoutCodegen(expr, expected, inputRow)
     checkEvaluationWithMutableProjection(expr, expected, inputRow)

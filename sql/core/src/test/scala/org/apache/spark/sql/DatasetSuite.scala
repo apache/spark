@@ -25,7 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.catalyst.ScroogeLikeExample
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, ScroogeLikeExample}
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
@@ -528,42 +528,42 @@ class DatasetSuite extends QueryTest
   test("groupBy function, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.mapGroups { (g, iter) => (g._1, iter.map(_._2).sum) }
+    val aggregated = grouped.mapGroups { (g, iter) => (g._1, iter.map(_._2).sum) }
 
     checkDatasetUnorderly(
-      agged,
+      aggregated,
       ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(v => (v._1, "word"))
-    val agged = grouped.flatMapGroups { (g, iter) =>
+    val aggregated = grouped.flatMapGroups { (g, iter) =>
       Iterator(g._1, iter.map(_._2).sum.toString)
     }
 
     checkDatasetUnorderly(
-      agged,
+      aggregated,
       "a", "30", "b", "3", "c", "1")
   }
 
   test("groupBy function, mapValues, flatMap") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val keyValue = ds.groupByKey(_._1).mapValues(_._2)
-    val agged = keyValue.mapGroups { (g, iter) => (g, iter.sum) }
-    checkDataset(agged, ("a", 30), ("b", 3), ("c", 1))
+    val aggregated = keyValue.mapGroups { (g, iter) => (g, iter.sum) }
+    checkDataset(aggregated, ("a", 30), ("b", 3), ("c", 1))
 
     val keyValue1 = ds.groupByKey(t => (t._1, "key")).mapValues(t => (t._2, "value"))
-    val agged1 = keyValue1.mapGroups { (g, iter) => (g._1, iter.map(_._1).sum) }
-    checkDataset(agged1, ("a", 30), ("b", 3), ("c", 1))
+    val aggregated1 = keyValue1.mapGroups { (g, iter) => (g._1, iter.map(_._1).sum) }
+    checkDataset(aggregated1, ("a", 30), ("b", 3), ("c", 1))
   }
 
   test("groupBy function, reduce") {
     val ds = Seq("abc", "xyz", "hello").toDS()
-    val agged = ds.groupByKey(_.length).reduceGroups(_ + _)
+    val aggregated = ds.groupByKey(_.length).reduceGroups(_ + _)
 
     checkDatasetUnorderly(
-      agged,
+      aggregated,
       3 -> "abcxyz", 5 -> "hello")
   }
 
@@ -914,11 +914,11 @@ class DatasetSuite extends QueryTest
 
   test("grouping key and grouped value has field with same name") {
     val ds = Seq(ClassData("a", 1), ClassData("a", 2)).toDS()
-    val agged = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
+    val aggregated = ds.groupByKey(d => ClassNullableData(d.a, null)).mapGroups {
       (key, values) => key.a + values.map(_.b).sum
     }
 
-    checkDataset(agged, "a3")
+    checkDataset(aggregated, "a3")
   }
 
   test("cogroup's left and right side has field with same name") {
@@ -1286,7 +1286,7 @@ class DatasetSuite extends QueryTest
       Route("b", "c", 6))
     val ds = sparkContext.parallelize(data).toDF.as[Route]
 
-    val grped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
+    val grouped = ds.map(r => GroupedRoutes(r.src, r.dest, Seq(r)))
       .groupByKey(r => (r.src, r.dest))
       .reduceGroups { (g1: GroupedRoutes, g2: GroupedRoutes) =>
         GroupedRoutes(g1.src, g1.dest, g1.routes ++ g2.routes)
@@ -1303,7 +1303,7 @@ class DatasetSuite extends QueryTest
     implicit def ordering[GroupedRoutes]: Ordering[GroupedRoutes] =
       (x: GroupedRoutes, y: GroupedRoutes) => x.toString.compareTo(y.toString)
 
-    checkDatasetUnorderly(grped, expected: _*)
+    checkDatasetUnorderly(grouped, expected: _*)
   }
 
   test("SPARK-18189: Fix serialization issue in KeyValueGroupedDataset") {
@@ -1383,7 +1383,7 @@ class DatasetSuite extends QueryTest
               }
             }
           } else {
-            // Local checkpoints dont require checkpoint_dir
+            // Local checkpoints don't require checkpoint_dir
             f
           }
         }
@@ -1474,7 +1474,7 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-18717: code generation works for both scala.collection.Map" +
-    " and scala.collection.imutable.Map") {
+    " and scala.collection.immutable.Map") {
     val ds = Seq(WithImmutableMap("hi", Map(42L -> "foo"))).toDS
     checkDataset(ds.map(t => t), WithImmutableMap("hi", Map(42L -> "foo")))
 
@@ -1691,6 +1691,33 @@ class DatasetSuite extends QueryTest
     val ds2 = spark.createDataset(rdd)(encoder)
     assert(ds1.schema == ds2.schema)
     checkDataset(ds1.select("_2._2"), ds2.select("_2._2").collect(): _*)
+  }
+
+  test("SPARK-23862: Spark ExpressionEncoder should support Java Enum type from Scala") {
+    val saveModeSeq =
+      Seq(SaveMode.Append, SaveMode.Overwrite, SaveMode.ErrorIfExists, SaveMode.Ignore, null)
+    assert(saveModeSeq.toDS().collect().toSeq === saveModeSeq)
+    assert(saveModeSeq.toDS().schema === new StructType().add("value", StringType, nullable = true))
+
+    val saveModeCaseSeq = saveModeSeq.map(SaveModeCase.apply)
+    assert(saveModeCaseSeq.toDS().collect().toSet === saveModeCaseSeq.toSet)
+    assert(saveModeCaseSeq.toDS().schema ===
+      new StructType().add("mode", StringType, nullable = true))
+
+    val saveModeArrayCaseSeq =
+      Seq(SaveModeArrayCase(Array()), SaveModeArrayCase(saveModeSeq.toArray))
+    val collected = saveModeArrayCaseSeq.toDS().collect()
+    assert(collected.length === 2)
+    val sortedByLength = collected.sortBy(_.modes.length)
+    assert(sortedByLength(0).modes === Array())
+    assert(sortedByLength(1).modes === saveModeSeq.toArray)
+    assert(saveModeArrayCaseSeq.toDS().schema ===
+      new StructType().add("modes", ArrayType(StringType, containsNull = true), nullable = true))
+
+    // Enum is stored as string, so it is possible to convert to/from string
+    val stringSeq = saveModeSeq.map(Option.apply).map(_.map(_.toString).orNull)
+    assert(stringSeq.toDS().as[SaveMode].collect().toSet === saveModeSeq.toSet)
+    assert(saveModeSeq.toDS().as[String].collect().toSet === stringSeq.toSet)
   }
 
   test("SPARK-24571: filtering of string values by char literal") {
@@ -1926,7 +1953,63 @@ class DatasetSuite extends QueryTest
       }
     }
   }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    checkDataset(
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, FooEnum.E1), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+
+    // test null
+    checkDataset(
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)).toDS(),
+      Seq(FooClassWithEnum(1, null), FooClassWithEnum(2, FooEnum.E2)): _*
+    )
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    val df = Seq("aa", "bb", "cc", "abc").toDF("zoo")
+    checkAnswer(df.where($"zoo" === Array('a', 'a')), Seq(Row("aa")))
+    checkAnswer(
+      df.where($"zoo".contains(Array('a', 'b'))),
+      Seq(Row("abc")))
+  }
+
+  test("SPARK-33469: Add current_timezone function") {
+    val df = Seq(1).toDF("c")
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Shanghai") {
+      val timezone = df.selectExpr("current_timezone()").collect().head.getString(0)
+      assert(timezone == "Asia/Shanghai")
+    }
+  }
+
+  test("SPARK-34002: Fix broken Option input/output in UDF") {
+    def f1(bar: Bar): Option[Bar] = {
+      None
+    }
+
+    def f2(bar: Option[Bar]): Option[Bar] = {
+      bar
+    }
+
+    val udf1 = udf(f1 _).withName("f1")
+    val udf2 = udf(f2 _).withName("f2")
+
+    val df = (1 to 2).map(i => Tuple1(Bar(1))).toDF("c0")
+    val withUDF = df
+      .withColumn("c1", udf1(col("c0")))
+      .withColumn("c2", udf2(col("c1")))
+
+    assert(withUDF.schema == StructType(
+      StructField("c0", StructType(StructField("a", IntegerType, false) :: Nil)) ::
+        StructField("c1", StructType(StructField("a", IntegerType, false) :: Nil)) ::
+        StructField("c2", StructType(StructField("a", IntegerType, false) :: Nil)) :: Nil))
+
+    checkAnswer(withUDF, Row(Row(1), null, null) :: Row(Row(1), null, null) :: Nil)
+  }
 }
+
+case class Bar(a: Int)
 
 object AssertExecutionId {
   def apply(id: Long): Long = {
@@ -2024,3 +2107,7 @@ case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
 case class SpecialCharClass(`field.1`: String, `field 2`: String)
+
+/** Used to test Java Enums from Scala code */
+case class SaveModeCase(mode: SaveMode)
+case class SaveModeArrayCase(modes: Array[SaveMode])

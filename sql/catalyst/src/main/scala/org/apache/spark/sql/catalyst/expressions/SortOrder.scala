@@ -63,11 +63,10 @@ case class SortOrder(
     child: Expression,
     direction: SortDirection,
     nullOrdering: NullOrdering,
-    sameOrderExpressions: Set[Expression])
-  extends UnaryExpression with Unevaluable {
+    sameOrderExpressions: Seq[Expression])
+  extends Expression with Unevaluable {
 
-  /** Sort order is not foldable because we don't have an eval for it. */
-  override def foldable: Boolean = false
+  override def children: Seq[Expression] = child +: sameOrderExpressions
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (RowOrdering.isOrderable(dataType)) {
@@ -86,7 +85,7 @@ case class SortOrder(
   def isAscending: Boolean = direction == Ascending
 
   def satisfies(required: SortOrder): Boolean = {
-    (sameOrderExpressions + child).exists(required.child.semanticEquals) &&
+    children.exists(required.child.semanticEquals) &&
       direction == required.direction && nullOrdering == required.nullOrdering
   }
 }
@@ -95,7 +94,7 @@ object SortOrder {
   def apply(
      child: Expression,
      direction: SortDirection,
-     sameOrderExpressions: Set[Expression] = Set.empty): SortOrder = {
+     sameOrderExpressions: Seq[Expression] = Seq.empty): SortOrder = {
     new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
   }
 

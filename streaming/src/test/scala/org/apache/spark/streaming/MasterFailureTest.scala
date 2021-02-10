@@ -332,7 +332,7 @@ class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread
   override def run(): Unit = {
     try {
       // If it is the first killing, then allow the first checkpoint to be created
-      var minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
+      val minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
       val killWaitTime = minKillWaitTime + math.abs(Random.nextLong % maxKillWaitTime)
       logInfo("Kill wait time = " + killWaitTime)
       Thread.sleep(killWaitTime)

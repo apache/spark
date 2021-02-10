@@ -573,7 +573,7 @@ object IntervalUtils {
     var pointPrefixed: Boolean = false
 
     def trimToNextState(b: Byte, next: ParseState): Unit = {
-      if (b <= ' ') {
+      if (Character.isWhitespace(b)) {
         i += 1
       } else {
         state = next
@@ -594,7 +594,7 @@ object IntervalUtils {
           if (s.startsWith(intervalStr)) {
             if (s.numBytes() == intervalStr.numBytes()) {
               throwIAE("interval string cannot be empty")
-            } else if (bytes(i + intervalStr.numBytes()) > ' ') {
+            } else if (!Character.isWhitespace(bytes(i + intervalStr.numBytes()))) {
               throwIAE(s"invalid interval prefix $currentWord")
             } else {
               i += intervalStr.numBytes() + 1
@@ -641,7 +641,7 @@ object IntervalUtils {
               } catch {
                 case e: ArithmeticException => throwIAE(e.getMessage, e)
               }
-            case _ if b <= ' ' => state = TRIM_BEFORE_UNIT
+            case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_UNIT
             case '.' =>
               fractionScale = initialFractionScale
               state = VALUE_FRACTIONAL_PART
@@ -652,7 +652,8 @@ object IntervalUtils {
           if ('0' <= b && b <= '9' && fractionScale > 0) {
             fraction += (b - '0') * fractionScale
             fractionScale /= 10
-          } else if (b <= ' ' && (!pointPrefixed || fractionScale < initialFractionScale)) {
+          } else if (Character.isWhitespace(b) &&
+              (!pointPrefixed || fractionScale < initialFractionScale)) {
             fraction /= NANOS_PER_MICROS.toInt
             state = TRIM_BEFORE_UNIT
           } else if ('0' <= b && b <= '9') {
@@ -718,12 +719,12 @@ object IntervalUtils {
         case UNIT_SUFFIX =>
           b match {
             case 's' => state = UNIT_END
-            case _ if b <= ' ' => state = TRIM_BEFORE_SIGN
+            case _ if Character.isWhitespace(b) => state = TRIM_BEFORE_SIGN
             case _ => throwIAE(s"invalid unit '$currentWord'")
           }
           i += 1
         case UNIT_END =>
-          if (b <= ' ') {
+          if (Character.isWhitespace(b) ) {
             i += 1
             state = TRIM_BEFORE_SIGN
           } else {
@@ -735,7 +736,10 @@ object IntervalUtils {
     val result = state match {
       case UNIT_SUFFIX | UNIT_END | TRIM_BEFORE_SIGN =>
         new CalendarInterval(months, days, microseconds)
-      case _ => null
+      case TRIM_BEFORE_VALUE => throwIAE(s"expect a number after '$currentWord' but hit EOL")
+      case VALUE | VALUE_FRACTIONAL_PART =>
+        throwIAE(s"expect a unit name after '$currentWord' but hit EOL")
+      case _ => throwIAE(s"unknown error when parsing '$currentWord'")
     }
 
     result

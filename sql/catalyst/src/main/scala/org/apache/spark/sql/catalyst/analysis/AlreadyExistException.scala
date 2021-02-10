@@ -37,7 +37,8 @@ class NamespaceAlreadyExistsException(message: String) extends AnalysisException
   }
 }
 
-class TableAlreadyExistsException(message: String) extends AnalysisException(message) {
+class TableAlreadyExistsException(message: String, cause: Option[Throwable] = None)
+  extends AnalysisException(message, cause = cause) {
   def this(db: String, table: String) = {
     this(s"Table or view '$table' already exists in database '$db'")
   }
@@ -63,7 +64,7 @@ class PartitionAlreadyExistsException(message: String) extends AnalysisException
 }
 
 class PartitionsAlreadyExistException(message: String) extends AnalysisException(message) {
-  def this(db: String, table: String, specs: Seq[TablePartitionSpec]) {
+  def this(db: String, table: String, specs: Seq[TablePartitionSpec]) = {
     this(s"The following partitions already exists in table '$table' database '$db':\n"
       + specs.mkString("\n===\n"))
   }

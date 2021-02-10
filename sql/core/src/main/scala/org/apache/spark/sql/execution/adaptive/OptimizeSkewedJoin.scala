@@ -23,9 +23,8 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -53,9 +52,11 @@ import org.apache.spark.sql.internal.SQLConf
  * Note that, when this rule is enabled, it also coalesces non-skewed partitions like
  * `CoalesceShufflePartitions` does.
  */
-case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
+object OptimizeSkewedJoin extends CustomShuffleReaderRule {
 
-  private val ensureRequirements = EnsureRequirements(conf)
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+
+  private val ensureRequirements = EnsureRequirements
 
   private val supportedJoinTypes =
     Inner :: Cross :: LeftSemi :: LeftAnti :: LeftOuter :: RightOuter :: Nil
@@ -290,7 +291,9 @@ case class OptimizeSkewedJoin(conf: SQLConf) extends Rule[SparkPlan] {
 
 private object ShuffleStage {
   def unapply(plan: SparkPlan): Option[ShuffleStageInfo] = plan match {
-    case s: ShuffleQueryStageExec if s.mapStats.isDefined =>
+    case s: ShuffleQueryStageExec
+        if s.mapStats.isDefined &&
+          OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
       val mapStats = s.mapStats.get
       val sizes = mapStats.bytesByPartitionId
       val partitions = sizes.zipWithIndex.map {
@@ -299,7 +302,8 @@ private object ShuffleStage {
       Some(ShuffleStageInfo(s, mapStats, partitions))
 
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs)
-      if s.mapStats.isDefined && partitionSpecs.nonEmpty =>
+        if s.mapStats.isDefined && partitionSpecs.nonEmpty &&
+          OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
       val mapStats = s.mapStats.get
       val sizes = mapStats.bytesByPartitionId
       val partitions = partitionSpecs.map {

@@ -20,7 +20,7 @@ package org.apache.spark.resource
 import org.apache.spark.annotation.{Evolving, Since}
 
 /**
- * A task resource request. This is used in conjuntion with the ResourceProfile to
+ * A task resource request. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
  *

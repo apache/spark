@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneId}
+import java.time.{LocalDate, LocalDateTime, LocalTime}
 import java.time.temporal.ChronoField
 import java.util.{Calendar, TimeZone}
 import java.util.Calendar.{DAY_OF_MONTH, DST_OFFSET, ERA, HOUR_OF_DAY, MINUTE, MONTH, SECOND, YEAR, ZONE_OFFSET}

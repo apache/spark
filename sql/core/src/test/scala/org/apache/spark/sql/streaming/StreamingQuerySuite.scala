@@ -34,7 +34,9 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, Rand, Randn, Shuffle, Uuid}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Complete
 import org.apache.spark.sql.connector.read.InputPartition
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2}
@@ -703,7 +705,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val q2 = startQuery(input(1).toDS.map { i =>
       // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
       // It should not fail the query.
-      q1
+      val q = q1
       i
     }, "stream_serializable_test_2")
     val q3 = startQuery(input(2).toDS.map { i =>
@@ -1138,6 +1140,42 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         AddData(inputData, 1, 2, 3, 3, 4),
         CheckAnswer(Row(1), Row(2), Row(3), Row(4))
       )
+    }
+  }
+
+  testQuietly("limit on empty batch should not cause state store error") {
+    // The source only produces two batches, the first batch is empty and the second batch has data.
+    val source = new Source {
+      var batchId = 0
+      override def stop(): Unit = {}
+      override def getOffset: Option[Offset] = {
+        Some(LongOffset(batchId + 1))
+      }
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        if (batchId == 0) {
+          batchId += 1
+          Dataset.ofRows(spark, LocalRelation(schema.toAttributes, Nil, isStreaming = true))
+        } else {
+          Dataset.ofRows(spark,
+            LocalRelation(schema.toAttributes, InternalRow(10) :: Nil, isStreaming = true))
+        }
+      }
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+
+    MockSourceProvider.withMockSources(source) {
+      val df = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+        .limit(1)
+
+      testStream(df)(
+        StartStream(),
+        AssertOnQuery { q =>
+          q.processAllAvailable()
+          true
+        },
+        CheckAnswer(10))
     }
   }
 

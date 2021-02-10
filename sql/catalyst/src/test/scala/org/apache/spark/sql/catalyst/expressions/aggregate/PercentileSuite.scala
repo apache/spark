@@ -66,20 +66,20 @@ class PercentileSuite extends SparkFunSuite {
     // Test with row with frequency. Second and third columns are frequency in Int and Long
     val countForFrequencyTest = 1000
     val rowsWithFrequency = (1 to countForFrequencyTest).map(x => Seq(x, x):+ x.toLong)
-    val expectedPercentilesWithFrquency = Seq(1.0, 500.0, 707.0, 866.0, 1000.0)
+    val expectedPercentilesWithFrequency = Seq(1.0, 500.0, 707.0, 866.0, 1000.0)
 
     val frequencyExpressionInt = BoundReference(1, IntegerType, nullable = false)
     val aggInt = new Percentile(childExpression, percentageExpression, frequencyExpressionInt)
-    runTest(aggInt, rowsWithFrequency, expectedPercentilesWithFrquency)
+    runTest(aggInt, rowsWithFrequency, expectedPercentilesWithFrequency)
 
     val frequencyExpressionLong = BoundReference(2, LongType, nullable = false)
     val aggLong = new Percentile(childExpression, percentageExpression, frequencyExpressionLong)
-    runTest(aggLong, rowsWithFrequency, expectedPercentilesWithFrquency)
+    runTest(aggLong, rowsWithFrequency, expectedPercentilesWithFrequency)
 
     // Run test with Flatten data
     val flattenRows = (1 to countForFrequencyTest).flatMap(current =>
       (1 to current).map(y => current )).map(Seq(_))
-    runTest(agg, flattenRows, expectedPercentilesWithFrquency)
+    runTest(agg, flattenRows, expectedPercentilesWithFrequency)
   }
 
   private def runTest(agg: Percentile,
