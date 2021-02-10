@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -95,6 +96,15 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
         val df = spark.sql("SELECT * FROM VALUES (1), (2), (3), (4), (5), (6), (7), (8)")
         assert(df.rdd.partitions.length === minPartitionNum)
       }
+    }
+  }
+
+  test("SPARK-34420: Throw exception if non-streaming Deduplicate is not replaced by aggregate") {
+    val df = spark.range(10)
+    val planner = spark.sessionState.planner
+    val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
+    intercept[IllegalStateException] {
+      planner.plan(deduplicate)
     }
   }
 }
