@@ -395,22 +395,24 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
     // Error handling
+    var resolved: Map[String, Any] = Map()
     values.foreach { case (colName, replaceValue) =>
       // Check column name exists
-      df.resolve(colName)
+      val resolvedColumn = df.resolve(colName)
 
       // Check data type
       replaceValue match {
         case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long | _: jl.Boolean | _: String =>
-          // This is good
+        // This is good
         case _ => throw new IllegalArgumentException(
           s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
       }
+      resolved += (resolvedColumn.name -> replaceValue)
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
     val projections = df.schema.fields.map { f =>
-      values.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
+      resolved.find { case (k, _) => columnEquals(k, f.name) }.map { case (_, v) =>
         v match {
           case v: jl.Float => fillCol[Float](f, v)
           case v: jl.Double => fillCol[Double](f, v)
@@ -421,7 +423,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         }
       }.getOrElse(df.col(f.name))
     }
-    df.select(projections : _*)
+    df.select(projections: _*)
   }
 
   /**
