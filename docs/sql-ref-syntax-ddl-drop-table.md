@@ -26,7 +26,7 @@ if the table is not `EXTERNAL` table. If the table is not present it throws an e
 
 In case of an external table, only the associated metadata information is removed from the metastore database.
 
-If the table is cached, the command uncaches the table and all its dependants such as views. Thereby the dependants should be cached again explicitly.
+If the table is cached, the command uncaches the table and all its dependents such as views. Thereby the dependents should be cached again explicitly.
 
 ### Syntax
 
