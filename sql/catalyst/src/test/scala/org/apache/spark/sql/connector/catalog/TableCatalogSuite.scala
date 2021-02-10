@@ -925,7 +925,7 @@ class TableCatalogSuite extends SparkFunSuite {
     assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(!partTable.rows.isEmpty)
     partTable.truncateTable()
-    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 0)
+    assert(partTable.listPartitionIdentifiers(Array.empty, InternalRow.empty).length == 2)
     assert(partTable.rows.isEmpty)
   }
 }

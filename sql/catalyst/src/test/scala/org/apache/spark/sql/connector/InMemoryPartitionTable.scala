@@ -131,9 +131,4 @@ class InMemoryPartitionTable(
       throw new NoSuchPartitionException(name, ident, partitionSchema)
     }
   }
-
-  override def truncateTable(): Boolean = {
-    memoryTablePartitions.clear()
-    super.truncateTable()
-  }
 }

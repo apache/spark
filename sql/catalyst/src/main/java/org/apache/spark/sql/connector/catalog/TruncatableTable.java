@@ -26,7 +26,6 @@ import org.apache.spark.annotation.Evolving;
 public interface TruncatableTable extends Table {
   /**
    * Truncate a table by removing all rows from the table atomically.
-   * If the table supports partitions, the method removes all existing partitions.
    *
    * @return true if a table was truncated successfully otherwise false
    *
