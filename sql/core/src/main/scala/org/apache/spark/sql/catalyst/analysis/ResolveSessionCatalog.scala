@@ -401,10 +401,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
-        pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+        pattern @ (None | Some(UnresolvedPartitionSpec(_, _))), output) =>
       ShowPartitionsCommand(
         ident.asTableIdentifier,
-        s.output,
+        output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     case s @ ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>

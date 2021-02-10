@@ -766,14 +766,16 @@ case class TruncateTable(
  */
 case class ShowPartitions(
     child: LogicalPlan,
-    pattern: Option[PartitionSpec]) extends Command {
+    pattern: Option[PartitionSpec],
+    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 
   override lazy val resolved: Boolean =
     childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+}
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("partition", StringType, nullable = false)())
+object ShowPartitions {
+  val OUTPUT = Seq(AttributeReference("partition", StringType, nullable = false)())
 }
 
 /**
