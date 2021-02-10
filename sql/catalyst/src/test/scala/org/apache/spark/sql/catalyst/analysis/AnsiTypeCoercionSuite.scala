@@ -83,6 +83,20 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     assert(castNull.isEmpty, s"Should not be able to cast $from to $to, but got $castNull")
   }
 
+  private def shouldCastStringLiteral(to: AbstractDataType, expected: DataType): Unit = {
+    val input = Literal("123")
+    val castResult = AnsiTypeCoercion.implicitCast(input, to)
+    assert(DataType.equalsIgnoreCaseAndNullability(
+      castResult.map(_.dataType).getOrElse(null), expected),
+      s"Failed to cast String literal to $to")
+  }
+
+  private def shouldNotCastStringInput(to: AbstractDataType): Unit = {
+    val input = AttributeReference("s", StringType)()
+    val castResult = AnsiTypeCoercion.implicitCast(input, to)
+    assert(castResult.isEmpty, s"Should not be able to cast non-foldable String input to $to")
+  }
+
   private def default(dataType: DataType): Expression = dataType match {
     case ArrayType(internalType: DataType, _) =>
       CreateArray(Seq(Literal.default(internalType)))
@@ -205,34 +219,23 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
   }
 
   test("implicit type cast - unfoldable StringType") {
-    val input = AttributeReference("s", StringType)()
-    assert(AnsiTypeCoercion.implicitCast(input, StringType) == Some(input))
-    assert(AnsiTypeCoercion.implicitCast(input, NumericType).isEmpty)
-    assert(AnsiTypeCoercion.implicitCast(input, DecimalType).isEmpty)
-    allTypes.filterNot(_ == StringType).foreach { dt =>
-      assert(AnsiTypeCoercion.implicitCast(input, dt).isEmpty)
+    val nonCastableTypes =
+      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    nonCastableTypes.foreach { dt =>
+      shouldNotCastStringInput(dt)
     }
+    shouldNotCastStringInput(DecimalType)
+    shouldNotCastStringInput(NumericType)
   }
 
   test("implicit type cast - foldable StringType") {
-    val input = Literal("1")
-    assert(AnsiTypeCoercion.implicitCast(input, StringType) == Some(input))
-    assert(AnsiTypeCoercion.implicitCast(input, NumericType) == Some(Cast(input, DoubleType)))
-    assert(AnsiTypeCoercion.implicitCast(input, DecimalType) ==
-      Some(Cast(input, DecimalType.defaultConcreteType)))
-    (numericTypes ++ datetimeTypes ++ Seq(BinaryType)).foreach { dt =>
-      assert(AnsiTypeCoercion.implicitCast(input, dt) == Some(Cast(input, dt)))
+    val castableTypes =
+      numericTypes ++ datetimeTypes ++ Seq(BinaryType)
+    castableTypes.foreach { dt =>
+      shouldCastStringLiteral(dt, dt)
     }
-  }
-
-  test("implicit type cast - StringType") {
-    val checkedType = StringType
-    val nonCastableTypes =
-      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
-    checkTypeCasting(checkedType, castableTypes = allTypes.filterNot(nonCastableTypes.contains))
-    shouldNotCast(checkedType, DecimalType)
-    shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
-    shouldNotCast(checkedType, IntegralType)
+    shouldCastStringLiteral(DecimalType, DecimalType.defaultConcreteType)
+    shouldCastStringLiteral(NumericType, DoubleType)
   }
 
   test("implicit type cast - DateType") {
@@ -252,20 +255,17 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
-  test("implicit type cast - unfoldable rrayType(StringType)") {
-    val checkedType = ArrayType(StringType)
+  test("implicit type cast - unfoldable ArrayType(StringType)") {
+    val input = AttributeReference("a", ArrayType(StringType))()
     val nonCastableTypes = allTypes.filterNot(_ == StringType)
-    checkTypeCasting(checkedType,
-      castableTypes = allTypes.filterNot(nonCastableTypes.contains).map(ArrayType(_)))
-    nonCastableTypes.map(ArrayType(_)).foreach(shouldNotCast(checkedType, _))
-    shouldNotCast(ArrayType(DoubleType, containsNull = false),
-      ArrayType(LongType, containsNull = false))
-    shouldNotCast(checkedType, DecimalType)
-    shouldNotCast(checkedType, NumericType)
-    shouldNotCast(checkedType, IntegralType)
+    nonCastableTypes.map(ArrayType(_)).foreach { dt =>
+      assert(AnsiTypeCoercion.implicitCast(input, dt).isEmpty)
+    }
+    assert(AnsiTypeCoercion.implicitCast(input, DecimalType).isEmpty)
+    assert(AnsiTypeCoercion.implicitCast(input, NumericType).isEmpty)
   }
 
-  test("implicit type cast - foldable rrayType(StringType)") {
+  test("implicit type cast - foldable arrayType(StringType)") {
     val input = Literal(Array("1"))
     assert(AnsiTypeCoercion.implicitCast(input, ArrayType(StringType)) == Some(input))
     (numericTypes ++ datetimeTypes ++ Seq(BinaryType)).foreach { dt =>
@@ -359,7 +359,8 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
     shouldCast(DecimalType(10, 2), TypeCollection(DecimalType, IntegerType), DecimalType(10, 2))
     shouldNotCast(IntegerType, TypeCollection(DecimalType(10, 2), StringType))
 
-    shouldNotCast(StringType, TypeCollection(NumericType, BinaryType))
+    shouldNotCastStringInput(TypeCollection(NumericType, BinaryType))
+    shouldCastStringLiteral(TypeCollection(NumericType, BinaryType), DoubleType)
 
     shouldCast(
       ArrayType(StringType, false),

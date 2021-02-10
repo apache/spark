@@ -141,22 +141,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   }
 
   override def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression] = {
-    (e, expectedType) match {
-      // This type coercion system will allow implicit converting String type literals as other
-      // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (StringType(), a: AtomicType) if e.foldable && a != BooleanType && a != StringType =>
-        Some(Cast(e, a))
-
-      case (_ @ StringType(), NumericType) if e.foldable =>
-        Some(Cast(e, DoubleType))
-
-      case (_ @ StringType(), DecimalType) if e.foldable =>
-        Some(Cast(e, DecimalType.SYSTEM_DEFAULT))
-
-      case _ =>
-        implicitCast(e.dataType, expectedType).map { dt =>
-          if (dt == e.dataType) e else Cast(e, dt)
-        }
+    implicitCast(e.dataType, expectedType, e.foldable).map { dt =>
+      if (dt == e.dataType) e else Cast(e, dt)
     }
   }
 
@@ -164,13 +150,27 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    * In Ansi mode, the implicit cast is only allow when `expectedType` is in the type precedent
    * list of `inType`.
    */
-  private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
+  private def implicitCast(
+      inType: DataType,
+      expectedType: AbstractDataType,
+      isInputFoldable: Boolean): Option[DataType] = {
     (inType, expectedType) match {
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
 
       // Cast null type (usually from null literals) into target types
       case (NullType, target) => Some(target.defaultConcreteType)
+
+      // This type coercion system will allow implicit converting String type literals as other
+      // primitive types, in case of breaking too many existing Spark SQL queries.
+      case (StringType, a: AtomicType) if isInputFoldable && a != BooleanType && a != StringType =>
+        Some(a)
+
+      case (StringType, NumericType) if isInputFoldable =>
+        Some(DoubleType)
+
+      case (StringType, DecimalType) if isInputFoldable =>
+        Some(DecimalType.SYSTEM_DEFAULT)
 
       // If input is a numeric type but not decimal, and we expect a decimal type,
       // cast the input to decimal.
@@ -192,7 +192,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
       case (_, TypeCollection(types)) =>
-        types.flatMap(implicitCast(inType, _)).headOption
+        types.flatMap(implicitCast(inType, _, isInputFoldable)).headOption
 
       // Implicit cast between array types.
       //
@@ -204,15 +204,15 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // 3. Otherwise, the cast is not allowed
       case (ArrayType(fromType, containsNullFrom), ArrayType(toType: DataType, containsNullTo))
           if Cast.resolvableNullability(containsNullFrom, containsNullTo) =>
-        implicitCast(fromType, toType).map(ArrayType(_, containsNullTo))
+        implicitCast(fromType, toType, isInputFoldable).map(ArrayType(_, containsNullTo))
 
       // Implicit cast between Map types.
       // Follows the same semantics of implicit casting between two array types.
       // Refer to documentation above.
       case (MapType(fromKeyType, fromValueType, fn), MapType(toKeyType, toValueType, tn))
           if Cast.resolvableNullability(fn, tn) =>
-        val newKeyType = implicitCast(fromKeyType, toKeyType)
-        val newValueType = implicitCast(fromValueType, toValueType)
+        val newKeyType = implicitCast(fromKeyType, toKeyType, isInputFoldable)
+        val newValueType = implicitCast(fromValueType, toValueType, isInputFoldable)
         if (newKeyType.isDefined && newValueType.isDefined) {
           Some(MapType(newKeyType.get, newValueType.get, tn))
         } else {
