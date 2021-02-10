@@ -28,7 +28,7 @@ import org.codehaus.janino.InternalCompilerException
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSeq, Expression, UnevaluableAggregate}
+import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -321,10 +321,5 @@ object QueryExecutionErrors {
 
   def compilerError(e: CompileException): Throwable = {
     new CompileException(failedToCompileMsg(e), e.getLocation)
-  }
-
-  def cannotFindExpressionInInputAttributesError(
-      a: AttributeReference, input: AttributeSeq): Throwable = {
-    new IllegalStateException(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
   }
 }
