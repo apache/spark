@@ -57,7 +57,10 @@ private object PostgresDialect extends JdbcDialect {
     case "int8" | "oid" => Some(LongType)
     case "float4" => Some(FloatType)
     case "money" | "float8" => Some(DoubleType)
-    case "text" | "varchar" | "char" | "bpchar" | "cidr" | "inet" | "json" | "jsonb" | "uuid" =>
+    case "text" | "varchar" | "char" | "bpchar" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
+         "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
+         "line" | "lseg" | "box" | "path" | "polygon" | "circle" | "pg_lsn" | "varbit" |
+         "interval" | "pg_snapshot" =>
       Some(StringType)
     case "bytea" => Some(BinaryType)
     case "timestamp" | "timestamptz" | "time" | "timetz" => Some(TimestampType)
