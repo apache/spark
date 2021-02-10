@@ -702,7 +702,7 @@ abstract class AvroSuite
     }
   }
 
-  test("support user provided avro schema") {
+  test("support user provided avro schema string") {
     val avroSchema =
       """
         |{
@@ -718,6 +718,16 @@ abstract class AvroSuite
     val result = spark
       .read
       .option("avroSchema", avroSchema)
+      .format("avro")
+      .load(testAvro)
+      .collect()
+    val expected = spark.read.format("avro").load(testAvro).select("string").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("support user provided avro schema url") {
+    val avroSchemaUrl = "src/test/resources/test_sub.avsc"
+    val result = spark.read.option("avroSchemaUrl", avroSchemaUrl)
       .format("avro")
       .load(testAvro)
       .collect()
