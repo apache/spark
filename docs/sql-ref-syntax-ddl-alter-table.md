@@ -27,8 +27,9 @@ license: |
 
 `ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database.
 
-If the table is cached, the commands clear cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
-The partition rename command keeps table dependents as cached but the table rename does not. In this way dependents should be re-cached explicitly after table renaming.
+If the table is cached, the commands clear cached data of the table. The cache will be lazily filled when the next time the table is accessed. Additionally:
+  * the table rename command uncaches all table's dependents such as views that refer to the table. The dependents should be cached again explicitly.
+  * the partition rename command clears caches of all table dependents while keeping them as cached. So, their caches will be lazily filled when the next time they are accessed.
 
 #### Syntax
 
