@@ -1802,9 +1802,9 @@ User can set `featureType` and `labelType`, and Spark will pick the score functi
 ~~~
 featureType |  labelType |score function
 ------------|------------|--------------
-categorical |categorical | chi2
-continuous  |categorical | f_classif
-continuous  |continuous  | f_regression
+categorical |categorical | chi-squared (chi2)
+continuous  |categorical | ANOVATest (f_classif)
+continuous  |continuous  | F-value (f_regression)
 ~~~
 
 It supports five selection modes: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
