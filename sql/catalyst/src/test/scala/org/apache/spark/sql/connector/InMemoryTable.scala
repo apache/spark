@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.expressions.{BucketTransform, DaysTransfor
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
-import org.apache.spark.sql.sources.{And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
+import org.apache.spark.sql.sources.{AlwaysTrue, And, EqualNullSafe, EqualTo, Filter, IsNotNull, IsNull}
 import org.apache.spark.sql.types.{DataType, DateType, StringType, StructField, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -51,7 +51,7 @@ class InMemoryTable(
     val distribution: Distribution = Distributions.unspecified(),
     val ordering: Array[SortOrder] = Array.empty)
   extends Table with SupportsRead with SupportsWrite with SupportsDelete
-      with SupportsMetadataColumns with TruncatableTable {
+      with SupportsMetadataColumns {
 
   private object PartitionKeyColumn extends MetadataColumn {
     override def name: String = "_partition"
@@ -393,11 +393,6 @@ class InMemoryTable(
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
     dataMap --= InMemoryTable.filtersToKeys(dataMap.keys, partCols.map(_.toSeq.quoted), filters)
   }
-
-  override def truncateTable(): Boolean = dataMap.synchronized {
-    dataMap.clear()
-    dataMap.isEmpty
-  }
 }
 
 object InMemoryTable {
@@ -424,6 +419,7 @@ object InMemoryTable {
           null == extractValue(attr, partitionNames, partValues)
         case IsNotNull(attr) =>
           null != extractValue(attr, partitionNames, partValues)
+        case AlwaysTrue() => true
         case f =>
           throw new IllegalArgumentException(s"Unsupported filter type: $f")
       }
@@ -436,6 +432,7 @@ object InMemoryTable {
       case _: EqualNullSafe => true
       case _: IsNull => true
       case _: IsNotNull => true
+      case _: AlwaysTrue => true
       case _ => false
     }
   }
