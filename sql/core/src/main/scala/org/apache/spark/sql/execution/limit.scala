@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ParallelCollectionRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,7 +55,7 @@ case class CollectLimitExec(limit: Int, child: SparkPlan) extends LimitExec {
   protected override def doExecute(): RDD[InternalRow] = {
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0) {
-      sparkContext.parallelize(Array.empty[InternalRow], 1)
+      new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
     } else {
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
@@ -211,7 +211,7 @@ case class TakeOrderedAndProjectExec(
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
     val childRDD = child.execute()
     if (childRDD.getNumPartitions == 0) {
-      sparkContext.parallelize(Array.empty[InternalRow], 1)
+      new ParallelCollectionRDD(sparkContext, Seq.empty[InternalRow], 1, Map.empty)
     } else {
       val singlePartitionRDD = if (childRDD.getNumPartitions == 1) {
         childRDD
