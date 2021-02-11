@@ -82,7 +82,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
   @deprecated("Aggregator[IN, BUF, OUT] should now be registered as a UDF" +
     " via the functions.udaf(agg) method.", "3.0.0")
   def register(name: String, udaf: UserDefinedAggregateFunction): UserDefinedAggregateFunction = {
-    def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf)
+    def builder(children: Seq[Expression]) = ScalaUDAF(children, udaf, udafName = Some(name))
     functionRegistry.createOrReplaceTempFunction(name, builder)
     udaf
   }
@@ -109,15 +109,15 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    udf match {
+    udf.withName(name) match {
       case udaf: UserDefinedAggregator[_, _, _] =>
         def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
         functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
-      case _ =>
-        def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+        udaf
+      case other =>
+        def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
         functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
+        other
     }
   }
 

@@ -327,7 +327,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect {
-        case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+        case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
       }.length == 2)
       assert(
         finalPlan.collect {
@@ -363,7 +363,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       val reusedStages = level1Stages.flatMap { stage =>
         stage.plan.collect {
-          case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+          case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
         }
       }
       assert(reusedStages.length == 1)

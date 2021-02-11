@@ -2901,6 +2901,31 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * (Scala-specific) Creates a datetime interval
+   *
+   * @param years Number of years
+   * @param months Number of months
+   * @param weeks Number of weeks
+   * @param days Number of days
+   * @param hours Number of hours
+   * @param mins Number of mins
+   * @param secs Number of secs
+   * @return A datetime interval
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def make_interval(
+      years: Column = lit(0),
+      months: Column = lit(0),
+      weeks: Column = lit(0),
+      days: Column = lit(0),
+      hours: Column = lit(0),
+      mins: Column = lit(0),
+      secs: Column = lit(0)): Column = withExpr {
+    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
    * Returns the date that is `numMonths` after `startDate`.
    *
    * @param startDate A date, timestamp or string. If a string, the data must be in a format that
