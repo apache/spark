@@ -39,6 +39,9 @@ SELECT * FROM command('SHOW COLUMNS in test_show_tables') WHERE col_name = 'a';
 SHOW CREATE TABLE test_show_tables;
 SELECT * FROM command('SHOW CREATE TABLE test_show_tables');
 
+-- Illegal command content
+SELECT * FROM command('SHOW CREATE TABLE');
+
 -- Clean Up
 DROP TABLE test_show_partitions;
 DROP TABLE test_show_table_properties;
