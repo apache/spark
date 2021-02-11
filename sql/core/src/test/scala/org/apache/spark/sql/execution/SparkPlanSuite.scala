@@ -103,8 +103,10 @@ class SparkPlanSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(10)
     val planner = spark.sessionState.planner
     val deduplicate = Deduplicate(df.queryExecution.analyzed.output, df.queryExecution.analyzed)
-    intercept[IllegalStateException] {
+    val err = intercept[IllegalStateException] {
       planner.plan(deduplicate)
     }
+    assert(err.getMessage.contains("Deduplicate operator for non streaming data source " +
+      "should have been replaced by aggregate in the optimizer"))
   }
 }
