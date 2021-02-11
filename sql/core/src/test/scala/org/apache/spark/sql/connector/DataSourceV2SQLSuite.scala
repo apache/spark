@@ -142,7 +142,7 @@ class DataSourceV2SQLSuite
       Array("Part 0", "id", ""),
       Array("", "", ""),
       Array("# Metadata Columns", "", ""),
-      Array("index", "string", "Metadata column used to conflict with a data column"),
+      Array("index", "int", "Metadata column used to conflict with a data column"),
       Array("_partition", "string", "Partition key used to store the row"),
       Array("", "", ""),
       Array("# Detailed Table Information", "", ""),
@@ -1898,7 +1898,7 @@ class DataSourceV2SQLSuite
   test("AlterTable: rename table basic test") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
 
       val e = intercept[AnalysisException] {
         sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
@@ -1908,7 +1908,7 @@ class DataSourceV2SQLSuite
 
       sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new", false)))
     }
   }
 
@@ -2085,8 +2085,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("SHOW FUNCTIONS not valid v1 namespace") {
@@ -2107,8 +2106,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DROP FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -2120,8 +2118,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
-    assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("REFRESH FUNCTION: only support session catalog") {
@@ -2134,7 +2131,7 @@ class DataSourceV2SQLSuite
       sql("REFRESH FUNCTION default.ns1.ns2.fun")
     }
     assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+      "Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2172,7 +2169,7 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
     assert(e.message.contains(
-      "The namespace in session catalog must have exactly one name part: global_temp.ns1.ns2.tbl"))
+      "global_temp.ns1.ns2.tbl is not a valid TableIdentifier as it has more than 2 name parts."))
   }
 
   test("table name same as catalog can be used") {
@@ -2201,10 +2198,29 @@ class DataSourceV2SQLSuite
         sql("CREATE TABLE t USING json AS SELECT 1 AS i")
 
         val t = "spark_catalog.t"
+
         def verify(sql: String): Unit = {
           val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(
-            s"The namespace in session catalog must have exactly one name part: $t"))
+          assert(e.message.contains(s"Table or view not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyView(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"View not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyTable(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"Table not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyGeneric(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
         }
 
         verify(s"select * from $t")
@@ -2212,16 +2228,16 @@ class DataSourceV2SQLSuite
         verify(s"REFRESH TABLE $t")
         verify(s"DESCRIBE $t i")
         verify(s"DROP TABLE $t")
-        verify(s"DROP VIEW $t")
-        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS")
-        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
-        verify(s"MSCK REPAIR TABLE $t")
-        verify(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
-        verify(s"SHOW CREATE TABLE $t")
-        verify(s"SHOW CREATE TABLE $t AS SERDE")
-        verify(s"CACHE TABLE $t")
-        verify(s"UNCACHE TABLE $t")
-        verify(s"TRUNCATE TABLE $t")
+        verifyView(s"DROP VIEW $t")
+        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        verifyTable(s"MSCK REPAIR TABLE $t")
+        verifyTable(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
+        verifyGeneric(s"SHOW CREATE TABLE $t")
+        verifyGeneric(s"SHOW CREATE TABLE $t AS SERDE")
+        verifyGeneric(s"CACHE TABLE $t")
+        verifyGeneric(s"UNCACHE TABLE $t")
+        verifyGeneric(s"TRUNCATE TABLE $t")
         verify(s"SHOW COLUMNS FROM $t")
       }
     }
@@ -2369,7 +2385,7 @@ class DataSourceV2SQLSuite
         sql(s"CACHE TABLE $sessionCatalogName.v")
       )
       assert(e1.message.contains(
-        "The namespace in session catalog must have exactly one name part: spark_catalog.v"))
+        "Table or view not found: spark_catalog.v"))
     }
     val e2 = intercept[AnalysisException] {
       sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
@@ -2443,9 +2459,12 @@ class DataSourceV2SQLSuite
           "PARTITIONED BY (bucket(4, id), id)")
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
-      checkAnswer(
-        spark.sql(s"SELECT id, data, _partition FROM $t1"),
-        Seq(Row(1, "a", "3/1"), Row(2, "b", "0/2"), Row(3, "c", "1/3")))
+      val sqlQuery = spark.sql(s"SELECT id, data, index, _partition FROM $t1")
+      val dfQuery = spark.table(t1).select("id", "data", "index", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
+      }
     }
   }
 
@@ -2456,9 +2475,12 @@ class DataSourceV2SQLSuite
           "PARTITIONED BY (bucket(4, index), index)")
       sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
-      checkAnswer(
-        spark.sql(s"SELECT index, data, _partition FROM $t1"),
-        Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
+      val sqlQuery = spark.sql(s"SELECT index, data, _partition FROM $t1")
+      val dfQuery = spark.table(t1).select("index", "data", "_partition")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(3, "c", "1/3"), Row(2, "b", "0/2"), Row(1, "a", "3/1")))
+      }
     }
   }
 
@@ -2469,9 +2491,27 @@ class DataSourceV2SQLSuite
           "PARTITIONED BY (bucket(4, id), id)")
       sql(s"INSERT INTO $t1 VALUES (3, 'c'), (2, 'b'), (1, 'a')")
 
-      checkAnswer(
-        spark.sql(s"SELECT * FROM $t1"),
-        Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+      val sqlQuery = spark.sql(s"SELECT * FROM $t1")
+      val dfQuery = spark.table(t1)
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query, Seq(Row(3, "c"), Row(2, "b"), Row(1, "a")))
+      }
+    }
+  }
+
+  test("SPARK-31255: metadata column should only be produced when necessary") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+
+      val sqlQuery = spark.sql(s"SELECT * FROM $t1 WHERE index = 0")
+      val dfQuery = spark.table(t1).filter("index = 0")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        assert(query.schema.fieldNames.toSeq == Seq("id", "data"))
+      }
     }
   }
 

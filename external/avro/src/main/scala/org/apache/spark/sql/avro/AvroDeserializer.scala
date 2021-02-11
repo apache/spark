@@ -36,7 +36,6 @@ import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArr
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,11 +48,14 @@ private[sql] class AvroDeserializer(
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     filters: StructFilters) {
 
-  def this(rootAvroType: Schema, rootCatalystType: DataType) = {
+  def this(
+      rootAvroType: Schema,
+      rootCatalystType: DataType,
+      datetimeRebaseMode: String) = {
     this(
       rootAvroType,
       rootCatalystType,
-      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ)),
+      LegacyBehaviorPolicy.withName(datetimeRebaseMode),
       new NoopFilters)
   }
 

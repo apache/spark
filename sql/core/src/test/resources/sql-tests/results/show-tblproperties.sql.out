@@ -23,17 +23,17 @@ p2	v2
 -- !query
 SHOW TBLPROPERTIES tbl("p1")
 -- !query schema
-struct<value:string>
+struct<key:string,value:string>
 -- !query output
-v1
+p1	v1
 
 
 -- !query
 SHOW TBLPROPERTIES tbl("p3")
 -- !query schema
-struct<value:string>
+struct<key:string,value:string>
 -- !query output
-Table default.tbl does not have property: p3
+p3	Table default.tbl does not have property: p3
 
 
 -- !query
@@ -71,17 +71,17 @@ view.referredTempViewNames	[]
 -- !query
 SHOW TBLPROPERTIES view("p1")
 -- !query schema
-struct<value:string>
+struct<key:string,value:string>
 -- !query output
-v1
+p1	v1
 
 
 -- !query
 SHOW TBLPROPERTIES view("p3")
 -- !query schema
-struct<value:string>
+struct<key:string,value:string>
 -- !query output
-Table default.view does not have property: p3
+p3	Table default.view does not have property: p3
 
 
 -- !query
