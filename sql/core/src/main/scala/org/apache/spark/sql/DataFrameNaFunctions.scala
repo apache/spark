@@ -413,8 +413,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       // Eg: "`ColWith.Dot`" will be resolved to the column with name "ColWith.Dot"
       // in a dataframe having columns ("ColWith.Dot", "Col").
       // If resolved name is not used, while filling null values "`ColWith.Dot`" will
-      // neither match "ColWith.Dot" nor "ColWith.Dot" will be found in the dataframe,
-      // it leads to the failure.
+      // not match "ColWith.Dot".
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
@@ -428,9 +427,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
           case v: jl.Boolean => fillCol[Boolean](f, v.booleanValue())
           case v: String => fillCol[String](f, v)
         }
-      }.getOrElse(df.col(f.name))
+      }.getOrElse(df.col(if (f.name.contains('.')) s"`${f.name}`" else f.name))
     }
-    df.select(projections: _*)
+    df.select(projections : _*)
   }
 
   /**
