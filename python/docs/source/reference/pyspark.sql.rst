@@ -72,10 +72,16 @@ See also :class:`SparkSession`.
     SparkSession.udf
     SparkSession.version
 
-.. toctree::
-    :hidden:
 
-    pyspark.sql.conf.RuntimeConfig
+Configuration
+-------------
+
+.. currentmodule:: pyspark.sql.conf
+
+.. autosummary::
+    :toctree: api/
+
+    RuntimeConfig
 
 
 Input and Output
