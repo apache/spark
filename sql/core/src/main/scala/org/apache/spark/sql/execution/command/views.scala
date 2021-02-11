@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View, With}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -560,29 +560,25 @@ object ViewHelper {
       child.flatMap {
         case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
           Seq(nameParts)
+        case w: With if !w.resolved => w.innerChildren.flatMap(collectTempViews)
         case plan if !plan.resolved => plan.expressions.flatMap(_.flatMap {
           case e: SubqueryExpression => collectTempViews(e.plan)
           case _ => Seq.empty
-        }) ++ plan.innerChildren.flatMap {
-          case p: LogicalPlan => collectTempViews(p)
-          case _ => Seq.empty
-        }
+        })
         case _ => Seq.empty
       }.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
       child.flatMap {
+        case w: With if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
         case plan if !plan.resolved =>
           plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
-            case e: UnresolvedFunction if (catalog.isTemporaryFunction(e.name)) =>
+            case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
               Seq(e.name.funcName)
             case _ => Seq.empty
-          }) ++ plan.innerChildren.flatMap {
-            case p: LogicalPlan => collectTempFunctions(p)
-            case _ => Seq.empty
-          }
+          })
         case _ => Seq.empty
       }.distinct
     }
