@@ -3943,6 +3943,15 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-34421: Resolve temporary functions in views with CTEs") {
+    withTempView("temp_view") {
+      spark.udf.register("temp_func", identity[Int](_))
+
+      sql("CREATE TEMPORARY VIEW temp_view AS WITH cte AS (SELECT temp_func(0)) SELECT * FROM cte")
+      checkAnswer(sql("SELECT * FROM temp_view"), Row(0))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

@@ -557,23 +557,34 @@ object ViewHelper {
   private def collectTemporaryObjects(
       catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
-      child.collect {
+      child.flatMap {
         case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
           Seq(nameParts)
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+        case plan if !plan.resolved => plan.expressions.flatMap(_.flatMap {
           case e: SubqueryExpression => collectTempViews(e.plan)
-        }).flatten
-      }.flatten.distinct
+          case _ => Seq.empty
+        }) ++ plan.innerChildren.flatMap {
+          case p: LogicalPlan => collectTempViews(p)
+          case _ => Seq.empty
+        }
+        case _ => Seq.empty
+      }.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
-      child.collect {
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
-          case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
-            Seq(e.name.funcName)
-        }).flatten
-      }.flatten.distinct
+      child.flatMap {
+        case plan if !plan.resolved =>
+          plan.expressions.flatMap(_.flatMap {
+            case e: SubqueryExpression => collectTempFunctions(e.plan)
+            case e: UnresolvedFunction if (catalog.isTemporaryFunction(e.name)) =>
+              Seq(e.name.funcName)
+            case _ => Seq.empty
+          }) ++ plan.innerChildren.flatMap {
+            case p: LogicalPlan => collectTempFunctions(p)
+            case _ => Seq.empty
+          }
+        case _ => Seq.empty
+      }.distinct
     }
     (collectTempViews(child), collectTempFunctions(child))
   }
