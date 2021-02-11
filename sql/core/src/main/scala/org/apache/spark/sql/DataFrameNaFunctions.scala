@@ -394,8 +394,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
-    // Error handling
     var resolved: Map[String, Any] = Map()
+    // Error handling
     values.foreach { case (colName, replaceValue) =>
       // Check column name exists
       val resolvedColumn = df.resolve(colName)
@@ -403,11 +403,18 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       // Check data type
       replaceValue match {
         case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long | _: jl.Boolean | _: String =>
-        // This is good
+          // This is good
         case _ => throw new IllegalArgumentException(
           s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
       }
       resolved += (resolvedColumn.name -> replaceValue)
+      // Use resolved column name onwards for filling the null values.
+      // It is needed for the column names having a dot and quoted with back-tick.
+      // Eg: "`ColWith.Dot`" will be resolved to the column with name "ColWith.Dot"
+      // in a dataframe having columns ("ColWith.Dot", "Col").
+      // If resolved name is not used, while filling null values "`ColWith.Dot`" will
+      // neither match "ColWith.Dot" nor "ColWith.Dot" will be found in the dataframe,
+      // it leads to the failure.
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
