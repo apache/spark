@@ -1141,7 +1141,7 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("AlterTable: remove nonexistent table property") {
+  test("SPARK-34380: unset nonexistent table property") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {
       sql(s"CREATE TABLE $t (id int) USING $v2Format TBLPROPERTIES('test' = '34')")
