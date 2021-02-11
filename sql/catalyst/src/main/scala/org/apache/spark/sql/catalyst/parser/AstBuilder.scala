@@ -1139,6 +1139,22 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Create a table-valued command call with arguments, e.g. command("show tables")
+   */
+  override def visitTableValuedCommand(ctx: TableValuedCommandContext): LogicalPlan =
+    withOrigin(ctx) {
+      val command = ctx.commandTable
+      val aliases = if (command.tableAlias.identifierList != null) {
+        visitIdentifierList(command.tableAlias.identifierList)
+      } else {
+        Seq.empty
+      }
+
+    val tvc = UnresolvedTableValuedCommand(string(command.content), aliases)
+    tvc.optionalMap(command.tableAlias.strictIdentifier)(aliasPlan)
+  }
+
+  /**
    * Create an inline table (a virtual table in Hive parlance).
    */
   override def visitInlineTable(ctx: InlineTableContext): LogicalPlan = withOrigin(ctx) {

@@ -137,6 +137,29 @@ case class UnresolvedTableValuedFunction(
 }
 
 /**
+ * A table-valued command, e.g.
+ * {{{
+ *   select tableName from command("show tables");
+ *
+ *   // Assign alias names
+ *   select t.tableName from command("show tables") t;
+ * }}}
+ *
+ * @param command content of command
+ * @param outputNames alias names of command output columns. If these names given, an analyzer
+ *                    adds [[Project]] to rename the output columns.
+ */
+case class UnresolvedTableValuedCommand(
+    command: String,
+    outputNames: Seq[String])
+  extends LeafNode {
+
+  override def output: Seq[Attribute] = Nil
+
+  override lazy val resolved = false
+}
+
+/**
  * Holds the name of an attribute that has yet to be resolved.
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {

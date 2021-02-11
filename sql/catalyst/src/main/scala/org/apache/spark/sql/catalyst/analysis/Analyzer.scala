@@ -239,6 +239,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       LookupFunctions),
     Batch("Resolution", fixedPoint,
       ResolveTableValuedFunctions ::
+      ResolveTableValuedCommands ::
       ResolveNamespace(catalogManager) ::
       new ResolveCatalogs(catalogManager) ::
       ResolveUserSpecifiedColumns ::

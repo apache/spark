@@ -684,6 +684,7 @@ relationPrimary
     | '(' query ')' sample? tableAlias        #aliasedQuery
     | '(' relation ')' sample? tableAlias     #aliasedRelation
     | inlineTable                             #inlineTableDefault2
+    | commandTable                            #tableValuedCommand
     | functionTable                           #tableValuedFunction
     ;
 
@@ -693,6 +694,10 @@ inlineTable
 
 functionTable
     : funcName=errorCapturingIdentifier '(' (expression (',' expression)*)? ')' tableAlias
+    ;
+
+commandTable
+    : COMMAND '(' content = STRING ')' tableAlias
     ;
 
 tableAlias
@@ -1039,6 +1044,7 @@ ansiNonReserved
     | CODEGEN
     | COLLECTION
     | COLUMNS
+    | COMMAND
     | COMMENT
     | COMMIT
     | COMPACT
@@ -1262,6 +1268,7 @@ nonReserved
     | COLLECTION
     | COLUMN
     | COLUMNS
+    | COMMAND
     | COMMENT
     | COMMIT
     | COMPACT
@@ -1508,6 +1515,7 @@ COLLATE: 'COLLATE';
 COLLECTION: 'COLLECTION';
 COLUMN: 'COLUMN';
 COLUMNS: 'COLUMNS';
+COMMAND: 'COMMAND';
 COMMENT: 'COMMENT';
 COMMIT: 'COMMIT';
 COMPACT: 'COMPACT';
