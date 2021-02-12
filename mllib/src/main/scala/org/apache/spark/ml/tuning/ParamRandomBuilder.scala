@@ -144,7 +144,7 @@ class ParamRandomBuilder extends ParamGridBuilder {
 
   @Since("3.2.0")
   def addLog10Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
-    addLogRandom(param, lim, n, 2)
+    addLogRandom(param, lim, n, 10)
 
   @Since("3.2.0")
   def addLog2Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
