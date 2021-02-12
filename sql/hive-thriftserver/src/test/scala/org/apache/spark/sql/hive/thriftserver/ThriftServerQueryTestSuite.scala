@@ -72,6 +72,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     // SPARK-28636
     "decimalArithmeticOperations.sql",
     "literals.sql",
+    // Because table valued commands supports some show command, so skip it. see HiveResult.hiveResultString
+    "table-valued-commands.sql",
     "subquery/scalar-subquery/scalar-subquery-predicate.sql",
     "subquery/in-subquery/in-limit.sql",
     "subquery/in-subquery/in-group-by.sql",
