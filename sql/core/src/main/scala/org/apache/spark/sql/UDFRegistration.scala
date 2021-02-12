@@ -109,15 +109,15 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * @since 2.2.0
    */
   def register(name: String, udf: UserDefinedFunction): UserDefinedFunction = {
-    udf match {
+    udf.withName(name) match {
       case udaf: UserDefinedAggregator[_, _, _] =>
         def builder(children: Seq[Expression]) = udaf.scalaAggregator(children)
         functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
-      case _ =>
-        def builder(children: Seq[Expression]) = udf.apply(children.map(Column.apply) : _*).expr
+        udaf
+      case other =>
+        def builder(children: Seq[Expression]) = other.apply(children.map(Column.apply) : _*).expr
         functionRegistry.createOrReplaceTempFunction(name, builder)
-        udf
+        other
     }
   }
 

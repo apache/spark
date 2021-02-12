@@ -150,7 +150,8 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
   def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
     val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]]
     val bEncoder = aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
-    ScalaAggregator(exprs, aggregator, iEncoder, bEncoder, nullable, deterministic)
+    ScalaAggregator(
+      exprs, aggregator, iEncoder, bEncoder, nullable, deterministic, aggregatorName = name)
   }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {

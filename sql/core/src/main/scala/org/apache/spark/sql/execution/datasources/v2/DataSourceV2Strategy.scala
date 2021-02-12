@@ -337,8 +337,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowNamespaces(ResolvedNamespace(catalog, ns), pattern, output) =>
       ShowNamespacesExec(output, catalog.asNamespaceCatalog, ns, pattern) :: Nil
 
-    case r @ ShowTables(ResolvedNamespace(catalog, ns), pattern) =>
-      ShowTablesExec(r.output, catalog.asTableCatalog, ns, pattern) :: Nil
+    case ShowTables(ResolvedNamespace(catalog, ns), pattern, output) =>
+      ShowTablesExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case _: ShowTableExtended =>
       throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
@@ -349,8 +349,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: ShowCurrentNamespace =>
       ShowCurrentNamespaceExec(r.output, r.catalogManager) :: Nil
 
-    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey) =>
-      ShowTablePropertiesExec(r.output, rt.table, propertyKey) :: Nil
+    case r @ ShowTableProperties(rt: ResolvedTable, propertyKey, output) =>
+      ShowTablePropertiesExec(output, rt.table, propertyKey) :: Nil
 
     case AnalyzeTable(_: ResolvedTable, _, _) | AnalyzeColumn(_: ResolvedTable, _, _) =>
       throw new AnalysisException("ANALYZE TABLE is not supported for v2 tables.")
@@ -400,14 +400,14 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case TruncateTable(_: ResolvedTable, _) =>
       throw new AnalysisException("TRUNCATE TABLE is not supported for v2 tables.")
 
-    case ShowColumns(_: ResolvedTable, _) =>
+    case ShowColumns(_: ResolvedTable, _, _) =>
       throw new AnalysisException("SHOW COLUMNS is not supported for v2 tables.")
 
     case r @ ShowPartitions(
         ResolvedTable(catalog, _, table: SupportsPartitionManagement, _),
-        pattern @ (None | Some(_: ResolvedPartitionSpec))) =>
+        pattern @ (None | Some(_: ResolvedPartitionSpec)), output) =>
       ShowPartitionsExec(
-        r.output,
+        output,
         catalog,
         table,
         pattern.map(_.asInstanceOf[ResolvedPartitionSpec])) :: Nil

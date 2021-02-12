@@ -493,6 +493,29 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * It does not change the behavior of partition discovery.</li>
    * <li>`recursiveFileLookup`: recursively scan a directory for files. Using this option
    * disables partition discovery</li>
+   * <li>`datetimeRebaseMode` (default is the value specified in the SQL config
+   * `spark.sql.legacy.parquet.datetimeRebaseModeInRead`): the rebasing mode for the values
+   * of the `DATE`, `TIMESTAMP_MICROS`, `TIMESTAMP_MILLIS` logical types from the Julian to
+   * Proleptic Gregorian calendar:
+   *   <ul>
+   *     <li>`EXCEPTION` : Spark fails in reads of ancient dates/timestamps that are ambiguous
+   *     between the two calendars</li>
+   *     <li>`CORRECTED` : loading of dates/timestamps without rebasing</li>
+   *     <li>`LEGACY` : perform rebasing of ancient dates/timestamps from the Julian to Proleptic
+   *     Gregorian calendar</li>
+   *   </ul>
+   * </li>
+   * <li>`int96RebaseMode` (default is the value specified in the SQL config
+   * `spark.sql.legacy.parquet.int96RebaseModeInRead`): the rebasing mode for `INT96` timestamps
+   * from the Julian to Proleptic Gregorian calendar:
+   *   <ul>
+   *     <li>`EXCEPTION` : Spark fails in reads of ancient `INT96` timestamps that are ambiguous
+   *     between the two calendars</li>
+   *     <li>`CORRECTED` : loading of timestamps without rebasing</li>
+   *     <li>`LEGACY` : perform rebasing of ancient `INT96` timestamps from the Julian to Proleptic
+   *     Gregorian calendar</li>
+   *   </ul>
+   * </li>
    * </ul>
    *
    * @since 2.0.0
