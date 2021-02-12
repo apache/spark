@@ -390,7 +390,7 @@ case class MergeIntoTable(
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("nullable")
   override def children: Seq[Expression] = condition.toSeq
 }
 
@@ -410,7 +410,7 @@ case class InsertAction(
 
 case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException(this, "nullable")
+  override def dataType: DataType = throw new UnresolvedException("nullable")
   override def children: Seq[Expression] = key ::  value :: Nil
 }
 
@@ -562,10 +562,13 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
  */
 case class ShowTableProperties(
     table: LogicalPlan,
-    propertyKey: Option[String]) extends Command {
+    propertyKey: Option[String],
+    override val output: Seq[Attribute] = ShowTableProperties.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowTableProperties {
+  val OUTPUT: Seq[Attribute] = Seq(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
 }
@@ -766,14 +769,16 @@ case class TruncateTable(
  */
 case class ShowPartitions(
     child: LogicalPlan,
-    pattern: Option[PartitionSpec]) extends Command {
+    pattern: Option[PartitionSpec],
+    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 
   override lazy val resolved: Boolean =
     childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+}
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("partition", StringType, nullable = false)())
+object ShowPartitions {
+  val OUTPUT = Seq(AttributeReference("partition", StringType, nullable = false)())
 }
 
 /**

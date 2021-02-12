@@ -49,6 +49,7 @@ import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, Da
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -1755,6 +1756,20 @@ abstract class AvroSuite
     }
   }
 
+  private def runInMode(
+      modes: Seq[LegacyBehaviorPolicy.Value])(f: Map[String, String] => Unit): Unit = {
+    modes.foreach { mode =>
+      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
+        f(Map.empty)
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      modes.foreach { mode =>
+        f(Map(AvroOptions.DATETIME_REBASE_MODE -> mode.toString))
+      }
+    }
+  }
+
   test("SPARK-31183: compatibility with Spark 2.4 in reading dates/timestamps") {
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
     def checkReadMixedFiles(
@@ -1784,9 +1799,9 @@ abstract class AvroSuite
 
           // For Avro files written by Spark 3.0, we know the writer info and don't need the config
           // to guide the rebase behavior.
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+          runInMode(Seq(LEGACY)) { options =>
             checkAnswer(
-              spark.read.format("avro").load(path2_4, path3_0, path3_0_rebase),
+              spark.read.options(options).format("avro").load(path2_4, path3_0, path3_0_rebase),
               1.to(3).map(_ => Row(java.sql.Date.valueOf(dataStr))))
           }
         } else {
@@ -1817,9 +1832,9 @@ abstract class AvroSuite
 
           // For Avro files written by Spark 3.0, we know the writer info and don't need the config
           // to guide the rebase behavior.
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> LEGACY.toString) {
+          runInMode(Seq(LEGACY)) { options =>
             checkAnswer(
-              spark.read.format("avro").load(path2_4, path3_0, path3_0_rebase),
+              spark.read.options(options).format("avro").load(path2_4, path3_0, path3_0_rebase),
               1.to(3).map(_ => Row(java.sql.Timestamp.valueOf(dataStr))))
           }
         }
@@ -1869,10 +1884,10 @@ abstract class AvroSuite
 
       // The file metadata indicates if it needs rebase or not, so we can always get the correct
       // result regardless of the "rebase mode" config.
-      Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-          checkAnswer(spark.read.format("avro").load(path), Row(Timestamp.valueOf(tsStr)))
-        }
+      runInMode(Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+        checkAnswer(
+          spark.read.options(options).format("avro").load(path),
+          Row(Timestamp.valueOf(tsStr)))
       }
 
       // Force to not rebase to prove the written datetime values are rebased and we will get
@@ -1912,12 +1927,10 @@ abstract class AvroSuite
 
         // The file metadata indicates if it needs rebase or not, so we can always get the correct
         // result regardless of the "rebase mode" config.
-        Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-          withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-            checkAnswer(
-              spark.read.schema("ts timestamp").format("avro").load(path),
-              Row(Timestamp.valueOf(rebased)))
-          }
+        runInMode(Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+          checkAnswer(
+            spark.read.options(options).schema("ts timestamp").format("avro").load(path),
+            Row(Timestamp.valueOf(rebased)))
         }
 
         // Force to not rebase to prove the written datetime values are rebased and we will get
@@ -1943,10 +1956,10 @@ abstract class AvroSuite
 
       // The file metadata indicates if it needs rebase or not, so we can always get the correct
       // result regardless of the "rebase mode" config.
-      Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-          checkAnswer(spark.read.format("avro").load(path), Row(Date.valueOf("1001-01-01")))
-        }
+      runInMode(Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+        checkAnswer(
+          spark.read.options(options).format("avro").load(path),
+          Row(Date.valueOf("1001-01-01")))
       }
 
       // Force to not rebase to prove the written datetime values are rebased and we will get

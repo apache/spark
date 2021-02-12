@@ -87,6 +87,7 @@ private[sql] class AvroFileFormat extends FileFormat
     val broadcastedConf =
       spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val parsedOptions = new AvroOptions(options, hadoopConf)
+    val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
@@ -125,7 +126,7 @@ private[sql] class AvroFileFormat extends FileFormat
 
         val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
           reader.asInstanceOf[DataFileReader[_]].getMetaString,
-          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+          datetimeRebaseModeInRead)
 
         val avroFilters = if (SQLConf.get.avroFilterPushDown) {
           new OrderedFilters(filters, requiredSchema)
