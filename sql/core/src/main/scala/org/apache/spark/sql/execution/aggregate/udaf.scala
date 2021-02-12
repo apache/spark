@@ -333,8 +333,6 @@ case class ScalaUDAF(
   with ImplicitCastInputTypes
   with UserDefinedExpression {
 
-  override def name: String = udafName.getOrElse("UDAF")
-
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
 
@@ -480,8 +478,6 @@ case class ScalaAggregator[IN, BUF, OUT](
   private[this] lazy val bufferDeserializer = bufferEncoder.createDeserializer()
   private[this] lazy val outputEncoder = agg.outputEncoder.asInstanceOf[ExpressionEncoder[OUT]]
   private[this] lazy val outputSerializer = outputEncoder.createSerializer()
-
-  override def name: String = aggregatorName.getOrElse(nodeName)
 
   def dataType: DataType = outputEncoder.objSerializer.dataType
 
