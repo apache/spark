@@ -21,38 +21,142 @@ import org.scalatest.matchers.must.Matchers
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, TestParams}
+import org.apache.spark.ml.param._
 
 class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropertyChecks
   with Matchers {
 
   val solver = new TestParams() {
-    val randomCol: Param[Double] = new Param[Double](this, "randomVal", "randomly generated value")
+    private val randomColName = "randomVal"
+    val DummyDoubleParam = new DoubleParam(this, randomColName, "doc")
+    val DummyLongParam = new LongParam(this, randomColName, "doc")
+    val DummyFloatParam = new FloatParam(this, randomColName, "doc")
+    val DummyIntParam = new IntParam(this, randomColName, "doc")
   }
-  import solver.{inputCol, maxIter, randomCol}
+  import solver._
 
-  val limit: Limits[Double] = Limits(1d, 100d)
+  val DoubleLimits: Limits[Double] = Limits(1d, 100d)
+  val FloatLimits: Limits[Float] = Limits(1f, 100f)
+  val IntLimits: Limits[Int] = Limits(1, 100)
+  val LongLimits: Limits[Long] = Limits(1L, 100L)
   val nRandoms: Int = 5
+
+  // Java API
+
+  test("Java API random Double linear params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addRandom(DummyDoubleParam, DoubleLimits.x, DoubleLimits.y, nRandoms),
+      DoubleLimits,
+      DummyDoubleParam)
+  }
+
+  test("Java API random Double log2 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog2Random(DummyDoubleParam, DoubleLimits.x, DoubleLimits.y, nRandoms),
+      DoubleLimits,
+      DummyDoubleParam)
+  }
+
+  test("Java API random Double log10 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog10Random(DummyDoubleParam, DoubleLimits.x, DoubleLimits.y, nRandoms),
+      DoubleLimits,
+      DummyDoubleParam)
+  }
+
+  test("Java API random Float linear params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addRandom(DummyFloatParam, FloatLimits.x, FloatLimits.y, nRandoms),
+      FloatLimits,
+      DummyFloatParam)
+  }
+
+  test("Java API random Float log2 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog2Random(DummyFloatParam, FloatLimits.x, FloatLimits.y, nRandoms),
+      FloatLimits,
+      DummyFloatParam)
+  }
+
+  test("Java API random Float log10 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog10Random(DummyFloatParam, FloatLimits.x, FloatLimits.y, nRandoms),
+      FloatLimits,
+      DummyFloatParam)
+  }
+
+  test("Java API random Long linear params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addRandom(DummyLongParam, LongLimits.x, LongLimits.y, nRandoms),
+      LongLimits,
+      DummyLongParam)
+  }
+
+  test("Java API random Long log2 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog2Random(DummyLongParam, LongLimits.x, LongLimits.y, nRandoms),
+      LongLimits,
+      DummyLongParam)
+  }
+
+  test("Java API random Long log10 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog10Random(DummyLongParam, LongLimits.x, LongLimits.y, nRandoms),
+      LongLimits,
+      DummyLongParam)
+  }
+
+  test("Java API random Int linear params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addRandom(DummyIntParam, IntLimits.x, IntLimits.y, nRandoms),
+      IntLimits,
+      DummyIntParam)
+  }
+
+  test("Java API random Int log2 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog2Random(DummyIntParam, IntLimits.x, IntLimits.y, nRandoms),
+      IntLimits,
+      DummyIntParam)
+  }
+
+  test("Java API random Int log10 params mixed with fixed values") {
+    checkRangeAndCardinality(
+      _.addLog10Random(DummyIntParam, IntLimits.x, IntLimits.y, nRandoms),
+      IntLimits,
+      DummyIntParam)
+  }
+
+  // Scala API
 
   test("random linear params mixed with fixed values") {
     import RandomRanges._
-    checkRangeAndCardinality(_.addRandom(randomCol, limit, nRandoms))
+    checkRangeAndCardinality(_.addRandom(DummyDoubleParam, DoubleLimits, nRandoms),
+      DoubleLimits,
+      DummyDoubleParam)
   }
 
   test("random log2 params mixed with fixed values") {
     import RandomRanges._
-    checkRangeAndCardinality(_.addLog2Random(randomCol, limit, nRandoms))
+    checkRangeAndCardinality(_.addLog2Random(DummyDoubleParam, DoubleLimits, nRandoms),
+      DoubleLimits,
+      DummyDoubleParam)
   }
 
   test("random log10 params mixed with fixed values") {
     import RandomRanges._
-    checkRangeAndCardinality(_.addLog10Random(randomCol, limit, nRandoms))
+    checkRangeAndCardinality(_.addLog10Random(DummyDoubleParam, DoubleLimits, nRandoms),
+      DoubleLimits,
+      DummyDoubleParam)
   }
 
-  def checkRangeAndCardinality(addFn: ParamRandomBuilder => ParamRandomBuilder): Unit = {
+  def checkRangeAndCardinality[T: Numeric](addFn: ParamRandomBuilder => ParamRandomBuilder,
+                               lim: Limits[T],
+                               randomCol: Param[T]): Unit = {
     val maxIterations: Int = 10
     val basedOn: Array[ParamPair[_]] = Array(maxIter -> maxIterations)
     val inputCols: Array[String] = Array("input0", "input1")
+    val ops: Numeric[T] = implicitly[Numeric[T]]
 
     val builder: ParamRandomBuilder = new ParamRandomBuilder()
       .baseOn(basedOn: _*)
@@ -62,7 +166,8 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     paramMap.foreach { m: ParamMap =>
       assert(m(maxIter) == maxIterations)
       assert(inputCols contains  m(inputCol))
-      assert(m(randomCol) >= limit.x && m(randomCol) <= limit.y)
+      assert(ops.gteq(m(randomCol), lim.x))
+      assert(ops.lteq(m(randomCol), lim.y))
     }
   }
 

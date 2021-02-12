@@ -108,10 +108,12 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
     def apply(genRandom: RandomT[T]): T = genRandom.randomT()
     def appropriate(x: T, y: T): Boolean
   }
+
   def Linear[T: Numeric: Generator]: RandomFn[T] = new RandomFn {
     override def apply(genRandom: RandomT[T]): T = genRandom.randomT()
     override def appropriate(x: T, y: T): Boolean = true
   }
+
   def Log10[T: Numeric: Generator]: RandomFn[T] = new RandomFn {
     override def apply(genRandom: RandomT[T]): T = genRandom.randomTLog(10)
     val ops: Numeric[T] = implicitly[Numeric[T]]

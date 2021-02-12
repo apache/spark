@@ -19,6 +19,7 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
+import org.apache.spark.ml.tuning.RandomRanges._
 
 case class Limits[T: Numeric](x: T, y: T)
 
@@ -155,5 +156,55 @@ class ParamRandomBuilder extends ParamGridBuilder {
     val gen: RandomT[T] = RandomRanges(lim)
     addGrid(param, (1 to n).map { _: Int => gen.randomTLog(base) })
   }
+
+  // specialized versions for Java.
+
+  @Since("3.2.0")
+  def addRandom(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
+    addRandom(param, Limits(x, y), n)(DoubleGenerator)
+
+  @Since("3.2.0")
+  def addLog10Random(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 10)(DoubleGenerator)
+
+  @Since("3.2.0")
+  def addLog2Random(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 2)(DoubleGenerator)
+
+  @Since("3.2.0")
+  def addRandom(param: FloatParam, x: Float, y: Float, n: Int): this.type =
+    addRandom(param, Limits(x, y), n)(FloatGenerator)
+
+  @Since("3.2.0")
+  def addLog10Random(param: FloatParam, x: Float, y: Float, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 10)(FloatGenerator)
+
+  @Since("3.2.0")
+  def addLog2Random(param: FloatParam, x: Float, y: Float, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 2)(FloatGenerator)
+
+  @Since("3.2.0")
+  def addRandom(param: IntParam, x: Int, y: Int, n: Int): this.type =
+    addRandom(param, Limits(x, y), n)(IntGenerator)
+
+  @Since("3.2.0")
+  def addLog10Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 10)(IntGenerator)
+
+  @Since("3.2.0")
+  def addLog2Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 2)(IntGenerator)
+
+  @Since("3.2.0")
+  def addRandom(param: LongParam, x: Long, y: Long, n: Int): this.type =
+    addRandom(param, Limits(x, y), n)(LongGenerator)
+
+  @Since("3.2.0")
+  def addLog10Random(param: LongParam, x: Long, y: Long, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 10)(LongGenerator)
+
+  @Since("3.2.0")
+  def addLog2Random(param: LongParam, x: Long, y: Long, n: Int): this.type =
+    addLogRandom(param, Limits(x, y), n, 2)(LongGenerator)
 
 }
