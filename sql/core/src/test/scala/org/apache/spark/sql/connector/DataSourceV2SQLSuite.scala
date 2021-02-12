@@ -2085,7 +2085,8 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun', " +
+      "namespace in default Spark session catalog must have exactly one name."))
   }
 
   test("SHOW FUNCTIONS not valid v1 namespace") {
@@ -2106,7 +2107,8 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DROP FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun', " +
+      "namespace in default Spark session catalog must have exactly one name."))
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -2118,7 +2120,8 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
-    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun', " +
+      "namespace in default Spark session catalog must have exactly one name."))
   }
 
   test("REFRESH FUNCTION: only support session catalog") {

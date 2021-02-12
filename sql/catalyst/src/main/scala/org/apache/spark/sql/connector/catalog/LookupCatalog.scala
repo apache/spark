@@ -170,7 +170,8 @@ private[sql] trait LookupCatalog extends Logging {
           ident.namespace match {
             case Array(db) => FunctionIdentifier(ident.name, Some(db))
             case _ =>
-              throw new AnalysisException(s"Unsupported function name '$ident'")
+              throw new AnalysisException(s"Unsupported function name '$ident', " +
+              "namespace in default Spark session catalog must have exactly one name.")
           }
         }
 
