@@ -53,6 +53,11 @@ uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scal
 For Python 3.9, Arrow optimization and pandas UDFs might not work due to the supported Python versions in Apache Arrow. Please refer to the latest [Python Compatibility](https://arrow.apache.org/docs/python/install.html#python-compatibility) page.
 For Java 11, `-Dio.netty.tryReflectionSetAccessible=true` is required additionally for Apache Arrow library. This prevents `java.lang.UnsupportedOperationException: sun.misc.Unsafe or java.nio.DirectByteBuffer.(long, int) not available` when Apache Arrow uses Netty internally.
 
+```python
+# PySpark
+SparkSession.builder.config('spark.driver.extraJavaOptions', '-Dio.netty.tryReflectionSetAccessible=true').getOrCreate()
+```
+
 # Running the Examples and Shell
 
 Spark comes with several sample programs.  Scala, Java, Python and R examples are in the
