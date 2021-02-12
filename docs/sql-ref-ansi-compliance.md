@@ -216,6 +216,7 @@ Below is a list of all the keywords in Spark SQL.
 |COLLECTION|non-reserved|non-reserved|non-reserved|
 |COLUMN|reserved|non-reserved|reserved|
 |COLUMNS|non-reserved|non-reserved|non-reserved|
+|COMMAND|non-reserved|non-reserved|non-reserved|
 |COMMENT|non-reserved|non-reserved|non-reserved|
 |COMMIT|non-reserved|non-reserved|reserved|
 |COMPACT|non-reserved|non-reserved|non-reserved|
