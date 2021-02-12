@@ -38,10 +38,12 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     import RandomRanges._
     checkRangeAndCardinality(_.addRandom(randomCol, limit, nRandoms))
   }
+
   test("random log2 params mixed with fixed values") {
     import RandomRanges._
     checkRangeAndCardinality(_.addLog2Random(randomCol, limit, nRandoms))
   }
+
   test("random log10 params mixed with fixed values") {
     import RandomRanges._
     checkRangeAndCardinality(_.addLog10Random(randomCol, limit, nRandoms))
