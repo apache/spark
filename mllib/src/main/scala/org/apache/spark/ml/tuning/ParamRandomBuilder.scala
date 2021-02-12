@@ -20,20 +20,20 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
 
-case class Limits[T: Numeric](x: T, y: T)
+private[ml] case class Limits[T: Numeric](x: T, y: T)
 
-abstract class RandomT[T: Numeric] {
+private[ml] abstract class RandomT[T: Numeric] {
   def randomT(): T
   def randomTLog(n: Int): T
 }
 
-abstract class Generator[T: Numeric] {
+private[ml] abstract class Generator[T: Numeric] {
   def apply(lim: Limits[T]): RandomT[T]
 }
 
-object RandomRanges {
+private[ml] object RandomRanges {
 
-  val rnd = new scala.util.Random
+  private val rnd = new scala.util.Random
 
   private[tuning] def randomBigInt0To(x: BigInt): BigInt = {
     var randVal = BigInt(x.bitLength, rnd)
@@ -43,7 +43,7 @@ object RandomRanges {
     randVal
   }
 
-  def bigIntBetween(lower: BigInt, upper: BigInt): BigInt = {
+  private[ml] def bigIntBetween(lower: BigInt, upper: BigInt): BigInt = {
     val diff: BigInt = upper - lower
     randomBigInt0To(diff) + lower
   }
@@ -55,7 +55,7 @@ object RandomRanges {
     (zeroCenteredRnd * range) + halfWay
   }
 
-  implicit object DoubleGenerator extends Generator[Double] {
+  private[ml] implicit object DoubleGenerator extends Generator[Double] {
     def apply(limits: Limits[Double]): RandomT[Double] = new RandomT[Double] {
       import limits._
       val lower: Double = math.min(x, y)
@@ -69,7 +69,7 @@ object RandomRanges {
     }
   }
 
-  implicit object FloatGenerator extends Generator[Float] {
+  private[ml] implicit object FloatGenerator extends Generator[Float] {
     def apply(limits: Limits[Float]): RandomT[Float] = new RandomT[Float] {
       import limits._
       val lower: Float = math.min(x, y)
@@ -83,7 +83,7 @@ object RandomRanges {
     }
   }
 
-  implicit object IntGenerator extends Generator[Int] {
+  private[ml] implicit object IntGenerator extends Generator[Int] {
     def apply(limits: Limits[Int]): RandomT[Int] = new RandomT[Int] {
       import limits._
       val lower: Int = math.min(x, y)
@@ -97,7 +97,7 @@ object RandomRanges {
     }
   }
 
-  implicit object LongGenerator extends Generator[Long] {
+  private[ml] implicit object LongGenerator extends Generator[Long] {
     def apply(limits: Limits[Long]): RandomT[Long] = new RandomT[Long] {
       import limits._
       val lower: Long = math.min(x, y)
@@ -111,9 +111,9 @@ object RandomRanges {
     }
   }
 
-  def logN(x: Double, base: Int): Double = math.log(x) / math.log(base)
+  private[ml] def logN(x: Double, base: Int): Double = math.log(x) / math.log(base)
 
-  def randomLog(lower: Double, upper: Double, n: Int): Double = {
+  private[ml] def randomLog(lower: Double, upper: Double, n: Int): Double = {
     val logLower: Double = logN(lower, n)
     val logUpper: Double = logN(upper, n)
     val logLimits: Limits[Double] = Limits(logLower, logUpper)
@@ -121,7 +121,7 @@ object RandomRanges {
     math.pow(n, rndLogged.randomT())
   }
 
-  def apply[T: Generator](lim: Limits[T])(implicit t: Generator[T]): RandomT[T] = t(lim)
+  private[ml] def apply[T: Generator](lim: Limits[T])(implicit t: Generator[T]): RandomT[T] = t(lim)
 
 }
 
@@ -134,9 +134,9 @@ object RandomRanges {
  * Note: if you want more sophisticated hyperparameter tuning, consider Python libraries
  * such as Hyperopt.
  */
-@Since("3.1.0")
+@Since("3.2.0")
 class ParamRandomBuilder extends ParamGridBuilder {
-  @Since("3.1.0")
+  @Since("3.2.0")
   def addRandom[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
     addGrid(param, (1 to n).map { _: Int => gen.randomT() })
