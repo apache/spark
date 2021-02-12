@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningSubquery, Expression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.dynamicpruning.PartitionPruning._
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -33,36 +32,12 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelper {
 
-  // Check whether need to remove inferred DPP.
-  private def isRemoveInferred(condition: Expression, child: LogicalPlan): Boolean = {
-    splitConjunctivePredicates(condition).exists {
-      case DynamicPruningSubquery(pruningKey, buildQuery, buildKeys, index, _, _) =>
-        getPartitionTableScan(pruningKey, child).isEmpty || (!SQLConf.get.exchangeReuseEnabled &&
-          !pruningHasBenefit(pruningKey, child, buildKeys(index), buildQuery))
-      case _ => false
-    }
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = {
     if (!SQLConf.get.dynamicPartitionPruningEnabled) {
       return plan
     }
 
     plan.transform {
-      // Remove any DynamicPruning Filters that didn't filter on partition column and
-      // do not have has benefit. This is inferred by Infer Filters from PartitionPruning.
-      case f @ Filter(condition, child)
-        if SQLConf.get.constraintPropagationEnabled && isRemoveInferred(condition, child) =>
-        val newCondition = condition.transform {
-          case DynamicPruningSubquery(pruningKey, _, _, _, _, _)
-            if getPartitionTableScan(pruningKey, child).isEmpty =>
-            TrueLiteral
-          case DynamicPruningSubquery(pruningKey, buildQuery, buildKeys, index, _, _)
-            if !SQLConf.get.exchangeReuseEnabled &&
-              !pruningHasBenefit(pruningKey, child, buildKeys(index), buildQuery) =>
-            TrueLiteral
-        }
-        f.copy(condition = newCondition)
       // pass through anything that is pushed down into PhysicalOperation
       case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) => p
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.

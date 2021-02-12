@@ -58,10 +58,16 @@ trait ConstraintHelper {
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
-  def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
+  def inferAdditionalConstraints(
+      constraints: ExpressionSet,
+      isInferDynamicPruning: Boolean = false): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
     // IsNotNull should be constructed by `constructIsNotNullConstraints`.
-    val predicates = constraints.filterNot(_.isInstanceOf[IsNotNull])
+    val predicates = if (isInferDynamicPruning) {
+      constraints.filterNot(_.isInstanceOf[IsNotNull])
+    } else {
+      constraints.filterNot(e => e.isInstanceOf[IsNotNull] || e.isInstanceOf[DynamicPruning])
+    }
     predicates.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
         val candidateConstraints = predicates - eq

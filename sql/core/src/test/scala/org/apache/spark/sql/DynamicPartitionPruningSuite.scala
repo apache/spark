@@ -1430,7 +1430,7 @@ abstract class DynamicPartitionPruningSuiteBase
           .mode("overwrite")
           .saveAsTable("df5")
 
-        Given(s"Inferred DPP on partition column")
+        Given("Inferred DPP on partition column")
         Seq(true, false).foreach { infer =>
           withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> s"$infer") {
             val df = sql(
@@ -1450,48 +1450,26 @@ abstract class DynamicPartitionPruningSuiteBase
             } else {
               assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
             }
-            checkDistinctSubqueries(df, 1)
-            checkPartitionPruningPredicate(df, false, true)
-            assert(!checkUnpushedFilters(df))
-
             checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
           }
         }
 
-        Given("Remove no benefit inferred DPP on partition column " +
-          s"when ${SQLConf.EXCHANGE_REUSE_ENABLED.key} is disabled")
-        Seq(true, false).foreach { reuse =>
-          Seq(true, false).foreach { broadcastOnly =>
-            withSQLConf(
-              SQLConf.EXCHANGE_REUSE_ENABLED.key -> s"$reuse",
-              SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> s"$broadcastOnly") {
-              val df = sql(
-                """
-                  |SELECT t1.id,
-                  |       df4.k
-                  |FROM (SELECT df3.id,
-                  |             df1.k
-                  |        FROM df1
-                  |        JOIN df3
-                  |          ON df1.k = df3.k) t1
-                  |     JOIN df4
-                  |       ON t1.k = df4.k AND df4.id < 2
-                  |""".stripMargin)
-
-              if (!reuse) {
-                assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
-                checkDistinctSubqueries(df, 0)
-                checkPartitionPruningPredicate(df, !broadcastOnly, false)
-              } else {
-                assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 2)
-                checkDistinctSubqueries(df, 1)
-                checkPartitionPruningPredicate(df, false, true)
-              }
-              assert(!checkUnpushedFilters(df))
-
-              checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
-            }
-          }
+        Given("Remove no benefit inferred DPP on partition column")
+        withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
+          val df = sql(
+            """
+              |SELECT t1.id,
+              |       df4.k
+              |FROM (SELECT df3.id,
+              |             df1.k
+              |        FROM df1
+              |        JOIN df3
+              |          ON df1.k = df3.k) t1
+              |     JOIN df4
+              |       ON t1.k = df4.k AND df4.id < 2
+              |""".stripMargin)
+          assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
+          checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
         }
 
         Given("Remove inferred DPP on non-partition column")
@@ -1510,10 +1488,6 @@ abstract class DynamicPartitionPruningSuiteBase
               |""".stripMargin)
 
           assert(collectDynamicPruningExpressions(df.queryExecution.executedPlan).size === 1)
-          checkDistinctSubqueries(df, 1)
-          checkPartitionPruningPredicate(df, false, true)
-          assert(!checkUnpushedFilters(df))
-
           checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
         }
       }

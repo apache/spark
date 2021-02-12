@@ -143,7 +143,7 @@ Output [5]: [cs_bill_customer_sk#1, cs_item_sk#2, cs_quantity#3, cs_list_price#4
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#5), dynamicpruningexpression(cs_sold_date_sk#5 IN dynamicpruning#6)]
-PushedFilters: [IsNotNull(cs_bill_customer_sk)]
+PushedFilters: [IsNotNull(cs_bill_customer_sk), IsNotNull(cs_item_sk)]
 ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int,cs_quantity:int,cs_list_price:decimal(7,2)>
 
 (2) ColumnarToRow [codegen id : 1]
@@ -151,7 +151,7 @@ Input [5]: [cs_bill_customer_sk#1, cs_item_sk#2, cs_quantity#3, cs_list_price#4,
 
 (3) Filter [codegen id : 1]
 Input [5]: [cs_bill_customer_sk#1, cs_item_sk#2, cs_quantity#3, cs_list_price#4, cs_sold_date_sk#5]
-Condition : isnotnull(cs_bill_customer_sk#1)
+Condition : (isnotnull(cs_bill_customer_sk#1) AND isnotnull(cs_item_sk#2))
 
 (4) Exchange
 Input [5]: [cs_bill_customer_sk#1, cs_item_sk#2, cs_quantity#3, cs_list_price#4, cs_sold_date_sk#5]
@@ -516,7 +516,7 @@ Output [5]: [ws_item_sk#53, ws_bill_customer_sk#54, ws_quantity#55, ws_list_pric
 Batched: true
 Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#57), dynamicpruningexpression(ws_sold_date_sk#57 IN dynamicpruning#6)]
-PushedFilters: [IsNotNull(ws_bill_customer_sk)]
+PushedFilters: [IsNotNull(ws_bill_customer_sk), IsNotNull(ws_item_sk)]
 ReadSchema: struct<ws_item_sk:int,ws_bill_customer_sk:int,ws_quantity:int,ws_list_price:decimal(7,2)>
 
 (83) ColumnarToRow [codegen id : 27]
@@ -524,7 +524,7 @@ Input [5]: [ws_item_sk#53, ws_bill_customer_sk#54, ws_quantity#55, ws_list_price
 
 (84) Filter [codegen id : 27]
 Input [5]: [ws_item_sk#53, ws_bill_customer_sk#54, ws_quantity#55, ws_list_price#56, ws_sold_date_sk#57]
-Condition : isnotnull(ws_bill_customer_sk#54)
+Condition : (isnotnull(ws_bill_customer_sk#54) AND isnotnull(ws_item_sk#53))
 
 (85) Exchange
 Input [5]: [ws_item_sk#53, ws_bill_customer_sk#54, ws_quantity#55, ws_list_price#56, ws_sold_date_sk#57]

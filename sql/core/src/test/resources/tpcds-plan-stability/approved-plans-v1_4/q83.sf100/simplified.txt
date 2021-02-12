@@ -17,12 +17,14 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                 ColumnarToRow
                                   InputAdapter
                                     Scan parquet default.store_returns [sr_item_sk,sr_return_quantity,sr_returned_date_sk]
+                                      SubqueryBroadcast [d_date_sk] #1
+                                        ReusedExchange [d_date_sk] #2
                               InputAdapter
                                 BroadcastExchange #2
                                   WholeStageCodegen (3)
                                     Project [d_date_sk]
                                       BroadcastHashJoin [d_date,d_date]
-                                        Filter [d_date,d_date_sk]
+                                        Filter [d_date_sk,d_date]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.date_dim [d_date_sk,d_date]
@@ -31,7 +33,7 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                             WholeStageCodegen (2)
                                               Project [d_date]
                                                 BroadcastHashJoin [d_week_seq,d_week_seq]
-                                                  Filter [d_date,d_week_seq]
+                                                  Filter [d_week_seq,d_date]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.date_dim [d_date,d_week_seq]
@@ -66,6 +68,8 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet default.catalog_returns [cr_item_sk,cr_return_quantity,cr_returned_date_sk]
+                                            SubqueryBroadcast [d_date_sk] #2
+                                              ReusedExchange [d_date_sk] #2
                                     InputAdapter
                                       ReusedExchange [d_date_sk] #2
                                 InputAdapter
@@ -86,6 +90,7 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.web_returns [wr_item_sk,wr_return_quantity,wr_returned_date_sk]
+                                        ReusedSubquery [d_date_sk] #1
                                 InputAdapter
                                   ReusedExchange [d_date_sk] #2
                             InputAdapter

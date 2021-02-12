@@ -112,7 +112,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
    * using column statistics if they are available, otherwise we use the config value of
    * `spark.sql.optimizer.joinFilterRatio`.
    */
-  def pruningHasBenefit(
+  private[sql] def pruningHasBenefit(
       partExpr: Expression,
       partPlan: LogicalPlan,
       otherExpr: Expression,
@@ -148,7 +148,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     }
 
     // the pruning overhead is the total size in bytes of all scan relations
-    val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum
+    val overhead = otherPlan.collectLeaves().map(_.stats.sizeInBytes).sum.toFloat
 
     filterRatio * partPlan.stats.sizeInBytes.toFloat > overhead.toFloat
   }

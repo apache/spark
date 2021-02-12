@@ -53,7 +53,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
   override protected val excludedOnceBatches: Set[String] =
     Set(
       "PartitionPruning",
-      "Infer Filters from PartitionPruning",
       "Extract Python UDFs")
 
   protected def fixedPoint =
@@ -922,24 +921,22 @@ object InferFiltersFromGenerate extends Rule[LogicalPlan] {
   }
 }
 
-/**
- * Generate a list of additional filters from an operator's existing constraint but remove those
- * that are either already part of the operator's condition or are part of the operator's child
- * constraints. These filters are currently inserted to the existing conditions in the Filter
- * operators and on either side of Join operators.
- *
- * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
- * Inner and LeftSemi joins.
- */
-object InferFiltersFromConstraints extends Rule[LogicalPlan]
-  with PredicateHelper with ConstraintHelper {
-
+abstract class InferFiltersRule extends Rule[LogicalPlan]
+    with PredicateHelper with ConstraintHelper {
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (SQLConf.get.constraintPropagationEnabled) {
       inferFilters(plan)
     } else {
       plan
     }
+  }
+
+  protected def getBaseConstraints(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      conditionOpt: Option[Expression]): ExpressionSet = {
+    left.constraints.union(right.constraints)
+      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
   }
 
   private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -952,25 +949,25 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
         filter
       }
 
-    case join @ Join(left, right, joinType, conditionOpt, _) =>
+    case join @ Join(left, right, joinType, _, _) =>
       joinType match {
         // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
         // inner join, it just drops the right side in the final output.
         case _: InnerLike | LeftSemi =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
+          val allConstraints = getAllConstraints(join)
           val newLeft = inferNewFilter(left, allConstraints)
           val newRight = inferNewFilter(right, allConstraints)
           join.copy(left = newLeft, right = newRight)
 
         // For right outer join, we can only infer additional filters for left side.
         case RightOuter =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
+          val allConstraints = getAllConstraints(join)
           val newLeft = inferNewFilter(left, allConstraints)
           join.copy(left = newLeft)
 
         // For left join, we can only infer additional filters for right side.
         case LeftOuter | LeftAnti =>
-          val allConstraints = getAllConstraints(left, right, conditionOpt)
+          val allConstraints = getAllConstraints(join)
           val newRight = inferNewFilter(right, allConstraints)
           join.copy(right = newRight)
 
@@ -978,14 +975,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
       }
   }
 
-  private def getAllConstraints(
-      left: LogicalPlan,
-      right: LogicalPlan,
-      conditionOpt: Option[Expression]): ExpressionSet = {
-    val baseConstraints = left.constraints.union(right.constraints)
-      .union(ExpressionSet(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil)))
-    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
-  }
+  protected def getAllConstraints(join: Join): ExpressionSet
 
   private def inferNewFilter(plan: LogicalPlan, constraints: ExpressionSet): LogicalPlan = {
     val newPredicates = constraints
@@ -998,6 +988,22 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan]
     } else {
       Filter(newPredicates.reduce(And), plan)
     }
+  }
+}
+
+/**
+ * Generate a list of additional filters from an operator's existing constraint but remove those
+ * that are either already part of the operator's condition or are part of the operator's child
+ * constraints. These filters are currently inserted to the existing conditions in the Filter
+ * operators and on either side of Join operators.
+ *
+ * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
+ * Inner and LeftSemi joins.
+ */
+object InferFiltersFromConstraints extends InferFiltersRule {
+  override def getAllConstraints(join: Join): ExpressionSet = {
+    val baseConstraints = getBaseConstraints(join.left, join.right, join.condition)
+    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 }
 
