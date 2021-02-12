@@ -31,18 +31,31 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   }
   import solver.{inputCol, maxIter, randomCol}
 
-  test("random params mixed with fixed values") {
+  val limit: Limits[Double] = Limits(1d, 100d)
+  val nRandoms: Int = 5
+
+  test("random linear params mixed with fixed values") {
     import RandomRanges._
+    checkRangeAndCardinality(_.addRandom(randomCol, limit, nRandoms))
+  }
+  test("random log2 params mixed with fixed values") {
+    import RandomRanges._
+    checkRangeAndCardinality(_.addLog2Random(randomCol, limit, nRandoms))
+  }
+  test("random log10 params mixed with fixed values") {
+    import RandomRanges._
+    checkRangeAndCardinality(_.addLog10Random(randomCol, limit, nRandoms))
+  }
+
+  def checkRangeAndCardinality(addFn: ParamRandomBuilder => ParamRandomBuilder): Unit = {
     val maxIterations: Int = 10
     val basedOn: Array[ParamPair[_]] = Array(maxIter -> maxIterations)
     val inputCols: Array[String] = Array("input0", "input1")
-    val limit: Limits[Double] = Limits(0d, 100d)
-    val nRandoms: Int = 5
-    val paramMap: Array[ParamMap] = new ParamRandomBuilder()
+
+    val builder: ParamRandomBuilder = new ParamRandomBuilder()
       .baseOn(basedOn: _*)
       .addGrid(inputCol, inputCols)
-      .addRandom(randomCol, limit, nRandoms)
-      .build()
+    val paramMap: Array[ParamMap] = addFn(builder).build()
     assert(paramMap.length == inputCols.length * nRandoms * basedOn.length)
     paramMap.foreach { m: ParamMap =>
       assert(m(maxIter) == maxIterations)

@@ -20,18 +20,18 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
 
-private[ml] case class Limits[T: Numeric](x: T, y: T)
+case class Limits[T: Numeric](x: T, y: T)
 
 private[ml] abstract class RandomT[T: Numeric] {
   def randomT(): T
   def randomTLog(n: Int): T
 }
 
-private[ml] abstract class Generator[T: Numeric] {
+abstract class Generator[T: Numeric] {
   def apply(lim: Limits[T]): RandomT[T]
 }
 
-private[ml] object RandomRanges {
+object RandomRanges {
 
   private val rnd = new scala.util.Random
 
@@ -55,7 +55,7 @@ private[ml] object RandomRanges {
     (zeroCenteredRnd * range) + halfWay
   }
 
-  private[ml] implicit object DoubleGenerator extends Generator[Double] {
+  implicit object DoubleGenerator extends Generator[Double] {
     def apply(limits: Limits[Double]): RandomT[Double] = new RandomT[Double] {
       import limits._
       val lower: Double = math.min(x, y)
@@ -69,7 +69,7 @@ private[ml] object RandomRanges {
     }
   }
 
-  private[ml] implicit object FloatGenerator extends Generator[Float] {
+  implicit object FloatGenerator extends Generator[Float] {
     def apply(limits: Limits[Float]): RandomT[Float] = new RandomT[Float] {
       import limits._
       val lower: Float = math.min(x, y)
@@ -83,7 +83,7 @@ private[ml] object RandomRanges {
     }
   }
 
-  private[ml] implicit object IntGenerator extends Generator[Int] {
+  implicit object IntGenerator extends Generator[Int] {
     def apply(limits: Limits[Int]): RandomT[Int] = new RandomT[Int] {
       import limits._
       val lower: Int = math.min(x, y)
@@ -97,7 +97,7 @@ private[ml] object RandomRanges {
     }
   }
 
-  private[ml] implicit object LongGenerator extends Generator[Long] {
+  implicit object LongGenerator extends Generator[Long] {
     def apply(limits: Limits[Long]): RandomT[Long] = new RandomT[Long] {
       import limits._
       val lower: Long = math.min(x, y)
@@ -140,6 +140,20 @@ class ParamRandomBuilder extends ParamGridBuilder {
   def addRandom[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
     addGrid(param, (1 to n).map { _: Int => gen.randomT() })
+  }
+
+  @Since("3.2.0")
+  def addLog10Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
+    addLogRandom(param, lim, n, 2)
+
+  @Since("3.2.0")
+  def addLog2Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
+    addLogRandom(param, lim, n, 2)
+
+  private def addLogRandom[T: Generator](param: Param[T], lim: Limits[T],
+                                         n: Int, base: Int): this.type = {
+    val gen: RandomT[T] = RandomRanges(lim)
+    addGrid(param, (1 to n).map { _: Int => gen.randomTLog(base) })
   }
 
 }
