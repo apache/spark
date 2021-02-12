@@ -159,19 +159,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
-    val analyzedPlan = if (plan.resolved) {
-      plan
-    } else {
-      val qe = spark.sessionState.executePlan(plan)
-      qe.assertAnalyzed()
-      qe.analyzed
-    }
-
     val shouldRemove: LogicalPlan => Boolean =
       if (cascade) {
-        _.find(_.sameResult(analyzedPlan)).isDefined
+        _.find(_.sameResult(plan)).isDefined
       } else {
-        _.sameResult(analyzedPlan)
+        _.sameResult(plan)
       }
     val plansToUncache = cachedData.filter(cd => shouldRemove(cd.plan))
     this.synchronized {
@@ -195,7 +187,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         //    will keep it as it is. It means the physical plan has been re-compiled already in the
         //    other thread.
         val cacheAlreadyLoaded = cd.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded
-        cd.plan.find(_.sameResult(analyzedPlan)).isDefined && !cacheAlreadyLoaded
+        cd.plan.find(_.sameResult(plan)).isDefined && !cacheAlreadyLoaded
       })
     }
   }
