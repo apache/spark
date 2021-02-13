@@ -21,6 +21,7 @@ import java.{lang => jl}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
@@ -394,7 +395,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
-    var resolved: Map[String, Any] = Map()
+    val resolved = mutable.Map[String, Any]()
     // Error handling
     values.foreach { case (colName, replaceValue) =>
       // Check column name exists
