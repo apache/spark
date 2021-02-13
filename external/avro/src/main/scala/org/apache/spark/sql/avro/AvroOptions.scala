@@ -53,18 +53,22 @@ private[sql] class AvroOptions(
    */
   val schema: Option[Schema] = {
 
-    val avroUrlSchema = parameters.get("avroSchemaUrl").map(schemaFSUrl => {
-      log.info("loading avro schema from url: " + schemaFSUrl)
-      val fs = FileSystem.get(new URI(schemaFSUrl), conf)
-      val in = fs.open(new Path(schemaFSUrl))
-      try {
-        new Schema.Parser().parse(in)
-      } finally {
-        in.close()
-      }
+    parameters.get("avroSchema").map(new Schema.Parser().parse).orElse({
+
+      val avroUrlSchema = parameters.get("avroSchemaUrl").map(schemaFSUrl => {
+        log.info("loading avro schema from url: " + schemaFSUrl)
+        val fs = FileSystem.get(new URI(schemaFSUrl), conf)
+        val in = fs.open(new Path(schemaFSUrl))
+        try {
+          new Schema.Parser().parse(in)
+        } finally {
+          in.close()
+        }
+      })
+
+      avroUrlSchema
     })
 
-    avroUrlSchema.orElse(parameters.get("avroSchema").map(new Schema.Parser().parse))
   }
 
   /**
