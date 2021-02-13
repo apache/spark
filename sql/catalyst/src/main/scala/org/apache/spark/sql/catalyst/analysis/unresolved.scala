@@ -33,8 +33,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
  * resolved.
  */
-class UnresolvedException(function: String) extends AnalysisException(
-  QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError(function))
+class UnresolvedException(message: String) extends AnalysisException(message)
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
@@ -144,10 +143,14 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def exprId: ExprId =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("exprId")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
+  override def qualifier: Seq[String] =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("qualifier")
   override lazy val resolved = false
 
   override def newInstance(): UnresolvedAttribute = this
@@ -234,10 +237,14 @@ object UnresolvedAttribute {
 case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expression])
   extends Generator {
 
-  override def elementSchema: StructType = throw new UnresolvedException("elementTypes")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def foldable: Boolean = throw new UnresolvedException("foldable")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def elementSchema: StructType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("elementTypes")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def foldable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("foldable")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override lazy val resolved = false
 
   override def prettyName: String = name.unquotedString
@@ -263,8 +270,10 @@ case class UnresolvedFunction(
 
   override def children: Seq[Expression] = arguments ++ filter.toSeq
 
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override lazy val resolved = false
 
   override def prettyName: String = name.unquotedString
@@ -286,13 +295,20 @@ object UnresolvedFunction {
  */
 abstract class Star extends LeafExpression with NamedExpression {
 
-  override def name: String = throw new UnresolvedException("name")
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
-  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
-  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  override def name: String =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("name")
+  override def exprId: ExprId =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("exprId")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
+  override def qualifier: Seq[String] =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def toAttribute: Attribute =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("toAttribute")
+  override def newInstance(): NamedExpression =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("newInstance")
   override lazy val resolved = false
 
   def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression]
@@ -411,19 +427,26 @@ case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSens
 case class MultiAlias(child: Expression, names: Seq[String])
   extends UnaryExpression with NamedExpression with Unevaluable {
 
-  override def name: String = throw new UnresolvedException("name")
+  override def name: String =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("name")
 
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def exprId: ExprId =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("exprId")
 
-  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
 
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
 
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def qualifier: Seq[String] =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("qualifier")
 
-  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def toAttribute: Attribute =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("toAttribute")
 
-  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  override def newInstance(): NamedExpression =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("newInstance")
 
   override lazy val resolved = false
 
@@ -438,7 +461,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
  * @param expressions Expressions to expand.
  */
 case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Unevaluable {
-  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  override def newInstance(): NamedExpression =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("newInstance")
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
 }
@@ -457,8 +481,10 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
   override def left: Expression = child
   override def right: Expression = extraction
 
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override lazy val resolved = false
 
   override def toString: String = s"$child[$extraction]"
@@ -478,13 +504,20 @@ case class UnresolvedAlias(
     aliasFunc: Option[Expression => String] = None)
   extends UnaryExpression with NamedExpression with Unevaluable {
 
-  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def name: String = throw new UnresolvedException("name")
-  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  override def toAttribute: Attribute =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("toAttribute")
+  override def qualifier: Seq[String] =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def exprId: ExprId =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("exprId")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def name: String =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("name")
+  override def newInstance(): NamedExpression =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("newInstance")
 
   override lazy val resolved = false
 }
@@ -526,14 +559,17 @@ case class UnresolvedDeserializer(deserializer: Expression, inputAttributes: Seq
   require(inputAttributes.forall(_.resolved), "Input attributes must all be resolved.")
 
   override def child: Expression = deserializer
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override lazy val resolved = false
 }
 
 case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpression
   with Unevaluable with NonSQLExpression {
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override lazy val resolved = false
 }
 
@@ -549,8 +585,10 @@ case class GetColumnByOrdinal(ordinal: Int, dataType: DataType) extends LeafExpr
  */
 case class UnresolvedOrdinal(ordinal: Int)
     extends LeafExpression with Unevaluable with NonSQLExpression {
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override lazy val resolved = false
 }
 
@@ -570,7 +608,9 @@ case class UnresolvedHaving(
  * A place holder expression used in random functions, will be replaced after analyze.
  */
 case object UnresolvedSeed extends LeafExpression with Unevaluable {
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
   override lazy val resolved = false
 }

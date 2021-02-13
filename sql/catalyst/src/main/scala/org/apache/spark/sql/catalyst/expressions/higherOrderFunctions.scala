@@ -21,12 +21,11 @@ import java.util.Comparator
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
-
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
@@ -40,12 +39,18 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
-  override def exprId: ExprId = throw new UnresolvedException("exprId")
-  override def dataType: DataType = throw new UnresolvedException("dataType")
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
-  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
-  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  override def exprId: ExprId =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("exprId")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
+  override def nullable: Boolean =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
+  override def qualifier: Seq[String] =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def toAttribute: Attribute =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("toAttribute")
+  override def newInstance(): NamedExpression =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("newInstance")
   override lazy val resolved = false
 
   override def toString: String = s"lambda '$name"

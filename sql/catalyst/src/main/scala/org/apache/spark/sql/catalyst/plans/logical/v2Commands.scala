@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
@@ -390,7 +391,8 @@ case class MergeIntoTable(
 sealed abstract class MergeAction extends Expression with Unevaluable {
   def condition: Option[Expression]
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override def children: Seq[Expression] = condition.toSeq
 }
 
@@ -410,7 +412,8 @@ case class InsertAction(
 
 case class Assignment(key: Expression, value: Expression) extends Expression with Unevaluable {
   override def nullable: Boolean = false
-  override def dataType: DataType = throw new UnresolvedException("nullable")
+  override def dataType: DataType =
+    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
   override def children: Seq[Expression] = key ::  value :: Nil
 }
 
