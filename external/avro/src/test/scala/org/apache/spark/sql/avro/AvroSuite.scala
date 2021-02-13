@@ -726,7 +726,7 @@ abstract class AvroSuite
   }
 
   test("support user provided avro schema url") {
-    val avroSchemaUrl = "src/test/resources/test_sub.avsc"
+    val avroSchemaUrl = testFile("test_sub.avsc")
     val result = spark.read.option("avroSchemaUrl", avroSchemaUrl)
       .format("avro")
       .load(testAvro)
