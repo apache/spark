@@ -129,8 +129,7 @@ case class CreateViewCommand(
             sparkSession,
             analyzedPlan,
             aliasedPlan.schema,
-            originalText,
-            child))
+            originalText))
       } else {
         assert(isTemporary)
         View(None, isTemporary, aliasedPlan)
@@ -153,8 +152,7 @@ case class CreateViewCommand(
             sparkSession,
             analyzedPlan,
             aliasedPlan.schema,
-            originalText,
-            child))
+            originalText))
       } else {
         assert(isTemporary)
         View(None, isTemporary, aliasedPlan)
@@ -282,7 +280,7 @@ case class AlterViewAsCommand(
       checkCyclicViewReference(analyzedPlan, Seq(name), name)
       TemporaryViewRelation(
         prepareTemporaryView(
-          name, session, analyzedPlan, analyzedPlan.schema, Some(originalText), query))
+          name, session, analyzedPlan, analyzedPlan.schema, Some(originalText)))
     }
     session.sessionState.catalog.alterTempViewDefinition(name, tableDefinition)
   }
@@ -593,11 +591,10 @@ object ViewHelper {
       session: SparkSession,
       analyzedPlan: LogicalPlan,
       viewSchema: StructType,
-      originalText: Option[String],
-      child: LogicalPlan): CatalogTable = {
+      originalText: Option[String]): CatalogTable = {
 
     val catalog = session.sessionState.catalog
-    val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
+    val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, analyzedPlan)
     // TBLPROPERTIES is not allowed for temporary view, so we don't use it for
     // generating temporary view properties
     val newProperties = generateViewProperties(

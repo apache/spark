@@ -949,7 +949,15 @@ class Analyzer(override val catalogManager: CatalogManager)
   // If we are resolving relations insides views, we need to expand single-part relation names with
   // the current catalog and namespace of when the view was created.
   private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
-    if (!isResolvingView || referredTempViewNames.contains(nameParts)) return nameParts
+    def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
+      referredTempViewNames.exists { n =>
+        (n.length == nameParts.length) && n.zip(nameParts).forall {
+          case (a, b) => conf.resolver(a, b)
+        }
+      }
+    }
+
+    if (!isResolvingView || isReferredTempViewName(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
       AnalysisContext.get.catalogAndNamespace :+ nameParts.head
