@@ -338,6 +338,10 @@ class SparkSession(SparkConversionMixin):
         This is the interface through which the user can get and set all Spark and Hadoop
         configurations that are relevant to Spark SQL. When getting the value of a config,
         this defaults to the value set in the underlying :class:`SparkContext`, if any.
+
+        Returns
+        -------
+        :class:`pyspark.sql.conf.RuntimeConfig`
         """
         if not hasattr(self, "_conf"):
             self._conf = RuntimeConfig(self._jsparkSession.conf())
