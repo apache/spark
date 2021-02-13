@@ -933,7 +933,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         return None
       }
 
-      val tmpView = identifier match {
+      val tmpView = expandRelationName(identifier) match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
         case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
         case _ => None
