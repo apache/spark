@@ -408,13 +408,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
         case _ => throw new IllegalArgumentException(
           s"Unsupported value type ${replaceValue.getClass.getName} ($replaceValue).")
       }
-      resolved += (resolvedColumn.name -> replaceValue)
       // Use resolved column name onwards for filling the null values.
       // It is needed for the column names having a dot and quoted with back-tick.
       // Eg: "`ColWith.Dot`" will be resolved to the column with name "ColWith.Dot"
       // in a dataframe having columns ("ColWith.Dot", "Col").
       // If resolved name is not used, while filling null values "`ColWith.Dot`" will
       // not match "ColWith.Dot".
+      resolved += (resolvedColumn.name -> replaceValue)
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
@@ -428,7 +428,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
           case v: jl.Boolean => fillCol[Boolean](f, v.booleanValue())
           case v: String => fillCol[String](f, v)
         }
-      }.getOrElse(df.col(if (f.name.contains('.')) s"`${f.name}`" else f.name))
+      }.getOrElse(df.col(s"`${f.name}`"))
     }
     df.select(projections : _*)
   }
