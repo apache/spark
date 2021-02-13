@@ -21,6 +21,7 @@ import java.util.Comparator
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen._
