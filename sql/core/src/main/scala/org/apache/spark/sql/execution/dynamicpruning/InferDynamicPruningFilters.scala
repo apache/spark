@@ -17,25 +17,79 @@
 
 package org.apache.spark.sql.execution.dynamicpruning
 
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruningSubquery, ExpressionSet}
-import org.apache.spark.sql.catalyst.optimizer.InferFiltersRule
-import org.apache.spark.sql.catalyst.plans.logical.Join
+import org.apache.spark.sql.catalyst.expressions.{And, DynamicPruningSubquery, ExpressionSet, PredicateHelper}
+import org.apache.spark.sql.catalyst.plans.{InnerLike, LeftAnti, LeftOuter, LeftSemi, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{ConstraintHelper, Filter, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.dynamicpruning.PartitionPruning._
+import org.apache.spark.sql.internal.SQLConf
 
-object InferDynamicPruningFilters extends InferFiltersRule {
-  override def getAllConstraints(join: Join): ExpressionSet = {
-    val baseConstraints = getBaseConstraints(join.left, join.right, join.condition)
-    val filtered = inferAdditionalConstraints(baseConstraints, true).filter {
+/**
+ * Similar to InferFiltersFromConstraints, this one only infer DynamicPruning filters.
+ */
+object InferDynamicPruningFilters extends Rule[LogicalPlan]
+    with PredicateHelper with ConstraintHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    if (SQLConf.get.constraintPropagationEnabled) {
+      inferFilters(plan)
+    } else {
+      plan
+    }
+  }
+
+  private def inferFilters(plan: LogicalPlan): LogicalPlan = plan transform {
+    case join @ Join(left, right, joinType, _, _) =>
+      joinType match {
+        // For inner join, we can infer additional filters for both sides. LeftSemi is kind of an
+        // inner join, it just drops the right side in the final output.
+        case _: InnerLike | LeftSemi =>
+          val allConstraints = inferDynamicPrunings(join)
+          val newLeft = inferNewFilter(left, allConstraints)
+          val newRight = inferNewFilter(right, allConstraints)
+          join.copy(left = newLeft, right = newRight)
+
+        // For right outer join, we can only infer additional filters for left side.
+        case RightOuter =>
+          val allConstraints = inferDynamicPrunings(join)
+          val newLeft = inferNewFilter(left, allConstraints)
+          join.copy(left = newLeft)
+
+        // For left join, we can only infer additional filters for right side.
+        case LeftOuter | LeftAnti =>
+          val allConstraints = inferDynamicPrunings(join)
+          val newRight = inferNewFilter(right, allConstraints)
+          join.copy(right = newRight)
+
+        case _ => join
+      }
+  }
+
+  def inferDynamicPrunings(join: Join): ExpressionSet = {
+    val baseConstraints = join.left.constraints.union(join.right.constraints)
+      .union(ExpressionSet(join.condition.map(splitConjunctivePredicates).getOrElse(Nil)))
+    inferAdditionalConstraints(baseConstraints, true).filter {
       case DynamicPruningSubquery(
           pruningKey, buildQuery, buildKeys, broadcastKeyIndex, _, _) =>
-        PartitionPruning.getPartitionTableScan(pruningKey, join) match {
+        getPartitionTableScan(pruningKey, join) match {
           case Some(partScan) =>
-            val otherExpr = buildKeys(broadcastKeyIndex)
-            PartitionPruning.pruningHasBenefit(pruningKey, partScan, otherExpr, buildQuery)
+            pruningHasBenefit(pruningKey, partScan, buildKeys(broadcastKeyIndex), buildQuery)
           case _ =>
             false
         }
       case _ => false
     }
-    baseConstraints.union(filtered)
+  }
+
+  private def inferNewFilter(plan: LogicalPlan, dynamicPrunings: ExpressionSet): LogicalPlan = {
+    val newPredicates = dynamicPrunings
+      .filter { c =>
+        c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
+      } -- plan.constraints
+    if (newPredicates.isEmpty) {
+      plan
+    } else {
+      Filter(newPredicates.reduce(And), plan)
+    }
   }
 }

@@ -98,7 +98,7 @@ Input [4]: [ss_store_sk#1, ss_net_profit#2, ss_sold_date_sk#3, d_date_sk#5]
 Output [3]: [s_store_sk#8, s_county#9, s_state#10]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_state)]
+PushedFilters: [IsNotNull(s_store_sk)]
 ReadSchema: struct<s_store_sk:int,s_county:string,s_state:string>
 
 (12) ColumnarToRow [codegen id : 8]
@@ -106,7 +106,7 @@ Input [3]: [s_store_sk#8, s_county#9, s_state#10]
 
 (13) Filter [codegen id : 8]
 Input [3]: [s_store_sk#8, s_county#9, s_state#10]
-Condition : (isnotnull(s_store_sk#8) AND isnotnull(s_state#10))
+Condition : isnotnull(s_store_sk#8)
 
 (14) Scan parquet default.store_sales
 Output [3]: [ss_store_sk#1, ss_net_profit#2, ss_sold_date_sk#3]
@@ -194,7 +194,7 @@ Arguments: [rank(_w2#17) windowspecdefinition(s_state#10, _w2#17 DESC NULLS LAST
 
 (32) Filter [codegen id : 7]
 Input [4]: [s_state#16, s_state#10, _w2#17, ranking#19]
-Condition : ((isnotnull(ranking#19) AND (ranking#19 <= 5)) AND isnotnull(s_state#16))
+Condition : (isnotnull(ranking#19) AND (ranking#19 <= 5))
 
 (33) Project [codegen id : 7]
 Output [1]: [s_state#16]

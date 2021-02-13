@@ -25,12 +25,11 @@ WholeStageCodegen (36)
                                                 InputAdapter
                                                   Exchange [cs_item_sk] #3
                                                     WholeStageCodegen (1)
-                                                      Filter [cs_item_sk,cs_bill_customer_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
-                                                              SubqueryBroadcast [d_date_sk] #1
-                                                                ReusedExchange [d_date_sk] #4
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_item_sk,cs_quantity,cs_list_price,cs_sold_date_sk]
+                                                            SubqueryBroadcast [d_date_sk] #1
+                                                              ReusedExchange [d_date_sk] #4
                                             WholeStageCodegen (8)
                                               Sort [item_sk]
                                                 Project [item_sk]
@@ -170,11 +169,10 @@ WholeStageCodegen (36)
                                                 InputAdapter
                                                   Exchange [ws_item_sk] #15
                                                     WholeStageCodegen (18)
-                                                      Filter [ws_item_sk,ws_bill_customer_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
-                                                              ReusedSubquery [d_date_sk] #1
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.web_sales [ws_item_sk,ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
+                                                            ReusedSubquery [d_date_sk] #1
                                             WholeStageCodegen (25)
                                               Sort [item_sk]
                                                 Project [item_sk]
