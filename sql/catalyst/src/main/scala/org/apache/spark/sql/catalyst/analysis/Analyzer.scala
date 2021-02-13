@@ -864,7 +864,13 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
   private def isResolvingTempView: Boolean = AnalysisContext.get.isTempView
-  private def referredTempViewNames: Seq[Seq[String]] = AnalysisContext.get.referredTempViewNames
+  private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
+    AnalysisContext.get.referredTempViewNames.exists { n =>
+      (n.length == nameParts.length) && n.zip(nameParts).forall {
+        case (a, b) => conf.resolver(a, b)
+      }
+    }
+  }
 
   /**
    * Resolve relations to temp views. This is not an actual rule, and is called by
@@ -929,7 +935,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupTempView(
         identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView && !isResolvingTempView && !referredTempViewNames.contains(identifier)) {
+      if (isResolvingView && !isResolvingTempView && !isReferredTempViewName(identifier)) {
         return None
       }
 
@@ -949,14 +955,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   // If we are resolving relations insides views, we need to expand single-part relation names with
   // the current catalog and namespace of when the view was created.
   private def expandRelationName(nameParts: Seq[String]): Seq[String] = {
-    def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
-      referredTempViewNames.exists { n =>
-        (n.length == nameParts.length) && n.zip(nameParts).forall {
-          case (a, b) => conf.resolver(a, b)
-        }
-      }
-    }
-
     if (!isResolvingView || isReferredTempViewName(nameParts)) return nameParts
 
     if (nameParts.length == 1) {
