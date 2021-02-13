@@ -29,7 +29,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   val solver = new TestParams() {
     private val randomColName = "randomVal"
     val DummyDoubleParam = new DoubleParam(this, randomColName, "doc")
-    val DummyLongParam = new LongParam(this, randomColName, "doc")
     val DummyFloatParam = new FloatParam(this, randomColName, "doc")
     val DummyIntParam = new IntParam(this, randomColName, "doc")
   }
@@ -38,7 +37,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   val DoubleLimits: Limits[Double] = Limits(1d, 100d)
   val FloatLimits: Limits[Float] = Limits(1f, 100f)
   val IntLimits: Limits[Int] = Limits(1, 100)
-  val LongLimits: Limits[Long] = Limits(1L, 100L)
   val nRandoms: Int = 5
 
   // Java API
@@ -83,27 +81,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
       _.addLog10Random(DummyFloatParam, FloatLimits.x, FloatLimits.y, nRandoms),
       FloatLimits,
       DummyFloatParam)
-  }
-
-  test("Java API random Long linear params mixed with fixed values") {
-    checkRangeAndCardinality(
-      _.addRandom(DummyLongParam, LongLimits.x, LongLimits.y, nRandoms),
-      LongLimits,
-      DummyLongParam)
-  }
-
-  test("Java API random Long log2 params mixed with fixed values") {
-    checkRangeAndCardinality(
-      _.addLog2Random(DummyLongParam, LongLimits.x, LongLimits.y, nRandoms),
-      LongLimits,
-      DummyLongParam)
-  }
-
-  test("Java API random Long log10 params mixed with fixed values") {
-    checkRangeAndCardinality(
-      _.addLog10Random(DummyLongParam, LongLimits.x, LongLimits.y, nRandoms),
-      LongLimits,
-      DummyLongParam)
   }
 
   test("Java API random Int linear params mixed with fixed values") {

@@ -98,20 +98,6 @@ object RandomRanges {
     }
   }
 
-  implicit object LongGenerator extends Generator[Long] {
-    def apply(limits: Limits[Long]): RandomT[Long] = new RandomT[Long] {
-      import limits._
-      val lower: Long = math.min(x, y)
-      val upper: Long = math.max(x, y)
-
-      override def randomTLog(n: Int): Long =
-        RandomRanges.randomLog(lower, upper, n).toLong
-
-      override def randomT(): Long =
-        bigIntBetween(BigInt(lower), BigInt(upper)).longValue
-    }
-  }
-
   private[ml] def logN(x: Double, base: Int): Double = math.log(x) / math.log(base)
 
   private[ml] def randomLog(lower: Double, upper: Double, n: Int): Double = {
@@ -137,17 +123,14 @@ object RandomRanges {
  */
 @Since("3.2.0")
 class ParamRandomBuilder extends ParamGridBuilder {
-  @Since("3.2.0")
   def addRandom[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
     addGrid(param, (1 to n).map { _: Int => gen.randomT() })
   }
 
-  @Since("3.2.0")
   def addLog10Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
     addLogRandom(param, lim, n, 10)
 
-  @Since("3.2.0")
   def addLog2Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
     addLogRandom(param, lim, n, 2)
 
@@ -159,52 +142,31 @@ class ParamRandomBuilder extends ParamGridBuilder {
 
   // specialized versions for Java.
 
-  @Since("3.2.0")
   def addRandom(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
     addRandom(param, Limits(x, y), n)(DoubleGenerator)
 
-  @Since("3.2.0")
   def addLog10Random(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(DoubleGenerator)
 
-  @Since("3.2.0")
   def addLog2Random(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 2)(DoubleGenerator)
 
-  @Since("3.2.0")
   def addRandom(param: FloatParam, x: Float, y: Float, n: Int): this.type =
     addRandom(param, Limits(x, y), n)(FloatGenerator)
 
-  @Since("3.2.0")
   def addLog10Random(param: FloatParam, x: Float, y: Float, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(FloatGenerator)
 
-  @Since("3.2.0")
   def addLog2Random(param: FloatParam, x: Float, y: Float, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 2)(FloatGenerator)
 
-  @Since("3.2.0")
   def addRandom(param: IntParam, x: Int, y: Int, n: Int): this.type =
     addRandom(param, Limits(x, y), n)(IntGenerator)
 
-  @Since("3.2.0")
   def addLog10Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(IntGenerator)
 
-  @Since("3.2.0")
   def addLog2Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 2)(IntGenerator)
-
-  @Since("3.2.0")
-  def addRandom(param: LongParam, x: Long, y: Long, n: Int): this.type =
-    addRandom(param, Limits(x, y), n)(LongGenerator)
-
-  @Since("3.2.0")
-  def addLog10Random(param: LongParam, x: Long, y: Long, n: Int): this.type =
-    addLogRandom(param, Limits(x, y), n, 10)(LongGenerator)
-
-  @Since("3.2.0")
-  def addLog2Random(param: LongParam, x: Long, y: Long, n: Int): this.type =
-    addLogRandom(param, Limits(x, y), n, 2)(LongGenerator)
 
 }

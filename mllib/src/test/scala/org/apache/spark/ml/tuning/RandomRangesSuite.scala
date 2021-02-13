@@ -68,18 +68,6 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
     checkDistributionOf(1000)
   }
 
-  test("random longs") {
-    checkRange(Linear[Long])
-  }
-
-  test("random log longs") {
-    checkRange(Log10[Long])
-  }
-
-  test("random long distribution") {
-    checkDistributionOf(1000L)
-  }
-
   test("random doubles") {
     checkRange(Linear[Double])
   }
