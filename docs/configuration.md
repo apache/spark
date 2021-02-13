@@ -2825,7 +2825,7 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>1.5.3</td>
 </tr>
 <tr>
-  <td><code>spark.r.daemonInit</code></td>
+  <td><code>spark.r.daemonInit</code><a name="spark.r.daemonInit"></td>
   <td>NULL</td>
   <td>
     R code you would like executed <b>before</b> the daemon starts
@@ -2837,7 +2837,7 @@ External users can query the static sql config values via `SparkSession.conf` or
   <td>3.2.0</td>
 </tr>
 <tr>
-  <td><code>spark.r.daemonTimeout</code></td>
+  <td><code>spark.r.daemonTimeout</code><a name="spark.r.daemonTimeout"></a></td>
   <td>10000</td>
   <td>
     What is the upper limit in milliseconds that we allow for daemon

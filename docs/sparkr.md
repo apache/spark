@@ -777,10 +777,11 @@ All the initializations and library loading your worker function manages
 is thrown away when the fork concludes. Every fork has to be
 initialized.
 
-The configuration spark.r.daemonInit provides a way to avoid reloading
-packages every time the daemon forks by having the daemon pre-load
-packages. You do this by providing R code to initialize the daemon for
-your application.
+The configuration
+[spark.r.daemonInit](./configuration.md#spark.r.daemonInit) provides a
+way to avoid reloading packages every time the daemon forks by having
+the daemon pre-load packages. You do this by providing R code to
+initialize the daemon for your application.
 
 
 ## Time Saved
@@ -798,7 +799,8 @@ A real-world example:
 ## Warning
 
 If your initialization takes longer than 10 seconds, consider increasing
-the configuration spark.r.daemonTimeout.
+the configuration
+[spark.r.daemonTimeout](./configuration.md#spark.r.daemonTimeout).
 
 
 ## Examples
