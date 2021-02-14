@@ -23,8 +23,9 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -75,25 +76,25 @@ case class CreateFunctionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    catalog.loadFunctionResources(resources)
+    val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
-      val func = CatalogFunction(FunctionIdentifier(functionName, databaseName),
-        className, resources)
+      if (!replace && catalog.isRegisteredFunction(func.identifier)) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(func.identifier)
+      }
+      // We first load resources and then put the builder in the function registry.
+      catalog.loadFunctionResources(resources)
       catalog.registerFunction(func, overrideIfExists = replace)
     } else {
-      // For a permanent, we fill database name first.
-      val func = CatalogFunction(FunctionIdentifier(functionName,
-        Some(databaseName.getOrElse(catalog.getCurrentDatabase))), className, resources)
-      // We fail fast if function class is not exists.
-      catalog.requireFunctionClassExists(func)
       // Handles `CREATE OR REPLACE FUNCTION AS ... USING ...`
       if (replace && catalog.functionExists(func.identifier)) {
-        // Alter the function in the metastore
+        // alter the function in the metastore
         catalog.alterFunction(func)
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
         // This function will be loaded into the FunctionRegistry when a query uses it.
-        // We do not load it into FunctionRegistry right now.
+        // We do not load it into FunctionRegistry right now, to avoid loading the resource and
+        // UDF class immediately, as the Spark application to create the function may not have
+        // access to the resource and/or UDF class.
         catalog.createFunction(func, ignoreIfExists)
       }
     }

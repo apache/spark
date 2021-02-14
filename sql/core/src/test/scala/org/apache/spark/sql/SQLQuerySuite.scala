@@ -22,17 +22,21 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.commons.io.FileUtils
+
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -1316,7 +1320,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     )
   }
 
-  test("oder by asc by default when not specify ascending and descending") {
+  test("order by asc by default when not specify ascending and descending") {
     checkAnswer(
       sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
       Seq(Row(3, 1), Row(3, 2), Row(2, 1), Row(2, 2), Row(1, 1), Row(1, 2))
@@ -2812,7 +2816,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SRARK-22266: the same aggregate function was calculated multiple times") {
+  test("SPARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
     val physical = df.queryExecution.sparkPlan
@@ -3092,7 +3096,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           assert(scan.isInstanceOf[ParquetScan])
           assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
         case _ =>
-          fail(s"unknow format $format")
+          fail(s"unknown format $format")
       }
     }
 
@@ -3689,6 +3693,254 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     withTable("t") {
       spark.range(1).write.saveAsTable("t")
       checkAnswer(sql("SELECT id FROM t WHERE (SELECT true)"), Row(0L))
+    }
+  }
+
+  test("SPARK-33306: Timezone is needed when cast Date to String") {
+    withTempView("t1", "t2") {
+      spark.sql("select to_date(concat('2000-01-0', id)) as d from range(1, 2)")
+        .createOrReplaceTempView("t1")
+      spark.sql("select concat('2000-01-0', id) as d from range(1, 2)")
+        .createOrReplaceTempView("t2")
+      val result = Date.valueOf("2000-01-01")
+
+      checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      withSQLConf(SQLConf.LEGACY_CAST_DATETIME_TO_STRING.key -> "true") {
+        checkAnswer(sql("select t1.d from t1 join t2 on t1.d = t2.d"), Row(result))
+      }
+    }
+  }
+
+  test("SPARK-33338: GROUP BY using literal map should not fail") {
+    withTempDir { dir =>
+      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+      Seq(
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+        checkAnswer(sql(statement), Row("v1"))
+      }
+    }
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL") {
+    val sc = spark.sparkContext
+    val hiveVersion = "2.3.8"
+    // default transitive=false, only download specified jar
+    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion")
+    assert(sc.listJars()
+      .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
+
+    // test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
+    assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
+
+    sql(s"ADD JAR ivy://org.apache.hive:hive-contrib:$hiveVersion" +
+      "?exclude=org.pentaho:pentaho-aggdesigner-algorithm&transitive=true")
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-contrib-$hiveVersion.jar")))
+    assert(sc.listJars().exists(_.contains(s"org.apache.hive_hive-exec-$hiveVersion.jar")))
+    assert(!sc.listJars().exists(_.contains("org.pentaho.pentaho_aggdesigner-algorithm")))
+  }
+
+  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+    withTempView("df") {
+      Seq("m@ca").toDF("s").createOrReplaceTempView("df")
+
+      val e = intercept[AnalysisException] {
+        sql("SELECT s LIKE 'm%@ca' ESCAPE '%' FROM df").collect()
+      }
+      assert(e.message.contains("the pattern 'm%@ca' is invalid, " +
+        "the escape character is not allowed to precede '@'"))
+
+      checkAnswer(sql("SELECT s LIKE 'm@@ca' ESCAPE '@' FROM df"), Row(true))
+    }
+  }
+
+  test("limit partition num to 1 when distributing by foldable expressions") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.optimizedPlan
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 1 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("Fold RepartitionExpression num partition should check if partition expression is empty") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
+      val df = spark.range(1).hint("REPARTITION_BY_RANGE")
+      val plan = df.queryExecution.optimizedPlan
+      val res = plan.collect {
+        case r: RepartitionByExpression if r.numPartitions == 5 => true
+      }
+      assert(res.nonEmpty)
+    }
+  }
+
+  test("SPARK-34030: Fold RepartitionExpression num partition should at Optimizer") {
+    withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "2")) {
+      Seq(1, "1, 2", null, "version()").foreach { expr =>
+        val plan = sql(s"select * from values (1), (2), (3) t(a) distribute by $expr")
+          .queryExecution.analyzed
+        val res = plan.collect {
+          case r: RepartitionByExpression if r.numPartitions == 2 => true
+        }
+        assert(res.nonEmpty)
+      }
+    }
+  }
+
+  test("SPARK-33591: null as string partition literal value 'null' after setting legacy conf") {
+    withSQLConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      val t = "tbl"
+      withTable("tbl") {
+        sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+        sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+        checkAnswer(spark.sql(s"SELECT * FROM $t"), Row(0, "null"))
+      }
+    }
+  }
+
+  test("SPARK-33593: Vector reader got incorrect data with binary partition value") {
+    Seq("false", "true").foreach(value => {
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t1") {
+          sql(
+            """CREATE TABLE t1(name STRING, id BINARY, part BINARY)
+              |USING PARQUET PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t1 PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t1"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> value) {
+        withTable("t2") {
+          sql(
+            """CREATE TABLE t2(name STRING, id BINARY, part BINARY)
+              |USING ORC PARTITIONED BY (part)""".stripMargin)
+          sql("INSERT INTO t2 PARTITION(part = 'Spark SQL') VALUES('a', X'537061726B2053514C')")
+          checkAnswer(sql("SELECT name, cast(id as string), cast(part as string) FROM t2"),
+            Row("a", "Spark SQL", "Spark SQL"))
+        }
+      }
+    })
+  }
+
+  test("SPARK-33084: Add jar support Ivy URI in SQL -- jar contains udf class") {
+    val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
+    val functionName = "test_udf"
+    withTempDir { dir =>
+      System.setProperty("ivy.home", dir.getAbsolutePath)
+      val sourceJar = new File(Thread.currentThread().getContextClassLoader
+        .getResource("SPARK-33084.jar").getFile)
+      val targetCacheJarDir = new File(dir.getAbsolutePath +
+        "/local/org.apache.spark/SPARK-33084/1.0/jars/")
+      targetCacheJarDir.mkdir()
+      // copy jar to local cache
+      FileUtils.copyFileToDirectory(sourceJar, targetCacheJarDir)
+      withTempView("v1") {
+        withUserDefinedFunction(
+          s"default.$functionName" -> false,
+          functionName -> true) {
+          // create temporary function without class
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          }.getMessage
+          assert(e.contains("Can not load class 'org.apache.spark.examples.sql.Spark33084"))
+          sql("ADD JAR ivy://org.apache.spark:SPARK-33084:1.0")
+          sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+          // create a view using a function in 'default' database
+          sql(s"CREATE TEMPORARY VIEW v1 AS SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+          // view v1 should still using function defined in `default` database
+          checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
+        }
+      }
+      System.clearProperty("ivy.home")
+    }
+  }
+
+  test("SPARK-33964: Combine distinct unions that have noop project between them") {
+    val df = sql("""
+      |SELECT a, b FROM (
+      |  SELECT a, b FROM testData2
+      |  UNION
+      |  SELECT a, sum(b) FROM testData2 GROUP BY a
+      |  UNION
+      |  SELECT null AS a, sum(b) FROM testData2
+      |)""".stripMargin)
+
+    val unions = df.queryExecution.sparkPlan.collect {
+      case u: UnionExec => u
+    }
+
+    assert(unions.size == 1)
+  }
+
+  test("SPARK-34212 Parquet should read decimals correctly") {
+    def readParquet(schema: String, path: File): DataFrame = {
+      spark.read.schema(schema).parquet(path.toString)
+    }
+
+    withTempPath { path =>
+      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
+      df.write.parquet(path.toString)
+
+      Seq(true, false).foreach { vectorizedReader =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
+          // We can read the decimal parquet field with a larger precision, if scale is the same.
+          val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+          checkAnswer(readParquet(schema, path), df)
+        }
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
+        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+
+    // tests for parquet types without decimal metadata.
+    withTempPath { path =>
+      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      df.write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
+        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
+        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
+        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        val e = intercept[SparkException] {
+          readParquet("d DECIMAL(3, 2)", path).collect()
+        }.getCause
+        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
     }
   }
 }

@@ -95,7 +95,7 @@ trait FileScan extends Scan
 
   override def hashCode(): Int = getClass.hashCode()
 
-  val maxMetadataValueLength = 100
+  val maxMetadataValueLength = sparkSession.sessionState.conf.maxMetadataStringLength
 
   override def description(): String = {
     val metadataStr = getMetaData().toSeq.sorted.map {

@@ -53,4 +53,12 @@ public interface SupportsAdmissionControl extends SparkDataStream {
    * for the very first micro-batch. The source can return `null` if there is no data to process.
    */
   Offset latestOffset(Offset startOffset, ReadLimit limit);
+
+  /**
+   * Returns the most recent offset available.
+   *
+   * The source can return `null`, if there is no data to process or the source does not support
+   * to this method.
+   */
+  default Offset reportLatestOffset() { return null; }
 }

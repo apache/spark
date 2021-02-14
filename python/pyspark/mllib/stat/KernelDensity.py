@@ -26,6 +26,8 @@ class KernelDensity(object):
     Estimate probability density at required points given an RDD of samples
     from the population.
 
+    Examples
+    --------
     >>> kd = KernelDensity()
     >>> sample = sc.parallelize([0.0, 1.0])
     >>> kd.setSample(sample)

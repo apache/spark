@@ -18,8 +18,8 @@
 package org.apache.spark.ml
 
 import org.apache.spark.SparkException
-import org.apache.spark.ml.functions.vector_to_array
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.functions.{array_to_vector, vector_to_array}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MLTest
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.functions.col
@@ -86,5 +86,19 @@ class FunctionsSuite extends MLTest {
     }
     assert(thrown2.getMessage.contains(
       s"Unsupported dtype: float16. Valid values: float64, float32."))
+  }
+
+  test("test array_to_vector") {
+    val df1 = Seq(Tuple1(Array(0.5, 1.5))).toDF("c1")
+    val resultVec = df1.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
+    assert(resultVec === Vectors.dense(Array(0.5, 1.5)))
+
+    val df2 = Seq(Tuple1(Array(1.5f, 2.5f))).toDF("c1")
+    val resultVec2 = df2.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
+    assert(resultVec2 === Vectors.dense(Array(1.5, 2.5)))
+
+    val df3 = Seq(Tuple1(Array(1, 2))).toDF("c1")
+    val resultVec3 = df3.select(array_to_vector(col("c1"))).collect()(0)(0).asInstanceOf[Vector]
+    assert(resultVec3 === Vectors.dense(Array(1.0, 2.0)))
   }
 }

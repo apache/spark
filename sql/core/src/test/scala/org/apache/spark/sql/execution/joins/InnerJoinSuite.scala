@@ -101,7 +101,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         boundCondition,
         leftPlan,
         rightPlan)
-      EnsureRequirements(spark.sessionState.conf).apply(broadcastJoin)
+      EnsureRequirements.apply(broadcastJoin)
     }
 
     def makeShuffledHashJoin(
@@ -115,7 +115,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         side, None, leftPlan, rightPlan)
       val filteredJoin =
         boundCondition.map(FilterExec(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
-      EnsureRequirements(spark.sessionState.conf).apply(filteredJoin)
+      EnsureRequirements.apply(filteredJoin)
     }
 
     def makeSortMergeJoin(
@@ -126,7 +126,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
         rightPlan: SparkPlan) = {
       val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition,
         leftPlan, rightPlan)
-      EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
+      EnsureRequirements.apply(sortMergeJoin)
     }
 
     testWithWholeStageCodegenOnAndOff(s"$testName using BroadcastHashJoin (build=left)") { _ =>

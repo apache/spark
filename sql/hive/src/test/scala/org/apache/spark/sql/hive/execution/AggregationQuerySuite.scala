@@ -825,7 +825,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           """
             |SELECT corr(b, c) FROM covar_tab WHERE a = 3
           """.stripMargin),
-        Row(Double.NaN) :: Nil)
+        Row(null) :: Nil)
 
       checkAnswer(
         spark.sql(
@@ -834,10 +834,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           """.stripMargin),
         Row(1, null) ::
         Row(2, null) ::
-        Row(3, Double.NaN) ::
-        Row(4, Double.NaN) ::
-        Row(5, Double.NaN) ::
-        Row(6, Double.NaN) :: Nil)
+        Row(3, null) ::
+        Row(4, null) ::
+        Row(5, null) ::
+        Row(6, null) :: Nil)
 
       val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
       assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
@@ -869,7 +869,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(null))
     checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 

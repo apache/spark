@@ -22,6 +22,7 @@ import org.scalatest.Suite
 import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -56,10 +57,7 @@ trait CodegenInterpretedPlanTest extends PlanTest {
  * Provides helper methods for comparing plans, but without the overhead of
  * mandating a FunSuite.
  */
-trait PlanTestBase extends PredicateHelper with SQLHelper { self: Suite =>
-
-  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
-  protected def conf = SQLConf.get
+trait PlanTestBase extends PredicateHelper with SQLHelper with SQLConfHelper { self: Suite =>
 
   /**
    * Since attribute references are given globally unique ids during analysis,

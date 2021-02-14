@@ -178,7 +178,7 @@ class MesosFineGrainedSchedulerBackendSuite
     val (execInfo, _) = backend.createExecutorInfo(
       Arrays.asList(backend.createResource("cpus", 4)), "mockExecutor")
     assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
-    assert(execInfo.getContainer.getDocker.getForcePullImage.equals(true))
+    assert(execInfo.getContainer.getDocker.getForcePullImage)
     val portmaps = execInfo.getContainer.getDocker.getPortMappingsList
     assert(portmaps.get(0).getHostPort.equals(80))
     assert(portmaps.get(0).getContainerPort.equals(8080))
@@ -264,6 +264,7 @@ class MesosFineGrainedSchedulerBackendSuite
       partitionId = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
+      addedArchives = mutable.Map.empty[String, Long],
       properties = new Properties(),
       resources = immutable.Map.empty[String, ResourceInformation],
       ByteBuffer.wrap(new Array[Byte](0)))
@@ -377,6 +378,7 @@ class MesosFineGrainedSchedulerBackendSuite
       partitionId = 0,
       addedFiles = mutable.Map.empty[String, Long],
       addedJars = mutable.Map.empty[String, Long],
+      addedArchives = mutable.Map.empty[String, Long],
       properties = new Properties(),
       resources = immutable.Map.empty[String, ResourceInformation],
       ByteBuffer.wrap(new Array[Byte](0)))

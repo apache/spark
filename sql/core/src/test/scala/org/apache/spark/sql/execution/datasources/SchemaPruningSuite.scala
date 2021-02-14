@@ -623,9 +623,9 @@ abstract class SchemaPruningSuite
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
 
-      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+      val departmentSchema = "`depId` INT,`depName` STRING,`contactId` INT, " +
         "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
-      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+      spark.read.format(dataSourceName).schema(departmentSchema).load(path + "/departments")
         .createOrReplaceTempView("departments")
 
       testThunk
@@ -651,9 +651,9 @@ abstract class SchemaPruningSuite
       spark.read.format(dataSourceName).schema(schema).load(path + "/contacts")
         .createOrReplaceTempView("contacts")
 
-      val departmentScahem = "`depId` INT,`depName` STRING,`contactId` INT, " +
+      val departmentSchema = "`depId` INT,`depName` STRING,`contactId` INT, " +
         "`employer` STRUCT<`id`: INT, `company`: STRUCT<`name`: STRING, `address`: STRING>>"
-      spark.read.format(dataSourceName).schema(departmentScahem).load(path + "/departments")
+      spark.read.format(dataSourceName).schema(departmentSchema).load(path + "/departments")
         .createOrReplaceTempView("departments")
 
       testThunk

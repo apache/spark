@@ -50,7 +50,6 @@ from functools import wraps
 import types
 
 from pyspark.conf import SparkConf
-from pyspark.context import SparkContext
 from pyspark.rdd import RDD, RDDBarrier
 from pyspark.files import SparkFiles
 from pyspark.status import StatusTracker, SparkJobInfo, SparkStageInfo
@@ -103,7 +102,9 @@ def keyword_only(func):
     A decorator that forces keyword arguments in the wrapped method
     and saves actual input keyword arguments in `_input_kwargs`.
 
-    .. note:: Should only be used to wrap a method where first arg is `self`
+    Notes
+    -----
+    Should only be used to wrap a method where first arg is `self`
     """
     @wraps(func)
     def wrapper(self, *args, **kwargs):
@@ -113,6 +114,8 @@ def keyword_only(func):
         return func(self, **kwargs)
     return wrapper
 
+# To avoid circular dependencies
+from pyspark.context import SparkContext
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, Row  # noqa: F401

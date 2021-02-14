@@ -162,6 +162,7 @@ body .container-wrapper {
   margin-right: auto;
   border-radius: 15px;
   position: relative;
+  min-height: 100vh;
 }
 
 .title {
@@ -253,7 +254,7 @@ a:hover code {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by Github's wiki style */
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
   padding-left: 15px;
 }
 
@@ -262,8 +263,9 @@ a:hover code {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by Github's wiki style */
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
   padding-left: 30px;
+  min-height: 100vh;
 }
 
 .dropdown-menu {
@@ -324,14 +326,11 @@ a.anchorjs-link:hover { text-decoration: none; }
   border-left-width: 0px;
   border-bottom-width: 0px;
   margin-top: 0px;
-  width: 210px;
+  width: 220px;
+  height: 80%;
   float: left;
   position: fixed;
   overflow-y: scroll;
-}
-
-.left-menu {
-  width: 399px;
 }
 
 .left-menu h3 {

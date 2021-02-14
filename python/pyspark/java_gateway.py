@@ -35,12 +35,20 @@ from pyspark.serializers import read_int, write_with_length, UTF8Deserializer
 def launch_gateway(conf=None, popen_kwargs=None):
     """
     launch jvm gateway
-    :param conf: spark configuration passed to spark-submit
-    :param popen_kwargs: Dictionary of kwargs to pass to Popen when spawning
+
+    Parameters
+    ----------
+    conf : :py:class:`pyspark.SparkConf`
+        spark configuration passed to spark-submit
+    popen_kwargs : dict
+        Dictionary of kwargs to pass to Popen when spawning
         the py4j JVM. This is a developer feature intended for use in
         customizing how pyspark interacts with the py4j JVM (e.g., capturing
         stdout/stderr).
-    :return:
+
+    Returns
+    -------
+    ClientServer or JavaGateway
     """
     if "PYSPARK_GATEWAY_PORT" in os.environ:
         gateway_port = int(os.environ["PYSPARK_GATEWAY_PORT"])
@@ -174,9 +182,16 @@ def local_connect_and_auth(port, auth_secret):
     """
     Connect to local host, authenticate with it, and return a (sockfile,sock) for that connection.
     Handles IPV4 & IPV6, does some error handling.
-    :param port
-    :param auth_secret
-    :return: a tuple with (sockfile, sock)
+
+    Parameters
+    ----------
+    port : str or int or None
+    auth_secret : str
+
+    Returns
+    -------
+    tuple
+        with (sockfile, sock)
     """
     sock = None
     errors = []
@@ -186,14 +201,14 @@ def local_connect_and_auth(port, auth_secret):
         af, socktype, proto, _, sa = res
         try:
             sock = socket.socket(af, socktype, proto)
-            sock.settimeout(15)
+            sock.settimeout(int(os.environ.get("SPARK_AUTH_SOCKET_TIMEOUT", 15)))
             sock.connect(sa)
             sockfile = sock.makefile("rwb", int(os.environ.get("SPARK_BUFFER_SIZE", 65536)))
             _do_server_auth(sockfile, auth_secret)
             return (sockfile, sock)
         except socket.error as e:
             emsg = str(e)
-            errors.append("tried to connect to %s, but an error occured: %s" % (sa, emsg))
+            errors.append("tried to connect to %s, but an error occurred: %s" % (sa, emsg))
             sock.close()
             sock = None
     raise Exception("could not open socket: %s" % errors)

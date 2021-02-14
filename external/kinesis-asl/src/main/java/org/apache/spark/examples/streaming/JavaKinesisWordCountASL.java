@@ -49,7 +49,7 @@ import com.amazonaws.services.kinesis.AmazonKinesisClient;
  *
  * Usage: JavaKinesisWordCountASL [app-name] [stream-name] [endpoint-url] [region-name]
  *   [app-name] is the name of the consumer app, used to track the read data in DynamoDB
- *   [stream-name] name of the Kinesis stream (ie. mySparkStream)
+ *   [stream-name] name of the Kinesis stream (i.e. mySparkStream)
  *   [endpoint-url] endpoint of the Kinesis service
  *     (e.g. https://kinesis.us-east-1.amazonaws.com)
  *

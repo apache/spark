@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.streaming
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableProvider}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -37,6 +37,8 @@ case class StreamingRelationV2(
     table: Table,
     extraOptions: CaseInsensitiveStringMap,
     output: Seq[Attribute],
+    catalog: Option[CatalogPlugin],
+    identifier: Option[Identifier],
     v1Relation: Option[LogicalPlan])
   extends LeafNode with MultiInstanceRelation {
   override lazy val resolved = v1Relation.forall(_.resolved)

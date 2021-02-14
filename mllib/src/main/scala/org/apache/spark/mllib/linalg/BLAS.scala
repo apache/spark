@@ -285,6 +285,8 @@ private[spark] object BLAS extends Serializable with Logging {
           j += 1
           prevCol = col
         }
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
     }
   }
 

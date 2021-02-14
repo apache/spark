@@ -21,13 +21,12 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 /**
  * Replaces ordinal in 'order by' or 'group by' with UnresolvedOrdinal expression.
  */
-class SubstituteUnresolvedOrdinals(conf: SQLConf) extends Rule[LogicalPlan] {
+object SubstituteUnresolvedOrdinals extends Rule[LogicalPlan] {
   private def isIntLiteral(e: Expression) = e match {
     case Literal(_, IntegerType) => true
     case _ => false

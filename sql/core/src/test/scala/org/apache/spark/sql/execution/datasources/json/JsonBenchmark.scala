@@ -39,15 +39,8 @@ import org.apache.spark.sql.types._
  *      Results will be written to "benchmarks/JSONBenchmark-results.txt".
  * }}}
  */
-
 object JsonBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
-
-  private def prepareDataInfo(benchmark: Benchmark): Unit = {
-    // scalastyle:off println
-    benchmark.out.println("Preparing data for benchmarking ...")
-    // scalastyle:on println
-  }
 
   def schemaInferring(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("JSON schema inferring", rowsNum, output = output)
@@ -128,18 +121,6 @@ object JsonBenchmark extends SqlBasedBenchmark {
       .add("z", StringType)
   }
 
-  def writeWideRow(path: String, rowsNum: Int): StructType = {
-    val colsNum = 1000
-    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
-    val schema = StructType(fields)
-
-    spark.range(rowsNum)
-      .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
-      .write.json(path)
-
-    schema
-  }
-
   def countWideColumn(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("count a wide column", rowsNum, output = output)
 
@@ -171,7 +152,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
-      val schema = writeWideRow(path.getAbsolutePath, rowsNum)
+      val schema = writeWideRow(path.getAbsolutePath, rowsNum, 1000)
 
       benchmark.addCase("No encoding", numIters) { _ =>
         spark.read

@@ -35,7 +35,7 @@ with JVM. Profiling and debugging JVM is described at `Useful Developer Tools <h
 
 Note that,
 
-- If you are running locally, you can directly debug the driver side via using your IDE without the remote debug feature.
+- If you are running locally, you can directly debug the driver side via using your IDE without the remote debug feature. Setting PySpark with IDEs is documented `here <setting_ide.rst#pycharm>`__.
 - *There are many other ways of debugging PySpark applications*. For example, you can remotely debug by using the open source `Remote Debugger <https://www.pydev.org/manual_adv_remote_debugger.html>`_ instead of using PyCharm Professional documented here.
 
 
@@ -54,7 +54,7 @@ Enter the name of this new configuration, for example, ``MyRemoteDebugger`` and 
 .. image:: ../../../../docs/img/pyspark-remote-debug1.png
     :alt: PyCharm remote debugger setting
 
-| After that, you should install the corresponding version of the ``pydevd-pycahrm`` package in all the machines which will connect to your PyCharm debugger. In the previous dialog, it shows the command to install.
+| After that, you should install the corresponding version of the ``pydevd-pycharm`` package in all the machines which will connect to your PyCharm debugger. In the previous dialog, it shows the command to install.
 
 .. code-block:: text
 

@@ -21,10 +21,10 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 
 /**
@@ -92,8 +92,7 @@ class GlobalTempViewManager(val database: String) {
   def rename(oldName: String, newName: String): Boolean = synchronized {
     if (viewDefinitions.contains(oldName)) {
       if (viewDefinitions.contains(newName)) {
-        throw new AnalysisException(
-          s"rename temporary view from '$oldName' to '$newName': destination view already exists")
+        throw QueryCompilationErrors.renameTempViewToExistingViewError(oldName, newName)
       }
 
       val viewDefinition = viewDefinitions(oldName)

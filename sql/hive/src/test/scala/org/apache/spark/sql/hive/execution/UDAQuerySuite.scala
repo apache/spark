@@ -17,23 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.lang.{Double => jlDouble, Integer => jlInt, Long => jlLong}
-
-import scala.collection.JavaConverters._
-import scala.util.Random
-
-import test.org.apache.spark.sql.MyDoubleAvg
-import test.org.apache.spark.sql.MyDoubleSum
+import java.lang.{Double => jlDouble, Long => jlLong}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.expressions.{Aggregator}
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 

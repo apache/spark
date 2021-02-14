@@ -88,8 +88,6 @@ Kafka key-value record will be augmented with some metadata, such as the ingesti
 * If the "value" field that contains your data is in Avro, you could use `from_avro()` to extract your data, enrich it, clean it, and then push it downstream to Kafka again or write it out to a file.
 * `to_avro()` can be used to turn structs into Avro records. This method is particularly useful when you would like to re-encode multiple columns into a single one when writing data out to Kafka.
 
-Both functions are currently only available in Scala and Java.
-
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
@@ -183,6 +181,38 @@ query = output\
   .option("topic", "topic2")\
   .start()
 
+{% endhighlight %}
+</div>
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# `from_avro` requires Avro schema in JSON string format.
+jsonFormatSchema <- paste0(readLines("examples/src/main/resources/user.avsc"), collapse=" ")
+
+df <- read.stream(
+  "kafka",
+  kafka.bootstrap.servers = "host1:port1,host2:port2",
+  subscribe = "topic1"
+)
+
+# 1. Decode the Avro data into a struct;
+# 2. Filter by column `favorite_color`;
+# 3. Encode the column `name` in Avro format.
+
+output <- select(
+  filter(
+    select(df, alias(from_avro("value", jsonFormatSchema), "user")),
+    column("user.favorite_color") == "red"
+  ),
+  alias(to_avro("user.name"), "value")
+)
+
+write.stream(
+  output,
+  "kafka",
+  kafka.bootstrap.servers = "host1:port1,host2:port2",
+  topic = "topic2"
+)
 {% endhighlight %}
 </div>
 </div>
@@ -309,7 +339,7 @@ applications. Read the [Advanced Dependency Management](https://spark.apache
 Submission Guide for more details. 
 
 ## Supported types for Avro -> Spark SQL conversion
-Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.8.2/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.8.2/spec.html#schema_complex) under records of Avro.
+Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.10.1/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.10.1/spec.html#schema_complex) under records of Avro.
 <table class="table">
   <tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
@@ -373,7 +403,7 @@ In addition to the types listed above, it supports reading `union` types. The fo
 3. `union(something, null)`, where something is any supported Avro type. This will be mapped to the same Spark SQL type as that of something, with nullable set to true.
 All other union types are considered complex. They will be mapped to StructType where field names are member0, member1, etc., in accordance with members of the union. This is consistent with the behavior when converting between Avro and Parquet.
 
-It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.8.2/spec.html#Logical+Types):
+It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.10.1/spec.html#Logical+Types):
 
 <table class="table">
   <tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>

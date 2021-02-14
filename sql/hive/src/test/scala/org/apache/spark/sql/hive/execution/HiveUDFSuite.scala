@@ -658,6 +658,24 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+  test("SPARK-32877: add test for Hive UDF complex decimal type") {
+    withUserDefinedFunction("testArraySum" -> false) {
+      sql(s"CREATE FUNCTION testArraySum AS '${classOf[ArraySumUDF].getName}'")
+      checkAnswer(
+        sql("SELECT testArraySum(array(1, 1.1, 1.2))"),
+        Seq(Row(3.3)))
+
+      val msg = intercept[AnalysisException] {
+        sql("SELECT testArraySum(1)")
+      }.getMessage
+      assert(msg.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+
+      val msg2 = intercept[AnalysisException] {
+        sql("SELECT testArraySum(1, 2)")
+      }.getMessage
+      assert(msg2.contains(s"No handler for UDF/UDAF/UDTF '${classOf[ArraySumUDF].getName}'"))
+    }
+  }
 }
 
 class TestPair(x: Int, y: Int) extends Writable with Serializable {
@@ -739,5 +757,16 @@ class StatelessUDF extends UDF {
   def evaluate(): LongWritable = {
     result.set(result.get() + 1)
     result
+  }
+}
+
+class ArraySumUDF extends UDF {
+  import scala.collection.JavaConverters._
+  def evaluate(values: java.util.List[java.lang.Double]): java.lang.Double = {
+    var r = 0d
+    for (v <- values.asScala) {
+      r += v
+    }
+    r
   }
 }

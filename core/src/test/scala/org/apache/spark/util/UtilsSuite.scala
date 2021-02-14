@@ -18,8 +18,7 @@
 package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, InputStream, PrintStream, SequenceInputStream}
-import java.lang.{Double => JDouble, Float => JFloat}
+  FileOutputStream, PrintStream, SequenceInputStream}
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -42,6 +41,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
@@ -1304,10 +1304,11 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("pathsToMetadata") {
     val paths = (0 to 4).map(i => new Path(s"path$i"))
-    assert(Utils.buildLocationMetadata(paths, 5) == "[path0]")
-    assert(Utils.buildLocationMetadata(paths, 10) == "[path0, path1]")
-    assert(Utils.buildLocationMetadata(paths, 15) == "[path0, path1, path2]")
-    assert(Utils.buildLocationMetadata(paths, 25) == "[path0, path1, path2, path3]")
+    assert(Utils.buildLocationMetadata(paths, 10) == "(5 paths)[...]")
+    // 11 is the minimum threshold to print at least one path
+    assert(Utils.buildLocationMetadata(paths, 11) == "(5 paths)[path0, ...]")
+    // 11 + 5 + 2 = 18 is the minimum threshold to print two paths
+    assert(Utils.buildLocationMetadata(paths, 18) == "(5 paths)[path0, path1, ...]")
   }
 
   test("checkHost supports both IPV4 and IPV6") {
@@ -1405,6 +1406,44 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     hostnamePort = Utils.parseHostPort("localhost:")
     assert(hostnamePort._1.equals("localhost"))
     assert(hostnamePort._2 === 0)
+  }
+
+  test("executorOffHeapMemorySizeAsMb when MEMORY_OFFHEAP_ENABLED is false") {
+    val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(new SparkConf())
+    assert(executorOffHeapMemory == 0)
+  }
+
+  test("executorOffHeapMemorySizeAsMb when MEMORY_OFFHEAP_ENABLED is true") {
+    val offHeapMemoryInMB = 50
+    val offHeapMemory: Long = offHeapMemoryInMB * 1024 * 1024
+    val sparkConf = new SparkConf()
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+      .set(MEMORY_OFFHEAP_SIZE, offHeapMemory)
+    val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(sparkConf)
+    assert(executorOffHeapMemory == offHeapMemoryInMB)
+  }
+
+  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
+    "but MEMORY_OFFHEAP_SIZE not config scene") {
+    val sparkConf = new SparkConf()
+      .set(MEMORY_OFFHEAP_ENABLED, true)
+    val expected =
+      s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true"
+    val message = intercept[IllegalArgumentException] {
+      Utils.executorOffHeapMemorySizeAsMb(sparkConf)
+    }.getMessage
+    assert(message.contains(expected))
+  }
+
+  test("isPushBasedShuffleEnabled when both PUSH_BASED_SHUFFLE_ENABLED" +
+    " and SHUFFLE_SERVICE_ENABLED are true") {
+    val conf = new SparkConf()
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set(IS_TESTING, false)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
+    conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    assert(Utils.isPushBasedShuffleEnabled(conf) === true)
   }
 }
 

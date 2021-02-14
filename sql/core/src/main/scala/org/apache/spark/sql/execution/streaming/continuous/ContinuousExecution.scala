@@ -65,7 +65,7 @@ class ContinuousExecution(
     var nextSourceId = 0
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     val _logicalPlan = analyzedPlan.transform {
-      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _) =>
+      case s @ StreamingRelationV2(ds, sourceName, table: SupportsRead, options, output, _, _, _) =>
         val dsStr = if (ds.nonEmpty) s"[${ds.get}]" else ""
         if (!table.supports(TableCapability.CONTINUOUS_READ)) {
           throw new UnsupportedOperationException(
@@ -332,7 +332,7 @@ class ContinuousExecution(
 
     synchronized {
       // Record offsets before updating `committedOffsets`
-      recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+      recordTriggerOffsets(from = committedOffsets, to = availableOffsets, latest = latestOffsets)
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch, CommitMetadata())
         val offset =

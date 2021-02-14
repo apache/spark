@@ -81,10 +81,10 @@ object OrcUtils extends Logging {
     }
   }
 
-  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
+  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-    val conf = sparkSession.sessionState.newHadoopConf()
+    val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
@@ -125,7 +125,7 @@ object OrcUtils extends Logging {
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcUtils.readOrcSchemasInParallel)
     } else {
-      OrcUtils.readSchema(sparkSession, files)
+      OrcUtils.readSchema(sparkSession, files, options)
     }
   }
 
@@ -142,13 +142,18 @@ object OrcUtils extends Logging {
       reader: Reader,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
     val orcFieldNames = reader.getSchema.getFieldNames.asScala
+    val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
     if (orcFieldNames.isEmpty) {
       // SPARK-8501: Some old empty ORC files always have an empty schema stored in their footer.
       None
     } else {
-      if (orcFieldNames.forall(_.startsWith("_col"))) {
-        // This is a ORC file written by Hive, no field names in the physical schema, assume the
-        // physical schema maps to the data scheme by index.
+      if (forcePositionalEvolution || orcFieldNames.forall(_.startsWith("_col"))) {
+        // This is either an ORC file written by an old version of Hive and there are no field
+        // names in the physical schema, or `orc.force.positional.evolution=true` is forced because
+        // the file was written by a newer version of Hive where
+        // `orc.force.positional.evolution=true` was set (possibly because columns were renamed so
+        // the physical schema doesn't match the data schema).
+        // In these cases we map the physical schema to the data schema by index.
         assert(orcFieldNames.length <= dataSchema.length, "The given data schema " +
           s"${dataSchema.catalogString} has less fields than the actual ORC physical schema, " +
           "no idea which columns were dropped, fail to read.")

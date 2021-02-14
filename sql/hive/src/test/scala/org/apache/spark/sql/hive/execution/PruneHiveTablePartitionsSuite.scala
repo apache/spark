@@ -18,9 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.LongType
 
 class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
 
@@ -75,7 +77,56 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
         }
         val scale = 20
         val predicate = (1 to scale).map(i => s"(p0 = '$i' AND p1 = '$i')").mkString(" OR ")
-        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale)
+        val expectedStr = {
+          // left
+          "(((((((`p0` = 1) && (`p1` = 1)) || ((`p0` = 2) && (`p1` = 2))) ||" +
+          " ((`p0` = 3) && (`p1` = 3))) || (((`p0` = 4) && (`p1` = 4)) ||" +
+          " ((`p0` = 5) && (`p1` = 5)))) || (((((`p0` = 6) && (`p1` = 6)) ||" +
+          " ((`p0` = 7) && (`p1` = 7))) || ((`p0` = 8) && (`p1` = 8))) ||" +
+          " (((`p0` = 9) && (`p1` = 9)) || ((`p0` = 10) && (`p1` = 10))))) ||" +
+          // right
+          " ((((((`p0` = 11) && (`p1` = 11)) || ((`p0` = 12) && (`p1` = 12))) ||" +
+          " ((`p0` = 13) && (`p1` = 13))) || (((`p0` = 14) && (`p1` = 14)) ||" +
+          " ((`p0` = 15) && (`p1` = 15)))) || (((((`p0` = 16) && (`p1` = 16)) ||" +
+          " ((`p0` = 17) && (`p1` = 17))) || ((`p0` = 18) && (`p1` = 18))) ||" +
+          " (((`p0` = 19) && (`p1` = 19)) || ((`p0` = 20) && (`p1` = 20))))))"
+        }
+        assertPrunedPartitions(s"SELECT * FROM t WHERE $predicate", scale,
+          expectedStr)
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneHiveTablePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        "hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(s"CREATE TABLE SPARK_34119 PARTITIONED BY (p) STORED AS textfile AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(20))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          320L,
+          Some(20),
+          Seq(ColumnStat(
+            distinctCount = Some(20),
+            min = Some(0),
+            max = Some(19),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          64L,
+          Some(4),
+          Seq(ColumnStat(
+            distinctCount = Some(4),
+            min = Some(0),
+            max = Some(19),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }

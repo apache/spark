@@ -240,7 +240,7 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
 
     val metadata = spark.read.json(s"$mlpPath/metadata")
     val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
-    assert(sparkVersionStr == "2.4.4")
+    assert(sparkVersionStr === "2.4.4")
   }
 
   test("summary and training summary") {

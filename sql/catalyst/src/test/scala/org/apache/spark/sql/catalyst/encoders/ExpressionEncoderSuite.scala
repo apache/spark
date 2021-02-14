@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.{Encoder, Encoders}
-import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
@@ -388,6 +388,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     }
     assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
   }
+
+  encodeDecodeTest((1, FooEnum.E1), "Tuple with Int and scala Enum")
+  encodeDecodeTest((null, FooEnum.E1, FooEnum.E2), "Tuple with Null and scala Enum")
+  encodeDecodeTest(Seq(FooEnum.E1, null), "Seq with scala Enum")
+  encodeDecodeTest(Map("key" -> FooEnum.E1), "Map with String key and scala Enum")
+  encodeDecodeTest(Map(FooEnum.E1 -> "value"), "Map with scala Enum key and String value")
+  encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
+  encodeDecodeTest(FooEnum.E1, "scala Enum")
 
   // Scala / Java big decimals ----------------------------------------------------------
 

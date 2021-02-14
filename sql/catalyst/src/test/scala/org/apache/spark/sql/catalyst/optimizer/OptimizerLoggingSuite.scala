@@ -100,7 +100,7 @@ class OptimizerLoggingSuite extends PlanTest {
         withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> level) {}
       }
       assert(error.getMessage.contains(
-        "Invalid value for 'spark.sql.optimizer.planChangeLog.level'."))
+        "Invalid value for 'spark.sql.planChangeLog.level'."))
     }
   }
 

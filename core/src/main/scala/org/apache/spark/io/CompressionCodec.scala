@@ -20,7 +20,7 @@ package org.apache.spark.io
 import java.io._
 import java.util.Locale
 
-import com.github.luben.zstd.{ZstdInputStream, ZstdOutputStream}
+import com.github.luben.zstd.{NoPool, RecyclingBufferPool, ZstdInputStream, ZstdOutputStream}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
 import net.jpountz.xxhash.XXHashFactory
@@ -107,7 +107,6 @@ private[spark] object CompressionCodec {
   }
 
   val FALLBACK_COMPRESSION_CODEC = "snappy"
-  val DEFAULT_COMPRESSION_CODEC = "lz4"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
@@ -218,22 +217,30 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
   // fastest of all with reasonably high compression ratio.
   private val level = conf.get(IO_COMPRESSION_ZSTD_LEVEL)
 
+  private val bufferPool = if (conf.get(IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED)) {
+    RecyclingBufferPool.INSTANCE
+  } else {
+    NoPool.INSTANCE
+  }
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
-    new BufferedOutputStream(new ZstdOutputStream(s, level), bufferSize)
+    val os = new ZstdOutputStream(s, bufferPool).setLevel(level)
+    new BufferedOutputStream(os, bufferSize)
   }
 
   override private[spark] def compressedContinuousOutputStream(s: OutputStream) = {
     // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
     // stuck on reading open frame.
-    new BufferedOutputStream(new ZstdOutputStream(s, level).setCloseFrameOnFlush(true), bufferSize)
+    val os = new ZstdOutputStream(s, bufferPool).setLevel(level).setCloseFrameOnFlush(true)
+    new BufferedOutputStream(os, bufferSize)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = {
     // Wrap the zstd input stream in a buffered input stream so that we can
     // avoid overhead excessive of JNI call while trying to uncompress small amount of data.
-    new BufferedInputStream(new ZstdInputStream(s), bufferSize)
+    new BufferedInputStream(new ZstdInputStream(s, bufferPool), bufferSize)
   }
 
   override def compressedContinuousInputStream(s: InputStream): InputStream = {
@@ -241,6 +248,6 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Reading). By default `isContinuous` is false, and when we try to read from open frames,
     // `compressedInputStream` method above throws truncated error exception. This method set
     // `isContinuous` true to allow reading from open frames.
-    new BufferedInputStream(new ZstdInputStream(s).setContinuous(true), bufferSize)
+    new BufferedInputStream(new ZstdInputStream(s, bufferPool).setContinuous(true), bufferSize)
   }
 }

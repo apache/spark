@@ -131,7 +131,7 @@ the following case-insensitive options:
   <tr>
     <td><code>fetchsize</code></td>
     <td>
-      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (eg. Oracle with 10 rows). This option applies only to reading.
+      The JDBC fetch size, which determines how many rows to fetch per round trip. This can help performance on JDBC drivers which default to low fetch size (e.g. Oracle with 10 rows). This option applies only to reading.
     </td>
   </tr>
 
@@ -212,6 +212,20 @@ the following case-insensitive options:
     </td>
   </tr>
 </table>
+
+Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
+Before using <code>keytab</code> and <code>principal</code> configuration options, please make sure the following requirements are met:
+* The included JDBC driver version supports kerberos authentication with keytab. 
+* There is a built-in connection provider which supports the used database.
+
+There is a built-in connection providers for the following databases:
+* DB2
+* MariaDB
+* MS Sql
+* Oracle
+* PostgreSQL
+
+If the requirements are not met, please consider using the <code>JdbcConnectionProvider</code> developer API to handle custom authentication.
 
 <div class="codetabs">
 

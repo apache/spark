@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode}
 import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.connector.expressions.{Expressions, LogicalExpressions}
+import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 

@@ -28,7 +28,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Column
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -61,16 +61,6 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
   override protected def afterEach(): Unit = {
     super.afterEach()
     uncaughtExceptionHandler.cleanStatus()
-  }
-
-  def isHive23OrSpark: Boolean
-
-  // In Hive 1.2, the string representation of a decimal omits trailing zeroes.
-  // But in Hive 2.3, it is always padded to 18 digits with trailing zeroes if necessary.
-  val decimalToString: Column => Column = if (isHive23OrSpark) {
-    c => c.cast("string")
-  } else {
-    c => c.cast("decimal(1, 0)").cast("string")
   }
 
   def createScriptTransformationExec(
@@ -134,7 +124,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         s"""
            |SELECT
            |TRANSFORM(a, b, c, d, e)
-           |USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '\t'
+           |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+           |  ROW FORMAT DELIMITED
+           |  FIELDS TERMINATED BY '\t'
            |FROM v
         """.stripMargin)
 
@@ -142,15 +136,12 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         'a.cast("string"),
         'b.cast("string"),
         'c.cast("string"),
-        decimalToString('d),
+        'd.cast("string"),
         'e.cast("string")).collect())
     }
   }
 
-  test("SPARK-25990: TRANSFORM should handle schema less correctly (no serde)") {
-    assume(TestUtils.testCommandAvailable("python"))
-    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
-
+  test("SPARK-32388: TRANSFORM should handle schema less correctly (no serde)") {
     withTempView("v") {
       val df = Seq(
         (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
@@ -167,7 +158,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             df.col("c").expr,
             df.col("d").expr,
             df.col("e").expr),
-          script = s"python $scriptFilePath",
+          script = "cat",
           output = Seq(
             AttributeReference("key", StringType)(),
             AttributeReference("value", StringType)()),
@@ -177,6 +168,39 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         df.select(
           'a.cast("string").as("key"),
           'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr,
+            df.col("b").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          'b.cast("string").as("value")).collect())
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          input = Seq(
+            df.col("a").expr),
+          script = "cat",
+          output = Seq(
+            AttributeReference("key", StringType)(),
+            AttributeReference("value", StringType)()),
+          child = child,
+          ioschema = defaultIOSchema.copy(schemaLess = true)
+        ),
+        df.select(
+          'a.cast("string").as("key"),
+          lit(null)).collect())
     }
   }
 
@@ -400,6 +424,167 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         'a.cast("string").as("a"),
         'b.cast("string").as("b"),
         lit(null), lit(null)).collect())
+  }
+
+  test("SPARK-32106: TRANSFORM with non-existent command/file") {
+    Seq(
+      s"""
+         |SELECT TRANSFORM(a)
+         |USING 'some_non_existent_command' AS (a)
+         |FROM VALUES (1) t(a)
+       """.stripMargin,
+      s"""
+         |SELECT TRANSFORM(a)
+         |USING 'python some_non_existent_file' AS (a)
+         |FROM VALUES (1) t(a)
+       """.stripMargin).foreach { query =>
+      intercept[SparkException] {
+        // Since an error message is shell-dependent, this test just checks
+        // if the expected exception will be thrown.
+        sql(query).collect()
+      }
+    }
+  }
+
+  test("SPARK-33930: Script Transform default FIELD DELIMIT should be \u0001 (no serde)") {
+    withTempView("v") {
+      val df = Seq(
+        (1, 2, 3),
+        (2, 3, 4),
+        (3, 4, 5)
+      ).toDF("a", "b", "c")
+      df.createTempView("v")
+
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c)
+             |  ROW FORMAT DELIMITED
+             |  USING 'cat' AS (a)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '&'
+             |FROM v
+        """.stripMargin), identity,
+        Row("1\u00012\u00013") ::
+          Row("2\u00013\u00014") ::
+          Row("3\u00014\u00015") :: Nil)
+    }
+  }
+
+  test("SPARK-33934: Add SparkFile's root dir to env property PATH") {
+    assume(TestUtils.testCommandAvailable("python"))
+    val scriptFilePath = copyAndGetResourceFile("test_script.py", ".py").getAbsoluteFile
+    withTempView("v") {
+      val df = Seq(
+        (1, "1", 1.0, BigDecimal(1.0), new Timestamp(1)),
+        (2, "2", 2.0, BigDecimal(2.0), new Timestamp(2)),
+        (3, "3", 3.0, BigDecimal(3.0), new Timestamp(3))
+      ).toDF("a", "b", "c", "d", "e") // Note column d's data type is Decimal(38, 18)
+      df.createTempView("v")
+
+      // test 'python /path/to/script.py' with local file
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT
+             |TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING 'python $scriptFilePath' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      // test '/path/to/script.py' with script not executable
+      val e1 = intercept[TestFailedException] {
+        checkAnswer(
+          sql(
+            s"""
+               |SELECT
+               |TRANSFORM(a, b, c, d, e)
+               |  ROW FORMAT DELIMITED
+               |  FIELDS TERMINATED BY '\t'
+               |  USING '$scriptFilePath' AS (a, b, c, d, e)
+               |  ROW FORMAT DELIMITED
+               |  FIELDS TERMINATED BY '\t'
+               |FROM v
+        """.stripMargin), identity, df.select(
+            'a.cast("string"),
+            'b.cast("string"),
+            'c.cast("string"),
+            'd.cast("string"),
+            'e.cast("string")).collect())
+      }.getMessage
+      // Check with status exit code since in GA test, it may lose detail failed root cause.
+      // Different root cause's exitcode is not same.
+      // In this test, root cause is `Permission denied`
+      assert(e1.contains("Subprocess exited with status 126"))
+
+      // test `/path/to/script.py' with script executable
+      scriptFilePath.setExecutable(true)
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT
+             |TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING '$scriptFilePath' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      scriptFilePath.setExecutable(false)
+      sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
+
+      // test `script.py` when file added
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING '${scriptFilePath.getName}' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+
+      // test `python script.py` when file added
+      checkAnswer(
+        sql(
+          s"""
+             |SELECT TRANSFORM(a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |  USING 'python ${scriptFilePath.getName}' AS (a, b, c, d, e)
+             |  ROW FORMAT DELIMITED
+             |  FIELDS TERMINATED BY '\t'
+             |FROM v
+        """.stripMargin), identity, df.select(
+          'a.cast("string"),
+          'b.cast("string"),
+          'c.cast("string"),
+          'd.cast("string"),
+          'e.cast("string")).collect())
+    }
   }
 }
 

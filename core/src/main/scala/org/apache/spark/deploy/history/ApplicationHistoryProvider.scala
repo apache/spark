@@ -150,4 +150,11 @@ private[history] abstract class ApplicationHistoryProvider {
    */
   def onUIDetached(appId: String, attemptId: Option[String], ui: SparkUI): Unit = { }
 
+  /**
+   * Returns true if the given user has permission to view the UI of the given attempt.
+   *
+   * @throws NoSuchElementException if the given attempt doesn't exist
+   */
+  def checkUIViewPermissions(appId: String, attemptId: Option[String], user: String): Boolean
+
 }

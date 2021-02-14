@@ -24,7 +24,7 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -49,22 +49,22 @@ import org.apache.spark.util.Utils
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
+ *   build/sbt "~sql/testOnly *SQLQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * The format for input files is simple:
@@ -154,10 +154,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
+  // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+  // here we need to ignore it.
+  private val otherIgnoreList =
+    if (TestUtils.testCommandAvailable("/bin/bash")) Nil else Set("transform.sql")
   /** List of test cases to ignore, in lower cases. */
   protected def ignoreList: Set[String] = Set(
-    "ignored.sql"   // Do NOT remove this one. It is here to test the ignore functionality.
-  )
+    "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
+  ) ++ otherIgnoreList
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
@@ -278,18 +282,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val allCode = importedCode ++ code
     val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
       // Although the loop is heavy, only used for bracketed comments test.
-      val querys = new ArrayBuffer[String]
+      val queries = new ArrayBuffer[String]
       val otherCodes = new ArrayBuffer[String]
       var tempStr = ""
       var start = false
       for (c <- allCode) {
         if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
           start = true
-          querys ++= splitWithSemicolon(otherCodes.toSeq)
+          queries ++= splitWithSemicolon(otherCodes.toSeq)
           otherCodes.clear()
         } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
           start = false
-          querys += s"\n${tempStr.stripSuffix(";")}"
+          queries += s"\n${tempStr.stripSuffix(";")}"
           tempStr = ""
         } else if (start) {
           tempStr += s"\n$c"
@@ -298,9 +302,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       }
       if (otherCodes.nonEmpty) {
-        querys ++= splitWithSemicolon(otherCodes.toSeq)
+        queries ++= splitWithSemicolon(otherCodes.toSeq)
       }
-      querys.toSeq
+      queries.toSeq
     } else {
       splitWithSemicolon(allCode).toSeq
     }
@@ -502,7 +506,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       case _: DescribeCommandBase
           | _: DescribeColumnCommand
           | _: DescribeRelation
-          | _: DescribeColumnStatement => true
+          | _: DescribeColumn => true
       case PhysicalOperation(_, _, Sort(_, true, _)) => true
       case _ => plan.children.iterator.exists(isSorted)
     }

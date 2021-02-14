@@ -86,11 +86,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      hasBenefit: Boolean,
-      isReuseBroadcastOnly: Boolean): LogicalPlan = {
+      partScan: LogicalRelation): LogicalPlan = {
     val reuseEnabled = SQLConf.get.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
-    if (hasBenefit || reuseEnabled) {
+    lazy val hasBenefit = pruningHasBenefit(pruningKey, partScan, filteringKey, filteringPlan)
+    if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
         DynamicPruningSubquery(
@@ -98,7 +98,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           filteringPlan,
           joinKeys,
           index,
-          isReuseBroadcastOnly),
+          SQLConf.get.dynamicPartitionPruningReuseBroadcastOnly || !hasBenefit),
         pruningPlan)
     } else {
       // abort dynamic partition pruning
@@ -255,22 +255,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
             var partScan = getPartitionTableScan(l, left)
             if (partScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
-              val hasBenefit = pruningHasBenefit(l, partScan.get, r, right)
-              val reuseBroadcastOnly = isReuseBroadcastOnly(
-                canBuildBroadcastRight(joinType), hasBenefit, hintToBroadcastLeft(hint), left,
-                right)
-              newLeft = insertPredicate(
-                l, newLeft, r, right, rightKeys, hasBenefit, reuseBroadcastOnly)
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get)
             } else {
               partScan = getPartitionTableScan(r, right)
               if (partScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
-                val hasBenefit = pruningHasBenefit(r, partScan.get, l, left)
-                val reuseBroadcastOnly = isReuseBroadcastOnly(
-                  canBuildBroadcastLeft(joinType), hasBenefit, hintToBroadcastRight(hint), right,
-                  left)
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, hasBenefit,
-                  reuseBroadcastOnly)
+                newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get)
               }
             }
           case _ =>

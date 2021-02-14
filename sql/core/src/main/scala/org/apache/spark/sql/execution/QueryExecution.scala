@@ -28,6 +28,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
@@ -35,7 +36,7 @@ import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
-import org.apache.spark.sql.execution.bucketing.CoalesceBucketsInJoin
+import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -84,7 +85,12 @@ class QueryExecution(
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    // We do not want optimized plans to be re-analyzed as literals that have been constant folded
+    // and such can cause issues during analysis. While `clone` should maintain the `analyzed` state
+    // of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+    plan.setAnalyzed()
+    plan
   }
 
   private def assertOptimized(): Unit = optimizedPlan
@@ -248,6 +254,12 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
+      optimizedPlan.foreach(_.expressions.foreach(_.foreach {
+        case subqueryExpression: SubqueryExpression =>
+          // trigger subquery's child plan stats propagation
+          subqueryExpression.plan.stats
+        case _ =>
+      }))
       optimizedPlan.stats
     } catch {
       case e: AnalysisException => append(e.toString + "\n")
@@ -339,16 +351,19 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
-      CoalesceBucketsInJoin(sparkSession.sessionState.conf),
+      CoalesceBucketsInJoin,
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
-      RemoveRedundantProjects(sparkSession.sessionState.conf),
-      EnsureRequirements(sparkSession.sessionState.conf),
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
-        sparkSession.sessionState.columnarRules),
-      CollapseCodegenStages(sparkSession.sessionState.conf),
-      ReuseExchange(sparkSession.sessionState.conf),
-      ReuseSubquery(sparkSession.sessionState.conf)
+      RemoveRedundantProjects,
+      EnsureRequirements,
+      // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
+      // number of partitions when instantiating PartitioningCollection.
+      RemoveRedundantSorts,
+      DisableUnnecessaryBucketedScan,
+      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
+      CollapseCodegenStages(),
+      ReuseExchange,
+      ReuseSubquery
     )
   }
 

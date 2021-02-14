@@ -19,7 +19,6 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.experimental.macros
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
@@ -304,6 +303,14 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
       AssertOnQuery(query => { func(query); true }, name)
 
     def apply(func: StreamExecution => Any): AssertOnQuery = apply("Execute")(func)
+  }
+
+  /** Call `StreamingQuery.processAllAvailable()` to wait. */
+  object ProcessAllAvailable {
+    def apply(): AssertOnQuery = AssertOnQuery { query =>
+      query.processAllAvailable()
+      true
+    }
   }
 
   object AwaitEpoch {

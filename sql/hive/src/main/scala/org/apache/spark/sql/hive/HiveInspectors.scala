@@ -1039,6 +1039,7 @@ private[hive] trait HiveInspectors {
 
     private def decimalTypeInfo(decimalType: DecimalType): TypeInfo = decimalType match {
       case DecimalType.Fixed(precision, scale) => new DecimalTypeInfo(precision, scale)
+      case dt => throw new AnalysisException(s"${dt.catalogString} is not supported.")
     }
 
     def toTypeInfo: TypeInfo = dt match {

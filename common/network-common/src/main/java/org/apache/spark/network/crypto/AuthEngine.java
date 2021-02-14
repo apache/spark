@@ -287,7 +287,7 @@ class AuthEngine implements Closeable {
         }
       }
     } catch (InternalError ie) {
-      // SPARK-25535. The commons-cryto library will throw InternalError if something goes wrong,
+      // SPARK-25535. The commons-crypto library will throw InternalError if something goes wrong,
       // and leave bad state behind in the Java wrappers, so it's not safe to use them afterwards.
       if (mode == Cipher.ENCRYPT_MODE) {
         this.encryptor = null;

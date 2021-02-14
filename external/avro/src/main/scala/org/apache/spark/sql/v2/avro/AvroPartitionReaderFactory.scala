@@ -57,6 +57,7 @@ case class AvroPartitionReaderFactory(
     partitionSchema: StructType,
     parsedOptions: AvroOptions,
     filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
+  private val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
@@ -91,7 +92,7 @@ case class AvroPartitionReaderFactory(
 
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
         reader.asInstanceOf[DataFileReader[_]].getMetaString,
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+        datetimeRebaseModeInRead)
 
       val avroFilters = if (SQLConf.get.avroFilterPushDown) {
         new OrderedFilters(filters, readDataSchema)

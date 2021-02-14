@@ -24,7 +24,7 @@ def version_check(python_env, major_python_version):
         These are various tests to test the Python container image.
         This file will be distributed via --py-files in the e2e tests.
     """
-    env_version = os.environ.get('PYSPARK_PYTHON')
+    env_version = os.environ.get('PYSPARK_PYTHON', 'python3')
     print("Python runtime version check is: " +
           str(sys.version_info[0] == major_python_version))
 

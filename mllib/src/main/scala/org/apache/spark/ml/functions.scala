@@ -18,7 +18,7 @@
 package org.apache.spark.ml
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.linalg.{SparseVector, Vector}
+import org.apache.spark.ml.linalg.{SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.{Vector => OldVector}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.functions.udf
@@ -70,6 +70,20 @@ object functions {
         s"Unsupported dtype: $dtype. Valid values: float64, float32."
       )
     }
+  }
+
+  private val arrayToVectorUdf = udf { array: Seq[Double] =>
+    Vectors.dense(array.toArray)
+  }
+
+  /**
+   * Converts a column of array of numeric type into a column of dense vectors in MLlib.
+   * @param v: the column of array&lt;NumericType&gt type
+   * @return a column of type `org.apache.spark.ml.linalg.Vector`
+   * @since 3.1.0
+   */
+  def array_to_vector(v: Column): Column = {
+    arrayToVectorUdf(v)
   }
 
   private[ml] def checkNonNegativeWeight = udf {

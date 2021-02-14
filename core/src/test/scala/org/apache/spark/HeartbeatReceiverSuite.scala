@@ -76,7 +76,7 @@ class HeartbeatReceiverSuite
     sc = spy(new SparkContext(conf))
     scheduler = mock(classOf[TaskSchedulerImpl])
     when(sc.taskScheduler).thenReturn(scheduler)
-    when(scheduler.nodeBlacklist).thenReturn(Predef.Set[String]())
+    when(scheduler.excludedNodes).thenReturn(Predef.Set[String]())
     when(scheduler.sc).thenReturn(sc)
     heartbeatReceiverClock = new ManualClock
     heartbeatReceiver = new HeartbeatReceiver(sc, heartbeatReceiverClock)
@@ -217,6 +217,24 @@ class HeartbeatReceiverSuite
       assert(!fakeSchedulerBackend.getExecutorIds().contains(executorId2))
     }
     fakeSchedulerBackend.stop()
+  }
+
+  test("SPARK-34273: Do not reregister BlockManager when SparkContext is stopped") {
+    val blockManagerId = BlockManagerId(executorId1, "localhost", 12345)
+
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
+      Heartbeat(executorId1, Array.empty, blockManagerId, mutable.Map.empty))
+    assert(response.reregisterBlockManager)
+
+    try {
+      sc.stopped.set(true)
+      val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
+        Heartbeat(executorId1, Array.empty, blockManagerId, mutable.Map.empty))
+      assert(!response.reregisterBlockManager)
+    } finally {
+      sc.stopped.set(false)
+    }
   }
 
   /** Manually send a heartbeat and return the response. */

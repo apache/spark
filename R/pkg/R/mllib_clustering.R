@@ -204,7 +204,7 @@ setMethod("write.ml", signature(object = "BisectingKMeansModel", path = "charact
 #' @return \code{spark.gaussianMixture} returns a fitted multivariate gaussian mixture model.
 #' @rdname spark.gaussianMixture
 #' @name spark.gaussianMixture
-#' @seealso mixtools: \url{https://cran.r-project.org/package=mixtools}
+#' @seealso mixtools: \url{https://cran.r-project.org/web/packages/mixtools/index.html}
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -483,7 +483,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @return \code{spark.lda} returns a fitted Latent Dirichlet Allocation model.
 #' @rdname spark.lda
 #' @aliases spark.lda,SparkDataFrame-method
-#' @seealso topicmodels: \url{https://cran.r-project.org/package=topicmodels}
+#' @seealso topicmodels: \url{https://cran.r-project.org/web/packages/topicmodels/index.html}
 #' @examples
 #' \dontrun{
 #' text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")

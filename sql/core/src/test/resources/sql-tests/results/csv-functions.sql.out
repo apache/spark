@@ -24,7 +24,7 @@ select from_csv('1', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-The expression '1' is not a valid schema string.;; line 1 pos 7
+The expression '1' is not a valid schema string.; line 1 pos 7
 
 
 -- !query
@@ -33,7 +33,14 @@ select from_csv('1', 'a InvalidType')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
+Cannot parse the data type: 
+extraneous input 'InvalidType' expecting <EOF>(line 1, pos 2)
 
+== SQL ==
+a InvalidType
+--^^^
+
+Failed fallback parsing: 
 DataType invalidtype is not supported.(line 1, pos 2)
 
 == SQL ==
@@ -48,7 +55,7 @@ select from_csv('1', 'a INT', named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options;; line 1 pos 7
+Must use a map() function for options; line 1 pos 7
 
 
 -- !query
@@ -57,7 +64,7 @@ select from_csv('1', 'a INT', map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7
 
 
 -- !query
@@ -82,7 +89,7 @@ select schema_of_csv('1|abc', map('delimiter', '|'))
 -- !query schema
 struct<schema_of_csv(1|abc):string>
 -- !query output
-struct<_c0:int,_c1:string>
+STRUCT<`_c0`: INT, `_c1`: STRING>
 
 
 -- !query
@@ -141,7 +148,7 @@ select to_csv(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Must use a map() function for options;; line 1 pos 7
+Must use a map() function for options; line 1 pos 7
 
 
 -- !query
@@ -150,4 +157,4 @@ select to_csv(named_struct('a', 1, 'b', 2), map('mode', 1))
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-A type of keys and values in map() must be string, but got map<string,int>;; line 1 pos 7
+A type of keys and values in map() must be string, but got map<string,int>; line 1 pos 7

@@ -63,7 +63,9 @@ abstract class XPathExtract
     Examples:
       > SELECT _FUNC_('<a><b>1</b></a>','a/b');
        true
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract {
 
@@ -82,7 +84,9 @@ case class XPathBoolean(xml: Expression, path: Expression) extends XPathExtract 
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
        3
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_short"
@@ -101,7 +105,9 @@ case class XPathShort(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
        3
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_int"
@@ -120,7 +126,9 @@ case class XPathInt(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
        3
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_long"
@@ -139,7 +147,9 @@ case class XPathLong(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
        3.0
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_float"
@@ -158,7 +168,9 @@ case class XPathFloat(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>1</b><b>2</b></a>', 'sum(a/b)');
        3.0
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String =
@@ -178,7 +190,9 @@ case class XPathDouble(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>b</b><c>cc</c></a>','a/c');
        cc
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath_string"
@@ -197,7 +211,9 @@ case class XPathString(xml: Expression, path: Expression) extends XPathExtract {
     Examples:
       > SELECT _FUNC_('<a><b>b1</b><b>b2</b><b>b3</b><c>c1</c><c>c2</c></a>','a/b/text()');
        ["b1","b2","b3"]
-  """)
+  """,
+  since = "2.0.0",
+  group = "xml_funcs")
 // scalastyle:on line.size.limit
 case class XPathList(xml: Expression, path: Expression) extends XPathExtract {
   override def prettyName: String = "xpath"

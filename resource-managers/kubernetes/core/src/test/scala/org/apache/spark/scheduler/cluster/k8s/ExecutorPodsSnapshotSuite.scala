@@ -16,45 +16,72 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import io.fabric8.kubernetes.api.model.Pod
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
 
 class ExecutorPodsSnapshotSuite extends SparkFunSuite {
 
+  def testCase(pod: Pod, state: Pod => ExecutorPodState): (Pod, ExecutorPodState) =
+    (pod, state(pod))
+
+  def doTest(testCases: Seq[(Pod, ExecutorPodState)]): Unit = {
+    val snapshot = ExecutorPodsSnapshot(testCases.map(_._1), 0)
+    for (((_, state), i) <- testCases.zipWithIndex) {
+      assertResult(state.getClass.getName, s"executor ID $i") {
+        snapshot.executorPods(i).getClass.getName
+      }
+    }
+  }
+
   test("States are interpreted correctly from pod metadata.") {
-    val pods = Seq(
-      pendingExecutor(0),
-      runningExecutor(1),
-      succeededExecutor(2),
-      failedExecutorWithoutDeletion(3),
-      deletedExecutor(4),
-      unknownExecutor(5))
-    val snapshot = ExecutorPodsSnapshot(pods)
-    assert(snapshot.executorPods ===
-      Map(
-        0L -> PodPending(pods(0)),
-        1L -> PodRunning(pods(1)),
-        2L -> PodSucceeded(pods(2)),
-        3L -> PodFailed(pods(3)),
-        4L -> PodDeleted(pods(4)),
-        5L -> PodUnknown(pods(5))))
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
+    val testCases = Seq(
+      testCase(pendingExecutor(0), PodPending),
+      testCase(runningExecutor(1), PodRunning),
+      testCase(succeededExecutor(2), PodSucceeded),
+      testCase(failedExecutorWithoutDeletion(3), PodFailed),
+      testCase(deletedExecutor(4), PodDeleted),
+      testCase(unknownExecutor(5), PodUnknown),
+      testCase(finishedExecutorWithRunningSidecar(6, 0), PodSucceeded),
+      testCase(finishedExecutorWithRunningSidecar(7, 1), PodFailed)
+    )
+    doTest(testCases)
+  }
+
+  test("SPARK-30821: States are interpreted correctly from pod metadata"
+    + " when configured to check all containers.") {
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(true)
+    val testCases = Seq(
+      testCase(pendingExecutor(0), PodPending),
+      testCase(runningExecutor(1), PodRunning),
+      testCase(runningExecutorWithFailedContainer(2), PodFailed),
+      testCase(succeededExecutor(3), PodSucceeded),
+      testCase(failedExecutorWithoutDeletion(4), PodFailed),
+      testCase(deletedExecutor(5), PodDeleted),
+      testCase(unknownExecutor(6), PodUnknown)
+    )
+    doTest(testCases)
   }
 
   test("Updates add new pods for non-matching ids and edit existing pods for matching ids") {
+    ExecutorPodsSnapshot.setShouldCheckAllContainers(false)
     val originalPods = Seq(
       pendingExecutor(0),
       runningExecutor(1))
-    val originalSnapshot = ExecutorPodsSnapshot(originalPods)
+    val originalSnapshot = ExecutorPodsSnapshot(originalPods, 0)
     val snapshotWithUpdatedPod = originalSnapshot.withUpdate(succeededExecutor(1))
     assert(snapshotWithUpdatedPod.executorPods ===
       Map(
         0L -> PodPending(originalPods(0)),
         1L -> PodSucceeded(succeededExecutor(1))))
-    val snapshotWithNewPod = snapshotWithUpdatedPod.withUpdate(pendingExecutor(2))
+    val pendingExec = pendingExecutor(2)
+    val snapshotWithNewPod = snapshotWithUpdatedPod.withUpdate(pendingExec)
     assert(snapshotWithNewPod.executorPods ===
       Map(
         0L -> PodPending(originalPods(0)),
         1L -> PodSucceeded(succeededExecutor(1)),
-        2L -> PodPending(pendingExecutor(2))))
+        2L -> PodPending(pendingExec)))
   }
 }

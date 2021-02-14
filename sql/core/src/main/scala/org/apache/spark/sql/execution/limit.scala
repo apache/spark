@@ -199,20 +199,23 @@ case class TakeOrderedAndProjectExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val ord = new LazilyGeneratedOrdering(sortOrder, child.output)
-    val localTopK: RDD[InternalRow] = {
-      child.execute().map(_.copy()).mapPartitions { iter =>
-        org.apache.spark.util.collection.Utils.takeOrdered(iter, limit)(ord)
+    val childRDD = child.execute()
+    val singlePartitionRDD = if (childRDD.getNumPartitions > 1) {
+      val localTopK = childRDD.mapPartitions { iter =>
+        org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       }
+      new ShuffledRowRDD(
+        ShuffleExchangeExec.prepareShuffleDependency(
+          localTopK,
+          child.output,
+          SinglePartition,
+          serializer,
+          writeMetrics),
+        readMetrics)
+    } else {
+      childRDD
     }
-    val shuffled = new ShuffledRowRDD(
-      ShuffleExchangeExec.prepareShuffleDependency(
-        localTopK,
-        child.output,
-        SinglePartition,
-        serializer,
-        writeMetrics),
-      readMetrics)
-    shuffled.mapPartitions { iter =>
+    singlePartitionRDD.mapPartitions { iter =>
       val topK = org.apache.spark.util.collection.Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
       if (projectList != child.output) {
         val proj = UnsafeProjection.create(projectList, child.output)

@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.UUID
 import java.util.regex.Pattern
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetSchemasOperation
@@ -29,7 +27,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetSchemasOperation
@@ -77,7 +74,8 @@ private[hive] class SparkGetSchemasOperation(
 
       val globalTempViewDb = sqlContext.sessionState.catalog.globalTempViewManager.database
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
-      if (databasePattern.matcher(globalTempViewDb).matches()) {
+      if (schemaName == null || schemaName.isEmpty ||
+          databasePattern.matcher(globalTempViewDb).matches()) {
         rowSet.addRow(Array[AnyRef](globalTempViewDb, DEFAULT_HIVE_CATALOG))
       }
       setState(OperationState.FINISHED)

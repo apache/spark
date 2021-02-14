@@ -159,8 +159,8 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
         val coordinatorRef = sqlContext.streams.stateStoreCoordinator
         val storeProviderId1 = StateStoreProviderId(StateStoreId(path, opId, 0), queryRunId)
         val storeProviderId2 = StateStoreProviderId(StateStoreId(path, opId, 1), queryRunId)
-        coordinatorRef.reportActiveInstance(storeProviderId1, "host1", "exec1")
-        coordinatorRef.reportActiveInstance(storeProviderId2, "host2", "exec2")
+        coordinatorRef.reportActiveInstance(storeProviderId1, "host1", "exec1", Seq.empty)
+        coordinatorRef.reportActiveInstance(storeProviderId2, "host2", "exec2", Seq.empty)
 
         require(
           coordinatorRef.getLocation(storeProviderId1) ===

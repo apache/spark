@@ -26,7 +26,7 @@ MKDIR %SPARK_HOME%\R\lib
 
 rem When you pass the package path directly as an argument to R CMD INSTALL,
 rem it takes the path as 'C:\projects\spark\R\..\R\pkg"' as an example at
-rem R 4.0. To work around this, directly go to the directoy and install it.
+rem R 4.0. To work around this, directly go to the directory and install it.
 rem See also SPARK-32074
 pushd %SPARK_HOME%\R\pkg\
 R.exe CMD INSTALL --library="%SPARK_HOME%\R\lib" .

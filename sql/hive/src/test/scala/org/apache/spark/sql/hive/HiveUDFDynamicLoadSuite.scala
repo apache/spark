@@ -156,9 +156,7 @@ class HiveUDFDynamicLoadSuite extends QueryTest with SQLTestUtils with TestHiveS
 
           sql(s"CREATE FUNCTION ${udfInfo.funcName} AS '${udfInfo.className}' USING JAR '$jarUrl'")
 
-          assert(Thread.currentThread().getContextClassLoader ne sparkClassLoader)
-          assert(Thread.currentThread().getContextClassLoader eq
-            spark.sqlContext.sharedState.jarClassLoader)
+          assert(Thread.currentThread().getContextClassLoader eq sparkClassLoader)
 
           // JAR will be loaded at first usage, and it will change the current thread's
           // context classloader to jar classloader in sharedState.

@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.1.0-SNAPSHOT</version>
+    <version>3.2.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -35,11 +35,6 @@
   </properties>
 
   <dependencies>
-    <!-- Added for Hive Parquet SerDe -->
-    <dependency>
-      <groupId>${hive.parquet.group}</groupId>
-      <artifactId>parquet-hadoop-bundle</artifactId>
-    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -127,12 +122,9 @@
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
     </dependency>
-    <!-- use the build matching the hadoop api of avro-mapred (i.e. no classifier for hadoop 1 API,
-    hadoop2 classifier for hadoop 2 API. avro-mapred is a dependency of org.spark-project.hive:hive-serde -->
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
-      <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>commons-httpclient</groupId>
@@ -166,6 +158,11 @@
     <dependency>
       <groupId>org.datanucleus</groupId>
       <artifactId>datanucleus-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>${hadoop-client-runtime.artifact}</artifactId>
+      <scope>${hadoop.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.thrift</groupId>
@@ -216,6 +213,15 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>scala-2.13</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
   </profiles>
 
