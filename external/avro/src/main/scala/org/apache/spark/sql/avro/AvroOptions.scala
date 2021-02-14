@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.avro
 
+import java.net.URI
+
+import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
@@ -36,7 +40,7 @@ private[sql] class AvroOptions(
   }
 
   /**
-   * Optional schema provided by a user in JSON format.
+   * Optional schema provided by a user in schema file or in JSON format.
    *
    * When reading Avro, this option can be set to an evolved schema, which is compatible but
    * different with the actual Avro schema. The deserialization schema will be consistent with
@@ -47,7 +51,21 @@ private[sql] class AvroOptions(
    * schema converted by Spark. For example, the expected schema of one column is of "enum" type,
    * instead of "string" type in the default converted schema.
    */
-  val schema: Option[String] = parameters.get("avroSchema")
+  val schema: Option[Schema] = {
+    parameters.get("avroSchema").map(new Schema.Parser().parse).orElse({
+      val avroUrlSchema = parameters.get("avroSchemaUrl").map(url => {
+        log.debug("loading avro schema from url: " + url)
+        val fs = FileSystem.get(new URI(url), conf)
+        val in = fs.open(new Path(url))
+        try {
+          new Schema.Parser().parse(in)
+        } finally {
+          in.close()
+        }
+      })
+      avroUrlSchema
+    })
+  }
 
   /**
    * Top level record name in write result, which is required in Avro spec.

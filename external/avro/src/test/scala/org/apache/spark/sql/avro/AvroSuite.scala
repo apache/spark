@@ -725,6 +725,52 @@ abstract class AvroSuite
     assert(result.sameElements(expected))
   }
 
+  test("SPARK-34416: support user provided avro schema url") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val result = spark.read.option("avroSchemaUrl", avroSchemaUrl)
+      .format("avro")
+      .load(testAvro)
+      .collect()
+    val expected = spark.read.format("avro").load(testAvro).select("string").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("SPARK-34416: support user provided both avro schema and avro schema url") {
+    val avroSchemaUrl = testFile("test_sub.avsc")
+    val avroSchema =
+      """
+        |{
+        |  "type" : "record",
+        |  "name" : "test_schema",
+        |  "fields" : [{
+        |    "name" : "union_int_long_null",
+        |    "type" : ["int", "long", "null"]
+        |  }]
+        |}
+      """.stripMargin
+
+    val result = spark.read
+      .option("avroSchema", avroSchema)
+      .option("avroSchemaUrl", avroSchemaUrl)
+      .format("avro")
+      .load(testAvro)
+      .collect()
+    val expected = spark.read.format("avro").load(testAvro).select("union_int_long_null").collect()
+    assert(result.sameElements(expected))
+  }
+
+  test("SPARK-34416: support user provided wrong avro schema url") {
+    val e = intercept[FileNotFoundException] {
+      spark.read
+        .option("avroSchemaUrl", "not_exists.avsc")
+        .format("avro")
+        .load(testAvro)
+        .collect()
+    }
+
+    assertExceptionMsg[FileNotFoundException](e, "File not_exists.avsc does not exist")
+  }
+
   test("support user provided avro schema with defaults for missing fields") {
     val avroSchema =
       """
