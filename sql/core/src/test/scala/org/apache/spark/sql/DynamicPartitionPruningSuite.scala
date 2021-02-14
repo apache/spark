@@ -1389,7 +1389,6 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-
   test("SPARK-34436: DPP support LIKE ANY/ALL expression") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(
