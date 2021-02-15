@@ -546,10 +546,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    case LocalLimit(exp, join @ Join(left, right, joinType, _, _)) =>
+    case LocalLimit(exp, join @ Join(left, right, joinType, conditionOpt, _)) =>
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
+        case _: InnerLike if conditionOpt.isEmpty =>
+          join.copy(
+            left = maybePushLocalLimit(exp, left),
+            right = maybePushLocalLimit(exp, right))
         case _ => join
       }
       LocalLimit(exp, newJoin)
