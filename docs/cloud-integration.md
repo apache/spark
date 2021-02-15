@@ -57,7 +57,6 @@ How does this affect Spark?
 
 1. Reading and writing data can be significantly slower than working with a normal filesystem.
 1. Some directory structures may be very inefficient to scan during query split calculation.
-1. The output of work may not be immediately visible to a follow-on query.
 1. The rename-based algorithm by which Spark normally commits work when saving an RDD, DataFrame or Dataset
  is potentially both slow and unreliable.
 
@@ -81,6 +80,12 @@ the clients will not simply fail if a file being read is overwritten.
 For this reason: avoid overwriting files where it is known/likely that other clients
 will be actively reading them.
 
+Other object stores are *inconsistent*
+
+This includes [OpenStack Swift](https://docs.openstack.org/swift/latest/).
+
+Such stores are not always safe to use as a destination of work -consult
+each store's specific documentation. 
 
 ### Installation
 
@@ -176,12 +181,19 @@ different stores and connectors when renaming directories:
 | Amazon S3     | s3a       | Unsafe                  | O(data) |
 | Azure Storage | wasb      | Safe                    | O(files) |
 | Azure Datalake Gen 2 | abfs | Safe                  | O(1) |
-| Google Cloud Storage | gs        | Safe                    | O(1) |
+| Google Cloud Storage | gs        | Mixed                    | O(files) |
 
 1. As storing temporary files can run up charges; delete
 directories called `"_temporary"` on a regular basis.
 1. For AWS S3, set a limit on how long multipart uploads can remain outstanding.
 This avoids incurring bills from incompleted uploads.
+1. For Google cloud, directory rename is file-by-file. Consider using the v2 committer
+and only write code which generates idemportent output -including filenames,
+as it is *no more unsafe* than the v1 committer, and faster.
+
+```
+spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
+```
 
 ### Parquet I/O Settings
 
