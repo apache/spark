@@ -38,10 +38,10 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
         CheckCartesianProducts) :: Nil
   }
 
-  val attrA = 'a.int
-  val attrB = 'b.int
-  val attrC = 'c.int
-  val attrD = 'd.int
+  val attrA = Symbol("a").int
+  val attrB = Symbol("b").int
+  val attrC = Symbol("c").int
+  val attrD = Symbol("d").int
 
   val testRelationLeft = LocalRelation(attrA, attrB)
   val testRelationRight = LocalRelation(attrC, attrD)
@@ -105,11 +105,11 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
     val query = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
-      condition = Some(unevaluableJoinCond && 'a.attr === 'c.attr))
+      condition = Some(unevaluableJoinCond && Symbol("a").attr === Symbol("c").attr))
     val expected = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
-      condition = Some('a.attr === 'c.attr)).where(unevaluableJoinCond).analyze
+      condition = Some(Symbol("a").attr === Symbol("c").attr)).where(unevaluableJoinCond).analyze
     val optimized = Optimize.execute(query.analyze)
     comparePlans(optimized, expected)
   }
@@ -118,11 +118,11 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
     val query = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
-      condition = Some(unevaluableJoinCond || 'a.attr === 'c.attr))
+      condition = Some(unevaluableJoinCond || Symbol("a").attr === Symbol("c").attr))
     val expected = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
-      condition = None).where(unevaluableJoinCond || 'a.attr === 'c.attr).analyze
+      condition = None).where(unevaluableJoinCond || Symbol("a").attr === Symbol("c").attr).analyze
     comparePlanWithCrossJoinEnable(query, expected)
   }
 
@@ -132,7 +132,7 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
       Seq(attrA, attrC),
       PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true)
-    val condition = (unevaluableJoinCond || 'a.attr === 'c.attr) && pythonUDF1
+    val condition = (unevaluableJoinCond || Symbol("a").attr === Symbol("c").attr) && pythonUDF1
 
     val query = testRelationLeft.join(
       testRelationRight,
@@ -151,16 +151,18 @@ class ExtractPythonUDFFromJoinConditionSuite extends PlanTest {
       Seq(attrA, attrC),
       PythonEvalType.SQL_BATCHED_UDF,
       udfDeterministic = true)
-    val condition = (unevaluableJoinCond || pythonUDF1) && 'a.attr === 'c.attr
+    val condition = (unevaluableJoinCond || pythonUDF1) && Symbol("a").attr === Symbol("c").attr
 
     val query = testRelationLeft.join(
       testRelationRight,
       joinType = Inner,
       condition = Some(condition))
-    val expected = testRelationLeft.join(
-      testRelationRight,
-      joinType = Inner,
-      condition = Some('a.attr === 'c.attr)).where(unevaluableJoinCond || pythonUDF1).analyze
+    val expected = testRelationLeft
+      .join(
+        testRelationRight,
+        joinType = Inner,
+        condition = Some(Symbol("a").attr === Symbol("c").attr))
+      .where(unevaluableJoinCond || pythonUDF1).analyze
     val optimized = Optimize.execute(query.analyze)
     comparePlans(optimized, expected)
   }

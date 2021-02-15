@@ -42,8 +42,9 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   }
 
   private val testRelation =
-    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
-  private val anotherTestRelation = LocalRelation('d.int)
+    LocalRelation(Symbol("i").int, Symbol("b").boolean,
+      Symbol("a").array(IntegerType), Symbol("m").map(IntegerType, IntegerType))
+  private val anotherTestRelation = LocalRelation(Symbol("d").int)
 
   test("replace null inside filter and join conditions") {
     testFilter(originalCond = Literal(null, BooleanType), expectedCond = FalseLiteral)
@@ -351,33 +352,33 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
   private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
 
   test("replace nulls in lambda function of ArrayFilter") {
-    testHigherOrderFunc('a, ArrayFilter, Seq(lv('e)))
+    testHigherOrderFunc(Symbol("a"), ArrayFilter, Seq(lv(Symbol("e"))))
   }
 
   test("replace nulls in lambda function of ArrayExists") {
     withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "true") {
-      val lambdaArgs = Seq(lv('e))
+      val lambdaArgs = Seq(lv(Symbol("e")))
       val cond = GreaterThan(lambdaArgs.last, Literal(0))
       val lambda = LambdaFunction(
         function = If(cond, Literal(null, BooleanType), TrueLiteral),
         arguments = lambdaArgs)
-      val expr = ArrayExists('a, lambda)
+      val expr = ArrayExists(Symbol("a"), lambda)
       testProjection(originalExpr = expr, expectedExpr = expr)
     }
     withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
-      testHigherOrderFunc('a, ArrayExists.apply, Seq(lv('e)))
+      testHigherOrderFunc(Symbol("a"), ArrayExists.apply, Seq(lv(Symbol("e"))))
     }
   }
 
   test("replace nulls in lambda function of MapFilter") {
-    testHigherOrderFunc('m, MapFilter, Seq(lv('k), lv('v)))
+    testHigherOrderFunc(Symbol("m"), MapFilter, Seq(lv(Symbol("k")), lv(Symbol("v"))))
   }
 
   test("inability to replace nulls in arbitrary higher-order function") {
     val lambdaFunc = LambdaFunction(
-      function = If(lv('e) > 0, Literal(null, BooleanType), TrueLiteral),
-      arguments = Seq[NamedExpression](lv('e)))
-    val column = ArrayTransform('a, lambdaFunc)
+      function = If(lv(Symbol("e")) > 0, Literal(null, BooleanType), TrueLiteral),
+      arguments = Seq[NamedExpression](lv(Symbol("e"))))
+    val column = ArrayTransform(Symbol("a"), lambdaFunc)
     testProjection(originalExpr = column, expectedExpr = column)
   }
 
@@ -449,8 +450,8 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
       function = !(cond <=> TrueLiteral),
       arguments = lambdaArgs)
     testProjection(
-      originalExpr = createExpr(argument, lambda1) as 'x,
-      expectedExpr = createExpr(argument, lambda2) as 'x)
+      originalExpr = createExpr(argument, lambda1) as Symbol("x"),
+      expectedExpr = createExpr(argument, lambda2) as Symbol("x"))
   }
 
   private def test(

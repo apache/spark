@@ -30,14 +30,14 @@ class EliminateDistinctSuite extends PlanTest {
         EliminateDistinct) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int)
+  val testRelation = LocalRelation(Symbol("a").int)
 
   test("Eliminate Distinct in Max") {
     val query = testRelation
-      .select(maxDistinct('a).as('result))
+      .select(maxDistinct(Symbol("a")).as(Symbol("result")))
       .analyze
     val answer = testRelation
-      .select(max('a).as('result))
+      .select(max(Symbol("a")).as(Symbol("result")))
       .analyze
     assert(query != answer)
     comparePlans(Optimize.execute(query), answer)
@@ -45,10 +45,10 @@ class EliminateDistinctSuite extends PlanTest {
 
   test("Eliminate Distinct in Min") {
     val query = testRelation
-      .select(minDistinct('a).as('result))
+      .select(minDistinct(Symbol("a")).as(Symbol("result")))
       .analyze
     val answer = testRelation
-      .select(min('a).as('result))
+      .select(min(Symbol("a")).as(Symbol("result")))
       .analyze
     assert(query != answer)
     comparePlans(Optimize.execute(query), answer)

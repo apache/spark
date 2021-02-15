@@ -41,16 +41,16 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   private val name = StructType.fromDDL("first string, middle string, last string")
   private val employer = StructType.fromDDL("id int, company struct<name:string, address:string>")
   private val contact = LocalRelation(
-    'id.int,
-    'name.struct(name),
-    'address.string,
-    'friends.array(name),
-    'relatives.map(StringType, name),
-    'employer.struct(employer))
+    Symbol("id").int,
+    Symbol("name").struct(name),
+    Symbol("address").string,
+    Symbol("friends").array(name),
+    Symbol("relatives").map(StringType, name),
+    Symbol("employer").struct(employer))
 
   test("Pushing a single nested field projection") {
     def testSingleFieldPushDown(op: LogicalPlan => LogicalPlan): Unit = {
-      val middle = GetStructField('name, 1, Some("middle"))
+      val middle = GetStructField(Symbol("name"), 1, Some("middle"))
       val query = op(contact).select(middle).analyze
       val optimized = Optimize.execute(query)
       val expected = op(contact.select(middle)).analyze
@@ -63,18 +63,18 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("Pushing multiple nested field projection") {
-    val first = GetStructField('name, 0, Some("first"))
-    val last = GetStructField('name, 2, Some("last"))
+    val first = GetStructField(Symbol("name"), 0, Some("first"))
+    val last = GetStructField(Symbol("name"), 2, Some("last"))
 
     val query = contact
       .limit(5)
-      .select('id, first, last)
+      .select(Symbol("id"), first, last)
       .analyze
 
     val optimized = Optimize.execute(query)
 
     val expected = contact
-      .select('id, first, last)
+      .select(Symbol("id"), first, last)
       .limit(5)
       .analyze
 
@@ -82,12 +82,12 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("function with nested field inputs") {
-    val first = GetStructField('name, 0, Some("first"))
-    val last = GetStructField('name, 2, Some("last"))
+    val first = GetStructField(Symbol("name"), 0, Some("first"))
+    val last = GetStructField(Symbol("name"), 2, Some("last"))
 
     val query = contact
       .limit(5)
-      .select('id, ConcatWs(Seq(first, last)))
+      .select(Symbol("id"), ConcatWs(Seq(first, last)))
       .analyze
 
     val optimized = Optimize.execute(query)
@@ -95,18 +95,19 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val aliases = collectGeneratedAliases(optimized)
 
     val expected = contact
-      .select('id, first.as(aliases(0)), last.as(aliases(1)))
+      .select(Symbol("id"), first.as(aliases(0)), last.as(aliases(1)))
       .limit(5)
       .select(
-        'id,
+        Symbol("id"),
         ConcatWs(Seq($"${aliases(0)}", $"${aliases(1)}")).as("concat_ws(name.first, name.last)"))
       .analyze
     comparePlans(optimized, expected)
   }
 
   test("multi-level nested field") {
-    val field1 = GetStructField(GetStructField('employer, 1, Some("company")), 0, Some("name"))
-    val field2 = GetStructField('employer, 0, Some("id"))
+    val field1 =
+      GetStructField(GetStructField(Symbol("employer"), 1, Some("company")), 0, Some("name"))
+    val field2 = GetStructField(Symbol("employer"), 0, Some("id"))
 
     val query = contact
       .limit(5)
@@ -123,18 +124,18 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("Push original case-sensitive names") {
-    val first1 = GetStructField('name, 0, Some("first"))
-    val first2 = GetStructField('name, 1, Some("FIRST"))
+    val first1 = GetStructField(Symbol("name"), 0, Some("first"))
+    val first2 = GetStructField(Symbol("name"), 1, Some("FIRST"))
 
     val query = contact
       .limit(5)
-      .select('id, first1, first2)
+      .select(Symbol("id"), first1, first2)
       .analyze
 
     val optimized = Optimize.execute(query)
 
     val expected = contact
-      .select('id, first1, first2)
+      .select(Symbol("id"), first1, first2)
       .limit(5)
       .analyze
 
@@ -143,15 +144,15 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Pushing a single nested field projection - negative") {
     val ops = Seq(
-      (input: LogicalPlan) => input.distribute('name)(1),
-      (input: LogicalPlan) => input.orderBy('name.asc),
-      (input: LogicalPlan) => input.sortBy('name.asc),
+      (input: LogicalPlan) => input.distribute(Symbol("name"))(1),
+      (input: LogicalPlan) => input.orderBy(Symbol("name").asc),
+      (input: LogicalPlan) => input.sortBy(Symbol("name").asc),
       (input: LogicalPlan) => input.union(input)
     )
 
     val queries = ops.map { op =>
-      op(contact.select('name))
-        .select(GetStructField('name, 1, Some("middle")))
+      op(contact.select(Symbol("name")))
+        .select(GetStructField(Symbol("name"), 1, Some("middle")))
         .analyze
     }
 
@@ -161,20 +162,20 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       comparePlans(optimized, expected)
     }
     val expectedUnion =
-      contact.select('name).union(contact.select('name.as('name)))
-        .select(GetStructField('name, 1, Some("middle"))).analyze
+      contact.select(Symbol("name")).union(contact.select(Symbol("name").as(Symbol("name"))))
+        .select(GetStructField(Symbol("name"), 1, Some("middle"))).analyze
     comparePlans(optimizedUnion, expectedUnion)
   }
 
   test("Pushing a single nested field projection through filters - negative") {
     val ops = Array(
-      (input: LogicalPlan) => input.where('name.isNotNull),
+      (input: LogicalPlan) => input.where(Symbol("name").isNotNull),
       (input: LogicalPlan) => input.where($"name.middle".isNotNull)
     )
 
     val queries = ops.map { op =>
       op(contact)
-        .select(GetStructField('name, 1, Some("middle")))
+        .select(GetStructField(Symbol("name"), 1, Some("middle")))
         .analyze
     }
 
@@ -189,25 +190,26 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Do not optimize when parent field is used") {
     val query = contact
       .limit(5)
-      .select('id, GetStructField('name, 0, Some("first")), 'name)
+      .select(Symbol("id"), GetStructField(Symbol("name"), 0, Some("first")), Symbol("name"))
       .analyze
 
     val optimized = Optimize.execute(query)
 
     val expected = contact
-      .select('id, 'name)
+      .select(Symbol("id"), Symbol("name"))
       .limit(5)
-      .select('id, GetStructField('name, 0, Some("first")), 'name)
+      .select(Symbol("id"), GetStructField(Symbol("name"), 0, Some("first")), Symbol("name"))
       .analyze
     comparePlans(optimized, expected)
   }
 
   test("Some nested column means the whole structure") {
-    val nestedRelation = LocalRelation('a.struct('b.struct('c.int, 'd.int, 'e.int)))
+    val nestedRelation = LocalRelation(
+      Symbol("a").struct(Symbol("b").struct(Symbol("c").int, Symbol("d").int, Symbol("e").int)))
 
     val query = nestedRelation
       .limit(5)
-      .select(GetStructField('a, 0, Some("b")))
+      .select(GetStructField(Symbol("a"), 0, Some("b")))
       .analyze
 
     val optimized = Optimize.execute(query)
@@ -216,12 +218,12 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("nested field pruning for getting struct field in array of struct") {
-    val field1 = GetArrayStructFields(child = 'friends,
+    val field1 = GetArrayStructFields(child = Symbol("friends"),
       field = StructField("first", StringType),
       ordinal = 0,
       numFields = 3,
       containsNull = true)
-    val field2 = GetStructField('employer, 0, Some("id"))
+    val field2 = GetStructField(Symbol("employer"), 0, Some("id"))
 
     val query = contact
       .limit(5)
@@ -238,8 +240,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("nested field pruning for getting struct field in map") {
-    val field1 = GetStructField(GetMapValue('relatives, Literal("key")), 0, Some("first"))
-    val field2 = GetArrayStructFields(child = MapValues('relatives),
+    val field1 = GetStructField(GetMapValue(Symbol("relatives"), Literal("key")), 0, Some("first"))
+    val field2 = GetArrayStructFields(child = MapValues(Symbol("relatives")),
       field = StructField("middle", StringType),
       ordinal = 1,
       numFields = 3,
@@ -260,15 +262,15 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   }
 
   test("SPARK-27633: Do not generate redundant aliases if parent nested field is aliased too") {
-    val nestedRelation = LocalRelation('a.struct('b.struct('c.int,
-      'd.struct('f.int, 'g.int)), 'e.int))
+    val nestedRelation = LocalRelation(Symbol("a").struct(Symbol("b").struct(Symbol("c").int,
+      Symbol("d").struct(Symbol("f").int, Symbol("g").int)), Symbol("e").int))
 
     // `a.b`
-    val first = 'a.getField("b")
+    val first = Symbol("a").getField("b")
     // `a.b.c` + 1
-    val second = 'a.getField("b").getField("c") + Literal(1)
+    val second = Symbol("a").getField("b").getField("c") + Literal(1)
     // `a.b.d.f`
-    val last = 'a.getField("b").getField("d").getField("f")
+    val last = Symbol("a").getField("b").getField("d").getField("f")
 
     val query = nestedRelation
       .limit(5)
@@ -292,8 +294,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Nested field pruning for Project and Generate") {
     val query = contact
-      .generate(Explode('friends.getField("first")), outputNames = Seq("explode"))
-      .select('explode, 'friends.getField("middle"))
+      .generate(Explode(Symbol("friends").getField("first")), outputNames = Seq("explode"))
+      .select(Symbol("explode"), Symbol("friends").getField("middle"))
       .analyze
     val optimized = Optimize.execute(query)
 
@@ -301,27 +303,27 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     val expected = contact
       .select(
-        'friends.getField("middle").as(aliases(0)),
-        'friends.getField("first").as(aliases(1)))
+        Symbol("friends").getField("middle").as(aliases(0)),
+        Symbol("friends").getField("first").as(aliases(1)))
       .generate(Explode($"${aliases(1)}"),
         unrequiredChildIndex = Seq(1),
         outputNames = Seq("explode"))
-      .select('explode, $"${aliases(0)}".as("friends.middle"))
+      .select(Symbol("explode"), $"${aliases(0)}".as("friends.middle"))
       .analyze
     comparePlans(optimized, expected)
   }
 
   test("Nested field pruning for Generate") {
     val query = contact
-      .generate(Explode('friends.getField("first")), outputNames = Seq("explode"))
-      .select('explode)
+      .generate(Explode(Symbol("friends").getField("first")), outputNames = Seq("explode"))
+      .select(Symbol("explode"))
       .analyze
     val optimized = Optimize.execute(query)
 
     val aliases = collectGeneratedAliases(optimized)
 
     val expected = contact
-      .select('friends.getField("first").as(aliases(0)))
+      .select(Symbol("friends").getField("first").as(aliases(0)))
       .generate(Explode($"${aliases(0)}"),
         unrequiredChildIndex = Seq(0),
         outputNames = Seq("explode"))
@@ -331,23 +333,23 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Nested field pruning for Project and Generate: not prune on generator output") {
     val companies = LocalRelation(
-      'id.int,
-      'employers.array(employer))
+      Symbol("id").int,
+      Symbol("employers").array(employer))
 
     val query = companies
-      .generate(Explode('employers.getField("company")), outputNames = Seq("company"))
-      .select('company.getField("name"))
+      .generate(Explode(Symbol("employers").getField("company")), outputNames = Seq("company"))
+      .select(Symbol("company").getField("name"))
       .analyze
     val optimized = Optimize.execute(query)
 
     val aliases = collectGeneratedAliases(optimized)
 
     val expected = companies
-      .select('employers.getField("company").as(aliases(0)))
+      .select(Symbol("employers").getField("company").as(aliases(0)))
       .generate(Explode($"${aliases(0)}"),
         unrequiredChildIndex = Seq(0),
         outputNames = Seq("company"))
-      .select('company.getField("name").as("company.name"))
+      .select(Symbol("company").getField("name").as("company.name"))
       .analyze
     comparePlans(optimized, expected)
   }
@@ -355,17 +357,17 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Nested field pruning for Generate: not prune on required child output") {
     val query = contact
       .generate(
-        Explode('friends.getField("first")),
+        Explode(Symbol("friends").getField("first")),
         outputNames = Seq("explode"))
-      .select('explode, 'friends)
+      .select(Symbol("explode"), Symbol("friends"))
       .analyze
     val optimized = Optimize.execute(query)
 
     val expected = contact
-      .select('friends)
-      .generate(Explode('friends.getField("first")),
+      .select(Symbol("friends"))
+      .generate(Explode(Symbol("friends").getField("first")),
         outputNames = Seq("explode"))
-      .select('explode, 'friends)
+      .select(Symbol("explode"), Symbol("friends"))
       .analyze
     comparePlans(optimized, expected)
   }
@@ -380,7 +382,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val aliases1 = collectGeneratedAliases(optimized1)
 
     val expected1 = contact
-      .select('id, 'name.getField("middle").as(aliases1(0)))
+      .select(Symbol("id"), Symbol("name").getField("middle").as(aliases1(0)))
       .distribute($"id")(1)
       .select($"${aliases1(0)}".as("middle"))
       .analyze
@@ -395,7 +397,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val aliases2 = collectGeneratedAliases(optimized2)
 
     val expected2 = contact
-      .select('name.getField("middle").as(aliases2(0)))
+      .select(Symbol("name").getField("middle").as(aliases2(0)))
       .distribute($"${aliases2(0)}")(1)
       .select($"${aliases2(0)}".as("middle"))
       .analyze
@@ -413,8 +415,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
   test("Nested field pruning through Join") {
     val department = LocalRelation(
-      'depID.int,
-      'personID.string)
+      Symbol("depID").int,
+      Symbol("personID").string)
 
     val query1 = contact.join(department, condition = Some($"id" === $"depID"))
       .select($"name.middle")
@@ -423,8 +425,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
     val aliases1 = collectGeneratedAliases(optimized1)
 
-    val expected1 = contact.select('id, 'name.getField("middle").as(aliases1(0)))
-      .join(department.select('depID), condition = Some($"id" === $"depID"))
+    val expected1 = contact.select(Symbol("id"), Symbol("name").getField("middle").as(aliases1(0)))
+      .join(department.select(Symbol("depID")), condition = Some($"id" === $"depID"))
       .select($"${aliases1(0)}".as("middle"))
       .analyze
     comparePlans(optimized1, expected1)
@@ -437,15 +439,16 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val aliases2 = collectGeneratedAliases(optimized2)
 
     val expected2 = contact.select(
-      'name.getField("first").as(aliases2(0)),
-      'name.getField("middle").as(aliases2(1)))
-      .join(department.select('personID), condition = Some($"${aliases2(1)}" === $"personID"))
+      Symbol("name").getField("first").as(aliases2(0)),
+      Symbol("name").getField("middle").as(aliases2(1)))
+      .join(department.select(Symbol("personID")),
+        condition = Some($"${aliases2(1)}" === $"personID"))
       .select($"${aliases2(0)}".as("first"))
       .analyze
     comparePlans(optimized2, expected2)
 
-    val contact2 = LocalRelation('name2.struct(name))
-    val query3 = contact.select('name)
+    val contact2 = LocalRelation(Symbol("name2").struct(name))
+    val query3 = contact.select(Symbol("name"))
       .join(contact2, condition = Some($"name" === $"name2"))
       .select($"name.first")
       .analyze
@@ -461,7 +464,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
       val expected1 = basePlan(
         contact
-        .select($"id", 'name.getField("first").as(aliases1(0)))
+        .select($"id", Symbol("name").getField("first").as(aliases1(0)))
       ).groupBy($"id")(first($"${aliases1(0)}").as("first")).analyze
       comparePlans(optimized1, expected1)
 
@@ -471,7 +474,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
 
       val expected2 = basePlan(
         contact
-        .select('name.getField("last").as(aliases2(0)), 'name.getField("first").as(aliases2(1)))
+        .select(Symbol("name").getField("last").as(aliases2(0)),
+          Symbol("name").getField("first").as(aliases2(1)))
       ).groupBy($"${aliases2(0)}")(first($"${aliases2(1)}").as("first")).analyze
       comparePlans(optimized2, expected2)
     }
@@ -495,7 +499,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
     val query = contact
-      .select($"name.first", winExpr.as('window))
+      .select($"name.first", winExpr.as(Symbol("window")))
       .orderBy($"name.last".asc)
       .analyze
     val optimized = Optimize.execute(query)
@@ -513,7 +517,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
   test("Nested field pruning for Filter with other supported operators") {
     val spec = windowSpec($"address" :: Nil, $"id".asc :: Nil, UnspecifiedFrame)
     val winExpr = windowExpr(RowNumber(), spec)
-    val query1 = contact.select($"name.first", winExpr.as('window))
+    val query1 = contact.select($"name.first", winExpr.as(Symbol("window")))
       .where($"window" === 1 && $"name.first" === "a")
       .analyze
     val optimized1 = Optimize.execute(query1)
@@ -558,8 +562,8 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized3, expected3)
 
     val department = LocalRelation(
-      'depID.int,
-      'personID.string)
+      Symbol("depID").int,
+      Symbol("personID").string)
     val query4 = contact.join(department, condition = Some($"id" === $"depID"))
       .where($"name.first" === "a")
       .select($"name.first")
@@ -568,7 +572,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     val aliases4 = collectGeneratedAliases(optimized4)
     val expected4 = contact
       .select($"id", $"name.first".as(aliases4(1)))
-      .join(department.select('depID), condition = Some($"id" === $"depID"))
+      .join(department.select(Symbol("depID")), condition = Some($"id" === $"depID"))
       .select($"${aliases4(1)}".as(aliases4(0)))
       .where($"${aliases4(0)}" === "a")
       .select($"${aliases4(0)}".as("first"))
@@ -637,7 +641,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
           Seq(ConcatWs(Seq($"name.first", $"name.middle")),
             ConcatWs(Seq($"name.middle", $"name.first")))
         ),
-        Seq('a.string, 'b.string),
+        Seq(Symbol("a").string, Symbol("b").string),
         basePlan(contact)
       ).analyze
       val optimized1 = Optimize.execute(query1)
@@ -649,10 +653,10 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
           Seq(ConcatWs(Seq($"${aliases1(0)}", $"${aliases1(1)}")),
             ConcatWs(Seq($"${aliases1(1)}", $"${aliases1(0)}")))
         ),
-        Seq('a.string, 'b.string),
+        Seq(Symbol("a").string, Symbol("b").string),
         basePlan(contact.select(
-          'name.getField("first").as(aliases1(0)),
-          'name.getField("middle").as(aliases1(1))))
+          Symbol("name").getField("first").as(aliases1(0)),
+          Symbol("name").getField("middle").as(aliases1(1))))
       ).analyze
       comparePlans(optimized1, expected1)
     }
@@ -670,7 +674,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         Seq($"name", $"name.middle"),
         Seq($"name", ConcatWs(Seq($"name.middle", $"name.first")))
       ),
-      Seq('a.string, 'b.string),
+      Seq(Symbol("a").string, Symbol("b").string),
       contact
     ).analyze
     val optimized2 = Optimize.execute(query2)
@@ -679,7 +683,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         Seq($"name", $"name.middle"),
         Seq($"name", ConcatWs(Seq($"name.middle", $"name.first")))
       ),
-      Seq('a.string, 'b.string),
+      Seq(Symbol("a").string, Symbol("b").string),
       contact.select($"name")
     ).analyze
     comparePlans(optimized2, expected2)

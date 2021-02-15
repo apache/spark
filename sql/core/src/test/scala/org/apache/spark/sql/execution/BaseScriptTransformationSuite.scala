@@ -133,11 +133,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         """.stripMargin)
 
       checkAnswer(query, identity, df.select(
-        'a.cast("string"),
-        'b.cast("string"),
-        'c.cast("string"),
-        'd.cast("string"),
-        'e.cast("string")).collect())
+        Symbol("a").cast("string"),
+        Symbol("b").cast("string"),
+        Symbol("c").cast("string"),
+        Symbol("d").cast("string"),
+        Symbol("e").cast("string")).collect())
     }
   }
 
@@ -166,8 +166,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          Symbol("a").cast("string").as("key"),
+          Symbol("b").cast("string").as("value")).collect())
 
       checkAnswer(
         df,
@@ -183,8 +183,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          Symbol("a").cast("string").as("key"),
+          Symbol("b").cast("string").as("value")).collect())
 
       checkAnswer(
         df,
@@ -199,7 +199,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           ioschema = defaultIOSchema.copy(schemaLess = true)
         ),
         df.select(
-          'a.cast("string").as("key"),
+          Symbol("a").cast("string").as("key"),
           lit(null)).collect())
     }
   }
@@ -265,7 +265,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
             child = child,
             ioschema = serde
           ),
-          df.select('a, 'b, 'c, 'd, 'e, 'f, 'g, 'h, 'i, 'j).collect())
+          df.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"), Symbol("e"), Symbol("f"),
+            Symbol("g"), Symbol("h"), Symbol("i"), Symbol("j")).collect())
       }
     }
   }
@@ -309,7 +310,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
           child = child,
           ioschema = defaultIOSchema
         ),
-        df.select('a, 'b.cast("string"), 'c.cast("string"), 'd.cast("string"), 'e).collect())
+        df.select(Symbol("a"), Symbol("b").cast("string"), Symbol("c").cast("string"),
+          Symbol("d").cast("string"), Symbol("e")).collect())
     }
   }
 
@@ -331,7 +333,7 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
               |USING 'cat' AS (a timestamp, b date)
               |FROM v
             """.stripMargin)
-          checkAnswer(query, identity, df.select('a, 'b).collect())
+          checkAnswer(query, identity, df.select(Symbol("a"), Symbol("b")).collect())
         }
       }
     }
@@ -366,11 +368,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  NULL DEFINED AS 'NULL'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          Symbol("a").cast("string"),
+          Symbol("b").cast("string"),
+          Symbol("c").cast("string"),
+          Symbol("d").cast("string"),
+          Symbol("e").cast("string")).collect())
 
       // input/output with different delimit and show result
       checkAnswer(
@@ -389,11 +391,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |FROM v
         """.stripMargin), identity, df.select(
           concat_ws(",",
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string"))).collect())
+            Symbol("a").cast("string"),
+            Symbol("b").cast("string"),
+            Symbol("c").cast("string"),
+            Symbol("d").cast("string"),
+            Symbol("e").cast("string"))).collect())
     }
   }
 
@@ -421,8 +423,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
         ioschema = defaultIOSchema
       ),
       df.select(
-        'a.cast("string").as("a"),
-        'b.cast("string").as("b"),
+        Symbol("a").cast("string").as("a"),
+        Symbol("b").cast("string").as("b"),
         lit(null), lit(null)).collect())
   }
 
@@ -495,11 +497,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          Symbol("a").cast("string"),
+          Symbol("b").cast("string"),
+          Symbol("c").cast("string"),
+          Symbol("d").cast("string"),
+          Symbol("e").cast("string")).collect())
 
       // test '/path/to/script.py' with script not executable
       val e1 = intercept[TestFailedException] {
@@ -515,11 +517,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
                |  FIELDS TERMINATED BY '\t'
                |FROM v
         """.stripMargin), identity, df.select(
-            'a.cast("string"),
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).collect())
+            Symbol("a").cast("string"),
+            Symbol("b").cast("string"),
+            Symbol("c").cast("string"),
+            Symbol("d").cast("string"),
+            Symbol("e").cast("string")).collect())
       }.getMessage
       // Check with status exit code since in GA test, it may lose detail failed root cause.
       // Different root cause's exitcode is not same.
@@ -540,11 +542,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          Symbol("a").cast("string"),
+          Symbol("b").cast("string"),
+          Symbol("c").cast("string"),
+          Symbol("d").cast("string"),
+          Symbol("e").cast("string")).collect())
 
       scriptFilePath.setExecutable(false)
       sql(s"ADD FILE ${scriptFilePath.getAbsolutePath}")
@@ -561,11 +563,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          Symbol("a").cast("string"),
+          Symbol("b").cast("string"),
+          Symbol("c").cast("string"),
+          Symbol("d").cast("string"),
+          Symbol("e").cast("string")).collect())
 
       // test `python script.py` when file added
       checkAnswer(
@@ -579,11 +581,11 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
              |  FIELDS TERMINATED BY '\t'
              |FROM v
         """.stripMargin), identity, df.select(
-          'a.cast("string"),
-          'b.cast("string"),
-          'c.cast("string"),
-          'd.cast("string"),
-          'e.cast("string")).collect())
+          Symbol("a").cast("string"),
+          Symbol("b").cast("string"),
+          Symbol("c").cast("string"),
+          Symbol("d").cast("string"),
+          Symbol("e").cast("string")).collect())
     }
   }
 }

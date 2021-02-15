@@ -181,9 +181,9 @@ class ErrorParserSuite extends AnalysisTest {
         |ORDER BY c
       """.stripMargin,
       table("t")
-        .where('a - 'b > 10)
-        .groupBy('fake - 'breaker)('a, 'b)
-        .orderBy('c.asc))
+        .where(Symbol("a") - Symbol("b") > 10)
+        .groupBy(Symbol("fake") - Symbol("breaker"))(Symbol("a"), Symbol("b"))
+        .orderBy(Symbol("c").asc))
     intercept(
       """
         |SELECT * FROM tab

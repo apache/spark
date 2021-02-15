@@ -40,12 +40,13 @@ class ConstantPropagationSuite extends PlanTest {
           BooleanSimplification) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.int.notNull)
+  val testRelation =
+    LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int, Symbol("d").int.notNull)
 
-  private val columnA = 'a
-  private val columnB = 'b
-  private val columnC = 'c
-  private val columnD = 'd
+  private val columnA = Symbol("a")
+  private val columnB = Symbol("b")
+  private val columnC = Symbol("c")
+  private val columnD = Symbol("d")
 
   test("basic test") {
     val query = testRelation

@@ -38,9 +38,9 @@ class SetOperationSuite extends PlanTest {
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation2 = LocalRelation('d.int, 'e.int, 'f.int)
-  val testRelation3 = LocalRelation('g.int, 'h.int, 'i.int)
+  val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
+  val testRelation2 = LocalRelation(Symbol("d").int, Symbol("e").int, Symbol("f").int)
+  val testRelation3 = LocalRelation(Symbol("g").int, Symbol("h").int, Symbol("i").int)
   val testUnion = Union(testRelation :: testRelation2 :: testRelation3 :: Nil)
 
   test("union: combine unions into one unions") {
@@ -59,33 +59,33 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("union: filter to each side") {
-    val unionQuery = testUnion.where('a === 1)
+    val unionQuery = testUnion.where(Symbol("a") === 1)
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.where('a === 1) ::
-        testRelation2.where('d === 1) ::
-        testRelation3.where('g === 1) :: Nil).analyze
+      Union(testRelation.where(Symbol("a") === 1) ::
+        testRelation2.where(Symbol("d") === 1) ::
+        testRelation3.where(Symbol("g") === 1) :: Nil).analyze
 
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("union: project to each side") {
-    val unionQuery = testUnion.select('a)
+    val unionQuery = testUnion.select(Symbol("a"))
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select('a) ::
-        testRelation2.select('d) ::
-        testRelation3.select('g) :: Nil).analyze
+      Union(testRelation.select(Symbol("a")) ::
+        testRelation2.select(Symbol("d")) ::
+        testRelation3.select(Symbol("g")) :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("Remove unnecessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as('a))
+      .select(Literal(1).as(Symbol("a")))
     val query2 = OneRowRelation()
-      .select(Literal(2).as('b))
+      .select(Literal(2).as(Symbol("b")))
     val query3 = OneRowRelation()
-      .select(Literal(3).as('c))
+      .select(Literal(3).as(Symbol("c")))
 
     // D - U - D - U - query1
     //     |       |
@@ -113,13 +113,13 @@ class SetOperationSuite extends PlanTest {
 
   test("Keep necessary distincts in multiple unions") {
     val query1 = OneRowRelation()
-      .select(Literal(1).as('a))
+      .select(Literal(1).as(Symbol("a")))
     val query2 = OneRowRelation()
-      .select(Literal(2).as('b))
+      .select(Literal(2).as(Symbol("b")))
     val query3 = OneRowRelation()
-      .select(Literal(3).as('c))
+      .select(Literal(3).as(Symbol("c")))
     val query4 = OneRowRelation()
-      .select(Literal(4).as('d))
+      .select(Literal(4).as(Symbol("d")))
 
     // U - D - U - query1
     // |       |
@@ -150,10 +150,12 @@ class SetOperationSuite extends PlanTest {
     val input = Except(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteExceptAll(input)
 
-    val planFragment = testRelation.select(Literal(1L).as("vcol"), 'a, 'b, 'c)
-      .union(testRelation2.select(Literal(-1L).as("vcol"), 'd, 'e, 'f))
-      .groupBy('a, 'b, 'c)('a, 'b, 'c, sum('vcol).as("sum"))
-      .where(GreaterThan('sum, Literal(0L))).analyze
+    val planFragment = testRelation
+      .select(Literal(1L).as("vcol"), Symbol("a"), Symbol("b"), Symbol("c"))
+      .union(testRelation2.select(Literal(-1L).as("vcol"), Symbol("d"), Symbol("e"), Symbol("f")))
+      .groupBy(Symbol("a"), Symbol("b"), Symbol("c"))(
+        Symbol("a"), Symbol("b"), Symbol("c"), sum(Symbol("vcol")).as("sum"))
+      .where(GreaterThan(Symbol("sum"), Literal(0L))).analyze
     val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
@@ -172,16 +174,19 @@ class SetOperationSuite extends PlanTest {
     val input = Intersect(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteIntersectAll(input)
     val leftRelation = testRelation
-      .select(Literal(true).as("vcol1"), Literal(null, BooleanType).as("vcol2"), 'a, 'b, 'c)
+      .select(Literal(true).as("vcol1"),
+        Literal(null, BooleanType).as("vcol2"), Symbol("a"), Symbol("b"), Symbol("c"))
     val rightRelation = testRelation2
-      .select(Literal(null, BooleanType).as("vcol1"), Literal(true).as("vcol2"), 'd, 'e, 'f)
+      .select(Literal(null, BooleanType).as("vcol1"),
+        Literal(true).as("vcol2"), Symbol("d"), Symbol("e"), Symbol("f"))
     val planFragment = leftRelation.union(rightRelation)
-      .groupBy('a, 'b, 'c)(count('vcol1).as("vcol1_count"),
-        count('vcol2).as("vcol2_count"), 'a, 'b, 'c)
-      .where(And(GreaterThanOrEqual('vcol1_count, Literal(1L)),
-        GreaterThanOrEqual('vcol2_count, Literal(1L))))
-      .select('a, 'b, 'c,
-        If(GreaterThan('vcol1_count, 'vcol2_count), 'vcol2_count, 'vcol1_count).as("min_count"))
+      .groupBy(Symbol("a"), Symbol("b"), Symbol("c"))(count(Symbol("vcol1")).as("vcol1_count"),
+        count(Symbol("vcol2")).as("vcol2_count"), Symbol("a"), Symbol("b"), Symbol("c"))
+      .where(And(GreaterThanOrEqual(Symbol("vcol1_count"), Literal(1L)),
+        GreaterThanOrEqual(Symbol("vcol2_count"), Literal(1L))))
+      .select(Symbol("a"), Symbol("b"), Symbol("c"),
+        If(GreaterThan(Symbol("vcol1_count"), Symbol("vcol2_count")),
+          Symbol("vcol2_count"), Symbol("vcol1_count")).as("min_count"))
       .analyze
     val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
@@ -198,27 +203,27 @@ class SetOperationSuite extends PlanTest {
   }
 
   test("SPARK-23356 union: expressions with literal in project list are pushed down") {
-    val unionQuery = testUnion.select(('a + 1).as("aa"))
+    val unionQuery = testUnion.select((Symbol("a") + 1).as("aa"))
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select(('a + 1).as("aa")) ::
-        testRelation2.select(('d + 1).as("aa")) ::
-        testRelation3.select(('g + 1).as("aa")) :: Nil).analyze
+      Union(testRelation.select((Symbol("a") + 1).as("aa")) ::
+        testRelation2.select((Symbol("d") + 1).as("aa")) ::
+        testRelation3.select((Symbol("g") + 1).as("aa")) :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("SPARK-23356 union: expressions in project list are pushed down") {
-    val unionQuery = testUnion.select(('a + 'b).as("ab"))
+    val unionQuery = testUnion.select((Symbol("a") + Symbol("b")).as("ab"))
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer =
-      Union(testRelation.select(('a + 'b).as("ab")) ::
-        testRelation2.select(('d + 'e).as("ab")) ::
-        testRelation3.select(('g + 'h).as("ab")) :: Nil).analyze
+      Union(testRelation.select((Symbol("a") + Symbol("b")).as("ab")) ::
+        testRelation2.select((Symbol("d") + Symbol("e")).as("ab")) ::
+        testRelation3.select((Symbol("g") + Symbol("h")).as("ab")) :: Nil).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
   test("SPARK-23356 union: no pushdown for non-deterministic expression") {
-    val unionQuery = testUnion.select('a, Rand(10).as("rnd"))
+    val unionQuery = testUnion.select(Symbol("a"), Rand(10).as("rnd"))
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer = unionQuery.analyze
     comparePlans(unionOptimized, unionCorrectAnswer)

@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 
 class ResolveNaturalJoinSuite extends AnalysisTest {
-  lazy val a = 'a.string
-  lazy val b = 'b.string
-  lazy val c = 'c.string
-  lazy val d = 'd.struct('f1.int, 'f2.long)
+  lazy val a = Symbol("a").string
+  lazy val b = Symbol("b").string
+  lazy val c = Symbol("c").string
+  lazy val d = Symbol("d").struct(Symbol("f1").int, Symbol("f2").long)
   lazy val aNotNull = a.notNull
   lazy val bNotNull = b.notNull
   lazy val cNotNull = c.notNull

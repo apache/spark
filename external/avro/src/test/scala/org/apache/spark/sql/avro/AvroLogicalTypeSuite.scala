@@ -122,7 +122,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val expected = timestampInputData.map(t => Row(new Timestamp(t._1)))
       val timestampAvro = timestampFile(dir.getAbsolutePath)
-      val df = spark.read.format("avro").load(timestampAvro).select('timestamp_millis)
+      val df = spark.read.format("avro").load(timestampAvro).select(Symbol("timestamp_millis"))
 
       checkAnswer(df, expected)
 
@@ -137,7 +137,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val expected = timestampInputData.map(t => Row(new Timestamp(t._2)))
       val timestampAvro = timestampFile(dir.getAbsolutePath)
-      val df = spark.read.format("avro").load(timestampAvro).select('timestamp_micros)
+      val df = spark.read.format("avro").load(timestampAvro).select(Symbol("timestamp_micros"))
 
       checkAnswer(df, expected)
 
@@ -151,8 +151,8 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   test("Logical type: user specified output schema with different timestamp types") {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
-      val df =
-        spark.read.format("avro").load(timestampAvro).select('timestamp_millis, 'timestamp_micros)
+      val df = spark.read.format("avro").load(timestampAvro).select(
+        Symbol("timestamp_millis"), Symbol("timestamp_micros"))
 
       val expected = timestampInputData.map(t => Row(new Timestamp(t._1), new Timestamp(t._2)))
 
@@ -184,7 +184,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
       val schema = StructType(StructField("long", TimestampType, true) :: Nil)
-      val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
+      val df = spark.read.format("avro").schema(schema).load(timestampAvro).select(Symbol("long"))
 
       val expected = timestampInputData.map(t => Row(new Timestamp(t._3)))
 

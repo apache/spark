@@ -42,7 +42,7 @@ class NoopSuite extends SharedSparkSession {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(numElems)
-        .select('id mod 10 as "key", 'id as "value")
+        .select(Symbol("id") mod 10 as "key", Symbol("id") as "value")
         .write
         .partitionBy("key")
         .parquet(path)

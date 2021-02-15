@@ -284,11 +284,12 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
       "func", Seq.empty, plans.table("e"), null)
 
     compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
-      p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
+      p.copy(child = p.child.where(Symbol("f") < 10),
+        output = Seq(Symbol("key").string, Symbol("value").string)))
     compareTransformQuery("map a, b using 'func' as c, d from e",
-      p.copy(output = Seq('c.string, 'd.string)))
+      p.copy(output = Seq(Symbol("c").string, Symbol("d").string)))
     compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
-      p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
+      p.copy(output = Seq(Symbol("c").int, Symbol("d").decimal(10, 0))))
   }
 
   test("use backticks in output of Script Transform") {

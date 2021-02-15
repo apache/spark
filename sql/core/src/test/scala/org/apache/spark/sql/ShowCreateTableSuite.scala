@@ -137,7 +137,8 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     withTable("ddl_test") {
       spark
         .range(3)
-        .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd, 'id as 'e)
+        .select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b"),
+          Symbol("id") as Symbol("c"), Symbol("id") as Symbol("d"), Symbol("id") as Symbol("e"))
         .write
         .mode("overwrite")
         .partitionBy("a", "b")

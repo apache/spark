@@ -71,9 +71,9 @@ class ResolveHintsSuite extends AnalysisTest {
   test("do not traverse past existing broadcast hints") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"),
-        ResolvedHint(table("table").where('a > 1), HintInfo(strategy = Some(BROADCAST)))),
-      ResolvedHint(testRelation.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
-      caseSensitive = false)
+        ResolvedHint(table("table").where(Symbol("a") > 1), HintInfo(strategy = Some(BROADCAST)))),
+      ResolvedHint(testRelation.where(
+        Symbol("a") > 1), HintInfo(strategy = Some(BROADCAST))).analyze, caseSensitive = false)
   }
 
   test("should work for subqueries") {
@@ -83,7 +83,7 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
 
     checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery(Symbol("tableAlias"))),
       ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
@@ -96,8 +96,10 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("do not traverse past subquery alias") {
     checkAnalysis(
-      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
-      testRelation.where('a > 1).analyze,
+      UnresolvedHint(
+        "MAPJOIN", Seq("table"),
+        table("table").where(Symbol("a") > 1).subquery(Symbol("tableAlias"))),
+      testRelation.where(Symbol("a") > 1).analyze,
       caseSensitive = false)
   }
 
@@ -109,8 +111,9 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
-        .select('a).analyze,
+      ResolvedHint(
+        testRelation.where(Symbol("a") > 1).select(Symbol("a")),
+        HintInfo(strategy = Some(BROADCAST))).select(Symbol("a")).analyze,
       caseSensitive = false)
   }
 
@@ -122,7 +125,7 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
         """.stripMargin
       ),
-      testRelation.where('a > 1).select('a).select('a).analyze,
+      testRelation.where(Symbol("a") > 1).select(Symbol("a")).select(Symbol("a")).analyze,
       caseSensitive = false)
   }
 

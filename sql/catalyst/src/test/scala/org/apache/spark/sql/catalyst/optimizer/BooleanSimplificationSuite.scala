@@ -42,16 +42,18 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
         PruneFilters) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string,
-    'e.boolean, 'f.boolean, 'g.boolean, 'h.boolean)
+  val testRelation = LocalRelation(
+    Symbol("a").int, Symbol("b").int, Symbol("c").int, Symbol("d").string,
+    Symbol("e").boolean, Symbol("f").boolean, Symbol("g").boolean, Symbol("h").boolean)
 
   val testRelationWithData = LocalRelation.fromExternalRows(
     testRelation.output, Seq(Row(1, 2, 3, "abc"))
   )
 
-  val testNotNullableRelation = LocalRelation('a.int.notNull, 'b.int.notNull, 'c.int.notNull,
-    'd.string.notNull, 'e.boolean.notNull, 'f.boolean.notNull, 'g.boolean.notNull,
-    'h.boolean.notNull)
+  val testNotNullableRelation = LocalRelation(
+    Symbol("a").int.notNull, Symbol("b").int.notNull, Symbol("c").int.notNull,
+    Symbol("d").string.notNull, Symbol("e").boolean.notNull, Symbol("f").boolean.notNull,
+    Symbol("g").boolean.notNull, Symbol("h").boolean.notNull)
 
   val testNotNullableRelationWithData = LocalRelation.fromExternalRows(
     testNotNullableRelation.output, Seq(Row(1, 2, 3, "abc"))
@@ -86,105 +88,138 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
   }
 
   test("a && a => a") {
-    checkCondition(Literal(1) < 'a && Literal(1) < 'a, Literal(1) < 'a)
-    checkCondition(Literal(1) < 'a && Literal(1) < 'a && Literal(1) < 'a, Literal(1) < 'a)
+    checkCondition(Literal(1) < Symbol("a") && Literal(1) < Symbol("a"), Literal(1) < Symbol("a"))
+    checkCondition(Literal(1) < Symbol("a") && Literal(1) < Symbol("a") &&
+      Literal(1) < Symbol("a"), Literal(1) < Symbol("a"))
   }
 
   test("a || a => a") {
-    checkCondition(Literal(1) < 'a || Literal(1) < 'a, Literal(1) < 'a)
-    checkCondition(Literal(1) < 'a || Literal(1) < 'a || Literal(1) < 'a, Literal(1) < 'a)
+    checkCondition(Literal(1) < Symbol("a") || Literal(1) < Symbol("a"), Literal(1) < Symbol("a"))
+    checkCondition(Literal(1) < Symbol("a") || Literal(1) < Symbol("a") ||
+      Literal(1) < Symbol("a"), Literal(1) < Symbol("a"))
   }
 
   test("(a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ...") {
-    checkCondition('b > 3 || 'c > 5, 'b > 3 || 'c > 5)
+    checkCondition(Symbol("b") > 3 || Symbol("c") > 5, Symbol("b") > 3 || Symbol("c") > 5)
 
-    checkCondition(('a < 2 && 'a > 3 && 'b > 5) || 'a < 2, 'a < 2)
+    checkCondition((Symbol("a") < 2 && Symbol("a") > 3 &&
+      Symbol("b") > 5) || Symbol("a") < 2, Symbol("a") < 2)
 
-    checkCondition('a < 2 || ('a < 2 && 'a > 3 && 'b > 5), 'a < 2)
+    checkCondition(Symbol("a") < 2 || (Symbol("a") < 2 &&
+      Symbol("a") > 3 && Symbol("b") > 5), Symbol("a") < 2)
 
-    val input = ('a === 'b && 'b > 3 && 'c > 2) ||
-      ('a === 'b && 'c < 1 && 'a === 5) ||
-      ('a === 'b && 'b < 5 && 'a > 1)
+    val input = (Symbol("a") === Symbol("b") && Symbol("b") > 3 && Symbol("c") > 2) ||
+      (Symbol("a") === Symbol("b") && Symbol("c") < 1 && Symbol("a") === 5) ||
+      (Symbol("a") === Symbol("b") && Symbol("b") < 5 && Symbol("a") > 1)
 
-    val expected = 'a === 'b && (
-      ('b > 3 && 'c > 2) || ('c < 1 && 'a === 5) || ('b < 5 && 'a > 1))
+    val expected = Symbol("a") === Symbol("b") &&
+      ((Symbol("b") > 3 && Symbol("c") > 2) || (Symbol("c") < 1 &&
+        Symbol("a") === 5) || (Symbol("b") < 5 && Symbol("a") > 1))
 
     checkCondition(input, expected)
   }
 
   test("(a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ...") {
-    checkCondition('b > 3 && 'c > 5, 'b > 3 && 'c > 5)
+    checkCondition(Symbol("b") > 3 && Symbol("c") > 5, Symbol("b") > 3 && Symbol("c") > 5)
 
-    checkCondition(('a < 2 || 'a > 3 || 'b > 5) && 'a < 2, 'a < 2)
+    checkCondition((Symbol("a") < 2 || Symbol("a") > 3 ||
+      Symbol("b") > 5) && Symbol("a") < 2, Symbol("a") < 2)
 
-    checkCondition('a < 2 && ('a < 2 || 'a > 3 || 'b > 5), 'a < 2)
+    checkCondition(Symbol("a") < 2 &&
+      (Symbol("a") < 2 || Symbol("a") > 3 || Symbol("b") > 5), Symbol("a") < 2)
 
-    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), 'a < 2 || ('b > 3 && 'c > 5))
+    checkCondition((Symbol("a") < 2 || Symbol("b") > 3) &&
+      (Symbol("a") < 2 || Symbol("c") > 5), Symbol("a") < 2 || (Symbol("b") > 3 && Symbol("c") > 5))
 
     checkCondition(
-      ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
-      'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
+      (Symbol("a") === Symbol("b") || Symbol("b") > 3) &&
+        (Symbol("a") === Symbol("b") || Symbol("a") > 3) &&
+        (Symbol("a") === Symbol("b") || Symbol("a") < 5),
+      Symbol("a") === Symbol("b") || Symbol("b") > 3 && Symbol("a") > 3 && Symbol("a") < 5)
   }
 
   test("e && (!e || f) - not nullable") {
-    checkConditionInNotNullableRelation('e && (!'e || 'f ), 'e && 'f)
+    checkConditionInNotNullableRelation(Symbol("e") &&
+      (!Symbol("e") || Symbol("f") ), Symbol("e") && Symbol("f"))
 
-    checkConditionInNotNullableRelation('e && ('f || !'e ), 'e && 'f)
+    checkConditionInNotNullableRelation(Symbol("e") &&
+      (Symbol("f") || !Symbol("e") ), Symbol("e") && Symbol("f"))
 
-    checkConditionInNotNullableRelation((!'e || 'f ) && 'e, 'f && 'e)
+    checkConditionInNotNullableRelation((!Symbol("e") || Symbol("f") ) &&
+      Symbol("e"), Symbol("f") && Symbol("e"))
 
-    checkConditionInNotNullableRelation(('f || !'e ) && 'e, 'f && 'e)
+    checkConditionInNotNullableRelation((Symbol("f") || !Symbol("e") ) &&
+      Symbol("e"), Symbol("f") && Symbol("e"))
   }
 
   test("e && (!e || f) - nullable") {
-    Seq ('e && (!'e || 'f ),
-        'e && ('f || !'e ),
-        (!'e || 'f ) && 'e,
-        ('f || !'e ) && 'e,
-        'e || (!'e && 'f),
-        'e || ('f && !'e),
-        ('e && 'f) || !'e,
-        ('f && 'e) || !'e).foreach { expr =>
+    Seq (Symbol("e") && (!Symbol("e") || Symbol("f") ),
+        Symbol("e") && (Symbol("f") || !Symbol("e") ),
+        (!Symbol("e") || Symbol("f") ) && Symbol("e"),
+        (Symbol("f") || !Symbol("e") ) && Symbol("e"),
+        Symbol("e") || (!Symbol("e") && Symbol("f")),
+        Symbol("e") || (Symbol("f") && !Symbol("e")),
+        (Symbol("e") && Symbol("f")) || !Symbol("e"),
+        (Symbol("f") && Symbol("e")) || !Symbol("e")).foreach { expr =>
       checkCondition(expr, expr)
     }
   }
 
   test("a < 1 && (!(a < 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation('a < 1 && (!('a < 1) || 'f), ('a < 1) && 'f)
-    checkConditionInNotNullableRelation('a < 1 && ('f || !('a < 1)), ('a < 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") < 1 &&
+      (!(Symbol("a") < 1) || Symbol("f")), (Symbol("a") < 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") < 1 &&
+      (Symbol("f") || !(Symbol("a") < 1)), (Symbol("a") < 1) && Symbol("f"))
 
-    checkConditionInNotNullableRelation('a <= 1 && (!('a <= 1) || 'f), ('a <= 1) && 'f)
-    checkConditionInNotNullableRelation('a <= 1 && ('f || !('a <= 1)), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") <= 1 &&
+      (!(Symbol("a") <= 1) || Symbol("f")), (Symbol("a") <= 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") <= 1 &&
+      (Symbol("f") || !(Symbol("a") <= 1)), (Symbol("a") <= 1) && Symbol("f"))
 
-    checkConditionInNotNullableRelation('a > 1 && (!('a > 1) || 'f), ('a > 1) && 'f)
-    checkConditionInNotNullableRelation('a > 1 && ('f || !('a > 1)), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") > 1 &&
+      (!(Symbol("a") > 1) || Symbol("f")), (Symbol("a") > 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") > 1 &&
+      (Symbol("f") || !(Symbol("a") > 1)), (Symbol("a") > 1) && Symbol("f"))
 
-    checkConditionInNotNullableRelation('a >= 1 && (!('a >= 1) || 'f), ('a >= 1) && 'f)
-    checkConditionInNotNullableRelation('a >= 1 && ('f || !('a >= 1)), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") >= 1 &&
+      (!(Symbol("a") >= 1) || Symbol("f")), (Symbol("a") >= 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") >= 1 &&
+      (Symbol("f") || !(Symbol("a") >= 1)), (Symbol("a") >= 1) && Symbol("f"))
   }
 
   test("a < 1 && ((a >= 1) || f) - not nullable") {
-    checkConditionInNotNullableRelation('a < 1 && ('a >= 1 || 'f ), ('a < 1) && 'f)
-    checkConditionInNotNullableRelation('a < 1 && ('f || 'a >= 1), ('a < 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") < 1 &&
+      (Symbol("a") >= 1 || Symbol("f") ), (Symbol("a") < 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") < 1 &&
+      (Symbol("f") || Symbol("a") >= 1), (Symbol("a") < 1) && Symbol("f"))
 
-    checkConditionInNotNullableRelation('a <= 1 && ('a > 1 || 'f ), ('a <= 1) && 'f)
-    checkConditionInNotNullableRelation('a <= 1 && ('f || 'a > 1), ('a <= 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") <= 1 &&
+      (Symbol("a") > 1 || Symbol("f") ), (Symbol("a") <= 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") <= 1 &&
+      (Symbol("f") || Symbol("a") > 1), (Symbol("a") <= 1) && Symbol("f"))
 
-    checkConditionInNotNullableRelation('a > 1 && (('a <= 1) || 'f), ('a > 1) && 'f)
-    checkConditionInNotNullableRelation('a > 1 && ('f || ('a <= 1)), ('a > 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") > 1 &&
+      ((Symbol("a") <= 1) || Symbol("f")), (Symbol("a") > 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") > 1 &&
+      (Symbol("f") || (Symbol("a") <= 1)), (Symbol("a") > 1) && Symbol("f"))
 
-    checkConditionInNotNullableRelation('a >= 1 && (('a < 1) || 'f), ('a >= 1) && 'f)
-    checkConditionInNotNullableRelation('a >= 1 && ('f || ('a < 1)), ('a >= 1) && 'f)
+    checkConditionInNotNullableRelation(Symbol("a") >= 1 &&
+      ((Symbol("a") < 1) || Symbol("f")), (Symbol("a") >= 1) && Symbol("f"))
+    checkConditionInNotNullableRelation(Symbol("a") >= 1 &&
+      (Symbol("f") || (Symbol("a") < 1)), (Symbol("a") >= 1) && Symbol("f"))
   }
 
   test("DeMorgan's law") {
-    checkCondition(!('e && 'f), !'e || !'f)
+    checkCondition(!(Symbol("e") && Symbol("f")), !Symbol("e") || !Symbol("f"))
 
-    checkCondition(!('e || 'f), !'e && !'f)
+    checkCondition(!(Symbol("e") || Symbol("f")), !Symbol("e") && !Symbol("f"))
 
-    checkCondition(!(('e && 'f) || ('g && 'h)), (!'e || !'f) && (!'g || !'h))
+    checkCondition(!((Symbol("e") && Symbol("f")) || (Symbol("g") &&
+      Symbol("h"))), (!Symbol("e") || !Symbol("f")) && (!Symbol("g") || !Symbol("h")))
 
-    checkCondition(!(('e || 'f) && ('g || 'h)), (!'e && !'f) || (!'g && !'h))
+    checkCondition(!((Symbol("e") || Symbol("f")) &&
+      (Symbol("g") || Symbol("h"))), (!Symbol("e") &&
+      !Symbol("f")) || (!Symbol("g") && !Symbol("h")))
   }
 
   private val analyzer = new Analyzer(
@@ -192,53 +227,62 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
   test("(a && b) || (a && c) => a && (b || c) when case insensitive") {
     val plan = analyzer.execute(
-      testRelation.where(('a > 2 && 'b > 3) || ('A > 2 && 'b < 5)))
+      testRelation.where((Symbol("a") > 2 &&
+        Symbol("b") > 3) || (Symbol("a") > 2 && Symbol("b") < 5)))
     val actual = Optimize.execute(plan)
     val expected = analyzer.execute(
-      testRelation.where('a > 2 && ('b > 3 || 'b < 5)))
+      testRelation.where(Symbol("a") > 2 &&
+        (Symbol("b") > 3 || Symbol("b") < 5)))
     comparePlans(actual, expected)
   }
 
   test("(a || b) && (a || c) => a || (b && c) when case insensitive") {
     val plan = analyzer.execute(
-      testRelation.where(('a > 2 || 'b > 3) && ('A > 2 || 'b < 5)))
+      testRelation.where((Symbol("a") > 2 || Symbol("b") > 3) &&
+        (Symbol("a") > 2 || Symbol("b") < 5)))
     val actual = Optimize.execute(plan)
     val expected = analyzer.execute(
-      testRelation.where('a > 2 || ('b > 3 && 'b < 5)))
+      testRelation.where(Symbol("a") > 2 || (Symbol("b") > 3 && Symbol("b") < 5)))
     comparePlans(actual, expected)
   }
 
   test("Complementation Laws") {
-    checkConditionInNotNullableRelation('e && !'e, testNotNullableRelation)
-    checkConditionInNotNullableRelation(!'e && 'e, testNotNullableRelation)
+    checkConditionInNotNullableRelation(Symbol("e") && !Symbol("e"), testNotNullableRelation)
+    checkConditionInNotNullableRelation(!Symbol("e") && Symbol("e"), testNotNullableRelation)
 
-    checkConditionInNotNullableRelation('e || !'e, testNotNullableRelationWithData)
-    checkConditionInNotNullableRelation(!'e || 'e, testNotNullableRelationWithData)
+    checkConditionInNotNullableRelation(
+      Symbol("e") || !Symbol("e"), testNotNullableRelationWithData)
+    checkConditionInNotNullableRelation(
+      !Symbol("e") || Symbol("e"), testNotNullableRelationWithData)
   }
 
   test("Complementation Laws - null handling") {
-    checkCondition('e && !'e,
-      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
-    checkCondition(!'e && 'e,
-      testRelationWithData.where(And(Literal(null, BooleanType), 'e.isNull)).analyze)
+    checkCondition(Symbol("e") && !Symbol("e"),
+      testRelationWithData.where(And(Literal(null, BooleanType), Symbol("e").isNull)).analyze)
+    checkCondition(!Symbol("e") && Symbol("e"),
+      testRelationWithData.where(And(Literal(null, BooleanType), Symbol("e").isNull)).analyze)
 
-    checkCondition('e || !'e,
-      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
-    checkCondition(!'e || 'e,
-      testRelationWithData.where(Or('e.isNotNull, Literal(null, BooleanType))).analyze)
+    checkCondition(Symbol("e") || !Symbol("e"),
+      testRelationWithData.where(Or(Symbol("e").isNotNull, Literal(null, BooleanType))).analyze)
+    checkCondition(!Symbol("e") || Symbol("e"),
+      testRelationWithData.where(Or(Symbol("e").isNotNull, Literal(null, BooleanType))).analyze)
   }
 
   test("Complementation Laws - negative case") {
-    checkCondition('e && !'f, testRelationWithData.where('e && !'f).analyze)
-    checkCondition(!'f && 'e, testRelationWithData.where(!'f && 'e).analyze)
+    checkCondition(Symbol("e") && !Symbol("f"),
+      testRelationWithData.where(Symbol("e") && !Symbol("f")).analyze)
+    checkCondition(!Symbol("f") && Symbol("e"),
+      testRelationWithData.where(!Symbol("f") && Symbol("e")).analyze)
 
-    checkCondition('e || !'f, testRelationWithData.where('e || !'f).analyze)
-    checkCondition(!'f || 'e, testRelationWithData.where(!'f || 'e).analyze)
+    checkCondition(Symbol("e") || !Symbol("f"),
+      testRelationWithData.where(Symbol("e") || !Symbol("f")).analyze)
+    checkCondition(!Symbol("f") || Symbol("e"),
+      testRelationWithData.where(!Symbol("f") || Symbol("e")).analyze)
   }
 
   test("simplify NOT(IsNull(x)) and NOT(IsNotNull(x))") {
-    checkCondition(Not(IsNotNull('b)), IsNull('b))
-    checkCondition(Not(IsNull('b)), IsNotNull('b))
+    checkCondition(Not(IsNotNull(Symbol("b"))), IsNull(Symbol("b")))
+    checkCondition(Not(IsNull(Symbol("b"))), IsNotNull(Symbol("b")))
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
@@ -249,8 +293,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
 
   test("filter reduction - positive cases") {
     val fields = Seq(
-      'col1NotNULL.boolean.notNull,
-      'col2NotNULL.boolean.notNull
+      Symbol("col1NotNULL").boolean.notNull,
+      Symbol("col2NotNULL").boolean.notNull
     )
     val Seq(col1NotNULL, col2NotNULL) = fields.zipWithIndex.map { case (f, i) => f.at(i) }
 

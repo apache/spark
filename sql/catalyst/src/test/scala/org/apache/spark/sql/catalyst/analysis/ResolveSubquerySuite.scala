@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
  */
 class ResolveSubquerySuite extends AnalysisTest {
 
-  val a = 'a.int
-  val b = 'b.int
-  val c = 'c.int
+  val a = Symbol("a").int
+  val b = Symbol("b").int
+  val c = Symbol("c").int
   val t1 = LocalRelation(a)
   val t2 = LocalRelation(b)
   val t3 = LocalRelation(c)

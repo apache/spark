@@ -228,11 +228,12 @@ class AdaptiveQueryExecSuite
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
-      val df1 = spark.range(10).withColumn("a", 'id)
-      val df2 = spark.range(10).withColumn("b", 'id)
+      val df1 = spark.range(10).withColumn("a", Symbol("id"))
+      val df2 = spark.range(10).withColumn("b", Symbol("id"))
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-        val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
-          .groupBy('a).count()
+        val testDf =
+          df1.where(Symbol("a") > 10).join(df2.where(Symbol("b") > 10), Seq("id"), "left_outer")
+          .groupBy(Symbol("a")).count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
@@ -244,8 +245,9 @@ class AdaptiveQueryExecSuite
       }
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
-        val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
-          .groupBy('a).count()
+        val testDf =
+          df1.where(Symbol("a") > 10).join(df2.where(Symbol("b") > 10), Seq("id"), "left_outer")
+          .groupBy(Symbol("a")).count()
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)
@@ -693,17 +695,17 @@ class AdaptiveQueryExecSuite
         spark
           .range(0, 1000, 1, 10)
           .select(
-            when('id < 250, 249)
-              .when('id >= 750, 1000)
-              .otherwise('id).as("key1"),
-            'id as "value1")
+            when(Symbol("id") < 250, 249)
+              .when(Symbol("id") >= 750, 1000)
+              .otherwise(Symbol("id")).as("key1"),
+            Symbol("id") as "value1")
           .createOrReplaceTempView("skewData1")
         spark
           .range(0, 1000, 1, 10)
           .select(
-            when('id < 250, 249)
-              .otherwise('id).as("key2"),
-            'id as "value2")
+            when(Symbol("id") < 250, 249)
+              .otherwise(Symbol("id")).as("key2"),
+            Symbol("id") as "value2")
           .createOrReplaceTempView("skewData2")
 
         def checkSkewJoin(
@@ -913,17 +915,17 @@ class AdaptiveQueryExecSuite
           spark
             .range(0, 1000, 1, 10)
             .select(
-              when('id < 250, 249)
-                .when('id >= 750, 1000)
-                .otherwise('id).as("key1"),
-              'id as "value1")
+              when(Symbol("id") < 250, 249)
+                .when(Symbol("id") >= 750, 1000)
+                .otherwise(Symbol("id")).as("key1"),
+              Symbol("id") as "value1")
             .createOrReplaceTempView("skewData1")
           spark
             .range(0, 1000, 1, 10)
             .select(
-              when('id < 250, 249)
-                .otherwise('id).as("key2"),
-              'id as "value2")
+              when(Symbol("id") < 250, 249)
+                .otherwise(Symbol("id")).as("key2"),
+              Symbol("id") as "value2")
             .createOrReplaceTempView("skewData2")
           val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
             "SELECT * FROM skewData1 join skewData2 ON key1 = key2")
@@ -998,7 +1000,7 @@ class AdaptiveQueryExecSuite
 
   test("AQE should set active session during execution") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val df = spark.range(10).select(sum('id))
+      val df = spark.range(10).select(sum(Symbol("id")))
       assert(df.queryExecution.executedPlan.isInstanceOf[AdaptiveSparkPlanExec])
       SparkSession.setActiveSession(null)
       checkAnswer(df, Seq(Row(45)))
@@ -1025,7 +1027,7 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true") {
       try {
         spark.experimental.extraStrategies = TestStrategy :: Nil
-        val df = spark.range(10).groupBy('id).count()
+        val df = spark.range(10).groupBy(Symbol("id")).count()
         df.collect()
       } finally {
         spark.experimental.extraStrategies = Nil
@@ -1311,7 +1313,7 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-33494: Do not use local shuffle reader for repartition") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      val df = spark.table("testData").repartition('key)
+      val df = spark.table("testData").repartition(Symbol("key"))
       df.collect()
       // local shuffle reader breaks partitioning and shouldn't be used for repartition operation
       // which is specified by users.
@@ -1341,7 +1343,7 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
         // Repartition with no partition num specified.
-        val dfRepartition = df.repartition('b)
+        val dfRepartition = df.repartition(Symbol("b"))
         dfRepartition.collect()
         val plan = dfRepartition.queryExecution.executedPlan
         // The top shuffle from repartition is optimized out.
@@ -1355,7 +1357,7 @@ class AdaptiveQueryExecSuite
         assert(customReader.get.asInstanceOf[CustomShuffleReaderExec].hasCoalescedPartition)
 
         // Repartition with partition default num specified.
-        val dfRepartitionWithNum = df.repartition(5, 'b)
+        val dfRepartitionWithNum = df.repartition(5, Symbol("b"))
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
         // The top shuffle from repartition is optimized out.
@@ -1367,7 +1369,7 @@ class AdaptiveQueryExecSuite
         assert(bhjWithNum.head.right.find(_.isInstanceOf[CustomShuffleReaderExec]).isEmpty)
 
         // Repartition with partition non-default num specified.
-        val dfRepartitionWithNum2 = df.repartition(3, 'b)
+        val dfRepartitionWithNum2 = df.repartition(3, Symbol("b"))
         dfRepartitionWithNum2.collect()
         val planWithNum2 = dfRepartitionWithNum2.queryExecution.executedPlan
         // The top shuffle from repartition is not optimized out, and this is the only shuffle that
@@ -1388,7 +1390,7 @@ class AdaptiveQueryExecSuite
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
         // Repartition with no partition num specified.
-        val dfRepartition = df.repartition('b)
+        val dfRepartition = df.repartition(Symbol("b"))
         dfRepartition.collect()
         val plan = dfRepartition.queryExecution.executedPlan
         // The top shuffle from repartition is optimized out.
@@ -1404,7 +1406,7 @@ class AdaptiveQueryExecSuite
         assert(customReaders.length == 2)
 
         // Repartition with default partition num specified.
-        val dfRepartitionWithNum = df.repartition(5, 'b)
+        val dfRepartitionWithNum = df.repartition(5, Symbol("b"))
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
         // The top shuffle from repartition is optimized out.
@@ -1420,7 +1422,7 @@ class AdaptiveQueryExecSuite
         assert(customReadersWithNum.isEmpty)
 
         // Repartition with default non-partition num specified.
-        val dfRepartitionWithNum2 = df.repartition(3, 'b)
+        val dfRepartitionWithNum2 = df.repartition(3, Symbol("b"))
         dfRepartitionWithNum2.collect()
         val planWithNum2 = dfRepartitionWithNum2.queryExecution.executedPlan
         // The top shuffle from repartition is not optimized out.

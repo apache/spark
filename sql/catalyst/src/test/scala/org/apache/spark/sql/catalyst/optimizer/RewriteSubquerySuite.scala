@@ -38,30 +38,33 @@ class RewriteSubquerySuite extends PlanTest {
   }
 
   test("Column pruning after rewriting predicate subquery") {
-    val relation = LocalRelation('a.int, 'b.int)
-    val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
+    val relation = LocalRelation(Symbol("a").int, Symbol("b").int)
+    val relInSubquery = LocalRelation(Symbol("x").int, Symbol("y").int, Symbol("z").int)
 
-    val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
+    val query = relation.where(Symbol("a").in(
+      ListQuery(relInSubquery.select(Symbol("x"))))).select(Symbol("a"))
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = relation
-      .select('a)
-      .join(relInSubquery.select('x), LeftSemi, Some('a === 'x))
+      .select(Symbol("a"))
+      .join(relInSubquery.select(Symbol("x")), LeftSemi, Some(Symbol("a") === Symbol("x")))
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("NOT-IN subquery nested inside OR") {
-    val relation1 = LocalRelation('a.int, 'b.int)
-    val relation2 = LocalRelation('c.int, 'd.int)
-    val exists = 'exists.boolean.notNull
+    val relation1 = LocalRelation(Symbol("a").int, Symbol("b").int)
+    val relation2 = LocalRelation(Symbol("c").int, Symbol("d").int)
+    val exists = Symbol("exists").boolean.notNull
 
-    val query = relation1.where('b === 1 || Not('a.in(ListQuery(relation2.select('c))))).select('a)
+    val query = relation1.where(Symbol("b") === 1 ||
+      Not(Symbol("a").in(ListQuery(relation2.select(Symbol("c")))))).select(Symbol("a"))
     val correctAnswer = relation1
-      .join(relation2.select('c), ExistenceJoin(exists), Some('a === 'c || IsNull('a === 'c)))
-      .where('b === 1 || Not(exists))
-      .select('a)
+      .join(relation2.select(Symbol("c")), ExistenceJoin(exists),
+        Some(Symbol("a") === Symbol("c") || IsNull(Symbol("a") === Symbol("c"))))
+      .where(Symbol("b") === 1 || Not(exists))
+      .select(Symbol("a"))
       .analyze
     val optimized = Optimize.execute(query.analyze)
 

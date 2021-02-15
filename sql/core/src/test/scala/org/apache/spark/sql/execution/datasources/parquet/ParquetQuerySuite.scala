@@ -151,7 +151,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         (1, "2016-01-01 10:11:12.123456"),
         (2, null),
         (3, "1965-01-01 10:11:12.123456"))
-        .toDS().select('_1, $"_2".cast("timestamp"))
+        .toDS().select(Symbol("_1"), $"_2".cast("timestamp"))
       checkAnswer(sql("select * from ts"), expected)
     }
   }
@@ -728,7 +728,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
   test("SPARK-15804: write out the metadata to parquet file") {
     val df = Seq((1, "abc"), (2, "hello")).toDF("a", "b")
     val md = new MetadataBuilder().putString("key", "value").build()
-    val dfWithmeta = df.select('a, 'b.as("b", md))
+    val dfWithmeta = df.select(Symbol("a"), Symbol("b").as("b", md))
 
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -854,7 +854,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => (Symbol("id") + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
@@ -887,7 +887,7 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => (Symbol("id") + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)

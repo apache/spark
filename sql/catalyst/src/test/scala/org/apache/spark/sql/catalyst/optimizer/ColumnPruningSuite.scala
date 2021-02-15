@@ -41,61 +41,63 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Column pruning for Generate when Generate.unrequiredChildIndex = child.output") {
-    val input = LocalRelation('a.int, 'b.int, 'c.array(StringType))
+    val input = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").array(StringType))
 
     val query =
       input
-        .generate(Explode('c), outputNames = "explode" :: Nil)
-        .select('c, 'explode)
+        .generate(Explode(Symbol("c")), outputNames = "explode" :: Nil)
+        .select(Symbol("c"), Symbol("explode"))
         .analyze
 
     val optimized = Optimize.execute(query)
 
     val correctAnswer =
       input
-        .select('c)
-        .generate(Explode('c), outputNames = "explode" :: Nil)
+        .select(Symbol("c"))
+        .generate(Explode(Symbol("c")), outputNames = "explode" :: Nil)
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Fill Generate.unrequiredChildIndex if possible") {
-    val input = LocalRelation('b.array(StringType))
+    val input = LocalRelation(Symbol("b").array(StringType))
 
     val query =
       input
-        .generate(Explode('b), outputNames = "explode" :: Nil)
-        .select(('explode + 1).as("result"))
+        .generate(Explode(Symbol("b")), outputNames = "explode" :: Nil)
+        .select((Symbol("explode") + 1).as("result"))
         .analyze
 
     val optimized = Optimize.execute(query)
 
     val correctAnswer =
       input
-        .generate(Explode('b), unrequiredChildIndex = input.output.zipWithIndex.map(_._2),
+        .generate(Explode(Symbol("b")), unrequiredChildIndex = input.output.zipWithIndex.map(_._2),
           outputNames = "explode" :: Nil)
-         .select(('explode + 1).as("result"))
+         .select((Symbol("explode") + 1).as("result"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Another fill Generate.unrequiredChildIndex if possible") {
-    val input = LocalRelation('a.int, 'b.int, 'c1.string, 'c2.string)
+    val input =
+      LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c1").string, Symbol("c2").string)
 
     val query =
       input
-        .generate(Explode(CreateArray(Seq('c1, 'c2))), outputNames = "explode" :: Nil)
-        .select('a, 'c1, 'explode)
+        .generate(
+          Explode(CreateArray(Seq(Symbol("c1"), Symbol("c2")))), outputNames = "explode" :: Nil)
+        .select(Symbol("a"), Symbol("c1"), Symbol("explode"))
         .analyze
 
     val optimized = Optimize.execute(query)
 
     val correctAnswer =
       input
-        .select('a, 'c1, 'c2)
-        .generate(Explode(CreateArray(Seq('c1, 'c2))),
+        .select(Symbol("a"), Symbol("c1"), Symbol("c2"))
+        .generate(Explode(CreateArray(Seq(Symbol("c1"), Symbol("c2")))),
           unrequiredChildIndex = Seq(2),
           outputNames = "explode" :: Nil)
         .analyze
@@ -113,10 +115,10 @@ class ColumnPruningSuite extends PlanTest {
       withSQLConf(SQLConf.NESTED_PRUNING_ON_EXPRESSIONS.key -> "true") {
         val structType = StructType.fromDDL("d double, e array<string>, f double, g double, " +
           "h array<struct<h1: int, h2: double>>")
-        val input = LocalRelation('a.int, 'b.int, 'c.struct(structType))
+        val input = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").struct(structType))
         val generatorOutputs = generatorOutputNames.map(UnresolvedAttribute(_))
 
-        val selectedExprs = Seq(UnresolvedAttribute("a"), 'c.getField("d")) ++
+        val selectedExprs = Seq(UnresolvedAttribute("a"), Symbol("c").getField("d")) ++
           generatorOutputs
 
         val query =
@@ -147,82 +149,86 @@ class ColumnPruningSuite extends PlanTest {
     }
 
     runTest(
-      Explode('c.getField("e")),
+      Explode(Symbol("c").getField("e")),
       aliases => Explode($"${aliases(1)}".as("c.e")),
-      aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1))),
+      aliases =>
+        Seq(Symbol("c").getField("d").as(aliases(0)), Symbol("c").getField("e").as(aliases(1))),
       Seq(2),
       Seq("explode")
     )
-    runTest(Stack(2 :: 'c.getField("f") :: 'c.getField("g") :: Nil),
+    runTest(Stack(2 :: Symbol("c").getField("f") :: Symbol("c").getField("g") :: Nil),
       aliases => Stack(2 :: $"${aliases(1)}".as("c.f") :: $"${aliases(2)}".as("c.g") :: Nil),
       aliases => Seq(
-        'c.getField("d").as(aliases(0)),
-        'c.getField("f").as(aliases(1)),
-        'c.getField("g").as(aliases(2))),
+        Symbol("c").getField("d").as(aliases(0)),
+        Symbol("c").getField("f").as(aliases(1)),
+        Symbol("c").getField("g").as(aliases(2))),
       Seq(2, 3),
       Seq("stack")
     )
     runTest(
-      PosExplode('c.getField("e")),
+      PosExplode(Symbol("c").getField("e")),
       aliases => PosExplode($"${aliases(1)}".as("c.e")),
-      aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("e").as(aliases(1))),
+      aliases =>
+        Seq(Symbol("c").getField("d").as(aliases(0)), Symbol("c").getField("e").as(aliases(1))),
       Seq(2),
       Seq("pos", "explode")
     )
     runTest(
-      Inline('c.getField("h")),
+      Inline(Symbol("c").getField("h")),
       aliases => Inline($"${aliases(1)}".as("c.h")),
-      aliases => Seq('c.getField("d").as(aliases(0)), 'c.getField("h").as(aliases(1))),
+      aliases =>
+        Seq(Symbol("c").getField("d").as(aliases(0)), Symbol("c").getField("h").as(aliases(1))),
       Seq(2),
       Seq("h1", "h2")
     )
   }
 
   test("Column pruning for Project on Sort") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val input = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
 
-    val query = input.orderBy('b.asc).select('a).analyze
+    val query = input.orderBy(Symbol("b").asc).select(Symbol("a")).analyze
     val optimized = Optimize.execute(query)
 
-    val correctAnswer = input.select('a, 'b).orderBy('b.asc).select('a).analyze
+    val correctAnswer = input.select(
+      Symbol("a"), Symbol("b")).orderBy(Symbol("b").asc).select(Symbol("a")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Column pruning for Expand") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val input = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
     val query =
       Aggregate(
-        Seq('aa, 'gid),
-        Seq(sum('c).as("sum")),
+        Seq(Symbol("aa"), Symbol("gid")),
+        Seq(sum(Symbol("c")).as("sum")),
         Expand(
           Seq(
-            Seq('a, 'b, 'c, Literal.create(null, StringType), 1),
-            Seq('a, 'b, 'c, 'a, 2)),
-          Seq('a, 'b, 'c, 'aa.int, 'gid.int),
+            Seq(Symbol("a"), Symbol("b"), Symbol("c"), Literal.create(null, StringType), 1),
+            Seq(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("a"), 2)),
+          Seq(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("aa").int, Symbol("gid").int),
           input)).analyze
     val optimized = Optimize.execute(query)
 
     val expected =
       Aggregate(
-        Seq('aa, 'gid),
-        Seq(sum('c).as("sum")),
+        Seq(Symbol("aa"), Symbol("gid")),
+        Seq(sum(Symbol("c")).as("sum")),
         Expand(
           Seq(
-            Seq('c, Literal.create(null, StringType), 1),
-            Seq('c, 'a, 2)),
-          Seq('c, 'aa.int, 'gid.int),
-          Project(Seq('a, 'c),
+            Seq(Symbol("c"), Literal.create(null, StringType), 1),
+            Seq(Symbol("c"), Symbol("a"), 2)),
+          Seq(Symbol("c"), Symbol("aa").int, Symbol("gid").int),
+          Project(Seq(Symbol("a"), Symbol("c")),
             input))).analyze
 
     comparePlans(optimized, expected)
   }
 
   test("Column pruning for ScriptTransformation") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
+    val input = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
     val query =
       ScriptTransformation(
-        Seq('a, 'b),
+        Seq(Symbol("a"), Symbol("b")),
         "func",
         Seq.empty,
         input,
@@ -231,11 +237,11 @@ class ColumnPruningSuite extends PlanTest {
 
     val expected =
       ScriptTransformation(
-        Seq('a, 'b),
+        Seq(Symbol("a"), Symbol("b")),
         "func",
         Seq.empty,
         Project(
-          Seq('a, 'b),
+          Seq(Symbol("a"), Symbol("b")),
           input),
         null).analyze
 
@@ -243,34 +249,35 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Column pruning on Filter") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val plan1 = Filter('a > 1, input).analyze
+    val input = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
+    val plan1 = Filter(Symbol("a") > 1, input).analyze
     comparePlans(Optimize.execute(plan1), plan1)
-    val query = Project('a :: Nil, Filter('c > Literal(0.0), input)).analyze
+    val query = Project(Symbol("a") :: Nil, Filter(Symbol("c") > Literal(0.0), input)).analyze
     comparePlans(Optimize.execute(query), query)
-    val plan2 = Filter('b > 1, Project(Seq('a, 'b), input)).analyze
-    val expected2 = Project(Seq('a, 'b), Filter('b > 1, input)).analyze
+    val plan2 = Filter(Symbol("b") > 1, Project(Seq(Symbol("a"), Symbol("b")), input)).analyze
+    val expected2 = Project(Seq(Symbol("a"), Symbol("b")), Filter(Symbol("b") > 1, input)).analyze
     comparePlans(Optimize.execute(plan2), expected2)
-    val plan3 = Project(Seq('a), Filter('b > 1, Project(Seq('a, 'b), input))).analyze
-    val expected3 = Project(Seq('a), Filter('b > 1, input)).analyze
+    val plan3 = Project(Seq(Symbol("a")), Filter(Symbol("b") > 1,
+      Project(Seq(Symbol("a"), Symbol("b")), input))).analyze
+    val expected3 = Project(Seq(Symbol("a")), Filter(Symbol("b") > 1, input)).analyze
     comparePlans(Optimize.execute(plan3), expected3)
   }
 
   test("Column pruning on except/intersect/distinct") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query = Project('a :: Nil, Except(input, input, isAll = false)).analyze
+    val input = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
+    val query = Project(Symbol("a") :: Nil, Except(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query), query)
 
-    val query2 = Project('a :: Nil, Intersect(input, input, isAll = false)).analyze
+    val query2 = Project(Symbol("a") :: Nil, Intersect(input, input, isAll = false)).analyze
     comparePlans(Optimize.execute(query2), query2)
-    val query3 = Project('a :: Nil, Distinct(input)).analyze
+    val query3 = Project(Symbol("a") :: Nil, Distinct(input)).analyze
     comparePlans(Optimize.execute(query3), query3)
   }
 
   test("Column pruning on Project") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query = Project('a :: Nil, Project(Seq('a, 'b), input)).analyze
-    val expected = Project(Seq('a), input).analyze
+    val input = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
+    val query = Project(Symbol("a") :: Nil, Project(Seq(Symbol("a"), Symbol("b")), input)).analyze
+    val expected = Project(Seq(Symbol("a")), input).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
@@ -291,140 +298,151 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("column pruning for group") {
-    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
     val originalQuery =
       testRelation
-        .groupBy('a)('a, count('b))
-        .select('a)
+        .groupBy(Symbol("a"))(Symbol("a"), count(Symbol("b")))
+        .select(Symbol("a"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
-        .groupBy('a)('a).analyze
+        .select(Symbol("a"))
+        .groupBy(Symbol("a"))(Symbol("a")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("column pruning for group with alias") {
-    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
 
     val originalQuery =
       testRelation
-        .groupBy('a)('a as 'c, count('b))
-        .select('c)
+        .groupBy(Symbol("a"))(Symbol("a") as Symbol("c"), count(Symbol("b")))
+        .select(Symbol("c"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
-        .groupBy('a)('a as 'c).analyze
+        .select(Symbol("a"))
+        .groupBy(Symbol("a"))(Symbol("a") as Symbol("c")).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("column pruning for Project(ne, Limit)") {
-    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+    val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
 
     val originalQuery =
       testRelation
-        .select('a, 'b)
+        .select(Symbol("a"), Symbol("b"))
         .limit(2)
-        .select('a)
+        .select(Symbol("a"))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("push down project past sort") {
-    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-    val x = testRelation.subquery('x)
+    val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
+    val x = testRelation.subquery(Symbol("x"))
 
     // push down valid
     val originalQuery = {
-      x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('a)
+      x.select(Symbol("a"), Symbol("b"))
+        .sortBy(SortOrder(Symbol("a"), Ascending))
+        .select(Symbol("a"))
     }
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
-      x.select('a)
-        .sortBy(SortOrder('a, Ascending)).analyze
+      x.select(Symbol("a"))
+        .sortBy(SortOrder(Symbol("a"), Ascending)).analyze
 
     comparePlans(optimized, correctAnswer)
 
     // push down invalid
     val originalQuery1 = {
-      x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('b)
+      x.select(Symbol("a"), Symbol("b"))
+        .sortBy(SortOrder(Symbol("a"), Ascending))
+        .select(Symbol("b"))
     }
 
     val optimized1 = Optimize.execute(originalQuery1.analyze)
     val correctAnswer1 =
-      x.select('a, 'b)
-        .sortBy(SortOrder('a, Ascending))
-        .select('b).analyze
+      x.select(Symbol("a"), Symbol("b"))
+        .sortBy(SortOrder(Symbol("a"), Ascending))
+        .select(Symbol("b")).analyze
 
     comparePlans(optimized1, correctAnswer1)
   }
 
   test("Column pruning on Window with useless aggregate functions") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
-    val winSpec = windowSpec('a :: Nil, 'd.asc :: Nil, UnspecifiedFrame)
-    val winExpr = windowExpr(count('d), winSpec)
+    val input =
+      LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double, Symbol("d").int)
+    val winSpec = windowSpec(Symbol("a") :: Nil, Symbol("d").asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count(Symbol("d")), winSpec)
 
-    val originalQuery = input.groupBy('a, 'c, 'd)('a, 'c, 'd, winExpr.as('window)).select('a, 'c)
-    val correctAnswer = input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
+    val originalQuery = input.groupBy(Symbol("a"), Symbol("c"), Symbol("d"))(
+      Symbol("a"), Symbol("c"), Symbol("d"),
+      winExpr.as(Symbol("window"))).select(Symbol("a"), Symbol("c"))
+    val correctAnswer = input.select(
+      Symbol("a"), Symbol("c"), Symbol("d")).groupBy(Symbol("a"),
+      Symbol("c"), Symbol("d"))(Symbol("a"), Symbol("c")).analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Column pruning on Window with selected agg expressions") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
-    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
-    val winExpr = windowExpr(count('b), winSpec)
+    val input =
+      LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double, Symbol("d").int)
+    val winSpec = windowSpec(Symbol("a") :: Nil, Symbol("b").asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count(Symbol("b")), winSpec)
 
     val originalQuery =
-      input.select('a, 'b, 'c, 'd, winExpr.as('window)).where('window > 1).select('a, 'c)
+      input.select(Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"),
+        winExpr.as(Symbol("window"))).where(Symbol("window") > 1).select(Symbol("a"), Symbol("c"))
     val correctAnswer =
-      input.select('a, 'b, 'c)
-        .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
-        .where('window > 1).select('a, 'c).analyze
+      input.select(Symbol("a"), Symbol("b"), Symbol("c"))
+        .window(winExpr.as(Symbol("window")) :: Nil, Symbol("a") :: Nil, Symbol("b").asc :: Nil)
+        .where(Symbol("window") > 1).select(Symbol("a"), Symbol("c")).analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Column pruning on Window in select") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
-    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
-    val winExpr = windowExpr(count('b), winSpec)
+    val input =
+      LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double, Symbol("d").int)
+    val winSpec = windowSpec(Symbol("a") :: Nil, Symbol("b").asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count(Symbol("b")), winSpec)
 
-    val originalQuery = input.select('a, 'b, 'c, 'd, winExpr.as('window)).select('a, 'c)
-    val correctAnswer = input.select('a, 'c).analyze
+    val originalQuery = input.select(
+      Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"),
+      winExpr.as(Symbol("window"))).select(Symbol("a"), Symbol("c"))
+    val correctAnswer = input.select(Symbol("a"), Symbol("c")).analyze
     val optimized = Optimize.execute(originalQuery.analyze)
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Column pruning on Union") {
-    val input1 = LocalRelation('a.int, 'b.string, 'c.double)
-    val input2 = LocalRelation('c.int, 'd.string, 'e.double)
-    val query = Project('b :: Nil, Union(input1 :: input2 :: Nil)).analyze
-    val expected = Union(Project('b :: Nil, input1) :: Project('d :: Nil, input2) :: Nil).analyze
+    val input1 = LocalRelation(Symbol("a").int, Symbol("b").string, Symbol("c").double)
+    val input2 = LocalRelation(Symbol("c").int, Symbol("d").string, Symbol("e").double)
+    val query = Project(Symbol("b") :: Nil, Union(input1 :: input2 :: Nil)).analyze
+    val expected = Union(
+      Project(Symbol("b") :: Nil, input1) :: Project(Symbol("d") :: Nil, input2) :: Nil).analyze
     comparePlans(Optimize.execute(query), expected)
   }
 
   test("Remove redundant projects in column pruning rule") {
-    val input = LocalRelation('key.int, 'value.string)
+    val input = LocalRelation(Symbol("key").int, Symbol("value").string)
 
     val query =
       Project(Seq($"x.key", $"y.key"),
@@ -447,33 +465,34 @@ class ColumnPruningSuite extends PlanTest {
   private val func = identity[Iterator[OtherTuple]] _
 
   test("Column pruning on MapPartitions") {
-    val input = LocalRelation('_1.int, '_2.int, 'c.int)
+    val input = LocalRelation(Symbol("_1").int, Symbol("_2").int, Symbol("c").int)
     val plan1 = MapPartitions(func, input)
     val correctAnswer1 =
-      MapPartitions(func, Project(Seq('_1, '_2), input)).analyze
+      MapPartitions(func, Project(Seq(Symbol("_1"), Symbol("_2")), input)).analyze
     comparePlans(Optimize.execute(plan1.analyze), correctAnswer1)
   }
 
   test("push project down into sample") {
-    val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-    val x = testRelation.subquery('x)
+    val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
+    val x = testRelation.subquery(Symbol("x"))
 
-    val query1 = Sample(0.0, 0.6, false, 11L, x).select('a)
+    val query1 = Sample(0.0, 0.6, false, 11L, x).select(Symbol("a"))
     val optimized1 = Optimize.execute(query1.analyze)
-    val expected1 = Sample(0.0, 0.6, false, 11L, x.select('a))
+    val expected1 = Sample(0.0, 0.6, false, 11L, x.select(Symbol("a")))
     comparePlans(optimized1, expected1.analyze)
 
-    val query2 = Sample(0.0, 0.6, false, 11L, x).select('a as 'aa)
+    val query2 = Sample(0.0, 0.6, false, 11L, x).select(Symbol("a") as Symbol("aa"))
     val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a as 'aa))
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select(Symbol("a") as Symbol("aa")))
     comparePlans(optimized2, expected2.analyze)
   }
 
   test("SPARK-24696 ColumnPruning rule fails to remove extra Project") {
-    val input = LocalRelation('key.int, 'value.string)
-    val query = input.select('key).where(rand(0L) > 0.5).where('key < 10).analyze
+    val input = LocalRelation(Symbol("key").int, Symbol("value").string)
+    val query = input.select(Symbol("key")).where(rand(0L) > 0.5).where(Symbol("key") < 10).analyze
     val optimized = Optimize.execute(query)
-    val expected = input.where(rand(0L) > 0.5).where('key < 10).select('key).analyze
+    val expected = input.where(
+      rand(0L) > 0.5).where(Symbol("key") < 10).select(Symbol("key")).analyze
     comparePlans(optimized, expected)
   }
   // todo: add more tests for column pruning

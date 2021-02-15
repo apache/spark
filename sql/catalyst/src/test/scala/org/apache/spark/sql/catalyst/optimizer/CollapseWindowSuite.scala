@@ -30,7 +30,7 @@ class CollapseWindowSuite extends PlanTest {
         CollapseWindow) :: Nil
   }
 
-  val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
+  val testRelation = LocalRelation(Symbol("a").double, Symbol("b").double, Symbol("c").string)
   val a = testRelation.output(0)
   val b = testRelation.output(1)
   val c = testRelation.output(2)
@@ -41,28 +41,28 @@ class CollapseWindowSuite extends PlanTest {
 
   test("collapse two adjacent windows with the same partition/order") {
     val query = testRelation
-      .window(Seq(min(a).as('min_a)), partitionSpec1, orderSpec1)
-      .window(Seq(max(a).as('max_a)), partitionSpec1, orderSpec1)
-      .window(Seq(sum(b).as('sum_b)), partitionSpec1, orderSpec1)
-      .window(Seq(avg(b).as('avg_b)), partitionSpec1, orderSpec1)
+      .window(Seq(min(a).as(Symbol("min_a"))), partitionSpec1, orderSpec1)
+      .window(Seq(max(a).as(Symbol("max_a"))), partitionSpec1, orderSpec1)
+      .window(Seq(sum(b).as(Symbol("sum_b"))), partitionSpec1, orderSpec1)
+      .window(Seq(avg(b).as(Symbol("avg_b"))), partitionSpec1, orderSpec1)
 
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)
     assert(analyzed.output === optimized.output)
 
     val correctAnswer = testRelation.window(Seq(
-      min(a).as('min_a),
-      max(a).as('max_a),
-      sum(b).as('sum_b),
-      avg(b).as('avg_b)), partitionSpec1, orderSpec1)
+      min(a).as(Symbol("min_a")),
+      max(a).as(Symbol("max_a")),
+      sum(b).as(Symbol("sum_b")),
+      avg(b).as(Symbol("avg_b"))), partitionSpec1, orderSpec1)
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("Don't collapse adjacent windows with different partitions or orders") {
     val query1 = testRelation
-      .window(Seq(min(a).as('min_a)), partitionSpec1, orderSpec1)
-      .window(Seq(max(a).as('max_a)), partitionSpec1, orderSpec2)
+      .window(Seq(min(a).as(Symbol("min_a"))), partitionSpec1, orderSpec1)
+      .window(Seq(max(a).as(Symbol("max_a"))), partitionSpec1, orderSpec2)
 
     val optimized1 = Optimize.execute(query1.analyze)
     val correctAnswer1 = query1.analyze
@@ -70,8 +70,8 @@ class CollapseWindowSuite extends PlanTest {
     comparePlans(optimized1, correctAnswer1)
 
     val query2 = testRelation
-      .window(Seq(min(a).as('min_a)), partitionSpec1, orderSpec1)
-      .window(Seq(max(a).as('max_a)), partitionSpec2, orderSpec1)
+      .window(Seq(min(a).as(Symbol("min_a"))), partitionSpec1, orderSpec1)
+      .window(Seq(max(a).as(Symbol("max_a"))), partitionSpec2, orderSpec1)
 
     val optimized2 = Optimize.execute(query2.analyze)
     val correctAnswer2 = query2.analyze
@@ -81,8 +81,8 @@ class CollapseWindowSuite extends PlanTest {
 
   test("Don't collapse adjacent windows with dependent columns") {
     val query = testRelation
-      .window(Seq(sum(a).as('sum_a)), partitionSpec1, orderSpec1)
-      .window(Seq(max('sum_a).as('max_sum_a)), partitionSpec1, orderSpec1)
+      .window(Seq(sum(a).as(Symbol("sum_a"))), partitionSpec1, orderSpec1)
+      .window(Seq(max(Symbol("sum_a")).as(Symbol("max_sum_a"))), partitionSpec1, orderSpec1)
       .analyze
 
     val expected = query.analyze
@@ -93,7 +93,7 @@ class CollapseWindowSuite extends PlanTest {
   test("Skip windows with empty window expressions") {
     val query = testRelation
       .window(Seq(), partitionSpec1, orderSpec1)
-      .window(Seq(sum(a).as('sum_a)), partitionSpec1, orderSpec1)
+      .window(Seq(sum(a).as(Symbol("sum_a"))), partitionSpec1, orderSpec1)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze

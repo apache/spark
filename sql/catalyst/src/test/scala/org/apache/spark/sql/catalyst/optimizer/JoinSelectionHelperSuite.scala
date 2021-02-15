@@ -27,13 +27,13 @@ import org.apache.spark.sql.internal.SQLConf
 class JoinSelectionHelperSuite extends PlanTest with JoinSelectionHelper {
 
   private val left = StatsTestPlan(
-    outputList = Seq('a.int, 'b.int, 'c.int),
+    outputList = Seq(Symbol("a").int, Symbol("b").int, Symbol("c").int),
     rowCount = 20000000,
     size = Some(20000000),
     attributeStats = AttributeMap(Seq()))
 
   private val right = StatsTestPlan(
-    outputList = Seq('d.int),
+    outputList = Seq(Symbol("d").int),
     rowCount = 1000,
     size = Some(1000),
     attributeStats = AttributeMap(Seq()))

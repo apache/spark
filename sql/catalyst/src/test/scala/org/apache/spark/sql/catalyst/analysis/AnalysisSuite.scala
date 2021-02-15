@@ -52,7 +52,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
-      testRelation.select('b).analyze
+      testRelation.select(Symbol("b")).analyze
     }
   }
 

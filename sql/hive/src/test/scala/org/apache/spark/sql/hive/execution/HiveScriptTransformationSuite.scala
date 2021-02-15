@@ -176,12 +176,12 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         """.stripMargin),
         identity,
         df.select(
-          'a.cast("string").as("key"),
+          Symbol("a").cast("string").as("key"),
           concat_ws("\t",
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).as("value")).collect())
+            Symbol("b").cast("string"),
+            Symbol("c").cast("string"),
+            Symbol("d").cast("string"),
+            Symbol("e").cast("string")).as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size > 2 and just specify serde,
@@ -204,8 +204,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         """.stripMargin),
         identity,
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          Symbol("a").cast("string").as("key"),
+          Symbol("b").cast("string").as("value")).collect())
 
 
       // In hive default serde mode, if we don't define output schema,
@@ -232,12 +232,12 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         """.stripMargin),
         identity,
         df.select(
-          'a.cast("string").as("key"),
+          Symbol("a").cast("string").as("key"),
           concat_ws("\t",
-            'b.cast("string"),
-            'c.cast("string"),
-            'd.cast("string"),
-            'e.cast("string")).as("value")).collect())
+            Symbol("b").cast("string"),
+            Symbol("c").cast("string"),
+            Symbol("d").cast("string"),
+            Symbol("e").cast("string")).as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size > 2 and specify serde
@@ -262,8 +262,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         """.stripMargin),
         identity,
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          Symbol("a").cast("string").as("key"),
+          Symbol("b").cast("string").as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size = 2 and specify serde, it will these two column as
@@ -287,8 +287,8 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         """.stripMargin),
         identity,
         df.select(
-          'a.cast("string").as("key"),
-          'b.cast("string").as("value")).collect())
+          Symbol("a").cast("string").as("key"),
+          Symbol("b").cast("string").as("value")).collect())
 
       // In hive default serde mode, if we don't define output schema,
       // when output column size < 2 and specify serde, it will return null for deficiency
@@ -312,7 +312,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
         """.stripMargin),
         identity,
         df.select(
-          'a.cast("string").as("key"),
+          Symbol("a").cast("string").as("key"),
           lit(null)).collect())
     }
   }
@@ -325,8 +325,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       val df = Seq(
         (1, "1", Array(0, 1, 2), Map("a" -> 1)),
         (2, "2", Array(3, 4, 5), Map("b" -> 2))
-      ).toDF("a", "b", "c", "d")
-        .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
+      ).toDF("a", "b", "c", "d").select(
+        Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"),
+        struct(Symbol("a"), Symbol("b")).as("e"))
       df.createTempView("v")
 
       // Hive serde support ArrayType/MapType/StructType as input and output data type
@@ -348,7 +349,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           child = child,
           ioschema = hiveIOSchema
         ),
-        df.select('c, 'd, 'e).collect())
+        df.select(Symbol("c"), Symbol("d"), Symbol("e")).collect())
     }
   }
 
@@ -358,8 +359,9 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
       val df = Seq(
         (1, "1", Array(0, 1, 2), Map("a" -> 1)),
         (2, "2", Array(3, 4, 5), Map("b" -> 2))
-      ).toDF("a", "b", "c", "d")
-        .select('a, 'b, 'c, 'd, struct('a, 'b).as("e"))
+      ).toDF("a", "b", "c", "d").select(
+        Symbol("a"), Symbol("b"), Symbol("c"), Symbol("d"),
+        struct(Symbol("a"), Symbol("b")).as("e"))
       df.createTempView("v")
 
       // Hive serde support ArrayType/MapType/StructType as input and output data type
@@ -369,7 +371,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           |USING 'cat' AS (c array<int>, d map<string, int>, e struct<col1:int, col2:string>)
           |FROM v
         """.stripMargin)
-      checkAnswer(query, identity, df.select('c, 'd, 'e).collect())
+      checkAnswer(query, identity, df.select(Symbol("c"), Symbol("d"), Symbol("e")).collect())
     }
   }
 

@@ -41,8 +41,9 @@ class SimplifyConditionalsInPredicateSuite extends PlanTest {
   }
 
   private val testRelation =
-    LocalRelation('i.int, 'b.boolean, 'a.array(IntegerType), 'm.map(IntegerType, IntegerType))
-  private val anotherTestRelation = LocalRelation('d.int)
+    LocalRelation(Symbol("i").int, Symbol("b").boolean,
+      Symbol("a").array(IntegerType), Symbol("m").map(IntegerType, IntegerType))
+  private val anotherTestRelation = LocalRelation(Symbol("d").int)
 
   test("IF(cond, trueVal, false) => AND(cond, trueVal)") {
     val originalCond = If(

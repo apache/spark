@@ -32,17 +32,17 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         ReorderAssociativeOperator) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation(Symbol("a").int, Symbol("b").int, Symbol("c").int)
 
   test("Reorder associative operators") {
     val originalQuery =
       testRelation
         .select(
-          (Literal(3) + ((Literal(1) + 'a) + 2)) + 4,
-          'b * 1 * 2 * 3 * 4,
-          ('b + 1) * 2 * 3 * 4,
-          'a + 1 + 'b + 2 + 'c + 3,
-          'a + 1 + 'b * 2 + 'c + 3,
+          (Literal(3) + ((Literal(1) + Symbol("a")) + 2)) + 4,
+          Symbol("b") * 1 * 2 * 3 * 4,
+          (Symbol("b") + 1) * 2 * 3 * 4,
+          Symbol("a") + 1 + Symbol("b") + 2 + Symbol("c") + 3,
+          Symbol("a") + 1 + Symbol("b") * 2 + Symbol("c") + 3,
           Rand(0) * 1 * 2 * 3 * 4)
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -50,11 +50,11 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select(
-          ('a + 10).as("((3 + ((1 + a) + 2)) + 4)"),
-          ('b * 24).as("((((b * 1) * 2) * 3) * 4)"),
-          (('b + 1) * 24).as("((((b + 1) * 2) * 3) * 4)"),
-          ('a + 'b + 'c + 6).as("(((((a + 1) + b) + 2) + c) + 3)"),
-          ('a + 'b * 2 + 'c + 4).as("((((a + 1) + (b * 2)) + c) + 3)"),
+          (Symbol("a") + 10).as("((3 + ((1 + a) + 2)) + 4)"),
+          (Symbol("b") * 24).as("((((b * 1) * 2) * 3) * 4)"),
+          ((Symbol("b") + 1) * 24).as("((((b + 1) * 2) * 3) * 4)"),
+          (Symbol("a") + Symbol("b") + Symbol("c") + 6).as("(((((a + 1) + b) + 2) + c) + 3)"),
+          (Symbol("a") + Symbol("b") * 2 + Symbol("c") + 4).as("((((a + 1) + (b * 2)) + c) + 3)"),
           Rand(0) * 1 * 2 * 3 * 4)
         .analyze
 

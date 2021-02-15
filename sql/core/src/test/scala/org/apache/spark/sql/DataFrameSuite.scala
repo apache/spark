@@ -117,7 +117,7 @@ class DataFrameSuite extends QueryTest
     val df = Seq(Tuple1("a b c"), Tuple1("d e")).toDF("words")
 
     checkAnswer(
-      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select('word),
+      df.explode("words", "word") { word: String => word.split(" ").toSeq }.select(Symbol("word")),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
   }
@@ -125,15 +125,15 @@ class DataFrameSuite extends QueryTest
   test("explode") {
     val df = Seq((1, "a b c"), (2, "a b"), (3, "a")).toDF("number", "letters")
     val df2 =
-      df.explode('letters) {
+      df.explode(Symbol("letters")) {
         case Row(letters: String) => letters.split(" ").map(Tuple1(_)).toSeq
       }
 
     checkAnswer(
       df2
-        .select('_1 as 'letter, 'number)
-        .groupBy('letter)
-        .agg(count_distinct('number)),
+        .select(Symbol("_1") as Symbol("letter"), Symbol("number"))
+        .groupBy(Symbol("letter"))
+        .agg(count_distinct(Symbol("number"))),
       Row("a", 3) :: Row("b", 2) :: Row("c", 1) :: Nil
     )
   }
@@ -314,7 +314,7 @@ class DataFrameSuite extends QueryTest
     assert(e.getMessage.contains("Invalid usage of '*' in explode/json_tuple/UDTF"))
 
     checkAnswer(
-      df.explode('prefix, 'csv) { case Row(prefix: String, csv: String) =>
+      df.explode(Symbol("prefix"), Symbol("csv")) { case Row(prefix: String, csv: String) =>
         csv.split(",").map(v => Tuple1(prefix + ":" + v)).toSeq
       },
       Row("1", "1,2", "1:1") ::

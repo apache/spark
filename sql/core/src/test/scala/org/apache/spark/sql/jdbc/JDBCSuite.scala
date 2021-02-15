@@ -367,7 +367,8 @@ class JDBCSuite extends QueryTest
   }
 
   test("SELECT * WHERE (quoted strings)") {
-    assert(sql("select * from foobar").where('NAME === "joe 'foo' \"bar\"").collect().size === 1)
+    assert(sql("select * from foobar")
+      .where(Symbol("NAME") === "joe 'foo' \"bar\"").collect().size === 1)
   }
 
   test("SELECT first field") {

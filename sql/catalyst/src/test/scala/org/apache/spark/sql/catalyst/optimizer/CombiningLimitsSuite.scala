@@ -55,14 +55,14 @@ class CombiningLimitsSuite extends PlanTest {
   test("limits: combines two limits") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(10)
         .limit(5)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(5).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -71,7 +71,7 @@ class CombiningLimitsSuite extends PlanTest {
   test("limits: combines three limits") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(2)
         .limit(7)
         .limit(5)
@@ -79,7 +79,7 @@ class CombiningLimitsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -88,15 +88,15 @@ class CombiningLimitsSuite extends PlanTest {
   test("limits: combines two limits after ColumnPruning") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(2)
-        .select('a)
+        .select(Symbol("a"))
         .limit(5)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select(Symbol("a"))
         .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)

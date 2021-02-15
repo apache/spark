@@ -115,7 +115,8 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
       }.getMessage
       assert(e.contains("Hive support is required to CREATE Hive TABLE (AS SELECT)"))
 
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      spark.range(1).select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b"))
+        .write.saveAsTable("t1")
       e = intercept[AnalysisException] {
         sql("CREATE TABLE t STORED AS parquet SELECT a, b from t1")
       }.getMessage
@@ -1624,7 +1625,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       sql("CREATE TABLE t USING parquet SELECT 1 as a, 1 as b")
       checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
 
-      spark.range(1).select('id as 'a, 'id as 'b).write.saveAsTable("t1")
+      spark.range(1).select(Symbol("id") as Symbol("a"), Symbol("id") as Symbol("b"))
+        .write.saveAsTable("t1")
       sql("CREATE TABLE t2 USING parquet SELECT a, b from t1")
       checkAnswer(spark.table("t2"), spark.table("t1"))
     }
