@@ -1009,6 +1009,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-XXXXX: recognize spark_catalog in rename table") {
+    withDatabase("spark_catalog.db") {
+      sql("CREATE DATABASE spark_catalog.db")
+      sql(s"CREATE TABLE spark_catalog.db.src_tbl (c0 INT) USING $dataSource")
+      sql(s"INSERT INTO spark_catalog.db.src_tbl SELECT 0")
+      sql("ALTER TABLE spark_catalog.db.src_tbl RENAME TO spark_catalog.db.dst_tbl")
+      val dst = "spark_catalog.db.dst_tbl"
+      checkAnswer(sql(s"SELECT * FROM $dst"), Row(0))
+
+      withView("v0_dst") {
+        sql(s"CREATE VIEW v0 AS SELECT c0 + 1 FROM $dst")
+        sql("ALTER VIEW v0 RENAME TO spark_catalog.v0_dst")
+        checkAnswer(sql("SELECT * FROM v0_dst"), Row(1))
+      }
+
+      withTempView("v1_dst") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT c0 + 2 FROM $dst")
+        sql("ALTER VIEW v1 RENAME TO spark_catalog.v1_dst")
+        checkAnswer(sql("SELECT * FROM v1_dst"), Row(2))
+      }
+
+      withGlobalTempView("v2_dst") {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT c0 + 3 FROM $dst")
+        sql("ALTER VIEW global_temp.v2 RENAME TO spark_catalog.global_temp.v2_dst")
+        checkAnswer(sql("SELECT * FROM global_temp.v2_dst"), Row(3))
+      }
+    }
+  }
+
   test("alter table: rename cached table") {
     import testImplicits._
     sql("CREATE TABLE students (age INT, name STRING) USING parquet")
