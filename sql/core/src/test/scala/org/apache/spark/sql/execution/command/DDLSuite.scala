@@ -1009,13 +1009,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-XXXXX: recognize spark_catalog in rename table") {
+  test("SPARK-34439: recognize spark_catalog in new identifier while view/table renaming") {
     withDatabase("spark_catalog.db") {
       sql("CREATE DATABASE spark_catalog.db")
-      sql(s"CREATE TABLE spark_catalog.db.src_tbl (c0 INT) USING $dataSource")
-      sql(s"INSERT INTO spark_catalog.db.src_tbl SELECT 0")
-      sql("ALTER TABLE spark_catalog.db.src_tbl RENAME TO spark_catalog.db.dst_tbl")
+      val src = "spark_catalog.db.src_tbl"
+      sql(s"CREATE TABLE $src (c0 INT) USING $dataSource")
+      sql(s"INSERT INTO $src SELECT 0")
       val dst = "spark_catalog.db.dst_tbl"
+      sql(s"ALTER TABLE spark_catalog.db.src_tbl RENAME TO $dst")
       checkAnswer(sql(s"SELECT * FROM $dst"), Row(0))
 
       withView("v0_dst") {
