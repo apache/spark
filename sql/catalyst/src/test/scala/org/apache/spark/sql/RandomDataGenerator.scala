@@ -149,12 +149,15 @@ object RandomDataGenerator {
    * @param dataType the type to generate values for
    * @param nullable whether null values should be generated
    * @param rand an optional random number generator
+   * @param validJulianDatetime whether to generate dates and timestamps that are valid
+   *                            in the Julian calendar.
    * @return a function which can be called to generate random values.
    */
   def forType(
       dataType: DataType,
       nullable: Boolean = true,
-      rand: Random = new Random): Option[() => Any] = {
+      rand: Random = new Random,
+      validJulianDatetime: Boolean = false): Option[() => Any] = {
     val valueGenerator: Option[() => Any] = dataType match {
       case StringType => Some(() => rand.nextString(rand.nextInt(MAX_STR_LEN)))
       case BinaryType => Some(() => {
@@ -196,7 +199,13 @@ object RandomDataGenerator {
         if (SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)) {
           randomNumeric[LocalDate](
             rand,
-            (rand: Random) => getRandomDate(rand).toLocalDate,
+            (rand: Random) => {
+              if (validJulianDatetime) {
+                getRandomDate(rand).toLocalDate
+              } else {
+                LocalDate.ofEpochDay(uniformDaysRand(rand))
+              }
+            },
             specialDates.map(LocalDate.parse))
         } else {
           randomNumeric[java.sql.Date](
@@ -238,7 +247,13 @@ object RandomDataGenerator {
         if (SQLConf.get.getConf(SQLConf.DATETIME_JAVA8API_ENABLED)) {
           randomNumeric[Instant](
             rand,
-            (rand: Random) => getRandomTimestamp(rand).toInstant,
+            (rand: Random) => {
+              if (validJulianDatetime) {
+                getRandomTimestamp(rand).toInstant
+              } else {
+                DateTimeUtils.microsToInstant(uniformMicrosRand(rand))
+              }
+            },
             specialTs.map { s =>
               val ldt = LocalDateTime.parse(s.replace(" ", "T"))
               ldt.atZone(ZoneId.systemDefault()).toInstant
