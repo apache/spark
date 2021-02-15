@@ -322,7 +322,7 @@ jobs:
     - name: Install dependencies for documentation generation
       run: |
         apt-get install -y libcurl4-openssl-dev pandoc
-        python3.6 -m pip install sphinx mkdocs numpy
+        python3.6 -m pip install "sphinx<3.5.0" mkdocs numpy
         apt-get update -y
         apt-get install -y ruby ruby-dev
         gem install jekyll jekyll-redirect-from rouge
