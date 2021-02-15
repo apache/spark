@@ -200,11 +200,12 @@ object RandomDataGenerator {
           randomNumeric[LocalDate](
             rand,
             (rand: Random) => {
-              if (validJulianDatetime) {
-                getRandomDate(rand).toLocalDate
+              val days = if (validJulianDatetime) {
+                DateTimeUtils.fromJavaDate(getRandomDate(rand))
               } else {
-                LocalDate.ofEpochDay(uniformDaysRand(rand))
+                uniformDaysRand(rand)
               }
+              LocalDate.ofEpochDay(days)
             },
             specialDates.map(LocalDate.parse))
         } else {
@@ -248,11 +249,12 @@ object RandomDataGenerator {
           randomNumeric[Instant](
             rand,
             (rand: Random) => {
-              if (validJulianDatetime) {
-                getRandomTimestamp(rand).toInstant
+              val micros = if (validJulianDatetime) {
+                DateTimeUtils.fromJavaTimestamp(getRandomTimestamp(rand))
               } else {
-                DateTimeUtils.microsToInstant(uniformMicrosRand(rand))
+                uniformMicrosRand(rand)
               }
+              DateTimeUtils.microsToInstant(micros)
             },
             specialTs.map { s =>
               val ldt = LocalDateTime.parse(s.replace(" ", "T"))
