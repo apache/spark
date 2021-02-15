@@ -30,6 +30,7 @@ import org.apache.spark.sql.{SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96, SPARK_VE
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.BaseRelation
@@ -132,19 +133,23 @@ object DataSourceUtils {
   }
 
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
-    val config = format match {
-      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
-      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key
-      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key
+    val (config, option) = format match {
+      case "Parquet INT96" =>
+        (SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
+      case "Parquet" =>
+        (SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
+      case "Avro" =>
+        (SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
       case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
       s"1900-01-01T00:00:00Z from $format files can be ambiguous, as the files may be written by " +
       "Spark 2.x or legacy versions of Hive, which uses a legacy hybrid calendar that is " +
       "different from Spark 3.0+'s Proleptic Gregorian calendar. See more details in " +
-      s"SPARK-31404. You can set $config to 'LEGACY' to rebase the datetime values w.r.t. " +
-      s"the calendar difference during reading. Or set $config to 'CORRECTED' to read the " +
-      "datetime values as it is.", null)
+      s"SPARK-31404. You can set the SQL config '$config' or the datasource option '$option' to " +
+      "'LEGACY' to rebase the datetime values w.r.t. the calendar difference during reading. " +
+      s"To read the datetime values as it is, set the SQL config '$config' or " +
+      s"the datasource option '$option' to 'CORRECTED'.", null)
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
