@@ -1072,14 +1072,29 @@ object SparkSubmit extends CommandLineUtils with Logging {
    * Return whether the given primary resource requires running python.
    */
   private[deploy] def isPython(res: String): Boolean = {
-    res != null && res.endsWith(".py") || res == PYSPARK_SHELL
+    if (res == null) {
+      return false
+    }
+    if (res == PYSPARK_SHELL) {
+      return true
+    }
+    val uri = new java.net.URI(res)
+    return uri.getPath.endsWith(".py")
   }
 
   /**
    * Return whether the given primary resource requires running R.
    */
   private[deploy] def isR(res: String): Boolean = {
-    res != null && (res.endsWith(".R") || res.endsWith(".r")) || res == SPARKR_SHELL
+    if (res == null) {
+      return false
+    }
+    if (res == SPARKR_SHELL) {
+      return true
+    }
+    val uri = new java.net.URI(res)
+    val path = uri.getPath
+    return path.endsWith(".R") || path.endsWith(".r")
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
