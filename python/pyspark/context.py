@@ -43,9 +43,8 @@ from pyspark.taskcontext import TaskContext
 from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
-from pyspark.exceptions import JavaGatewayError, NonDriverReferenceError, \
-    SparkContextConfigurationError, SparkContextInitializationError
-
+from pyspark.exceptions import NonDriverReferenceError, SparkContextInitializationError, \
+    JavaGatewayError
 
 __all__ = ['SparkContext']
 
@@ -190,10 +189,10 @@ class SparkContext(object):
 
         # Check that we have at least the required parameters
         if not self._conf.contains("spark.master"):
-            raise SparkContextConfigurationError(
+            raise SparkContextInitializationError(
                 "A master URL must be set in your configuration")
         if not self._conf.contains("spark.app.name"):
-            raise SparkContextConfigurationError(
+            raise SparkContextInitializationError(
                 "An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
@@ -1247,8 +1246,9 @@ class SparkContext(object):
         if self.profiler_collector is not None:
             self.profiler_collector.show_profiles()
         else:
-            raise SparkContextConfigurationError("'spark.python.profile' configuration must be set "
-                                                 "to 'true' to enable Python profile.")
+            raise SparkContextInitializationError(
+                "'spark.python.profile' configuration must be set "
+                "to 'true' to enable Python profile.")
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
@@ -1256,8 +1256,9 @@ class SparkContext(object):
         if self.profiler_collector is not None:
             self.profiler_collector.dump_profiles(path)
         else:
-            raise SparkContextConfigurationError("'spark.python.profile' configuration must be set "
-                                                 "to 'true' to enable Python profile.")
+            raise SparkContextInitializationError(
+                "'spark.python.profile' configuration must be set "
+                "to 'true' to enable Python profile.")
 
     def getConf(self):
         conf = SparkConf()

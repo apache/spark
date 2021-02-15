@@ -33,10 +33,3 @@ class SparkContextInitializationError(RuntimeError):
 
         Subclasses from RuntimeError for backward compatability reasons.
     """
-
-
-class SparkContextConfigurationError(SparkContextInitializationError):
-    """
-    Thrown whenever there is a Spark's configuration related problem.
-
-    """

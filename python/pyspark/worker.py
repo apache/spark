@@ -34,7 +34,6 @@ import warnings
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
-from pyspark.exceptions import SparkContextConfigurationError
 from pyspark.java_gateway import local_connect_and_auth
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.files import SparkFiles
@@ -473,7 +472,7 @@ def main(infile, outfile):
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
-            raise SparkContextConfigurationError((
+            raise Exception((
                 "Python in worker has different version %s than that in " +
                 "driver %s, PySpark cannot run with different minor versions. " +
                 "Please check environment variables PYSPARK_PYTHON and " +
