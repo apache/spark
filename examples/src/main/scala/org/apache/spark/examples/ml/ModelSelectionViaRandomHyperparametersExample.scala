@@ -18,9 +18,10 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.tuning.{CrossValidator, CrossValidatorModel, ParamRandomBuilder}
+import org.apache.spark.ml.tuning.{CrossValidator, CrossValidatorModel, Limits, ParamRandomBuilder}
+import org.apache.spark.ml.tuning.RandomRanges._
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -45,25 +46,31 @@ object ModelSelectionViaRandomHyperparametersExample {
 
     val lr = new LinearRegression().setMaxIter(10)
 
-    val paramGrid = new ParamRandomBuilder()
-      .addLog10Random(lr.regParam, 0.01, 1.0, 5)
+    // We sample the regularization parameter logarithmically over the range [0.01, 1.0].
+    // This means that values around 0.01, 0.1 and 1.0 are roughly equally likely.
+    // Note that both parameters must be greater than zero as otherwise we'll get an infinity.
+    // We sample the the ElasticNet mixing parameter uniformly over the range [0, 1]
+    // Note that in real life, you'd choose more than the 5 samples we see below.
+    val hyperparameters = new ParamRandomBuilder()
+      .addLog10Random(lr.regParam, Limits(0.01, 1.0), 5)
       .addGrid(lr.fitIntercept)
-      .addRandom(lr.elasticNetParam, 0.0, 1.0, 5)
+      .addRandom(lr.elasticNetParam, Limits(0.0, 1.0), 5)
       .build()
 
-    val eval = new BinaryClassificationEvaluator
-    eval.setRawPredictionCol("prediction")
+    println(s"hyperparameters:\n${hyperparameters.mkString("\n")}")
+
     val cv: CrossValidator = new CrossValidator()
       .setEstimator(lr)
-      .setEstimatorParamMaps(paramGrid)
-      .setEvaluator(eval)
+      .setEstimatorParamMaps(hyperparameters)
+      .setEvaluator(new RegressionEvaluator)
       .setNumFolds(3)
     val cvModel: CrossValidatorModel = cv.fit(data)
     val parent: LinearRegression = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
 
-    println(s"Optimal value for ${lr.regParam}: ${parent.getRegParam}")
-    println(s"Optimal value for ${lr.elasticNetParam}: ${parent.getElasticNetParam}")
-    println(s"Optimal value for ${lr.fitIntercept}: ${parent.getFitIntercept}")
+    println(s"""Optimal model has:
+         |${lr.regParam}        = ${parent.getRegParam}
+         |${lr.elasticNetParam} = ${parent.getElasticNetParam}
+         |${lr.fitIntercept}    = ${parent.getFitIntercept}""".stripMargin)
     // $example off$
 
     spark.stop()

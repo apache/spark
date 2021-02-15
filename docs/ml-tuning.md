@@ -81,6 +81,30 @@ The mathematical principle behind this is that given enough samples, the probabi
 Irrespective of machine learning model, the expected number of samples needed to have at least one within 5% of the optimum is about 60. 
 If this 5% volume lies between the parameters defined in a grid search, it will *never* be found by `ParamGridBuilder`.  
 
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+Refer to the [`ParamRandomBuilder` Scala docs](api/scala/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ModelSelectionViaRandomHyperparametersExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [`ParamRandomBuilder` Java docs](api/java/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaCrossValidationExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Python users are recommended to look at Python libraries that are specifically for hyperparameter tuning such as Hyperopt.  
+
+</div>
+
+</div>
+
 # Cross-Validation
 
 `CrossValidator` begins by splitting the dataset into a set of *folds* which are used as separate training and test datasets. E.g., with `$k=3$` folds, `CrossValidator` will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data for training and 1/3 for testing.  To evaluate a particular `ParamMap`, `CrossValidator` computes the average evaluation metric for the 3 `Model`s produced by fitting the `Estimator` on the 3 different (training, test) dataset pairs.
