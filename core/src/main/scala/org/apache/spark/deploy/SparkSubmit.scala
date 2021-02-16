@@ -19,18 +19,16 @@ package org.apache.spark.deploy
 
 import java.io._
 import java.lang.reflect.{InvocationTargetException, UndeclaredThrowableException}
-import java.net.{URI, URL}
+import java.net.{URI, URISyntaxException, URL}
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 import java.util.{ServiceLoader, UUID}
 import java.util.jar.JarInputStream
 import javax.ws.rs.core.UriBuilder
-
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Properties, Try}
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -47,7 +45,6 @@ import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
-
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
@@ -1069,6 +1066,24 @@ object SparkSubmit extends CommandLineUtils with Logging {
   }
 
   /**
+   * Extracts the path from a URI or returns the local path.
+   *
+   * This helper is used to determine whether the path or URI given as the driver to
+   * spark-submit is a Python or R file. It needs to parse the path as URI to deal
+   * with URIs that have a query fragment (such as AWS S3 presigned URLs).
+   *
+   * This was introduced to fix https://issues.apache.org/jira/browse/SPARK-34438
+   */
+  private def extractPath(localPathOrUri: String): String = {
+    try {
+      val uri = new URI(localPathOrUri)
+      return uri.getPath
+    } catch {
+      case _: URISyntaxException => return localPathOrUri
+    }
+  }
+
+  /**
    * Return whether the given primary resource requires running python.
    */
   private[deploy] def isPython(res: String): Boolean = {
@@ -1078,8 +1093,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     if (res == PYSPARK_SHELL) {
       return true
     }
-    val uri = new java.net.URI(res)
-    return uri.getPath.endsWith(".py")
+    val path = extractPath(res)
+    return path.endsWith(".py")
   }
 
   /**
@@ -1092,9 +1107,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     if (res == SPARKR_SHELL) {
       return true
     }
-    val uri = new java.net.URI(res)
-    val path = uri.getPath
-    return path.endsWith(".R") || path.endsWith(".r")
+    val path = extractPath(res)
+    return path.endsWith(".r") || path.endsWith(".R")
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
