@@ -1095,13 +1095,7 @@ class DDLParserSuite extends AnalysisTest {
       "Column position is not supported in Hive-style REPLACE COLUMNS")
   }
 
-  test("alter table/view: rename table/view") {
-    comparePlans(
-      parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
-      RenameTable(
-        UnresolvedTableOrView(Seq("a", "b", "c"), "ALTER TABLE ... RENAME TO", true),
-        Seq("x", "y", "z"),
-        isView = false))
+  test("alter view: rename view") {
     comparePlans(
       parsePlan("ALTER VIEW a.b.c RENAME TO x.y.z"),
       RenameTable(
