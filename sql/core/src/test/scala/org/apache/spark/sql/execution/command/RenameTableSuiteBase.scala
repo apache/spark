@@ -71,4 +71,29 @@ trait RenameTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(oldStorageLevel === newStorageLevel)
     }
   }
+
+  test("rename cached table") {
+    withNamespaceAndTable("ns", "students") { students =>
+      sql(s"CREATE TABLE $students (age INT, name STRING) $defaultUsing")
+      sql(s"INSERT INTO $students SELECT 19, 'Ana'")
+
+      spark.catalog.cacheTable(students)
+      val expected = Seq(Row(19, "Ana"))
+      QueryTest.checkAnswer(spark.table(students), expected)
+      assert(spark.catalog.isCached(students),
+        "bad test: table was not cached in the first place")
+      val teachers = s"$catalog.ns.teachers"
+      withTable(teachers) {
+        // After the command below we have both students and teachers.
+        sql(s"ALTER TABLE $students RENAME TO ns.teachers")
+        // The cached data for the old students table should not be read by
+        // the new students table.
+        sql(s"CREATE TABLE $students (age INT, name STRING) $defaultUsing")
+        assert(!spark.catalog.isCached(students))
+        assert(spark.catalog.isCached(teachers))
+        assert(spark.table(students).collect().isEmpty)
+        QueryTest.checkAnswer(spark.table(teachers), expected)
+      }
+    }
+  }
 }

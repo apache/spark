@@ -978,24 +978,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table: rename cached table") {
-    import testImplicits._
-    sql("CREATE TABLE students (age INT, name STRING) USING parquet")
-    val df = (1 to 2).map { i => (i, i.toString) }.toDF("age", "name")
-    df.write.insertInto("students")
-    spark.catalog.cacheTable("students")
-    checkAnswer(spark.table("students"), df)
-    assert(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
-    sql("ALTER TABLE students RENAME TO teachers")
-    sql("CREATE TABLE students (age INT, name STRING) USING parquet")
-    // Now we have both students and teachers.
-    // The cached data for the old students table should not be read by the new students table.
-    assert(!spark.catalog.isCached("students"))
-    assert(spark.catalog.isCached("teachers"))
-    assert(spark.table("students").collect().isEmpty)
-    checkAnswer(spark.table("teachers"), df)
-  }
-
   test("rename temporary view - destination table with database name") {
     withTempView("tab1") {
       sql(
