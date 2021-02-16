@@ -778,8 +778,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("composed expressions") {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
-    assertEqual("1 - f('o'), o(bar))",
-    Literal(1) - Symbol("f").function("o", Symbol("o").function(Symbol("bar"))))
+    assertEqual("1 - f('o', o(bar))",
+      Literal(1) - Symbol("f").function("o", Symbol("o").function(Symbol("bar"))))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
   }
 
