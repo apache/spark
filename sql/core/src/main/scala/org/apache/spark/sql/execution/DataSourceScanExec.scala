@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy.translateFilter
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
@@ -335,6 +336,19 @@ case class FileSourceScanExec(
     dataFilters.flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
   }
 
+  @transient
+  private lazy val runtimePushedDownFilters = {
+    dataFilters.flatMap {
+      case e: Expression if ExecSubqueryExpression.hasScalarSubquery(e) =>
+        val updatedValue = e.transform {
+          case s: ScalarSubquery => s.value
+        }
+        Some(updatedValue)
+      case _ =>
+        Nil
+    }.flatMap(translateFilter(_, DataSourceUtils.supportNestedPredicatePushdown(relation)))
+  }
+
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
     val location = relation.location
@@ -402,7 +416,7 @@ case class FileSourceScanExec(
         dataSchema = relation.dataSchema,
         partitionSchema = relation.partitionSchema,
         requiredSchema = requiredSchema,
-        filters = pushedDownFilters,
+        filters = pushedDownFilters ++ runtimePushedDownFilters,
         options = relation.options,
         hadoopConf = relation.sparkSession.sessionState.newHadoopConfWithOptions(relation.options))
 

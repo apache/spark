@@ -44,6 +44,16 @@ abstract class ExecSubqueryExpression extends PlanExpression[BaseSubqueryExec] {
 
 object ExecSubqueryExpression {
   /**
+   * Returns true when an expression contains a scalar-subquery
+   */
+  def hasScalarSubquery(e: Expression): Boolean = {
+    e.find {
+      case _: ScalarSubquery => true
+      case _ => false
+    }.isDefined
+  }
+
+  /**
    * Returns true when an expression contains a subquery
    */
   def hasSubquery(e: Expression): Boolean = {
@@ -95,14 +105,18 @@ case class ScalarSubquery(
     updated = true
   }
 
+  def value: Literal = {
+    require(updated, s"$this has not finished")
+    Literal.create(result, dataType)
+  }
+
   override def eval(input: InternalRow): Any = {
     require(updated, s"$this has not finished")
     result
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    require(updated, s"$this has not finished")
-    Literal.create(result, dataType).doGenCode(ctx, ev)
+    value.doGenCode(ctx, ev)
   }
 }
 

@@ -24,6 +24,7 @@ import java.util.zip.GZIPOutputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.{DataSourceScanExec, FileSourceScanExec, ScalarSubquery, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -598,6 +599,44 @@ class FileSourceStrategySuite extends QueryTest with SharedSparkSession with Pre
       assert(partitions.size == 1, "when checking partitions")
     }
     checkDataFilters(Set.empty)
+  }
+
+  test("SPARK-34444: pushdown scalar-subquery filter to FileSourceScan") {
+    val nums = 900
+    withTempPath { path =>
+      spark.range(nums)
+        .repartition(1)
+        .write
+        .option(ParquetOutputFormat.PAGE_SIZE, 500)
+        .option(ParquetOutputFormat.BLOCK_SIZE, 2000)
+        .parquet(path.getCanonicalPath)
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        withTempView("t1") {
+          spark.read.parquet(path.getCanonicalPath).createTempView("t1")
+          Seq(true, false).foreach { pushdown =>
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> s"$pushdown") {
+              val df = spark.sql("SELECT * FROM t1 WHERE id = (SELECT MAX(id) FROM range(2))")
+              checkAnswer(df, Row(1))
+              val fileSourceScans = df.queryExecution.executedPlan.collect {
+                case f: FileSourceScanExec => f
+              }
+              assert(fileSourceScans.size === 1)
+              val fileSourceScan = fileSourceScans.head
+              // Check ScalarSubquery pushdown to FileSourceScan
+              val expressions = fileSourceScan.dataFilters.flatMap(_.children)
+              assert(expressions.exists(_.isInstanceOf[ScalarSubquery]))
+              // Check numOutputRows
+              val numOutputRows = fileSourceScan.metrics("numOutputRows").value
+              if (pushdown) {
+                assert(numOutputRows < nums)
+              } else {
+                assert(numOutputRows === nums)
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   // Helpers for checking the arguments passed to the FileFormat.
