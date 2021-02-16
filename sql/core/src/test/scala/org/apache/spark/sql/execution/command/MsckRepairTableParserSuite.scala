@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.RepairTable
-import org.apache.spark.sql.test.SharedSparkSession
 
-class MsckRepairTableParserSuite extends AnalysisTest with SharedSparkSession {
+class MsckRepairTableParserSuite extends AnalysisTest {
   test("repair a table") {
     comparePlans(
       parsePlan("MSCK REPAIR TABLE a.b.c"),

@@ -230,7 +230,7 @@ statement
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
     | MSCK REPAIR TABLE multipartIdentifier
-      (option=(ADD|DROP|SYNC) PARTITIONS)?                             #repairTable
+        (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone

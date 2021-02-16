@@ -597,7 +597,7 @@ case class PartitionStatistics(numFiles: Int, totalSize: Long)
  * The syntax of this command is:
  * {{{
  *   ALTER TABLE table RECOVER PARTITIONS;
- *   MSCK REPAIR TABLE table [[ADD|DROP|SYNC] PARTITIONS];
+ *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS];
  * }}}
  */
 case class AlterTableRecoverPartitionsCommand(
