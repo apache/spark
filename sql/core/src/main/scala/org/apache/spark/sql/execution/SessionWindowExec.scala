@@ -52,6 +52,8 @@ case class SessionWindowExec(
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(sessionSpec.map(SortOrder(_, Ascending)) :+ SortOrder(timeColumn, Ascending))
 
+  override def producedAttributes: AttributeSet = AttributeSet(windowExpressions.toAttribute)
+
   override def output: Seq[Attribute] = child.output ++ Seq(windowExpressions.toAttribute)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning

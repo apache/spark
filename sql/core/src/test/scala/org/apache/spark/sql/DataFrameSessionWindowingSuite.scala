@@ -19,12 +19,14 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.sql.execution.SessionWindowExec
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
 
 class DataFrameSessionWindowingSuite
-  extends QueryTest with SharedSparkSession with BeforeAndAfterEach {
+  extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper with BeforeAndAfterEach {
 
   import testImplicits._
 
@@ -48,6 +50,7 @@ class DataFrameSessionWindowingSuite
       val a = spark.sql(
         s"""select session_window, key, sum(value) as res
             | from $table group by session_window(time, "10 seconds"), key""".stripMargin)
+
       checkAnswer(
         spark.sql(
           s"""select session_window, key, sum(value) as res
@@ -60,6 +63,12 @@ class DataFrameSessionWindowingSuite
           Row("2018-08-22 19:39:56", "2018-08-22 19:40:06", "b", 2)
         )
       )
+
+      val sessionWindow = collect(a.queryExecution.executedPlan) {
+        case s: SessionWindowExec => s
+      }
+      assert(sessionWindow.size == 1)
+      assert(sessionWindow.head.missingInput.isEmpty)
     }
   }
 
