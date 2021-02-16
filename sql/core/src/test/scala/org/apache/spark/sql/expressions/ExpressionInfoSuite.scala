@@ -114,6 +114,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val ignoreSet = Set(
       // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
       "org.apache.spark.sql.catalyst.expressions.TimeWindow",
+      "org.apache.spark.sql.catalyst.expressions.SessionWindowExpression",
       // Cast aliases do not need examples
       "org.apache.spark.sql.catalyst.expressions.Cast")
 
