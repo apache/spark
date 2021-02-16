@@ -1422,6 +1422,11 @@ constraints must be specified for semi join. This is because for not generating 
 row on left side, the engine must know when an input row on left side is not going to match with
 anything on right side in future.
 
+###### Semantic Guarantees of Stream-stream Semi Joins with Watermarking
+{:.no_toc}
+Semi joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
+regarding watermark delays and whether data will be dropped or not.
+
 ##### Support matrix for joins in streaming queries
 
 <table class ="table">
