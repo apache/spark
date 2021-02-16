@@ -24,7 +24,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.{catalyst, DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.plans.physical
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning, RoundRobinPartitioning, UnknownPartitioning}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, NullOrdering, SortDirection, SortOrder}
@@ -110,8 +110,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command)
@@ -174,8 +174,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command)
@@ -239,8 +239,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command)
@@ -258,7 +258,25 @@ class WriteDistributionAndOrderingSuite
     checkUnspecifiedDistributionAndLocalSort("overwriteDynamic")
   }
 
+  test("unspecified distribution and local sort with numPartitions: append") {
+    checkUnspecifiedDistributionAndLocalSort("append", Some(10))
+  }
+
+  test("unspecified distribution and local sort with numPartitions: overwrite") {
+    checkUnspecifiedDistributionAndLocalSort("overwrite", Some(10))
+  }
+
+  test("unspecified distribution and local sort with numPartitions: overwriteDynamic") {
+    checkUnspecifiedDistributionAndLocalSort("overwriteDynamic", Some(10))
+  }
+
   private def checkUnspecifiedDistributionAndLocalSort(command: String): Unit = {
+    checkUnspecifiedDistributionAndLocalSort(command, None)
+  }
+
+  private def checkUnspecifiedDistributionAndLocalSort(
+      command: String,
+      targetNumPartitions: Option[Int]): Unit = {
     val tableOrdering = Array[SortOrder](
       sort(FieldReference("data"), SortDirection.DESCENDING, NullOrdering.NULLS_FIRST)
     )
@@ -272,12 +290,12 @@ class WriteDistributionAndOrderingSuite
         Seq.empty
       )
     )
-    val writePartitioning = UnknownPartitioning(0)
+    val writePartitioning = unspecifiedWritePartitioning(targetNumPartitions)
 
     checkWriteRequirements(
       tableDistribution,
-      None,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command)
@@ -295,17 +313,35 @@ class WriteDistributionAndOrderingSuite
     checkUnspecifiedDistributionAndNoSort("overwriteDynamic")
   }
 
+  test("unspecified distribution and no sort with numPartitions: append") {
+    checkUnspecifiedDistributionAndNoSort("append", Some(10))
+  }
+
+  test("unspecified distribution and no sort with numPartitions: overwrite") {
+    checkUnspecifiedDistributionAndNoSort("overwrite", Some(10))
+  }
+
+  test("unspecified distribution and no sort with numPartitions: overwriteDynamic") {
+    checkUnspecifiedDistributionAndNoSort("overwriteDynamic", Some(10))
+  }
+
   private def checkUnspecifiedDistributionAndNoSort(command: String): Unit = {
+    checkUnspecifiedDistributionAndNoSort(command, None)
+  }
+
+  private def checkUnspecifiedDistributionAndNoSort(
+      command: String,
+      targetNumPartitions: Option[Int]): Unit = {
     val tableOrdering = Array.empty[SortOrder]
     val tableDistribution = Distributions.unspecified()
 
     val writeOrdering = Seq.empty[catalyst.expressions.SortOrder]
-    val writePartitioning = UnknownPartitioning(0)
+    val writePartitioning = unspecifiedWritePartitioning(targetNumPartitions)
 
     checkWriteRequirements(
       tableDistribution,
-      None,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeCommand = command)
@@ -367,8 +403,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
@@ -432,8 +468,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy(df("data").desc, df("id").asc),
@@ -496,8 +532,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.sortWithinPartitions("data", "id"),
@@ -562,8 +598,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
@@ -628,8 +664,8 @@ class WriteDistributionAndOrderingSuite
 
     checkWriteRequirements(
       tableDistribution,
-      targetNumPartitions,
       tableOrdering,
+      targetNumPartitions,
       expectedWritePartitioning = writePartitioning,
       expectedWriteOrdering = writeOrdering,
       writeTransform = df => df.orderBy("data", "id"),
@@ -638,15 +674,15 @@ class WriteDistributionAndOrderingSuite
 
   private def checkWriteRequirements(
       tableDistribution: Distribution,
-      tableNumPartitionsOnDistribution: Option[Int],
       tableOrdering: Array[SortOrder],
+      tableNumPartitions: Option[Int],
       expectedWritePartitioning: physical.Partitioning,
       expectedWriteOrdering: Seq[catalyst.expressions.SortOrder],
       writeTransform: DataFrame => DataFrame = df => df,
       writeCommand: String = "append"): Unit = {
 
     catalog.createTable(ident, schema, Array.empty, emptyProps, tableDistribution,
-      tableNumPartitionsOnDistribution, tableOrdering)
+      tableOrdering, tableNumPartitions)
 
     val df = spark.createDataFrame(Seq((1, "a"), (2, "b"), (3, "c"))).toDF("id", "data")
     val writer = writeTransform(df).writeTo(tableNameAsString)
@@ -754,6 +790,14 @@ class WriteDistributionAndOrderingSuite
     targetNumPartitions match {
       case Some(parts) => HashPartitioning(writePartitioningExprs, parts)
       case _ => HashPartitioning(writePartitioningExprs, conf.numShufflePartitions)
+    }
+  }
+
+  private def unspecifiedWritePartitioning(
+      targetNumPartitions: Option[Int]): physical.Partitioning = {
+    targetNumPartitions match {
+      case Some(parts) => RoundRobinPartitioning(parts)
+      case _ => UnknownPartitioning(0)
     }
   }
 }
