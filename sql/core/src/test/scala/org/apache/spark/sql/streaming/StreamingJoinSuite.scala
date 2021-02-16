@@ -343,8 +343,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select(Symbol("keftKey"),
-        timestamp_seconds($"time") as "leftTime", (Symbol("keftKey") * 2) as "leftValue")
+      .select(Symbol("leftKey"),
+        timestamp_seconds($"time") as "leftTime", (Symbol("leftKey") * 2) as "leftValue")
       .withWatermark("leftTime", "10 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
@@ -354,7 +354,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
 
     val joined =
       df1.join(df2, expr("leftKey = rightKey AND leftTime < rightTime - interval 5 seconds"))
-        .select(Symbol("keftKey"), Symbol("leftTime").cast("int"), Symbol("rightTime").cast("int"))
+        .select(Symbol("leftKey"), Symbol("leftTime").cast("int"), Symbol("rightTime").cast("int"))
 
     testStream(joined)(
       AddData(leftInput, (1, 5)),
@@ -403,8 +403,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     val rightInput = MemoryStream[(Int, Int)]
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select(Symbol("keftKey"),
-        timestamp_seconds($"time") as "leftTime", (Symbol("keftKey") * 2) as "leftValue")
+      .select(Symbol("leftKey"),
+        timestamp_seconds($"time") as "leftTime", (Symbol("leftKey") * 2) as "leftValue")
       .withWatermark("leftTime", "20 seconds")
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
@@ -437,7 +437,7 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     //     values allowed:  rightTime >= leftTime - 5s   ==>   rightTime > eventTimeWatermark - 5
     //     drop state where rightTime < eventTime - 5
 
-    val joined = df1.join(df2, condition).select(Symbol("keftKey"),
+    val joined = df1.join(df2, condition).select(Symbol("leftKey"),
       Symbol("leftTime").cast("int"), Symbol("rightTime").cast("int"))
 
     testStream(joined)(
