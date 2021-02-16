@@ -2505,7 +2505,6 @@ object SQLConf {
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
-      .internal()
       .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
         "to the built-in but external Avro data source module for backward compatibility.")
       .version("2.4.0")
