@@ -45,9 +45,9 @@ public interface RequiresDistributionAndOrdering extends Write {
   /**
    * Returns the number of partitions required by this write.
    * <p>
-   * Implementations may want to override this if it requires the specific number of partitions.
+   * Implementations may override this to require a specific number of input partitions.
    *
-   * @return the required number of partitions, non-positive values mean no requirement.
+   * @return the required number of partitions, any value less than 1 mean no requirement.
    */
   default int requiredNumPartitions() { return 0; }
 

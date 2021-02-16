@@ -32,16 +32,11 @@ object DistributionAndOrderingUtils {
     case write: RequiresDistributionAndOrdering =>
       val resolver = conf.resolver
 
-      val numParts = write.requiredNumPartitions()
-      val (distribution, numPartitions) = write.requiredDistribution match {
-        case d: OrderedDistribution =>
-          val dist = d.ordering.map(e => toCatalyst(e, query, resolver))
-          (dist, numParts)
-        case d: ClusteredDistribution =>
-          val dist = d.clustering.map(e => toCatalyst(e, query, resolver))
-          (dist, numParts)
-        case _: UnspecifiedDistribution =>
-          (Array.empty[Expression], numParts)
+      val numPartitions = write.requiredNumPartitions()
+      val distribution = write.requiredDistribution match {
+        case d: OrderedDistribution => d.ordering.map(e => toCatalyst(e, query, resolver))
+        case d: ClusteredDistribution => d.clustering.map(e => toCatalyst(e, query, resolver))
+        case _: UnspecifiedDistribution => Array.empty[Expression]
       }
 
       val queryWithDistribution = if (distribution.nonEmpty) {
@@ -54,12 +49,10 @@ object DistributionAndOrderingUtils {
         // for OrderedDistribution and generic expressions for ClusteredDistribution
         // this allows RepartitionByExpression to pick either range or hash partitioning
         RepartitionByExpression(distribution, query, finalNumPartitions)
+      } else if (numPartitions > 0) {
+        Repartition(numPartitions, shuffle = true, query)
       } else {
-        if (numPartitions > 0) {
-          Repartition(numPartitions, shuffle = true, query)
-        } else {
-          query
-        }
+        query
       }
 
       val ordering = write.requiredOrdering.toSeq
