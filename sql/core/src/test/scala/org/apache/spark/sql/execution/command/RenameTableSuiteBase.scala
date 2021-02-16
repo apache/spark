@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * This base suite contains unified tests for the `RENAME TABLE` command that check V1 and V2
@@ -31,4 +32,24 @@ import org.apache.spark.sql.QueryTest
  */
 trait RenameTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "RENAME TABLE"
+
+  test("SPARK-33786: Cache's storage level should be respected when a table name is altered") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      def getStorageLevel(tableName: String): StorageLevel = {
+        val table = spark.table(tableName)
+        val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
+        cachedData.cachedRepresentation.cacheBuilder.storageLevel
+      }
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+      sql(s"CACHE TABLE $src OPTIONS('storageLevel' 'MEMORY_ONLY')")
+      val oldStorageLevel = getStorageLevel(src)
+
+      sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
+      QueryTest.checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+      val newStorageLevel = getStorageLevel(dst)
+      assert(oldStorageLevel === newStorageLevel)
+    }
+  }
 }

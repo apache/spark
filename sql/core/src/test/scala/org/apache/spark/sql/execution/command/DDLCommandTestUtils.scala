@@ -54,7 +54,7 @@ trait DDLCommandTestUtils extends SQLTestUtils {
       (f: String => Unit): Unit = {
     val nsCat = s"$cat.$ns"
     withNamespace(nsCat) {
-      sql(s"CREATE NAMESPACE IF NOT EXISTS $nsCat")
+      sql(s"CREATE NAMESPACE $nsCat")
       val t = s"$nsCat.$tableName"
       withTable(t) {
         f(t)

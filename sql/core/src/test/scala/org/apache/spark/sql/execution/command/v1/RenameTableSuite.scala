@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
-import org.apache.spark.storage.StorageLevel
 
 /**
  * This base suite contains unified tests for the `RENAME TABLE` command that check V1
@@ -29,34 +28,10 @@ import org.apache.spark.storage.StorageLevel
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.RenameTableSuite`
  */
 trait RenameTableSuiteBase extends command.RenameTableSuiteBase {
-
 }
 
 /**
  * The class contains tests for the `RENAME TABLE` command to check V1 In-Memory table catalog.
  */
 class RenameTableSuite extends RenameTableSuiteBase with CommandSuiteBase {
-  test("SPARK-33786: Cache's storage level should be respected when a table name is altered") {
-    import testImplicits._
-    withNamespaceAndTable("ns", "src_tbl") { src =>
-      withNamespaceAndTable("ns", "dst_tbl") { dst =>
-        withTempPath { path =>
-          def getStorageLevel(tableName: String): StorageLevel = {
-            val table = spark.table(tableName)
-            val cachedData = spark.sharedState.cacheManager.lookupCachedData(table).get
-            cachedData.cachedRepresentation.cacheBuilder.storageLevel
-          }
-
-          Seq(1 -> "a").toDF("i", "j").write.parquet(path.getCanonicalPath)
-          sql(s"CREATE TABLE $src $defaultUsing LOCATION '${path.toURI}'")
-          sql(s"CACHE TABLE $src OPTIONS('storageLevel' 'MEMORY_ONLY')")
-          val oldStorageLevel = getStorageLevel(src)
-
-          sql(s"ALTER TABLE $src RENAME TO $dst")
-          val newStorageLevel = getStorageLevel(dst)
-          assert(oldStorageLevel === newStorageLevel)
-        }
-      }
-    }
-  }
 }
