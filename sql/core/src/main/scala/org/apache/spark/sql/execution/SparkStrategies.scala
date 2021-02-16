@@ -342,20 +342,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        if (AggUtils.hasSessionWindowExpression(namedGroupingExpressions)) {
-          AggUtils.planStreamingAggregationWithSessionWindow(
-            normalizedGroupingExpressions,
-            aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-            rewrittenResultExpressions,
-            planLater(child))
-        } else {
-          AggUtils.planStreamingAggregation(
-            normalizedGroupingExpressions,
-            aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-            rewrittenResultExpressions,
-            stateVersion,
-            planLater(child))
-        }
+        AggUtils.planStreamingAggregation(
+          normalizedGroupingExpressions,
+          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+          rewrittenResultExpressions,
+          stateVersion,
+          planLater(child))
       case _ => Nil
     }
   }

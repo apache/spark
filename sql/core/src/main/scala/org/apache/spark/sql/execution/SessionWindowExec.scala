@@ -103,7 +103,7 @@ case class SessionWindowExec(
         var rowIndexWithinPartition = 0
         var lastTime: Long = _
         var windowStartTime: Long = _
-        var windowResultWithBoundary = mutable.ArrayBuffer.empty[(Int, (Long, Long))]
+        val windowResultWithBoundary = mutable.ArrayBuffer.empty[(Int, (Long, Long))]
         var windowResultIndex = 0
 
         private[this] def addWindowValueAndBoundary(rowIndex: Int) {
@@ -129,8 +129,6 @@ case class SessionWindowExec(
           new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 
         var bufferIterator: Iterator[UnsafeRow] = _
-
-        val windowFunctionResult = new SpecificInternalRow(windowExpressions.map(_.dataType))
 
         private[this] def fetchNextPartition() {
           // Collect all the rows in the current partition.
