@@ -19,8 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.log4j.{Appender, AppenderSkeleton, Logger}
-import org.apache.log4j.spi.LoggingEvent
+import scala.math.Ordering
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -31,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -104,7 +104,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
     var strExpr: Expression = Literal("abc")
     for (_ <- 1 to 150) {
-      strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
+      strExpr = StringDecode(Encode(strExpr, "utf-8"), "utf-8")
     }
 
     val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
@@ -193,7 +193,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expressions = Seq.fill(length) {
       ToUTCTimestamp(
         Literal.create(Timestamp.valueOf("2015-07-24 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
+        Literal.create(LA.getId, StringType))
     }
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
@@ -210,7 +210,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expressions = Seq.fill(length) {
       ToUTCTimestamp(
         Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
-        Literal.create("PST", StringType))
+        Literal.create(LA.getId, StringType))
     }
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
@@ -251,7 +251,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       UTF8String.fromString("c"))
     assert(unsafeRow.getStruct(3, 1).getStruct(0, 2).getInt(1) === 3)
 
-    val fromUnsafe = FromUnsafeProjection(schema)
+    val fromUnsafe = SafeProjection.create(schema)
     val internalRow2 = fromUnsafe(unsafeRow)
     assert(internalRow === internalRow2)
 
@@ -332,13 +332,13 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {
-    GenerateUnsafeProjection.generate(AssertTrue(Cast(Literal("\""), BooleanType)) :: Nil)
+    GenerateUnsafeProjection.generate(AssertTrue(Cast(Literal("\""), BooleanType)).child :: Nil)
   }
 
   test("should not apply common subexpression elimination on conditional expressions") {
     val row = InternalRow(null)
     val bound = BoundReference(0, IntegerType, true)
-    val assertNotNull = AssertNotNull(bound, Nil)
+    val assertNotNull = AssertNotNull(bound)
     val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
     val projection = GenerateUnsafeProjection.generate(
       Seq(expr), subexpressionEliminationEnabled = true)
@@ -424,7 +424,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
     // When the number of primitive type mutable states is over the threshold, others are
     // allocated into an array
-    assert(ctx1.arrayCompactedMutableStates.get(CodeGenerator.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.arrayCompactedMutableStates(CodeGenerator.JAVA_INT).arrayNames.size == 1)
     assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
 
     val ctx2 = new CodegenContext
@@ -434,7 +434,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     // When the number of non-primitive type mutable states is over the threshold, others are
     // allocated into a new array
     assert(ctx2.inlinedMutableStates.isEmpty)
-    assert(ctx2.arrayCompactedMutableStates.get("InternalRow[]").get.arrayNames.size == 2)
+    assert(ctx2.arrayCompactedMutableStates("InternalRow[]").arrayNames.size == 2)
     assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
     assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
   }
@@ -515,37 +515,48 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-25113: should log when there exists generated methods above HugeMethodLimit") {
-    class MockAppender extends AppenderSkeleton {
-      var seenMessage = false
-
-      override def append(loggingEvent: LoggingEvent): Unit = {
-        if (loggingEvent.getRenderedMessage().contains("Generated method too long")) {
-          seenMessage = true
-        }
-      }
-
-      override def close(): Unit = {}
-      override def requiresLayout(): Boolean = false
-    }
-
-    val appender = new MockAppender()
-    withLogAppender(appender) {
+    val appender = new LogAppender("huge method limit")
+    withLogAppender(appender, loggerName = Some(classOf[CodeGenerator[_, _]].getName)) {
       val x = 42
       val expr = HugeCodeIntExpression(x)
       val proj = GenerateUnsafeProjection.generate(Seq(expr))
       val actual = proj(null)
       assert(actual.getInt(0) == x)
     }
-    assert(appender.seenMessage)
+    assert(appender.loggingEvents
+      .exists(_.getRenderedMessage().contains("Generated method too long")))
   }
 
-  private def withLogAppender(appender: Appender)(f: => Unit): Unit = {
-    val logger =
-      Logger.getLogger(classOf[CodeGenerator[_, _]].getName)
-    logger.addAppender(appender)
-    try f finally {
-      logger.removeAppender(appender)
-    }
+  test("SPARK-28916: subexpression elimination can cause 64kb code limit on UnsafeProjection") {
+    val numOfExprs = 10000
+    val exprs = (0 to numOfExprs).flatMap(colIndex =>
+      Seq(Add(BoundReference(colIndex, DoubleType, true),
+        BoundReference(numOfExprs + colIndex, DoubleType, true)),
+        Add(BoundReference(colIndex, DoubleType, true),
+          BoundReference(numOfExprs + colIndex, DoubleType, true))))
+    // these should not fail to compile due to 64K limit
+    GenerateUnsafeProjection.generate(exprs, true)
+    GenerateMutableProjection.generate(exprs, true)
+  }
+
+  test("SPARK-32624: Use CodeGenerator.typeName() to fix byte[] compile issue") {
+    val ctx = new CodegenContext
+    val bytes = new Array[Byte](3)
+    val refTerm = ctx.addReferenceObj("bytes", bytes)
+    assert(refTerm == "((byte[]) references[0] /* bytes */)")
+  }
+
+  test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
+    // emulate TypeUtils.getInterpretedOrdering(StringType)
+    val ctx = new CodegenContext
+    val comparator = implicitly[Ordering[UTF8String]]
+    val refTerm = ctx.addReferenceObj("comparator", comparator)
+
+    // Expecting result:
+    //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
+    // Using lenient assertions to be resilient to anonymous class numbering changes
+    assert(!refTerm.contains("null"))
+    assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
   }
 }
 

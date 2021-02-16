@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
@@ -47,13 +46,14 @@ case class ExpandExec(
   // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
-  override def references: AttributeSet =
+  @transient
+  override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
   private[this] val projection =
     (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
 
     child.execute().mapPartitions { iter =>
@@ -145,11 +145,12 @@ case class ExpandExec(
     // Part 1: declare variables for each column
     // If a column has the same value for all output rows, then we also generate its computation
     // right after declaration. Otherwise its value is computed in the part 2.
+    lazy val attributeSeq: AttributeSeq = child.output
     val outputColumns = output.indices.map { col =>
       val firstExpr = projections.head(col)
       if (sameOutput(col)) {
         // This column is the same across all output rows. Just generate code for it here.
-        BindReferences.bindReference(firstExpr, child.output).genCode(ctx)
+        BindReferences.bindReference(firstExpr, attributeSeq).genCode(ctx)
       } else {
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
@@ -170,7 +171,7 @@ case class ExpandExec(
       var updateCode = ""
       for (col <- exprs.indices) {
         if (!sameOutput(col)) {
-          val ev = BindReferences.bindReference(exprs(col), child.output).genCode(ctx)
+          val ev = BindReferences.bindReference(exprs(col), attributeSeq).genCode(ctx)
           updateCode +=
             s"""
                |${ev.code}

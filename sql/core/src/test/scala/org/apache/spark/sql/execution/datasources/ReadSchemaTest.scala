@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * The reader schema is said to be evolved (or projected) when it changed after the data is
@@ -46,6 +46,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *   | JSON         | 1, 2, 3, 4   |                                                        |
  *   | ORC          | 1, 2, 3, 4   | Native vectorized ORC reader has the widest coverage.  |
  *   | PARQUET      | 1, 2, 3      |                                                        |
+ *   | AVRO         | 1, 2, 3      |                                                        |
  *
  * This aims to provide an explicit test coverage for reader schema change on file-based data
  * sources. Since a file format has its own coverage, we need a test suite for each file-based
@@ -55,21 +56,24 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *
  *   ReadSchemaTest
  *     -> AddColumnTest
- *     -> HideColumnTest
+ *     -> AddColumnIntoTheMiddleTest
+ *     -> HideColumnAtTheEndTest
+ *     -> HideColumnInTheMiddleTest
  *     -> ChangePositionTest
  *     -> BooleanTypeTest
+ *     -> ToStringTypeTest
  *     -> IntegralTypeTest
  *     -> ToDoubleTypeTest
  *     -> ToDecimalTypeTest
  */
 
-trait ReadSchemaTest extends QueryTest with SQLTestUtils with SharedSQLContext {
+trait ReadSchemaTest extends QueryTest with SharedSparkSession {
   val format: String
   val options: Map[String, String] = Map.empty[String, String]
 }
 
 /**
- * Add column (Case 1).
+ * Add column (Case 1-1).
  * This test suite assumes that the missing column should be `null`.
  */
 trait AddColumnTest extends ReadSchemaTest {
@@ -104,6 +108,43 @@ trait AddColumnTest extends ReadSchemaTest {
         Row("b", "x", null, "two"),
         Row("a", "x", "y", "three"),
         Row("b", "x", "y", "three")))
+    }
+  }
+}
+
+/**
+ * Add column into the middle (Case 1-2).
+ */
+trait AddColumnIntoTheMiddleTest extends ReadSchemaTest {
+  import testImplicits._
+
+  test("append column into middle") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      val df1 = Seq((1, 2, "abc"), (4, 5, "def"), (8, 9, null)).toDF("col1", "col2", "col3")
+      val df2 = Seq((10, null, 20, null), (40, "uvw", 50, "xyz"), (80, null, 90, null))
+        .toDF("col1", "col4", "col2", "col3")
+
+      val dir1 = s"$path${File.separator}part=one"
+      val dir2 = s"$path${File.separator}part=two"
+
+      df1.write.format(format).options(options).save(dir1)
+      df2.write.format(format).options(options).save(dir2)
+
+      val df = spark.read
+        .schema(df2.schema)
+        .format(format)
+        .options(options)
+        .load(path)
+
+      checkAnswer(df, Seq(
+        Row(1, null, 2, "abc", "one"),
+        Row(4, null, 5, "def", "one"),
+        Row(8, null, 9, null, "one"),
+        Row(10, null, 20, null, "two"),
+        Row(40, "uvw", 50, "xyz", "two"),
+        Row(80, null, 90, null, "two")))
     }
   }
 }

@@ -68,7 +68,7 @@ rToSQLTypes <- as.environment(list(
   "character" = "string",
   "logical" = "boolean"))
 
-# Helper function of coverting decimal type. When backend returns column type in the
+# Helper function of converting decimal type. When backend returns column type in the
 # format of decimal(,) (e.g., decimal(10, 0)), this function coverts the column type
 # as double type. This function converts backend returned types that are not the key
 # of PRIMITIVE_TYPES, but should be treated as PRIMITIVE_TYPES.
@@ -82,4 +82,33 @@ specialtypeshandle <- function(type) {
     returntype <- "double"
   }
   returntype
+}
+
+# Helper function that checks supported types in Arrow.
+checkSchemaInArrow <- function(schema) {
+  stopifnot(inherits(schema, "structType"))
+
+  if (!requireNamespace("arrow", quietly = TRUE)) {
+    stop("'arrow' package should be installed.")
+  }
+
+  # Both cases below produce a corrupt value for unknown reason. It needs to be investigated.
+  field_strings <- sapply(schema$fields(), function(x) x$dataType.toString())
+  if (any(field_strings == "FloatType")) {
+    stop("Arrow optimization in R does not support float type yet.")
+  }
+  if (any(field_strings == "BinaryType")) {
+    stop("Arrow optimization in R does not support binary type yet.")
+  }
+  if (any(startsWith(field_strings, "ArrayType"))) {
+    stop("Arrow optimization in R does not support array type yet.")
+  }
+
+  # Arrow optimization in Spark does not yet support both cases below.
+  if (any(startsWith(field_strings, "StructType"))) {
+    stop("Arrow optimization in R does not support nested struct type yet.")
+  }
+  if (any(startsWith(field_strings, "MapType"))) {
+    stop("Arrow optimization in R does not support map type yet.")
+  }
 }

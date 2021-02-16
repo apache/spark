@@ -44,28 +44,6 @@ public final class Platform {
   public static final int DOUBLE_ARRAY_OFFSET;
 
   private static final boolean unaligned;
-  static {
-    boolean _unaligned;
-    String arch = System.getProperty("os.arch", "");
-    if (arch.equals("ppc64le") || arch.equals("ppc64")) {
-      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
-      // ppc64 and ppc64le support it
-      _unaligned = true;
-    } else {
-      try {
-        Class<?> bitsClass =
-          Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-        Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
-        unalignedMethod.setAccessible(true);
-        _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
-      } catch (Throwable t) {
-        // We at least know x86 and x64 support unaligned access.
-        //noinspection DynamicRegexReplaceableByCompiledPattern
-        _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
-      }
-    }
-    unaligned = _unaligned;
-  }
 
   // Access fields and constructors once and store them, for performance:
 
@@ -85,11 +63,13 @@ public final class Platform {
     }
   }
 
+  // Split java.version on non-digit chars:
+  private static final int majorVersion =
+    Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
+
   private static final Method CLEANER_CREATE_METHOD;
   static {
     // The implementation of Cleaner changed from JDK 8 to 9
-    // Split java.version on non-digit chars:
-    int majorVersion = Integer.parseInt(System.getProperty("java.version").split("\\D+")[0]);
     String cleanerClassName;
     if (majorVersion < 9) {
       cleanerClassName = "sun.misc.Cleaner";
@@ -209,21 +189,32 @@ public final class Platform {
   }
 
   /**
-   * Uses internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
-   * MaxDirectMemorySize limit (the default limit is too low and we do not want to require users
-   * to increase it).
+   * Allocate a DirectByteBuffer, potentially bypassing the JVM's MaxDirectMemorySize limit.
    */
   public static ByteBuffer allocateDirectBuffer(int size) {
     try {
+      if (CLEANER_CREATE_METHOD == null) {
+        // Can't set a Cleaner (see comments on field), so need to allocate via normal Java APIs
+        try {
+          return ByteBuffer.allocateDirect(size);
+        } catch (OutOfMemoryError oome) {
+          // checkstyle.off: RegexpSinglelineJava
+          throw new OutOfMemoryError("Failed to allocate direct buffer (" + oome.getMessage() +
+              "); try increasing -XX:MaxDirectMemorySize=... to, for example, your heap size");
+          // checkstyle.on: RegexpSinglelineJava
+        }
+      }
+      // Otherwise, use internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
+      // MaxDirectMemorySize limit (the default limit is too low and we do not want to
+      // require users to increase it).
       long memory = allocateMemory(size);
       ByteBuffer buffer = (ByteBuffer) DBB_CONSTRUCTOR.newInstance(memory, size);
-      if (CLEANER_CREATE_METHOD != null) {
-        try {
-          DBB_CLEANER_FIELD.set(buffer,
-              CLEANER_CREATE_METHOD.invoke(null, buffer, (Runnable) () -> freeMemory(memory)));
-        } catch (IllegalAccessException | InvocationTargetException e) {
-          throw new IllegalStateException(e);
-        }
+      try {
+        DBB_CLEANER_FIELD.set(buffer,
+            CLEANER_CREATE_METHOD.invoke(null, buffer, (Runnable) () -> freeMemory(memory)));
+      } catch (IllegalAccessException | InvocationTargetException e) {
+        freeMemory(memory);
+        throw new IllegalStateException(e);
       }
       return buffer;
     } catch (Exception e) {
@@ -307,5 +298,37 @@ public final class Platform {
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
     }
+  }
+
+  // This requires `majorVersion` and `_UNSAFE`.
+  static {
+    boolean _unaligned;
+    String arch = System.getProperty("os.arch", "");
+    if (arch.equals("ppc64le") || arch.equals("ppc64") || arch.equals("s390x")) {
+      // Since java.nio.Bits.unaligned() doesn't return true on ppc (See JDK-8165231), but
+      // ppc64 and ppc64le support it
+      _unaligned = true;
+    } else {
+      try {
+        Class<?> bitsClass =
+          Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
+        if (_UNSAFE != null && majorVersion >= 9) {
+          // Java 9/10 and 11/12 have different field names.
+          Field unalignedField =
+            bitsClass.getDeclaredField(majorVersion >= 11 ? "UNALIGNED" : "unaligned");
+          _unaligned = _UNSAFE.getBoolean(
+            _UNSAFE.staticFieldBase(unalignedField), _UNSAFE.staticFieldOffset(unalignedField));
+        } else {
+          Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
+          unalignedMethod.setAccessible(true);
+          _unaligned = Boolean.TRUE.equals(unalignedMethod.invoke(null));
+        }
+      } catch (Throwable t) {
+        // We at least know x86 and x64 support unaligned access.
+        //noinspection DynamicRegexReplaceableByCompiledPattern
+        _unaligned = arch.matches("^(i[3-6]86|x86(_64)?|x64|amd64|aarch64)$");
+      }
+    }
+    unaligned = _unaligned;
   }
 }

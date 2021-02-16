@@ -191,28 +191,28 @@ public class SparkSaslSuite {
 
       SaslEncryption.EncryptedMessage emsg =
         new SaslEncryption.EncryptedMessage(backend, msg, 1024);
-      long count = emsg.transferTo(channel, emsg.transfered());
+      long count = emsg.transferTo(channel, emsg.transferred());
       assertTrue(count < data.length);
       assertTrue(count > 0);
 
       // Here, the output buffer is full so nothing should be transferred.
-      assertEquals(0, emsg.transferTo(channel, emsg.transfered()));
+      assertEquals(0, emsg.transferTo(channel, emsg.transferred()));
 
       // Now there's room in the buffer, but not enough to transfer all the remaining data,
       // so the dummy count should be returned.
       channel.reset();
-      assertEquals(1, emsg.transferTo(channel, emsg.transfered()));
+      assertEquals(1, emsg.transferTo(channel, emsg.transferred()));
 
       // Eventually, the whole message should be transferred.
       for (int i = 0; i < data.length / 32 - 2; i++) {
         channel.reset();
-        assertEquals(1, emsg.transferTo(channel, emsg.transfered()));
+        assertEquals(1, emsg.transferTo(channel, emsg.transferred()));
       }
 
       channel.reset();
-      count = emsg.transferTo(channel, emsg.transfered());
+      count = emsg.transferTo(channel, emsg.transferred());
       assertTrue("Unexpected count: " + count, count > 1 && count < data.length);
-      assertEquals(data.length, emsg.transfered());
+      assertEquals(data.length, emsg.transferred());
     } finally {
       msg.release();
     }
@@ -237,9 +237,9 @@ public class SparkSaslSuite {
         new SaslEncryption.EncryptedMessage(backend, msg.convertToNetty(), data.length / 8);
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(data.length);
-      while (emsg.transfered() < emsg.count()) {
+      while (emsg.transferred() < emsg.count()) {
         channel.reset();
-        emsg.transferTo(channel, emsg.transfered());
+        emsg.transferTo(channel, emsg.transferred());
       }
 
       verify(backend, times(8)).wrap(any(byte[].class), anyInt(), anyInt());
@@ -347,17 +347,18 @@ public class SparkSaslSuite {
     verify(handler).getStreamManager();
 
     saslHandler.channelInactive(null);
-    verify(handler).channelInactive(any(TransportClient.class));
+    verify(handler).channelInactive(isNull());
 
     saslHandler.exceptionCaught(null, null);
-    verify(handler).exceptionCaught(any(Throwable.class), any(TransportClient.class));
+    verify(handler).exceptionCaught(isNull(), isNull());
   }
 
   @Test
   public void testDelegates() throws Exception {
     Method[] rpcHandlerMethods = RpcHandler.class.getDeclaredMethods();
     for (Method m : rpcHandlerMethods) {
-      SaslRpcHandler.class.getDeclaredMethod(m.getName(), m.getParameterTypes());
+      Method delegate = SaslRpcHandler.class.getMethod(m.getName(), m.getParameterTypes());
+      assertNotEquals(delegate.getDeclaringClass(), RpcHandler.class);
     }
   }
 
@@ -365,6 +366,7 @@ public class SparkSaslSuite {
 
     final TransportClient client;
     final TransportServer server;
+    final TransportContext ctx;
 
     private final boolean encrypt;
     private final boolean disableClientEncryption;
@@ -396,7 +398,7 @@ public class SparkSaslSuite {
       when(keyHolder.getSaslUser(anyString())).thenReturn("user");
       when(keyHolder.getSecretKey(anyString())).thenReturn("secret");
 
-      TransportContext ctx = new TransportContext(conf, rpcHandler);
+      this.ctx = new TransportContext(conf, rpcHandler);
 
       this.checker = new EncryptionCheckerBootstrap(SaslEncryption.ENCRYPTION_HANDLER_NAME);
 
@@ -430,6 +432,9 @@ public class SparkSaslSuite {
       }
       if (server != null) {
         server.close();
+      }
+      if (ctx != null) {
+        ctx.close();
       }
     }
 

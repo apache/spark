@@ -17,11 +17,17 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.Properties
+import java.util.concurrent.Executors
+
+import scala.collection.parallel.immutable.ParRange
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.types._
+import org.apache.spark.util.ThreadUtils
 
 class SQLExecutionSuite extends SparkFunSuite {
 
@@ -46,7 +52,7 @@ class SQLExecutionSuite extends SparkFunSuite {
     import spark.implicits._
     try {
       // Should not throw IllegalArgumentException
-      (1 to 100).par.foreach { _ =>
+      new ParRange(1 to 100).foreach { _ =>
         spark.sparkContext.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b").count()
       }
     } finally {
@@ -118,6 +124,38 @@ class SQLExecutionSuite extends SparkFunSuite {
     assert(df.queryExecution === queryExecution)
 
     spark.stop()
+  }
+
+  test("SPARK-32813: Table scan should work in different thread") {
+    val executor1 = Executors.newSingleThreadExecutor()
+    val executor2 = Executors.newSingleThreadExecutor()
+    var session: SparkSession = null
+    SparkSession.cleanupAnyExistingSession()
+
+    withTempDir { tempDir =>
+      try {
+        val tablePath = tempDir.toString + "/table"
+        val df = ThreadUtils.awaitResult(Future {
+          session = SparkSession.builder().appName("test").master("local[*]").getOrCreate()
+
+          session.createDataFrame(
+            session.sparkContext.parallelize(Row(Array(1, 2, 3)) :: Nil),
+            StructType(Seq(
+              StructField("a", ArrayType(IntegerType, containsNull = false), nullable = false))))
+            .write.parquet(tablePath)
+
+          session.read.parquet(tablePath)
+        }(ExecutionContext.fromExecutorService(executor1)), 1.minute)
+
+        ThreadUtils.awaitResult(Future {
+          assert(df.rdd.collect()(0) === Row(Seq(1, 2, 3)))
+        }(ExecutionContext.fromExecutorService(executor2)), 1.minute)
+      } finally {
+        executor1.shutdown()
+        executor2.shutdown()
+        session.stop()
+      }
+    }
   }
 }
 

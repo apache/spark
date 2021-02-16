@@ -32,6 +32,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.apache.spark.Partitioner;
 import org.apache.spark.SparkConf;
@@ -71,6 +73,10 @@ import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
+import org.apache.spark.resource.ExecutorResourceRequests;
+import org.apache.spark.resource.ResourceProfile;
+import org.apache.spark.resource.ResourceProfileBuilder;
+import org.apache.spark.resource.TaskResourceRequests;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.LongAccumulator;
@@ -156,13 +162,16 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void sample() {
-    List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+    List<Integer> ints = IntStream.iterate(1, x -> x + 1)
+      .limit(20)
+      .boxed()
+      .collect(Collectors.toList());
     JavaRDD<Integer> rdd = sc.parallelize(ints);
     // the seeds here are "magic" to make this work out nicely
     JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 8);
     assertEquals(2, sample20.count());
     JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 2);
-    assertEquals(2, sample20WithoutReplacement.count());
+    assertEquals(4, sample20WithoutReplacement.count());
   }
 
   @Test
@@ -240,6 +249,34 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(new Tuple2<>(0, 5), new Tuple2<>(0, 8), new Tuple2<>(2, 6)));
     assertEquals(partitions.get(1),
         Arrays.asList(new Tuple2<>(1, 3), new Tuple2<>(3, 8), new Tuple2<>(3, 8)));
+  }
+
+  @Test
+  public void filterByRange() {
+    List<Tuple2<Integer, Integer>> pairs = new ArrayList<>();
+    pairs.add(new Tuple2<>(0, 5));
+    pairs.add(new Tuple2<>(1, 8));
+    pairs.add(new Tuple2<>(2, 6));
+    pairs.add(new Tuple2<>(3, 8));
+    pairs.add(new Tuple2<>(4, 8));
+
+    JavaPairRDD<Integer, Integer> rdd = sc.parallelizePairs(pairs).sortByKey();
+
+    // Default comparator
+    JavaPairRDD<Integer, Integer> filteredRDD = rdd.filterByRange(3, 11);
+    List<Tuple2<Integer, Integer>> filteredPairs = filteredRDD.collect();
+    assertEquals(filteredPairs.size(), 2);
+    assertEquals(filteredPairs.get(0), new Tuple2<>(3, 8));
+    assertEquals(filteredPairs.get(1), new Tuple2<>(4, 8));
+
+    // Custom comparator
+    filteredRDD = rdd.filterByRange(Collections.reverseOrder(), 3, -2);
+    filteredPairs = filteredRDD.collect();
+    assertEquals(filteredPairs.size(), 4);
+    assertEquals(filteredPairs.get(0), new Tuple2<>(0, 5));
+    assertEquals(filteredPairs.get(1), new Tuple2<>(1, 8));
+    assertEquals(filteredPairs.get(2), new Tuple2<>(2, 6));
+    assertEquals(filteredPairs.get(3), new Tuple2<>(3, 8));
   }
 
   @Test
@@ -893,6 +930,16 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void withResources() {
+    ExecutorResourceRequests ereqs = new ExecutorResourceRequests().cores(4);
+    TaskResourceRequests treqs = new TaskResourceRequests().cpus(1);
+    ResourceProfile rp1 = new ResourceProfileBuilder().require(ereqs).require(treqs).build();
+    JavaRDD<Integer> in1 = sc.parallelize(Arrays.asList(1, 2, 3, 4));
+    in1.withResources(rp1);
+    assertEquals(rp1, in1.getResourceProfile());
+  }
+
+  @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
     TaskContext context = TaskContext$.MODULE$.empty();
@@ -1471,7 +1518,7 @@ public class JavaAPISuite implements Serializable {
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<>()).countAsync();
     try {
       future.get(2, TimeUnit.SECONDS);
-      fail("Expected future.get() for failed job to throw ExcecutionException");
+      fail("Expected future.get() for failed job to throw ExecutionException");
     } catch (ExecutionException ee) {
       assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
     }

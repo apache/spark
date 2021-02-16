@@ -18,6 +18,7 @@
 package org.apache.spark.ui.storage
 
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
@@ -31,19 +32,10 @@ import org.apache.spark.util.Utils
 private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends WebUIPage("rdd") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val parameterBlockPage = UIUtils.stripXSS(request.getParameter("block.page"))
-    val parameterBlockSortColumn = UIUtils.stripXSS(request.getParameter("block.sort"))
-    val parameterBlockSortDesc = UIUtils.stripXSS(request.getParameter("block.desc"))
-    val parameterBlockPageSize = UIUtils.stripXSS(request.getParameter("block.pageSize"))
-
-    val blockPage = Option(parameterBlockPage).map(_.toInt).getOrElse(1)
-    val blockSortColumn = Option(parameterBlockSortColumn).getOrElse("Block Name")
-    val blockSortDesc = Option(parameterBlockSortDesc).map(_.toBoolean).getOrElse(false)
-    val blockPageSize = Option(parameterBlockPageSize).map(_.toInt).getOrElse(100)
+    val blockPage = Option(request.getParameter("block.page")).map(_.toInt).getOrElse(1)
 
     val rddId = parameterId.toInt
     val rddStorageInfo = try {
@@ -60,11 +52,10 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
 
     val blockTableHTML = try {
       val _blockTable = new BlockPagedTable(
+        request,
+        "block",
         UIUtils.prependBaseUri(request, parent.basePath) + s"/storage/rdd/?id=${rddId}",
         rddStorageInfo.partitions.get,
-        blockPageSize,
-        blockSortColumn,
-        blockSortDesc,
         store.executorList(true))
       _blockTable.table(blockPage)
     } catch {
@@ -89,9 +80,9 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
       </script>
 
     val content =
-      <div class="row-fluid">
-        <div class="span12">
-          <ul class="unstyled">
+      <div class="row">
+        <div class="col-12">
+          <ul class="list-unstyled">
             <li>
               <strong>Storage Level:</strong>
               {rddStorageInfo.storageLevel}
@@ -116,8 +107,8 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
         </div>
       </div>
 
-      <div class="row-fluid">
-        <div class="span12">
+      <div class="row">
+        <div class="col-12">
           <h4>
             Data Distribution on {rddStorageInfo.dataDistribution.map(_.size).getOrElse(0)}
             Executors
@@ -190,7 +181,7 @@ private[ui] class BlockDataSource(
       rddPartition.memoryUsed,
       rddPartition.diskUsed,
       rddPartition.executors
-        .map { id => executorIdToAddress.get(id).getOrElse(id) }
+        .map { id => executorIdToAddress.getOrElse(id, id) }
         .sorted
         .mkString(" "))
   }
@@ -216,21 +207,22 @@ private[ui] class BlockDataSource(
 }
 
 private[ui] class BlockPagedTable(
+    request: HttpServletRequest,
+    rddTag: String,
     basePath: String,
     rddPartitions: Seq[RDDPartitionInfo],
-    pageSize: Int,
-    sortColumn: String,
-    desc: Boolean,
     executorSummaries: Seq[ExecutorSummary]) extends PagedTable[BlockTableRowData] {
+
+  private val (sortColumn, desc, pageSize) = getTableParameters(request, rddTag, "Block Name")
 
   override def tableId: String = "rdd-storage-by-block-table"
 
   override def tableCssClass: String =
-    "table table-bordered table-condensed table-striped table-head-clickable"
+    "table table-bordered table-sm table-striped table-head-clickable"
 
-  override def pageSizeFormField: String = "block.pageSize"
+  override def pageSizeFormField: String = s"$rddTag.pageSize"
 
-  override def pageNumberFormField: String = "block.page"
+  override def pageNumberFormField: String = s"$rddTag.page"
 
   override val dataSource: BlockDataSource = new BlockDataSource(
     rddPartitions,
@@ -240,7 +232,7 @@ private[ui] class BlockPagedTable(
     executorSummaries.map { ex => (ex.id, ex.hostPort) }.toMap)
 
   override def pageLink(page: Int): String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     basePath +
       s"&$pageNumberFormField=$page" +
       s"&block.sort=$encodedSortColumn" +
@@ -249,51 +241,21 @@ private[ui] class BlockPagedTable(
   }
 
   override def goButtonFormPath: String = {
-    val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
+    val encodedSortColumn = URLEncoder.encode(sortColumn, UTF_8.name())
     s"$basePath&block.sort=$encodedSortColumn&block.desc=$desc"
   }
 
   override def headers: Seq[Node] = {
-    val blockHeaders = Seq(
+    val blockHeaders: Seq[(String, Boolean, Option[String])] = Seq(
       "Block Name",
       "Storage Level",
       "Size in Memory",
       "Size on Disk",
-      "Executors")
+      "Executors").map(x => (x, true, None))
 
-    if (!blockHeaders.contains(sortColumn)) {
-      throw new IllegalArgumentException(s"Unknown column: $sortColumn")
-    }
+    isSortColumnValid(blockHeaders, sortColumn)
 
-    val headerRow: Seq[Node] = {
-      blockHeaders.map { header =>
-        if (header == sortColumn) {
-          val headerLink = Unparsed(
-            basePath +
-              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
-              s"&block.desc=${!desc}" +
-              s"&block.pageSize=$pageSize")
-          val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-          <th>
-            <a href={headerLink}>
-              {header}
-              <span>&nbsp;{Unparsed(arrow)}</span>
-            </a>
-          </th>
-        } else {
-          val headerLink = Unparsed(
-            basePath +
-              s"&block.sort=${URLEncoder.encode(header, "UTF-8")}" +
-              s"&block.pageSize=$pageSize")
-          <th>
-            <a href={headerLink}>
-              {header}
-            </a>
-          </th>
-        }
-      }
-    }
-    <thead>{headerRow}</thead>
+    headerRow(blockHeaders, desc, pageSize, sortColumn, basePath, rddTag, "block")
   }
 
   override def row(block: BlockTableRowData): Seq[Node] = {

@@ -17,126 +17,179 @@
 
 package org.apache.spark.sql.catalyst.csv
 
+import java.text.{DecimalFormat, DecimalFormatSymbols}
+import java.util.Locale
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class CSVInferSchemaSuite extends SparkFunSuite {
+class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("String fields types are inferred correctly from null types") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-    assert(CSVInferSchema.inferField(NullType, "", options) == NullType)
-    assert(CSVInferSchema.inferField(NullType, null, options) == NullType)
-    assert(CSVInferSchema.inferField(NullType, "100000000000", options) == LongType)
-    assert(CSVInferSchema.inferField(NullType, "60", options) == IntegerType)
-    assert(CSVInferSchema.inferField(NullType, "3.5", options) == DoubleType)
-    assert(CSVInferSchema.inferField(NullType, "test", options) == StringType)
-    assert(CSVInferSchema.inferField(NullType, "2015-08-20 15:57:00", options) == TimestampType)
-    assert(CSVInferSchema.inferField(NullType, "True", options) == BooleanType)
-    assert(CSVInferSchema.inferField(NullType, "FAlSE", options) == BooleanType)
+    val options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"), false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(NullType, "") == NullType)
+    assert(inferSchema.inferField(NullType, null) == NullType)
+    assert(inferSchema.inferField(NullType, "100000000000") == LongType)
+    assert(inferSchema.inferField(NullType, "60") == IntegerType)
+    assert(inferSchema.inferField(NullType, "3.5") == DoubleType)
+    assert(inferSchema.inferField(NullType, "test") == StringType)
+    assert(inferSchema.inferField(NullType, "2015-08-20 15:57:00") == TimestampType)
+    assert(inferSchema.inferField(NullType, "True") == BooleanType)
+    assert(inferSchema.inferField(NullType, "FAlSE") == BooleanType)
 
     val textValueOne = Long.MaxValue.toString + "0"
     val decimalValueOne = new java.math.BigDecimal(textValueOne)
     val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
-    assert(CSVInferSchema.inferField(NullType, textValueOne, options) == expectedTypeOne)
+    assert(inferSchema.inferField(NullType, textValueOne) == expectedTypeOne)
   }
 
   test("String fields types are inferred correctly from other types") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-    assert(CSVInferSchema.inferField(LongType, "1.0", options) == DoubleType)
-    assert(CSVInferSchema.inferField(LongType, "test", options) == StringType)
-    assert(CSVInferSchema.inferField(IntegerType, "1.0", options) == DoubleType)
-    assert(CSVInferSchema.inferField(DoubleType, null, options) == DoubleType)
-    assert(CSVInferSchema.inferField(DoubleType, "test", options) == StringType)
-    assert(CSVInferSchema.inferField(LongType, "2015-08-20 14:57:00", options) == TimestampType)
-    assert(CSVInferSchema.inferField(DoubleType, "2015-08-20 15:57:00", options) == TimestampType)
-    assert(CSVInferSchema.inferField(LongType, "True", options) == BooleanType)
-    assert(CSVInferSchema.inferField(IntegerType, "FALSE", options) == BooleanType)
-    assert(CSVInferSchema.inferField(TimestampType, "FALSE", options) == BooleanType)
+    val options = new CSVOptions(Map("timestampFormat" -> "yyyy-MM-dd HH:mm:ss"), false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(LongType, "1.0") == DoubleType)
+    assert(inferSchema.inferField(LongType, "test") == StringType)
+    assert(inferSchema.inferField(IntegerType, "1.0") == DoubleType)
+    assert(inferSchema.inferField(DoubleType, null) == DoubleType)
+    assert(inferSchema.inferField(DoubleType, "test") == StringType)
+    assert(inferSchema.inferField(LongType, "2015-08-20 14:57:00") == StringType)
+    assert(inferSchema.inferField(DoubleType, "2015-08-20 15:57:00") == StringType)
+    assert(inferSchema.inferField(LongType, "True") == StringType)
+    assert(inferSchema.inferField(IntegerType, "FALSE") == StringType)
+    assert(inferSchema.inferField(TimestampType, "FALSE") == StringType)
 
     val textValueOne = Long.MaxValue.toString + "0"
     val decimalValueOne = new java.math.BigDecimal(textValueOne)
     val expectedTypeOne = DecimalType(decimalValueOne.precision, decimalValueOne.scale)
-    assert(CSVInferSchema.inferField(IntegerType, textValueOne, options) == expectedTypeOne)
+    assert(inferSchema.inferField(IntegerType, textValueOne) == expectedTypeOne)
   }
 
   test("Timestamp field types are inferred correctly via custom data format") {
-    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"), false, "GMT")
-    assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
-    options = new CSVOptions(Map("timestampFormat" -> "yyyy"), false, "GMT")
-    assert(CSVInferSchema.inferField(TimestampType, "2015", options) == TimestampType)
+    var options = new CSVOptions(Map("timestampFormat" -> "yyyy-mm"), false, "UTC")
+    var inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(TimestampType, "2015-08") == TimestampType)
+
+    options = new CSVOptions(Map("timestampFormat" -> "yyyy"), false, "UTC")
+    inferSchema = new CSVInferSchema(options)
+    assert(inferSchema.inferField(TimestampType, "2015") == TimestampType)
   }
 
   test("Timestamp field types are inferred correctly from other types") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-    assert(CSVInferSchema.inferField(IntegerType, "2015-08-20 14", options) == StringType)
-    assert(CSVInferSchema.inferField(DoubleType, "2015-08-20 14:10", options) == StringType)
-    assert(CSVInferSchema.inferField(LongType, "2015-08 14:49:00", options) == StringType)
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(IntegerType, "2015-08-20 14") == StringType)
+    assert(inferSchema.inferField(DoubleType, "2015-08-20 14:10") == StringType)
+    assert(inferSchema.inferField(LongType, "2015-08 14:49:00") == StringType)
   }
 
   test("Boolean fields types are inferred correctly from other types") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
-    assert(CSVInferSchema.inferField(LongType, "Fale", options) == StringType)
-    assert(CSVInferSchema.inferField(DoubleType, "TRUEe", options) == StringType)
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(LongType, "Fale") == StringType)
+    assert(inferSchema.inferField(DoubleType, "TRUEe") == StringType)
   }
 
   test("Type arrays are merged to highest common type") {
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
     assert(
-      CSVInferSchema.mergeRowTypes(Array(StringType),
-        Array(DoubleType)).deep == Array(StringType).deep)
+      inferSchema.mergeRowTypes(Array(StringType),
+        Array(DoubleType)).sameElements(Array(StringType)))
     assert(
-      CSVInferSchema.mergeRowTypes(Array(IntegerType),
-        Array(LongType)).deep == Array(LongType).deep)
+      inferSchema.mergeRowTypes(Array(IntegerType),
+        Array(LongType)).sameElements(Array(LongType)))
     assert(
-      CSVInferSchema.mergeRowTypes(Array(DoubleType),
-        Array(LongType)).deep == Array(DoubleType).deep)
+      inferSchema.mergeRowTypes(Array(DoubleType),
+        Array(LongType)).sameElements(Array(DoubleType)))
   }
 
   test("Null fields are handled properly when a nullValue is specified") {
-    var options = new CSVOptions(Map("nullValue" -> "null"), false, "GMT")
-    assert(CSVInferSchema.inferField(NullType, "null", options) == NullType)
-    assert(CSVInferSchema.inferField(StringType, "null", options) == StringType)
-    assert(CSVInferSchema.inferField(LongType, "null", options) == LongType)
+    var options = new CSVOptions(Map("nullValue" -> "null"), false, "UTC")
+    var inferSchema = new CSVInferSchema(options)
 
-    options = new CSVOptions(Map("nullValue" -> "\\N"), false, "GMT")
-    assert(CSVInferSchema.inferField(IntegerType, "\\N", options) == IntegerType)
-    assert(CSVInferSchema.inferField(DoubleType, "\\N", options) == DoubleType)
-    assert(CSVInferSchema.inferField(TimestampType, "\\N", options) == TimestampType)
-    assert(CSVInferSchema.inferField(BooleanType, "\\N", options) == BooleanType)
-    assert(CSVInferSchema.inferField(DecimalType(1, 1), "\\N", options) == DecimalType(1, 1))
+    assert(inferSchema.inferField(NullType, "null") == NullType)
+    assert(inferSchema.inferField(StringType, "null") == StringType)
+    assert(inferSchema.inferField(LongType, "null") == LongType)
+
+    options = new CSVOptions(Map("nullValue" -> "\\N"), false, "UTC")
+    inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(IntegerType, "\\N") == IntegerType)
+    assert(inferSchema.inferField(DoubleType, "\\N") == DoubleType)
+    assert(inferSchema.inferField(TimestampType, "\\N") == TimestampType)
+    assert(inferSchema.inferField(BooleanType, "\\N") == BooleanType)
+    assert(inferSchema.inferField(DecimalType(1, 1), "\\N") == DecimalType(1, 1))
   }
 
   test("Merging Nulltypes should yield Nulltype.") {
-    val mergedNullTypes = CSVInferSchema.mergeRowTypes(Array(NullType), Array(NullType))
-    assert(mergedNullTypes.deep == Array(NullType).deep)
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    val mergedNullTypes = inferSchema.mergeRowTypes(Array(NullType), Array(NullType))
+    assert(mergedNullTypes.sameElements(Array(NullType)))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-mm"), false, "GMT")
-    assert(CSVInferSchema.inferField(TimestampType, "2015-08", options) == TimestampType)
+    val options = new CSVOptions(Map("TiMeStampFormat" -> "yyyy-mm"), false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(TimestampType, "2015-08") == TimestampType)
   }
 
   test("SPARK-18877: `inferField` on DecimalType should find a common type with `typeSoFar`") {
-    val options = new CSVOptions(Map.empty[String, String], false, "GMT")
+    val options = new CSVOptions(Map.empty[String, String], false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
 
-    // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
-    assert(CSVInferSchema.inferField(DecimalType(3, -10), "1.19E+11", options) ==
-      DecimalType(4, -9))
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      // 9.03E+12 is Decimal(3, -10) and 1.19E+11 is Decimal(3, -9).
+      assert(inferSchema.inferField(DecimalType(3, -10), "1.19E11") ==
+        DecimalType(4, -9))
+    }
 
     // BigDecimal("12345678901234567890.01234567890123456789") is precision 40 and scale 20.
     val value = "12345678901234567890.01234567890123456789"
-    assert(CSVInferSchema.inferField(DecimalType(3, -10), value, options) == DoubleType)
+    assert(inferSchema.inferField(DecimalType(3, 0), value) == DoubleType)
 
     // Seq(s"${Long.MaxValue}1", "2015-12-01 00:00:00") should be StringType
-    assert(CSVInferSchema.inferField(NullType, s"${Long.MaxValue}1", options) == DecimalType(20, 0))
-    assert(CSVInferSchema.inferField(DecimalType(20, 0), "2015-12-01 00:00:00", options)
+    assert(inferSchema.inferField(NullType, s"${Long.MaxValue}1") == DecimalType(20, 0))
+    assert(inferSchema.inferField(DecimalType(20, 0), "2015-12-01 00:00:00")
       == StringType)
   }
 
   test("DoubleType should be inferred when user defined nan/inf are provided") {
     val options = new CSVOptions(Map("nanValue" -> "nan", "negativeInf" -> "-inf",
-      "positiveInf" -> "inf"), false, "GMT")
-    assert(CSVInferSchema.inferField(NullType, "nan", options) == DoubleType)
-    assert(CSVInferSchema.inferField(NullType, "inf", options) == DoubleType)
-    assert(CSVInferSchema.inferField(NullType, "-inf", options) == DoubleType)
+      "positiveInf" -> "inf"), false, "UTC")
+    val inferSchema = new CSVInferSchema(options)
+
+    assert(inferSchema.inferField(NullType, "nan") == DoubleType)
+    assert(inferSchema.inferField(NullType, "inf") == DoubleType)
+    assert(inferSchema.inferField(NullType, "-inf") == DoubleType)
+  }
+
+  test("inferring the decimal type using locale") {
+    def checkDecimalInfer(langTag: String, expectedType: DataType): Unit = {
+      val options = new CSVOptions(
+        parameters = Map("locale" -> langTag, "inferSchema" -> "true", "sep" -> "|"),
+        columnPruning = false,
+        defaultTimeZoneId = "UTC")
+      val inferSchema = new CSVInferSchema(options)
+
+      val df = new DecimalFormat("", new DecimalFormatSymbols(Locale.forLanguageTag(langTag)))
+      val input = df.format(Decimal(1000001).toBigDecimal)
+
+      assert(inferSchema.inferField(NullType, input) == expectedType)
+    }
+
+    // input like '1,0' is inferred as strings for backward compatibility.
+    Seq("en-US").foreach(checkDecimalInfer(_, StringType))
+    Seq("ko-KR", "ru-RU", "de-DE").foreach(checkDecimalInfer(_, DecimalType(7, 0)))
   }
 }

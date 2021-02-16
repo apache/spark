@@ -22,13 +22,12 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
 class ObjectAggregationIterator(
     partIndex: Int,
@@ -42,7 +41,9 @@ class ObjectAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     inputRows: Iterator[InternalRow],
     fallbackCountThreshold: Int,
-    numOutputRows: SQLMetric)
+    numOutputRows: SQLMetric,
+    spillSize: SQLMetric,
+    numTasksFallBacked: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -58,12 +59,16 @@ class ObjectAggregationIterator(
 
   private[this] var aggBufferIterator: Iterator[AggregationBufferEntry] = _
 
+  // Remember spill data size of this task before execute this operator so that we can
+  // figure out how many bytes we spilled for this operator.
+  private val spillSizeBefore = TaskContext.get().taskMetrics().memoryBytesSpilled
+
   // Hacking the aggregation mode to call AggregateFunction.merge to merge two aggregation buffers
   private val mergeAggregationBuffers: (InternalRow, InternalRow) => Unit = {
     val newExpressions = aggregateExpressions.map {
-      case agg @ AggregateExpression(_, Partial, _, _) =>
+      case agg @ AggregateExpression(_, Partial, _, _, _) =>
         agg.copy(mode = PartialMerge)
-      case agg @ AggregateExpression(_, Complete, _, _) =>
+      case agg @ AggregateExpression(_, Complete, _, _, _) =>
         agg.copy(mode = Final)
       case other => other
     }
@@ -76,6 +81,11 @@ class ObjectAggregationIterator(
    * Start processing input rows.
    */
   processInputs()
+
+  TaskContext.get().addTaskCompletionListener[Unit](_ => {
+    // At the end of the task, update the task's spill size.
+    spillSize.set(TaskContext.get().taskMetrics().memoryBytesSpilled - spillSizeBefore)
+  })
 
   override final def hasNext: Boolean = {
     aggBufferIterator.hasNext
@@ -158,18 +168,18 @@ class ObjectAggregationIterator(
         val buffer: InternalRow = getAggregationBufferByKey(hashMap, groupingKey)
         processRow(buffer, newInput)
 
-        // The the hash map gets too large, makes a sorted spill and clear the map.
-        if (hashMap.size >= fallbackCountThreshold) {
+        // The hash map gets too large, makes a sorted spill and clear the map.
+        if (hashMap.size >= fallbackCountThreshold && inputRows.hasNext) {
           logInfo(
-            s"Aggregation hash map reaches threshold " +
+            s"Aggregation hash map size ${hashMap.size} reaches threshold " +
               s"capacity ($fallbackCountThreshold entries), spilling and falling back to sort" +
-              s" based aggregation. You may change the threshold by adjust option " +
+              " based aggregation. You may change the threshold by adjust option " +
               SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key
           )
 
           // Falls back to sort-based aggregation
           sortBased = true
-
+          numTasksFallBacked += 1
         }
       }
 

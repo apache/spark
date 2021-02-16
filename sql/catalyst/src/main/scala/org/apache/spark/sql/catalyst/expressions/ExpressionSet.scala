@@ -27,6 +27,10 @@ object ExpressionSet {
     expressions.foreach(set.add)
     set
   }
+
+  def apply(): ExpressionSet = {
+    new ExpressionSet()
+  }
 }
 
 /**
@@ -53,44 +57,102 @@ object ExpressionSet {
  * This is consistent with how we define `semanticEquals` between two expressions.
  */
 class ExpressionSet protected(
-    protected val baseSet: mutable.Set[Expression] = new mutable.HashSet,
-    protected val originals: mutable.Buffer[Expression] = new ArrayBuffer)
-  extends Set[Expression] {
+    private val baseSet: mutable.Set[Expression] = new mutable.HashSet,
+    private val originals: mutable.Buffer[Expression] = new ArrayBuffer)
+  extends Iterable[Expression] {
+
+  //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
 
   protected def add(e: Expression): Unit = {
     if (!e.deterministic) {
       originals += e
-    } else if (!baseSet.contains(e.canonicalized) ) {
+    } else if (!baseSet.contains(e.canonicalized)) {
       baseSet.add(e.canonicalized)
       originals += e
     }
   }
 
-  override def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
+  protected def remove(e: Expression): Unit = {
+    if (e.deterministic) {
+      baseSet --= baseSet.filter(_ == e.canonicalized)
+      originals --= originals.filter(_.canonicalized == e.canonicalized)
+    }
+  }
 
-  override def +(elem: Expression): ExpressionSet = {
-    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
+  def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
+
+  override def filter(p: Expression => Boolean): ExpressionSet = {
+    val newBaseSet = baseSet.filter(e => p(e.canonicalized))
+    val newOriginals = originals.filter(e => p(e.canonicalized))
+    new ExpressionSet(newBaseSet, newOriginals)
+  }
+
+  override def filterNot(p: Expression => Boolean): ExpressionSet = {
+    val newBaseSet = baseSet.filterNot(e => p(e.canonicalized))
+    val newOriginals = originals.filterNot(e => p(e.canonicalized))
+    new ExpressionSet(newBaseSet, newOriginals)
+  }
+
+  def +(elem: Expression): ExpressionSet = {
+    val newSet = clone()
     newSet.add(elem)
     newSet
   }
 
-  override def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
-    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
+  def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
     elems.foreach(newSet.add)
     newSet
   }
 
-  override def -(elem: Expression): ExpressionSet = {
-    if (elem.deterministic) {
-      val newBaseSet = baseSet.clone().filterNot(_ == elem.canonicalized)
-      val newOriginals = originals.clone().filterNot(_.canonicalized == elem.canonicalized)
-      new ExpressionSet(newBaseSet, newOriginals)
-    } else {
-      new ExpressionSet(baseSet.clone(), originals.clone())
-    }
+  def -(elem: Expression): ExpressionSet = {
+    val newSet = clone()
+    newSet.remove(elem)
+    newSet
   }
 
-  override def iterator: Iterator[Expression] = originals.iterator
+  def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val newSet = clone()
+    elems.foreach(newSet.remove)
+    newSet
+  }
+
+  def map(f: Expression => Expression): ExpressionSet = {
+    val newSet = new ExpressionSet()
+    this.iterator.foreach(elem => newSet.add(f(elem)))
+    newSet
+  }
+
+  def flatMap(f: Expression => Iterable[Expression]): ExpressionSet = {
+    val newSet = new ExpressionSet()
+    this.iterator.foreach(f(_).foreach(newSet.add))
+    newSet
+  }
+
+  def iterator: Iterator[Expression] = originals.iterator
+
+  def union(that: ExpressionSet): ExpressionSet = {
+    val newSet = clone()
+    that.iterator.foreach(newSet.add)
+    newSet
+  }
+
+  def subsetOf(that: ExpressionSet): Boolean = this.iterator.forall(that.contains)
+
+  def intersect(that: ExpressionSet): ExpressionSet = this.filter(that.contains)
+
+  def diff(that: ExpressionSet): ExpressionSet = this -- that
+
+  def apply(elem: Expression): Boolean = this.contains(elem)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case other: ExpressionSet => this.baseSet == other.baseSet
+    case _ => false
+  }
+
+  override def hashCode(): Int = baseSet.hashCode()
+
+  override def clone(): ExpressionSet = new ExpressionSet(baseSet.clone(), originals.clone())
 
   /**
    * Returns a string containing both the post [[Canonicalize]] expressions and the original

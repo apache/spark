@@ -18,7 +18,39 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-private[spark] case class SparkPod(pod: Pod, container: Container)
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Represents a SparkPod consisting of pod and the container within the pod.
+ */
+@Unstable
+@DeveloperApi
+case class SparkPod(pod: Pod, container: Container) {
+
+  /**
+   * Convenience method to apply a series of chained transformations to a pod.
+   *
+   * Use it like:
+   *
+   *     original.modify { case pod =>
+   *       // update pod and return new one
+   *     }.modify { case pod =>
+   *       // more changes that create a new pod
+   *     }.modify {
+   *       case pod if someCondition => // new pod
+   *     }
+   *
+   * This makes it cleaner to apply multiple transformations, avoiding having to create
+   * a bunch of awkwardly-named local variables. Since the argument is a partial function,
+   * it can do matching without needing to exhaust all the possibilities. If the function
+   * is not applied, then the original pod will be kept.
+   */
+  def transform(fn: PartialFunction[SparkPod, SparkPod]): SparkPod = fn.lift(this).getOrElse(this)
+
+}
+
 
 private[spark] object SparkPod {
   def initialPod(): SparkPod = {

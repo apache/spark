@@ -85,8 +85,6 @@ class SVMModel @Since("1.1.0") (
       numFeatures = weights.size, numClasses = 2, weights, intercept, threshold)
   }
 
-  override protected def formatVersion: String = "1.0"
-
   override def toString: String = {
     s"${super.toString}, numClasses = 2, threshold = ${threshold.getOrElse("None")}"
   }
@@ -148,7 +146,7 @@ class SVMWithSGD private (
 
   /**
    * Construct a SVM object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParm: 0.01, miniBatchFraction: 1.0}.
+   * regParam: 0.01, miniBatchFraction: 1.0}.
    */
   @Since("0.8.0")
   def this() = this(1.0, 100, 0.01, 1.0)

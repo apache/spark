@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import org.dmg.pmml.ClusteringModel
+import org.dmg.pmml.clustering.ClusteringModel
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.clustering.KMeansModel

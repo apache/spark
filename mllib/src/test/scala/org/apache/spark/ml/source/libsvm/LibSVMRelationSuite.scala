@@ -19,20 +19,34 @@ package org.apache.spark.ml.source.libsvm
 
 import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
-import java.util.List
 
 import com.google.common.io.Files
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
+class LibSVMRelationSuite
+  extends SparkFunSuite
+  with MLlibTestSparkContext
+  with CommonFileDataSourceSuite {
 
-class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
+  override protected def dataSourceFormat = "libsvm"
+  override protected def inputDataset = {
+    val rawData = new java.util.ArrayList[Row]()
+    rawData.add(Row(1.0, Vectors.sparse(1, Seq((0, 1.0)))))
+    val struct = new StructType()
+      .add("labelFoo", DoubleType, false)
+      .add("featuresBar", VectorType, false)
+    spark.createDataFrame(rawData, struct)
+  }
+
   // Path for dataset
   var path: String = _
 
@@ -73,6 +87,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(row1.getDouble(0) == 1.0)
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
   }
 
   test("select as dense vector") {
@@ -85,6 +100,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(row1.getDouble(0) == 1.0)
     val v = row1.getAs[DenseVector](1)
     assert(v == Vectors.dense(1.0, 0.0, 2.0, 0.0, 3.0, 0.0))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
   }
 
   test("illegal vector types") {
@@ -101,12 +117,14 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
   }
 
   test("case insensitive option") {
     val df = spark.read.option("NuMfEaTuReS", "100").format("libsvm").load(path)
     assert(df.first().getAs[SparseVector](1) ==
       Vectors.sparse(100, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === 100)
   }
 
   test("write libsvm data and read it again") {
@@ -120,6 +138,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
+    assert(AttributeGroup.fromStructField(df.schema("features")).size === v.size)
+    assert(AttributeGroup.fromStructField(df2.schema("features")).size === v.size)
   }
 
   test("write libsvm data failed due to invalid schema") {
@@ -148,6 +168,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(3, Seq((0, 2.0), (1, 3.0))))
+    assert(AttributeGroup.fromStructField(df2.schema("features")).size === v.size)
   }
 
   test("select features from libsvm relation") {
@@ -182,6 +203,26 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(e.getMessage.contains("No input path specified for libsvm data"))
     } finally {
       spark.sql("DROP TABLE IF EXISTS libsvmTable")
+    }
+  }
+
+  test("SPARK-32815: Test LibSVM data source on file paths with glob metacharacters") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // test libsvm writer / reader without specifying schema
+      val svmFileName = "[abc]"
+      val escapedSvmFileName = "\\[abc\\]"
+      val rawData = new java.util.ArrayList[Row]()
+      rawData.add(Row(1.0, Vectors.sparse(2, Seq((0, 2.0), (1, 3.0)))))
+      val struct = new StructType()
+        .add("labelFoo", DoubleType, false)
+        .add("featuresBar", VectorType, false)
+      val df = spark.createDataFrame(rawData, struct)
+      df.write.format("libsvm").save(s"$basePath/$svmFileName")
+      val df2 = spark.read.format("libsvm").load(s"$basePath/$escapedSvmFileName")
+      val row1 = df2.first()
+      val v = row1.getAs[SparseVector](1)
+      assert(v == Vectors.sparse(2, Seq((0, 2.0), (1, 3.0))))
     }
   }
 }

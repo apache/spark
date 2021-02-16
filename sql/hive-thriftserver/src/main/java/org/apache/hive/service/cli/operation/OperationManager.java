@@ -24,8 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
@@ -41,14 +39,15 @@ import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.log4j.Appender;
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * OperationManager.
  *
  */
 public class OperationManager extends AbstractService {
-  private final Log LOG = LogFactory.getLog(OperationManager.class.getName());
+  private final Logger LOG = LoggerFactory.getLogger(OperationManager.class.getName());
 
   private final Map<OperationHandle, Operation> handleToOperation =
       new HashMap<OperationHandle, Operation>();
@@ -83,16 +82,23 @@ public class OperationManager extends AbstractService {
   private void initOperationLogCapture(String loggingMode) {
     // Register another Appender (with the same layout) that talks to us.
     Appender ap = new LogDivertAppender(this, OperationLog.getLoggingLevel(loggingMode));
-    Logger.getRootLogger().addAppender(ap);
+    org.apache.log4j.Logger.getRootLogger().addAppender(ap);
   }
 
   public ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
       String statement, Map<String, String> confOverlay, boolean runAsync)
           throws HiveSQLException {
     ExecuteStatementOperation executeStatementOperation = ExecuteStatementOperation
-        .newExecuteStatementOperation(parentSession, statement, confOverlay, runAsync);
+        .newExecuteStatementOperation(parentSession, statement, confOverlay, runAsync, 0);
     addOperation(executeStatementOperation);
     return executeStatementOperation;
+  }
+
+  public ExecuteStatementOperation newExecuteStatementOperation(HiveSession parentSession,
+      String statement, Map<String, String> confOverlay, boolean runAsync, long queryTimeout)
+          throws HiveSQLException {
+    return newExecuteStatementOperation(parentSession, statement, confOverlay, runAsync,
+        queryTimeout);
   }
 
   public GetTypeInfoOperation newGetTypeInfoOperation(HiveSession parentSession) {
@@ -145,6 +151,25 @@ public class OperationManager extends AbstractService {
     return operation;
   }
 
+  public GetPrimaryKeysOperation newGetPrimaryKeysOperation(HiveSession parentSession,
+      String catalogName, String schemaName, String tableName) {
+    GetPrimaryKeysOperation operation = new GetPrimaryKeysOperation(parentSession,
+      catalogName, schemaName, tableName);
+    addOperation(operation);
+    return operation;
+  }
+
+  public GetCrossReferenceOperation newGetCrossReferenceOperation(
+      HiveSession session, String primaryCatalog, String primarySchema,
+      String primaryTable, String foreignCatalog, String foreignSchema,
+      String foreignTable) {
+   GetCrossReferenceOperation operation = new GetCrossReferenceOperation(session,
+     primaryCatalog, primarySchema, primaryTable, foreignCatalog, foreignSchema,
+     foreignTable);
+   addOperation(operation);
+   return operation;
+  }
+
   public Operation getOperation(OperationHandle operationHandle) throws HiveSQLException {
     Operation operation = getOperationInternal(operationHandle);
     if (operation == null) {
@@ -183,6 +208,7 @@ public class OperationManager extends AbstractService {
     Operation operation = getOperation(opHandle);
     OperationState opState = operation.getStatus().getState();
     if (opState == OperationState.CANCELED ||
+        opState == OperationState.TIMEDOUT ||
         opState == OperationState.CLOSED ||
         opState == OperationState.FINISHED ||
         opState == OperationState.ERROR ||
@@ -240,7 +266,8 @@ public class OperationManager extends AbstractService {
 
     // convert logs to RowSet
     TableSchema tableSchema = new TableSchema(getLogSchema());
-    RowSet rowSet = RowSetFactory.create(tableSchema, getOperation(opHandle).getProtocolVersion());
+    RowSet rowSet = RowSetFactory.create(tableSchema,
+        getOperation(opHandle).getProtocolVersion(), false);
     for (String log : logs) {
       rowSet.addRow(new String[] {log});
     }

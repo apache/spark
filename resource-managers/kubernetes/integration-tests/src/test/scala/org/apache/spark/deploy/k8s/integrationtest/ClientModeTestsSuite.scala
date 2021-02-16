@@ -27,6 +27,7 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
     val labels = Map("spark-app-selector" -> driverPodName)
     val driverPort = 7077
     val blockManagerPort = 10000
+    val executorLabel = "spark-client-it"
     val driverService = testBackend
       .getKubernetesClient
       .services()
@@ -62,11 +63,12 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .endMetadata()
         .withNewSpec()
           .withServiceAccountName(kubernetesTestComponents.serviceAccountName)
+          .withRestartPolicy("Never")
           .addNewContainer()
             .withName("spark-example")
             .withImage(image)
             .withImagePullPolicy("IfNotPresent")
-            .withCommand("/opt/spark/bin/run-example")
+            .addToArgs("/opt/spark/bin/run-example")
             .addToArgs("--master", s"k8s://https://kubernetes.default.svc")
             .addToArgs("--deploy-mode", "client")
             .addToArgs("--conf", s"spark.kubernetes.container.image=$image")
@@ -77,10 +79,11 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
               "/var/run/secrets/kubernetes.io/serviceaccount/token")
             .addToArgs("--conf", "spark.kubernetes.authenticate.caCertFile=" +
               "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
-            .addToArgs("--conf", s"spark.kubernetes.driver.pod.name=$driverPodName")
             .addToArgs("--conf", "spark.executor.memory=500m")
             .addToArgs("--conf", "spark.executor.cores=1")
-            .addToArgs("--conf", "spark.executor.instances=1")
+            .addToArgs("--conf", "spark.executor.instances=2")
+            .addToArgs("--conf", "spark.kubernetes.executor.deleteOnTermination=false")
+            .addToArgs("--conf", s"spark.kubernetes.executor.label.$executorLabel=$executorLabel")
             .addToArgs("--conf",
               s"spark.driver.host=" +
                 s"${driverService.getMetadata.getName}.${kubernetesTestComponents.namespace}.svc")
@@ -98,6 +101,20 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
           .getLog
           .contains("Pi is roughly 3"), "The application did not complete.")
       }
+
+      val executors = kubernetesTestComponents
+        .kubernetesClient
+        .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .withLabel(executorLabel, executorLabel)
+        .list()
+        .getItems()
+      assert(executors.size === 2)
+      val prefixes = executors.asScala.map { pod =>
+        val name = pod.getMetadata().getName()
+        name.substring(0, name.lastIndexOf("-"))
+      }.toSet
+      assert(prefixes.size === 1, s"Executor prefixes did not match: $prefixes")
     } finally {
       // Have to delete the service manually since it doesn't have an owner reference
       kubernetesTestComponents
@@ -105,6 +122,13 @@ private[spark] trait ClientModeTestsSuite { k8sSuite: KubernetesSuite =>
         .services()
         .inNamespace(kubernetesTestComponents.namespace)
         .delete(driverService)
+      // Delete all executors, since the test explicitly asks them not to be deleted by the app.
+      kubernetesTestComponents
+        .kubernetesClient
+        .pods()
+        .inNamespace(kubernetesTestComponents.namespace)
+        .withLabel(executorLabel, executorLabel)
+        .delete()
     }
   }
 

@@ -49,7 +49,7 @@ setClass("KSTest", representation(jobj = "jobj"))
 #' @rdname spark.kstest
 #' @aliases spark.kstest,SparkDataFrame-method
 #' @name spark.kstest
-#' @seealso \href{http://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
+#' @seealso \href{https://spark.apache.org/docs/latest/mllib-statistics.html#hypothesis-testing}{
 #'          MLlib: Hypothesis Testing}
 #' @examples
 #' \dontrun{
@@ -69,8 +69,7 @@ setMethod("spark.kstest", signature(data = "SparkDataFrame"),
           function(data, testCol = "test", nullHypothesis = c("norm"), distParams = c(0, 1)) {
             tryCatch(match.arg(nullHypothesis),
                      error = function(e) {
-                       msg <- paste("Distribution", nullHypothesis, "is not supported.")
-                       stop(msg)
+                       stop("Distribution ", nullHypothesis, " is not supported.")
                      })
             if (nullHypothesis == "norm") {
               distParams <- as.numeric(distParams)

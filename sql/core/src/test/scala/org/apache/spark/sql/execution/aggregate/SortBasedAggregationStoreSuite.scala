@@ -140,7 +140,7 @@ class SortBasedAggregationStoreSuite  extends SparkFunSuite with LocalSparkConte
       }
       override def getKey(): UnsafeRow = key
       override def getValue(): UnsafeRow = value
-      override def close(): Unit = Unit
+      override def close(): Unit = ()
     }
   }
 }

@@ -25,6 +25,7 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.StandaloneResourceUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -57,10 +58,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
     if (parent.killEnabled &&
         parent.master.securityMgr.checkModifyPermissions(request.getRemoteUser)) {
-      // stripXSS is called first to remove suspicious characters used in XSS attacks
-      val killFlag =
-        Option(UIUtils.stripXSS(request.getParameter("terminate"))).getOrElse("false").toBoolean
-      val id = Option(UIUtils.stripXSS(request.getParameter("id")))
+      val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
+      val id = Option(request.getParameter("id"))
       if (id.isDefined && killFlag) {
         action(id.get)
       }
@@ -69,37 +68,64 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
   }
 
+  private def formatWorkerResourcesDetails(worker: WorkerInfo): String = {
+    val usedInfo = worker.resourcesInfoUsed
+    val freeInfo = worker.resourcesInfoFree
+    formatResourcesDetails(usedInfo, freeInfo)
+  }
+
+  private def formatMasterResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
+    val totalInfo = aliveWorkers.map(_.resourcesInfo)
+      .flatMap(_.toIterator)
+      .groupBy(_._1) // group by resource name
+      .map { case (rName, rInfoArr) =>
+      rName -> rInfoArr.map(_._2.addresses.size).sum
+    }
+    val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
+      .flatMap(_.toIterator)
+      .groupBy(_._1) // group by resource name
+      .map { case (rName, rInfoArr) =>
+      rName -> rInfoArr.map(_._2.addresses.size).sum
+    }
+    formatResourcesUsed(totalInfo, usedInfo)
+  }
+
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
     val state = getMasterState
 
-    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory")
+    val workerHeaders = Seq("Worker Id", "Address", "State", "Cores", "Memory", "Resources")
     val workers = state.workers.sortBy(_.id)
     val aliveWorkers = state.workers.filter(_.state == WorkerState.ALIVE)
     val workerTable = UIUtils.listingTable(workerHeaders, workerRow, workers)
 
-    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor", "Submitted Time",
-      "User", "State", "Duration")
+    val appHeaders = Seq("Application ID", "Name", "Cores", "Memory per Executor",
+      "Resources Per Executor", "Submitted Time", "User", "State", "Duration")
     val activeApps = state.activeApps.sortBy(_.startTime).reverse
     val activeAppsTable = UIUtils.listingTable(appHeaders, appRow, activeApps)
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
-    val driverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
-      "Memory", "Main Class")
+    val activeDriverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
+      "Memory", "Resources", "Main Class", "Duration")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
-    val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
+    val activeDriversTable =
+      UIUtils.listingTable(activeDriverHeaders, activeDriverRow, activeDrivers)
+
+    val completedDriverHeaders = Seq("Submission ID", "Submitted Time", "Worker", "State", "Cores",
+      "Memory", "Resources", "Main Class")
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
-    val completedDriversTable = UIUtils.listingTable(driverHeaders, driverRow, completedDrivers)
+    val completedDriversTable =
+      UIUtils.listingTable(completedDriverHeaders, completedDriverRow, completedDrivers)
 
     // For now we only show driver information if the user has submitted drivers to the cluster.
     // This is until we integrate the notion of drivers and applications in the UI.
     def hasDrivers: Boolean = activeDrivers.length > 0 || completedDrivers.length > 0
 
     val content =
-        <div class="row-fluid">
-          <div class="span12">
-            <ul class="unstyled">
+        <div class="row">
+          <div class="col-12">
+            <ul class="list-unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
               {
                 state.restUri.map { uri =>
@@ -115,6 +141,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
               <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
+              <li><strong>Resources in use:</strong>
+                {formatMasterResourcesInUse(aliveWorkers)}</li>
               <li><strong>Applications:</strong>
                 {state.activeApps.length} <a href="#running-app">Running</a>,
                 {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
@@ -126,8 +154,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           </div>
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <span class="collapse-aggregated-workers collapse-table"
                 onClick="collapseTable('collapse-aggregated-workers','aggregated-workers')">
               <h4>
@@ -141,8 +169,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           </div>
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <span id="running-app" class="collapse-aggregated-activeApps collapse-table"
                 onClick="collapseTable('collapse-aggregated-activeApps','aggregated-activeApps')">
               <h4>
@@ -158,8 +186,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div>
           {if (hasDrivers) {
-             <div class="row-fluid">
-               <div class="span12">
+             <div class="row">
+               <div class="col-12">
                  <span class="collapse-aggregated-activeDrivers collapse-table"
                      onClick="collapseTable('collapse-aggregated-activeDrivers',
                      'aggregated-activeDrivers')">
@@ -177,8 +205,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           }
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <span id="completed-app" class="collapse-aggregated-completedApps collapse-table"
                 onClick="collapseTable('collapse-aggregated-completedApps',
                 'aggregated-completedApps')">
@@ -196,8 +224,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <div>
           {
             if (hasDrivers) {
-              <div class="row-fluid">
-                <div class="span12">
+              <div class="row">
+                <div class="col-12">
                   <span class="collapse-aggregated-completedDrivers collapse-table"
                       onClick="collapseTable('collapse-aggregated-completedDrivers',
                       'aggregated-completedDrivers')">
@@ -238,6 +266,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {Utils.megabytesToString(worker.memory)}
         ({Utils.megabytesToString(worker.memoryUsed)} Used)
       </td>
+      <td>{formatWorkerResourcesDetails(worker)}</td>
     </tr>
   }
 
@@ -274,6 +303,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={app.desc.memoryPerExecutorMB.toString}>
         {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
       </td>
+      <td>
+        {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
+      </td>
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
@@ -281,7 +313,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     </tr>
   }
 
-  private def driverRow(driver: DriverInfo): Seq[Node] = {
+  private def activeDriverRow(driver: DriverInfo) = driverRow(driver, showDuration = true)
+
+  private def completedDriverRow(driver: DriverInfo) = driverRow(driver, showDuration = false)
+
+  private def driverRow(driver: DriverInfo, showDuration: Boolean): Seq[Node] = {
     val killLink = if (parent.killEnabled &&
       (driver.state == DriverState.RUNNING ||
         driver.state == DriverState.SUBMITTED ||
@@ -314,7 +350,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
+      <td>{formatResourcesAddresses(driver.resources)}</td>
       <td>{driver.desc.command.arguments(2)}</td>
+      {if (showDuration) {
+        <td>{UIUtils.formatDuration(System.currentTimeMillis() - driver.startTime)}</td>
+      }}
     </tr>
   }
 }

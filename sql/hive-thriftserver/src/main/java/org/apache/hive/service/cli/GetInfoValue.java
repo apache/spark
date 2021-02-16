@@ -18,7 +18,7 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TGetInfoValue;
+import org.apache.hive.service.rpc.thrift.TGetInfoValue;
 
 /**
  * GetInfoValue.
@@ -52,7 +52,7 @@ public class GetInfoValue {
       stringValue = tGetInfoValue.getStringValue();
       break;
     default:
-      throw new IllegalArgumentException("Unreconigzed TGetInfoValue");
+      throw new IllegalArgumentException("Unrecognized TGetInfoValue");
     }
   }
 

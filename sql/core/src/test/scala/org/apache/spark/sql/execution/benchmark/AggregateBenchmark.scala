@@ -22,7 +22,7 @@ import java.util.HashMap
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config._
-import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.memory.{TaskMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
@@ -48,7 +48,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
     runBenchmark("aggregate without grouping") {
       val N = 500L << 22
       codegenBenchmark("agg w/o group", N) {
-        spark.range(N).selectExpr("sum(id)").collect()
+        spark.range(N).selectExpr("sum(id)").noop()
       }
     }
 
@@ -56,11 +56,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val N = 100L << 20
 
       codegenBenchmark("stddev", N) {
-        spark.range(N).groupBy().agg("id" -> "stddev").collect()
+        spark.range(N).groupBy().agg("id" -> "stddev").noop()
       }
 
       codegenBenchmark("kurtosis", N) {
-        spark.range(N).groupBy().agg("id" -> "kurtosis").collect()
+        spark.range(N).groupBy().agg("id" -> "kurtosis").noop()
       }
     }
 
@@ -70,7 +70,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("Aggregate w keys", N, output = output)
 
       def f(): Unit = {
-        spark.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+        spark.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().noop()
       }
 
       benchmark.addCase("codegen = F", numIters = 2) { _ =>
@@ -83,7 +83,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -92,7 +92,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -107,7 +107,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       spark.range(N).selectExpr("id", "floor(rand() * 10000) as k")
         .createOrReplaceTempView("test")
 
-      def f(): Unit = spark.sql("select k, k, sum(id) from test group by k, k").collect()
+      def f(): Unit = spark.sql("select k, k, sum(id) from test group by k, k").noop()
 
       benchmark.addCase("codegen = F", numIters = 2) { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -119,7 +119,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -128,7 +128,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -142,7 +142,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("Aggregate w string key", N, output = output)
 
       def f(): Unit = spark.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
-        .groupBy("k").count().collect()
+        .groupBy("k").count().noop()
 
       benchmark.addCase("codegen = F", numIters = 2) { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -154,7 +154,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -163,7 +163,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -177,7 +177,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       val benchmark = new Benchmark("Aggregate w decimal key", N, output = output)
 
       def f(): Unit = spark.range(N).selectExpr("id", "cast(id & 65535 as decimal) as k")
-        .groupBy("k").count().collect()
+        .groupBy("k").count().noop()
 
       benchmark.addCase("codegen = F") { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -189,7 +189,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -198,7 +198,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -222,7 +222,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           "id > 1023 as k6")
         .groupBy("k1", "k2", "k3", "k4", "k5", "k6")
         .sum()
-        .collect()
+        .noop()
 
       benchmark.addCase("codegen = F") { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -234,7 +234,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "false") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "false") {
           f()
         }
       }
@@ -243,7 +243,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
         withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
-          "spark.sql.codegen.aggregate.map.vectorized.enable" -> "true") {
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true") {
           f()
         }
       }
@@ -282,7 +282,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           "case when id > 1800 and id <= 1900 then 1 else 0 end as v18")
         .groupBy("k1", "k2", "k3")
         .sum()
-        .collect()
+        .noop()
 
       benchmark.addCase("codegen = F") { _ =>
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -315,7 +315,7 @@ object AggregateBenchmark extends SqlBasedBenchmark {
 
       codegenBenchmark("cube", N) {
         spark.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
-          .cube("k1", "k2").sum("id").collect()
+          .cube("k1", "k2").sum("id").noop()
       }
     }
 
@@ -473,10 +473,10 @@ object AggregateBenchmark extends SqlBasedBenchmark {
           value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
           value.setInt(0, 555)
           val taskMemoryManager = new TaskMemoryManager(
-            new StaticMemoryManager(
+            new UnifiedMemoryManager(
               new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
               Long.MaxValue,
-              Long.MaxValue,
+              Long.MaxValue / 2,
               1),
             0)
           val map = new LongToUnsafeRowMap(taskMemoryManager, 64)
@@ -504,11 +504,11 @@ object AggregateBenchmark extends SqlBasedBenchmark {
       Seq("off", "on").foreach { heap =>
         benchmark.addCase(s"BytesToBytesMap ($heap Heap)") { _ =>
           val taskMemoryManager = new TaskMemoryManager(
-            new StaticMemoryManager(
+            new UnifiedMemoryManager(
               new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, s"${heap == "off"}")
                 .set(MEMORY_OFFHEAP_SIZE.key, "102400000"),
               Long.MaxValue,
-              Long.MaxValue,
+              Long.MaxValue / 2,
               1),
             0)
           val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L << 20)

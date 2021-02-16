@@ -17,6 +17,7 @@
 
 package org.apache.spark.broadcast
 
+import java.util.Collections
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
@@ -24,6 +25,7 @@ import scala.reflect.ClassTag
 import org.apache.commons.collections.map.{AbstractReferenceMap, ReferenceMap}
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
 private[spark] class BroadcastManager(
@@ -38,7 +40,7 @@ private[spark] class BroadcastManager(
   initialize()
 
   // Called by SparkContext or Executor before using Broadcast
-  private def initialize() {
+  private def initialize(): Unit = {
     synchronized {
       if (!initialized) {
         broadcastFactory = new TorrentBroadcastFactory
@@ -48,21 +50,34 @@ private[spark] class BroadcastManager(
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     broadcastFactory.stop()
   }
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  private[broadcast] val cachedValues = {
-    new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
-  }
+  private[broadcast] val cachedValues =
+    Collections.synchronizedMap(
+      new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK)
+        .asInstanceOf[java.util.Map[Any, Any]]
+    )
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
-    broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
+    val bid = nextBroadcastId.getAndIncrement()
+    value_ match {
+      case pb: PythonBroadcast =>
+        // SPARK-28486: attach this new broadcast variable's id to the PythonBroadcast,
+        // so that underlying data file of PythonBroadcast could be mapped to the
+        // BroadcastBlockId according to this id. Please see the specific usage of the
+        // id in PythonBroadcast.readObject().
+        pb.setBroadcastId(bid)
+
+      case _ => // do nothing
+    }
+    broadcastFactory.newBroadcast[T](value_, isLocal, bid)
   }
 
-  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit = {
     broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
   }
 }

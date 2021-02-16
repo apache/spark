@@ -98,12 +98,71 @@ public class JavaSQLDataSourceExample {
       .getOrCreate();
 
     runBasicDataSourceExample(spark);
+    runGenericFileSourceOptionsExample(spark);
     runBasicParquetExample(spark);
     runParquetSchemaMergingExample(spark);
     runJsonDatasetExample(spark);
     runJdbcDatasetExample(spark);
 
     spark.stop();
+  }
+
+  private static void runGenericFileSourceOptionsExample(SparkSession spark) {
+    // $example on:ignore_corrupt_files$
+    // enable ignore corrupt files
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true");
+    // dir1/file3.json is corrupt from parquet's view
+    Dataset<Row> testCorruptDF = spark.read().parquet(
+            "examples/src/main/resources/dir1/",
+            "examples/src/main/resources/dir1/dir2/");
+    testCorruptDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:ignore_corrupt_files$
+    // $example on:recursive_file_lookup$
+    Dataset<Row> recursiveLoadedDF = spark.read().format("parquet")
+            .option("recursiveFileLookup", "true")
+            .load("examples/src/main/resources/dir1");
+    recursiveLoadedDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:recursive_file_lookup$
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=false");
+    // $example on:load_with_path_glob_filter$
+    Dataset<Row> testGlobFilterDF = spark.read().format("parquet")
+            .option("pathGlobFilter", "*.parquet") // json file should be filtered out
+            .load("examples/src/main/resources/dir1");
+    testGlobFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    // $example off:load_with_path_glob_filter$
+    // $example on:load_with_modified_time_filter$
+    Dataset<Row> beforeFilterDF = spark.read().format("parquet")
+            // Only load files modified before 7/1/2020 at 05:30
+            .option("modifiedBefore", "2020-07-01T05:30:00")
+            // Only load files modified after 6/1/2020 at 05:30
+            .option("modifiedAfter", "2020-06-01T05:30:00")
+            // Interpret both times above relative to CST timezone
+            .option("timeZone", "CST")
+            .load("examples/src/main/resources/dir1");
+    beforeFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    // $example off:load_with_modified_time_filter$
   }
 
   private static void runBasicDataSourceExample(SparkSession spark) {

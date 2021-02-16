@@ -1,0 +1,10 @@
+{
+  "id" : 0,
+  "name" : "0",
+  "numPartitions" : 8,
+  "numCachedPartitions" : 0,
+  "storageLevel" : "Memory Deserialized 1x Replicated",
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "partitions" : [ ]
+}

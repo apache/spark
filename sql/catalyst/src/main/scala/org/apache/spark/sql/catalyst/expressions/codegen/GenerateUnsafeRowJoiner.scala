@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.unsafe.Platform
 
 abstract class UnsafeRowJoiner {
   def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow
@@ -55,7 +51,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
     val ctx = new CodegenContext
-    val offset = Platform.BYTE_ARRAY_OFFSET
+    val offset = "Platform.BYTE_ARRAY_OFFSET"
     val getLong = "Platform.getLong"
     val putLong = "Platform.putLong"
 
@@ -92,7 +88,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
           s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8})"
         }
       }
-      s"$putLong(buf, ${offset + i * 8}, $bits);\n"
+      s"$putLong(buf, $offset + ${i * 8}, $bits);\n"
     }
 
     val copyBitsets = ctx.splitExpressions(
@@ -102,12 +98,12 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
                   ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
-    var cursor = offset + outputBitsetWords * 8
+    var cursor = outputBitsetWords * 8
     val copyFixedLengthRow1 = s"""
        |// Copy fixed length data for row1
        |Platform.copyMemory(
        |  obj1, offset1 + ${bitset1Words * 8},
-       |  buf, $cursor,
+       |  buf, $offset + $cursor,
        |  ${schema1.size * 8});
      """.stripMargin
     cursor += schema1.size * 8
@@ -117,7 +113,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |// Copy fixed length data for row2
        |Platform.copyMemory(
        |  obj2, offset2 + ${bitset2Words * 8},
-       |  buf, $cursor,
+       |  buf, $offset + $cursor,
        |  ${schema2.size * 8});
      """.stripMargin
     cursor += schema2.size * 8
@@ -129,7 +125,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |long numBytesVariableRow1 = row1.getSizeInBytes() - $numBytesBitsetAndFixedRow1;
        |Platform.copyMemory(
        |  obj1, offset1 + ${(bitset1Words + schema1.size) * 8},
-       |  buf, $cursor,
+       |  buf, $offset + $cursor,
        |  numBytesVariableRow1);
      """.stripMargin
 
@@ -140,7 +136,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |long numBytesVariableRow2 = row2.getSizeInBytes() - $numBytesBitsetAndFixedRow2;
        |Platform.copyMemory(
        |  obj2, offset2 + ${(bitset2Words + schema2.size) * 8},
-       |  buf, $cursor + numBytesVariableRow1,
+       |  buf, $offset + $cursor + numBytesVariableRow1,
        |  numBytesVariableRow2);
      """.stripMargin
 
@@ -161,7 +157,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
           } else {
             s"(${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + numBytesVariableRow1)"
           }
-        val cursor = offset + outputBitsetWords * 8 + i * 8
+        val cursor = outputBitsetWords * 8 + i * 8
         // UnsafeRow is a little underspecified, so in what follows we'll treat UnsafeRowWriter's
         // output as a de-facto specification for the internal layout of data.
         //
@@ -198,9 +194,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
         // Thus it is safe to perform `existingOffset != 0` checks here in the place of
         // more expensive null-bit checks.
         s"""
-           |existingOffset = $getLong(buf, $cursor);
+           |existingOffset = $getLong(buf, $offset + $cursor);
            |if (existingOffset != 0) {
-           |    $putLong(buf, $cursor, existingOffset + ($shift << 32));
+           |    $putLong(buf, $offset + $cursor, existingOffset + ($shift << 32));
            |}
          """.stripMargin
       }

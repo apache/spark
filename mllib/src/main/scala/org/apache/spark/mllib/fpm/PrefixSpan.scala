@@ -45,7 +45,7 @@ import org.apache.spark.storage.StorageLevel
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
  *
  * @param minSupport the minimal support level of the sequential pattern, any pattern that appears
  *                   more than (minSupport * size-of-the-dataset) times will be output
@@ -179,7 +179,7 @@ class PrefixSpan private (
       freqSequences.persist(data.getStorageLevel)
       freqSequences.count()
     }
-    dataInternalRepr.unpersist(false)
+    dataInternalRepr.unpersist()
 
     new PrefixSpanModel(freqSequences)
   }
@@ -316,9 +316,9 @@ object PrefixSpan extends Logging {
               ((prefix.id, item), (1L, postfixSize))
             }
           }
-        }.reduceByKey { case ((c0, s0), (c1, s1)) =>
-          (c0 + c1, s0 + s1)
-        }.filter { case (_, (c, _)) => c >= minCount }
+        }.reduceByKey { (cs0, cs1) =>
+          (cs0._1 + cs1._1, cs0._2 + cs1._2)
+        }.filter { case (_, cs) => cs._1 >= minCount }
         .collect()
       val newLargePrefixes = mutable.Map.empty[Int, Prefix]
       freqPrefixes.foreach { case ((id, item), (count, projDBSize)) =>
@@ -335,7 +335,7 @@ object PrefixSpan extends Logging {
       largePrefixes = newLargePrefixes
     }
 
-    var freqPatterns = sc.parallelize(localFreqPatterns, 1)
+    var freqPatterns = sc.parallelize(localFreqPatterns.toSeq, 1)
 
     val numSmallPrefixes = smallPrefixes.size
     logInfo(s"number of small prefixes for local processing: $numSmallPrefixes")
@@ -628,8 +628,6 @@ class PrefixSpanModel[Item] @Since("1.5.0") (
   override def save(sc: SparkContext, path: String): Unit = {
     PrefixSpanModel.SaveLoadV1_0.save(this, path)
   }
-
-  override protected val formatVersion: String = "1.0"
 }
 
 @Since("2.0.0")
@@ -685,7 +683,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
     def loadImpl[Item: ClassTag](freqSequences: DataFrame, sample: Item): PrefixSpanModel[Item] = {
       val freqSequencesRDD = freqSequences.select("sequence", "freq").rdd.map { x =>
-        val sequence = x.getAs[Seq[Seq[Item]]](0).map(_.toArray).toArray
+        val sequence = x.getSeq[scala.collection.Seq[Item]](0).map(_.toArray).toArray
         val freq = x.getLong(1)
         new PrefixSpan.FreqSequence(sequence, freq)
       }

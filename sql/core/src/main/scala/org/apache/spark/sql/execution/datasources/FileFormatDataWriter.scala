@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -37,7 +38,7 @@ import org.apache.spark.util.SerializableConfiguration
 abstract class FileFormatDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol) {
+    committer: FileCommitProtocol) extends DataWriter[InternalRow] {
   /**
    * Max number of files a single task writes out due to file size. In most cases the number of
    * files written should be very small. This is just a safe guard to protect some really bad
@@ -70,7 +71,7 @@ abstract class FileFormatDataWriter(
    * to the driver and used to update the catalog. Other information will be sent back to the
    * driver too and used to e.g. update the metrics in UI.
    */
-  def commit(): WriteTaskResult = {
+  override def commit(): WriteTaskResult = {
     releaseResources()
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
@@ -85,6 +86,8 @@ abstract class FileFormatDataWriter(
       committer.abortTask(taskAttemptContext)
     }
   }
+
+  override def close(): Unit = {}
 }
 
 /** FileFormatWriteTask for empty partitions */
@@ -164,7 +167,7 @@ class DynamicPartitionDataWriter(
 
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
-  private var currentPartionValues: Option[UnsafeRow] = None
+  private var currentPartitionValues: Option[UnsafeRow] = None
   private var currentBucketId: Option[Int] = None
 
   /** Extracts the partition values out of an input row. */
@@ -179,8 +182,7 @@ class DynamicPartitionDataWriter(
       val partitionName = ScalaUDF(
         ExternalCatalogUtils.getPartitionPathString _,
         StringType,
-        Seq(Literal(c.name), Cast(c, StringType, Option(description.timeZoneId))),
-        Seq(true, true))
+        Seq(Literal(c.name), Cast(c, StringType, Option(description.timeZoneId))))
       if (i == 0) Seq(partitionName) else Seq(Literal(Path.SEPARATOR), partitionName)
     })
 
@@ -245,11 +247,11 @@ class DynamicPartitionDataWriter(
     val nextPartitionValues = if (isPartitioned) Some(getPartitionValues(record)) else None
     val nextBucketId = if (isBucketed) Some(getBucketId(record)) else None
 
-    if (currentPartionValues != nextPartitionValues || currentBucketId != nextBucketId) {
+    if (currentPartitionValues != nextPartitionValues || currentBucketId != nextBucketId) {
       // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-      if (isPartitioned && currentPartionValues != nextPartitionValues) {
-        currentPartionValues = Some(nextPartitionValues.get.copy())
-        statsTrackers.foreach(_.newPartition(currentPartionValues.get))
+      if (isPartitioned && currentPartitionValues != nextPartitionValues) {
+        currentPartitionValues = Some(nextPartitionValues.get.copy())
+        statsTrackers.foreach(_.newPartition(currentPartitionValues.get))
       }
       if (isBucketed) {
         currentBucketId = nextBucketId
@@ -257,7 +259,7 @@ class DynamicPartitionDataWriter(
       }
 
       fileCounter = 0
-      newOutputWriter(currentPartionValues, currentBucketId)
+      newOutputWriter(currentPartitionValues, currentBucketId)
     } else if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
       // Exceeded the threshold in terms of the number of records per file.
@@ -266,7 +268,7 @@ class DynamicPartitionDataWriter(
       assert(fileCounter < MAX_FILE_COUNTER,
         s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
-      newOutputWriter(currentPartionValues, currentBucketId)
+      newOutputWriter(currentPartitionValues, currentBucketId)
     }
     val outputRow = getOutputRow(record)
     currentWriter.write(outputRow)
@@ -301,6 +303,7 @@ class WriteJobDescription(
 
 /** The result of a successful write task. */
 case class WriteTaskResult(commitMsg: TaskCommitMessage, summary: ExecutedWriteSummary)
+  extends WriterCommitMessage
 
 /**
  * Wrapper class for the metrics of writing data out.

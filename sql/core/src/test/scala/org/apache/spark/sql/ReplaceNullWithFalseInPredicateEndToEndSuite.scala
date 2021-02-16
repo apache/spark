@@ -20,11 +20,18 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, Literal}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{lit, when}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.BooleanType
 
-class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSQLContext {
+class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
+
+  private def checkPlanIsEmptyLocalScan(df: DataFrame): Unit =
+    df.queryExecution.executedPlan match {
+      case s: LocalTableScanExec => assert(s.rows.isEmpty)
+      case p => fail(s"$p is not LocalTableScanExec")
+    }
 
   test("SPARK-25860: Replace Literal(null, _) with FalseLiteral whenever possible") {
     withTable("t1", "t2") {
@@ -63,11 +70,6 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
 
       checkAnswer(df1.where("IF(l > 10, false, b OR null)"), Row(1, true))
     }
-
-    def checkPlanIsEmptyLocalScan(df: DataFrame): Unit = df.queryExecution.executedPlan match {
-      case s: LocalTableScanExec => assert(s.rows.isEmpty)
-      case p => fail(s"$p is not LocalTableScanExec")
-    }
   }
 
   test("SPARK-26107: Replace Literal(null, _) with FalseLiteral in higher-order functions") {
@@ -94,9 +96,11 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
       val df2 = spark.table("t2")
 
       // ArrayExists
-      val q1 = df1.selectExpr("EXISTS(a, e -> IF(e is null, null, true))")
-      checkAnswer(q1, Row(true) :: Nil)
-      assertNoLiteralNullInPlan(q1)
+      withSQLConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC.key -> "false") {
+        val q1 = df1.selectExpr("EXISTS(a, e -> IF(e is null, null, true))")
+        checkAnswer(q1, Row(true) :: Nil)
+        assertNoLiteralNullInPlan(q1)
+      }
 
       // ArrayFilter
       val q2 = df1.selectExpr("FILTER(a, e -> IF(e is null, null, true))")
@@ -107,6 +111,16 @@ class ReplaceNullWithFalseInPredicateEndToEndSuite extends QueryTest with Shared
       val q3 = df2.selectExpr("MAP_FILTER(m, (k, v) -> IF(v is null, null, true))")
       checkAnswer(q3, Row(Map[Any, Any](1 -> 1, 3 -> 3)))
       assertNoLiteralNullInPlan(q3)
+    }
+  }
+
+  test("SPARK-33847: replace None of elseValue inside CaseWhen to FalseLiteral") {
+    withTable("t1") {
+      Seq((1, 1), (2, 2)).toDF("a", "b").write.saveAsTable("t1")
+      val t1 = spark.table("t1")
+      val q1 = t1.filter("(CASE WHEN a > 1 THEN 1 END) = 0")
+      checkAnswer(q1, Seq.empty)
+      checkPlanIsEmptyLocalScan(q1)
     }
   }
 }

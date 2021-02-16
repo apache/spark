@@ -25,7 +25,7 @@ class RFormulaParserSuite extends SparkFunSuite {
       formula: String,
       label: String,
       terms: Seq[String],
-      schema: StructType = new StructType) {
+      schema: StructType = new StructType): Unit = {
     val resolved = RFormulaParser.parse(formula).resolve(schema)
     assert(resolved.label == label)
     val simpleTerms = terms.map { t =>
@@ -90,10 +90,46 @@ class RFormulaParserSuite extends SparkFunSuite {
 
   test("parse interactions") {
     checkParse("y ~ a:b", "y", Seq("a:b"))
+    checkParse("y ~ a:b + b:a", "y", Seq("a:b"))
     checkParse("y ~ ._a:._x", "y", Seq("._a:._x"))
     checkParse("y ~ foo:bar", "y", Seq("foo:bar"))
     checkParse("y ~ a : b : c", "y", Seq("a:b:c"))
     checkParse("y ~ q + a:b:c + b:c + c:d + z", "y", Seq("q", "a:b:c", "b:c", "c:d", "z"))
+  }
+
+  test("parse factor cross") {
+    checkParse("y ~ a*b", "y", Seq("a", "b", "a:b"))
+    checkParse("y ~ a*b + b*a", "y", Seq("a", "b", "a:b"))
+    checkParse("y ~ ._a*._x", "y", Seq("._a", "._x", "._a:._x"))
+    checkParse("y ~ foo*bar", "y", Seq("foo", "bar", "foo:bar"))
+    checkParse("y ~ a * b * c", "y", Seq("a", "b", "a:b", "c", "a:c", "b:c", "a:b:c"))
+  }
+
+  test("interaction distributive") {
+    checkParse("y ~ (a + b):c", "y", Seq("a:c", "b:c"))
+    checkParse("y ~ c:(a + b)", "y", Seq("c:a", "c:b"))
+  }
+
+  test("factor cross distributive") {
+    checkParse("y ~ (a + b)*c", "y", Seq("a", "b", "c", "a:c", "b:c"))
+    checkParse("y ~ c*(a + b)", "y", Seq("c", "a", "b", "c:a", "c:b"))
+  }
+
+  test("parse power") {
+    val schema = (new StructType)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
+      .add("d", "string", true)
+    checkParse("a ~ (a + b)^2", "a", Seq("a", "b", "a:b"))
+    checkParse("a ~ .^2", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d"), schema)
+    checkParse("a ~ .^3", "a", Seq("b", "c", "d", "b:c", "b:d", "c:d", "b:c:d"), schema)
+    checkParse("a ~ .^3-.", "a", Seq("b:c", "b:d", "c:d", "b:c:d"), schema)
+  }
+
+  test("operator precedence") {
+    checkParse("y ~ a*b:c", "y", Seq("a", "b:c", "a:b:c"))
+    checkParse("y ~ (a*b):c", "y", Seq("a:c", "b:c", "a:b:c"))
   }
 
   test("parse basic interactions with dot") {

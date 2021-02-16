@@ -29,12 +29,12 @@ class BoundedPriorityQueueSuite extends SparkFunSuite {
     pq += 0.3
     pq += 0.01
 
-    assert(pq.isEmpty == false)
+    assert(pq.nonEmpty)
     assert(pq.poll() == 0.1)
     assert(pq.poll() == 0.3)
     assert(pq.poll() == 1.0)
     assert(pq.poll() == 1.5)
-    assert(pq.isEmpty == true)
+    assert(pq.isEmpty)
 
     val pq2 = new BoundedPriorityQueue[(Int, Double)](4)(Ordering.by(_._2))
     pq2 += 1 -> 0.5

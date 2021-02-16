@@ -1,0 +1,176 @@
+== Physical Plan ==
+* HashAggregate (27)
++- Exchange (26)
+   +- * HashAggregate (25)
+      +- * Project (24)
+         +- SortMergeJoin FullOuter (23)
+            :- * Sort (13)
+            :  +- * HashAggregate (12)
+            :     +- Exchange (11)
+            :        +- * HashAggregate (10)
+            :           +- * Project (9)
+            :              +- * BroadcastHashJoin Inner BuildRight (8)
+            :                 :- * ColumnarToRow (2)
+            :                 :  +- Scan parquet default.store_sales (1)
+            :                 +- BroadcastExchange (7)
+            :                    +- * Project (6)
+            :                       +- * Filter (5)
+            :                          +- * ColumnarToRow (4)
+            :                             +- Scan parquet default.date_dim (3)
+            +- * Sort (22)
+               +- * HashAggregate (21)
+                  +- Exchange (20)
+                     +- * HashAggregate (19)
+                        +- * Project (18)
+                           +- * BroadcastHashJoin Inner BuildRight (17)
+                              :- * ColumnarToRow (15)
+                              :  +- Scan parquet default.catalog_sales (14)
+                              +- ReusedExchange (16)
+
+
+(1) Scan parquet default.store_sales
+Output [3]: [ss_item_sk#1, ss_customer_sk#2, ss_sold_date_sk#3]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#3), dynamicpruningexpression(ss_sold_date_sk#3 IN dynamicpruning#4)]
+ReadSchema: struct<ss_item_sk:int,ss_customer_sk:int>
+
+(2) ColumnarToRow [codegen id : 2]
+Input [3]: [ss_item_sk#1, ss_customer_sk#2, ss_sold_date_sk#3]
+
+(3) Scan parquet default.date_dim
+Output [2]: [d_date_sk#5, d_month_seq#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1200), LessThanOrEqual(d_month_seq,1211), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_month_seq:int>
+
+(4) ColumnarToRow [codegen id : 1]
+Input [2]: [d_date_sk#5, d_month_seq#6]
+
+(5) Filter [codegen id : 1]
+Input [2]: [d_date_sk#5, d_month_seq#6]
+Condition : (((isnotnull(d_month_seq#6) AND (d_month_seq#6 >= 1200)) AND (d_month_seq#6 <= 1211)) AND isnotnull(d_date_sk#5))
+
+(6) Project [codegen id : 1]
+Output [1]: [d_date_sk#5]
+Input [2]: [d_date_sk#5, d_month_seq#6]
+
+(7) BroadcastExchange
+Input [1]: [d_date_sk#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
+
+(8) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [ss_sold_date_sk#3]
+Right keys [1]: [d_date_sk#5]
+Join condition: None
+
+(9) Project [codegen id : 2]
+Output [2]: [ss_item_sk#1, ss_customer_sk#2]
+Input [4]: [ss_item_sk#1, ss_customer_sk#2, ss_sold_date_sk#3, d_date_sk#5]
+
+(10) HashAggregate [codegen id : 2]
+Input [2]: [ss_item_sk#1, ss_customer_sk#2]
+Keys [2]: [ss_customer_sk#2, ss_item_sk#1]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [ss_customer_sk#2, ss_item_sk#1]
+
+(11) Exchange
+Input [2]: [ss_customer_sk#2, ss_item_sk#1]
+Arguments: hashpartitioning(ss_customer_sk#2, ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#8]
+
+(12) HashAggregate [codegen id : 3]
+Input [2]: [ss_customer_sk#2, ss_item_sk#1]
+Keys [2]: [ss_customer_sk#2, ss_item_sk#1]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [ss_customer_sk#2 AS customer_sk#9, ss_item_sk#1 AS item_sk#10]
+
+(13) Sort [codegen id : 3]
+Input [2]: [customer_sk#9, item_sk#10]
+Arguments: [customer_sk#9 ASC NULLS FIRST, item_sk#10 ASC NULLS FIRST], false, 0
+
+(14) Scan parquet default.catalog_sales
+Output [3]: [cs_bill_customer_sk#11, cs_item_sk#12, cs_sold_date_sk#13]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(cs_sold_date_sk#13), dynamicpruningexpression(cs_sold_date_sk#13 IN dynamicpruning#4)]
+ReadSchema: struct<cs_bill_customer_sk:int,cs_item_sk:int>
+
+(15) ColumnarToRow [codegen id : 5]
+Input [3]: [cs_bill_customer_sk#11, cs_item_sk#12, cs_sold_date_sk#13]
+
+(16) ReusedExchange [Reuses operator id: 7]
+Output [1]: [d_date_sk#5]
+
+(17) BroadcastHashJoin [codegen id : 5]
+Left keys [1]: [cs_sold_date_sk#13]
+Right keys [1]: [d_date_sk#5]
+Join condition: None
+
+(18) Project [codegen id : 5]
+Output [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+Input [4]: [cs_bill_customer_sk#11, cs_item_sk#12, cs_sold_date_sk#13, d_date_sk#5]
+
+(19) HashAggregate [codegen id : 5]
+Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+Keys [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+
+(20) Exchange
+Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+Arguments: hashpartitioning(cs_bill_customer_sk#11, cs_item_sk#12, 5), ENSURE_REQUIREMENTS, [id=#14]
+
+(21) HashAggregate [codegen id : 6]
+Input [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+Keys [2]: [cs_bill_customer_sk#11, cs_item_sk#12]
+Functions: []
+Aggregate Attributes: []
+Results [2]: [cs_bill_customer_sk#11 AS customer_sk#15, cs_item_sk#12 AS item_sk#16]
+
+(22) Sort [codegen id : 6]
+Input [2]: [customer_sk#15, item_sk#16]
+Arguments: [customer_sk#15 ASC NULLS FIRST, item_sk#16 ASC NULLS FIRST], false, 0
+
+(23) SortMergeJoin
+Left keys [2]: [customer_sk#9, item_sk#10]
+Right keys [2]: [customer_sk#15, item_sk#16]
+Join condition: None
+
+(24) Project [codegen id : 7]
+Output [2]: [customer_sk#9, customer_sk#15]
+Input [4]: [customer_sk#9, item_sk#10, customer_sk#15, item_sk#16]
+
+(25) HashAggregate [codegen id : 7]
+Input [2]: [customer_sk#9, customer_sk#15]
+Keys: []
+Functions [3]: [partial_sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END), partial_sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [3]: [sum#17, sum#18, sum#19]
+Results [3]: [sum#20, sum#21, sum#22]
+
+(26) Exchange
+Input [3]: [sum#20, sum#21, sum#22]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#23]
+
+(27) HashAggregate [codegen id : 8]
+Input [3]: [sum#20, sum#21, sum#22]
+Keys: []
+Functions [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END), sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)]
+Aggregate Attributes [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END)#24, sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#25, sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#26]
+Results [3]: [sum(CASE WHEN (isnotnull(customer_sk#9) AND isnull(customer_sk#15)) THEN 1 ELSE 0 END)#24 AS store_only#27, sum(CASE WHEN (isnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#25 AS catalog_only#28, sum(CASE WHEN (isnotnull(customer_sk#9) AND isnotnull(customer_sk#15)) THEN 1 ELSE 0 END)#26 AS store_and_catalog#29]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#3 IN dynamicpruning#4
+ReusedExchange (28)
+
+
+(28) ReusedExchange [Reuses operator id: 7]
+Output [1]: [d_date_sk#5]
+
+Subquery:2 Hosting operator id = 14 Hosting Expression = cs_sold_date_sk#13 IN dynamicpruning#4
+
+

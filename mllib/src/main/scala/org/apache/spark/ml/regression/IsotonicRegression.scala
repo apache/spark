@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.functions.checkNonNegativeWeight
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -87,11 +88,11 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
     } else {
       col($(featuresCol))
     }
-    val w = if (hasWeightCol) col($(weightCol)).cast(DoubleType) else lit(1.0)
+    val w =
+      if (hasWeightCol) checkNonNegativeWeight(col($(weightCol)).cast(DoubleType)) else lit(1.0)
 
     dataset.select(col($(labelCol)).cast(DoubleType), f, w).rdd.map {
-      case Row(label: Double, feature: Double, weight: Double) =>
-        (label, feature, weight)
+      case Row(label: Double, feature: Double, weight: Double) => (label, feature, weight)
     }
   }
 
@@ -240,7 +241,7 @@ class IsotonicRegressionModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
+    val outputSchema = transformSchema(dataset.schema, logging = true)
     val predict = dataset.schema($(featuresCol)).dataType match {
       case DoubleType =>
         udf { feature: Double => oldModel.predict(feature) }
@@ -248,17 +249,33 @@ class IsotonicRegressionModel private[ml] (
         val idx = $(featureIndex)
         udf { features: Vector => oldModel.predict(features(idx)) }
     }
-    dataset.withColumn($(predictionCol), predict(col($(featuresCol))))
+    dataset.withColumn($(predictionCol), predict(col($(featuresCol))),
+      outputSchema($(predictionCol)).metadata)
   }
+
+  @Since("3.0.0")
+  def predict(value: Double): Double = oldModel.predict(value)
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema, fitting = false)
+    var outputSchema = validateAndTransformSchema(schema, fitting = false)
+    if ($(predictionCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateNumeric(outputSchema, $(predictionCol))
+    }
+    outputSchema
   }
 
   @Since("1.6.0")
   override def write: MLWriter =
     new IsotonicRegressionModelWriter(this)
+
+  @Since("3.0.0")
+  val numFeatures: Int = 1
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"IsotonicRegressionModel: uid=$uid, numFeatures=$numFeatures"
+  }
 }
 
 @Since("1.6.0")

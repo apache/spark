@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 
 
 /**
- * :: DeveloperApi ::
  * Class for squared error loss calculation.
  *
  * The squared (L2) error is defined as:
@@ -29,7 +28,6 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
  * where y is the label and F(x) is the model prediction for features x.
  */
 @Since("1.2.0")
-@DeveloperApi
 object SquaredError extends Loss {
 
   /**

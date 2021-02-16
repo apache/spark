@@ -19,20 +19,16 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.BucketSpec
+import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf.BUCKETING_MAX_BUCKETS
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite
-  extends DataSourceTest
-  with SharedSQLContext
-  with BeforeAndAfterEach {
+class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   import testImplicits._
 
   protected override lazy val sql = spark.sql _
@@ -170,24 +166,21 @@ class CreateTableAsSelectSuite
         )
       }.getMessage
       assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE TEMPORARY TABLE ... USING ... AS query"))
+        error.contains("CREATE TEMPORARY TABLE"))
     }
   }
 
-  test("disallows CREATE EXTERNAL TABLE ... USING ... AS query") {
+  test("SPARK-33651: allow CREATE EXTERNAL TABLE ... USING ... if location is specified") {
     withTable("t") {
-      val error = intercept[ParseException] {
-        sql(
-          s"""
-             |CREATE EXTERNAL TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toURI}')
-             |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
-        )
-      }.getMessage
-
-      assert(error.contains("Operation not allowed") &&
-        error.contains("CREATE EXTERNAL TABLE ... USING"))
+      sql(
+        s"""
+           |CREATE EXTERNAL TABLE t USING PARQUET
+           |OPTIONS (PATH '${path.toURI}')
+           |AS SELECT 1 AS a, 2 AS b
+         """.stripMargin)
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.tableType == CatalogTableType.EXTERNAL)
+      assert(table.location.toString == path.toURI.toString.stripSuffix("/"))
     }
   }
 
@@ -241,7 +234,7 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with overriden max number of buckets") {
+  test("create table using as select - with overridden max number of buckets") {
     def createTableSql(numBuckets: Int): String =
       s"""
          |CREATE TABLE t USING PARQUET
@@ -252,7 +245,7 @@ class CreateTableAsSelectSuite
 
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
-    withSQLConf("spark.sql.sources.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+    withSQLConf(BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
 
       // Within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {

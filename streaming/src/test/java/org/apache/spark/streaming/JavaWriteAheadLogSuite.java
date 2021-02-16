@@ -120,6 +120,6 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
     while (dataIterator.hasNext()) {
       readData.add(JavaUtils.bytesToString(dataIterator.next()));
     }
-    Assert.assertEquals(readData, Arrays.asList("data3", "data4"));
+    Assert.assertEquals(Arrays.asList("data3", "data4"), readData);
   }
 }

@@ -24,11 +24,10 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
-    rawParser: IN => Seq[InternalRow],
+    rawParser: IN => Iterable[InternalRow],
     mode: ParseMode,
     schema: StructType,
-    columnNameOfCorruptRecord: String,
-    isMultiLine: Boolean) {
+    columnNameOfCorruptRecord: String) {
 
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
@@ -56,15 +55,9 @@ class FailureSafeParser[IN](
     }
   }
 
-  private val skipParsing = !isMultiLine && mode == PermissiveMode && schema.isEmpty
-
   def parse(input: IN): Iterator[InternalRow] = {
     try {
-     if (skipParsing) {
-       Iterator.single(InternalRow.empty)
-     } else {
-       rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
-     }
+      rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>

@@ -19,7 +19,9 @@ import os
 import shutil
 import tempfile
 
-from pyspark.sql.types import *
+from pyspark.sql.functions import col
+from pyspark.sql.readwriter import DataFrameWriterV2
+from pyspark.sql.types import StructType, StructField, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -141,14 +143,69 @@ class ReadwriterTests(ReusedSQLTestCase):
                 .mode("overwrite").saveAsTable("pyspark_bucket"))
             self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
 
+    def test_insert_into(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2)], ["C1", "C2"])
+        with self.table("test_table"):
+            df.write.saveAsTable("test_table")
+            self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+            df.write.insertInto("test_table")
+            self.assertEqual(4, self.spark.sql("select * from test_table").count())
+
+            df.write.mode("overwrite").insertInto("test_table")
+            self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+            df.write.insertInto("test_table", True)
+            self.assertEqual(2, self.spark.sql("select * from test_table").count())
+
+            df.write.insertInto("test_table", False)
+            self.assertEqual(4, self.spark.sql("select * from test_table").count())
+
+            df.write.mode("overwrite").insertInto("test_table", False)
+            self.assertEqual(6, self.spark.sql("select * from test_table").count())
+
+
+class ReadwriterV2Tests(ReusedSQLTestCase):
+    def test_api(self):
+        df = self.df
+        writer = df.writeTo("testcat.t")
+        self.assertIsInstance(writer, DataFrameWriterV2)
+        self.assertIsInstance(writer.option("property", "value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.options(property="value"), DataFrameWriterV2)
+        self.assertIsInstance(writer.using("source"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy("id"), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(col("id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.tableProperty("foo", "bar"), DataFrameWriterV2)
+
+    def test_partitioning_functions(self):
+        import datetime
+        from pyspark.sql.functions import years, months, days, hours, bucket
+
+        df = self.spark.createDataFrame(
+            [(1, datetime.datetime(2000, 1, 1), "foo")],
+            ("id", "ts", "value")
+        )
+
+        writer = df.writeTo("testcat.t")
+
+        self.assertIsInstance(writer.partitionedBy(years("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(months("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(days("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(hours("ts")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, "id")), DataFrameWriterV2)
+        self.assertIsInstance(writer.partitionedBy(bucket(11, col("id"))), DataFrameWriterV2)
+        self.assertIsInstance(
+            writer.partitionedBy(bucket(3, "id"), hours(col("ts"))), DataFrameWriterV2
+        )
+
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_readwriter import *
+    from pyspark.sql.tests.test_readwriter import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

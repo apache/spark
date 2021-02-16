@@ -17,8 +17,6 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.base.Objects;
-
 public class CustomType1 {
 
   @KVIndex
@@ -52,12 +50,7 @@ public class CustomType1 {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("key", key)
-      .add("id", id)
-      .add("name", name)
-      .add("num", num)
-      .toString();
+    return "CustomType1[key=" + key + ",id=" + id + ",name=" + name + ",num=" + num;
   }
 
 }

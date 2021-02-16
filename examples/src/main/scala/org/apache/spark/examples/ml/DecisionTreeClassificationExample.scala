@@ -62,7 +62,7 @@ object DecisionTreeClassificationExample {
     val labelConverter = new IndexToString()
       .setInputCol("prediction")
       .setOutputCol("predictedLabel")
-      .setLabels(labelIndexer.labels)
+      .setLabels(labelIndexer.labelsArray(0))
 
     // Chain indexers and tree in a Pipeline.
     val pipeline = new Pipeline()

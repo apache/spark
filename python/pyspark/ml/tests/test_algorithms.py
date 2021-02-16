@@ -21,7 +21,7 @@ import unittest
 
 import numpy as np
 
-from pyspark.ml.classification import DecisionTreeClassifier, LogisticRegression, \
+from pyspark.ml.classification import FMClassifier, LogisticRegression, \
     MultilayerPerceptronClassifier, OneVsRest
 from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
 from pyspark.ml.fpm import FPGrowth
@@ -83,10 +83,10 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         result = model.transform(test).head()
         expected_prediction = 2.0
         expected_probability = [0.0, 0.0, 1.0]
-        expected_rawPrediction = [57.3955, -124.5462, 67.9943]
+        expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
-        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, rtol=0.1))
 
 
 class OneVsRestTests(SparkSessionTestCase):
@@ -114,9 +114,9 @@ class OneVsRestTests(SparkSessionTestCase):
         ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         output = model.transform(df)
-        self.assertEqual(output.columns, ["label", "features", "prediction"])
+        self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
-    def test_parallelism_doesnt_change_output(self):
+    def test_parallelism_does_not_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
@@ -140,7 +140,7 @@ class OneVsRestTests(SparkSessionTestCase):
         ovr = OneVsRest(classifier=lr, weightCol="weight")
         self.assertIsNotNone(ovr.fit(df))
         # classifier doesn't inherit hasWeightCol
-        dt = DecisionTreeClassifier()
+        dt = FMClassifier()
         ovr2 = OneVsRest(classifier=dt, weightCol="weight")
         self.assertIsNotNone(ovr2.fit(df))
 
@@ -226,8 +226,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
-            ["antecedent", "consequent", "confidence", "lift"]
+            [([3], [1], 1.0, 1.0, 0.5), ([2], [1], 1.0, 1.0, 0.75)],
+            ["antecedent", "consequent", "confidence", "lift", "support"]
         )
         actual_association_rules = fpm.associationRules
 
@@ -330,11 +330,11 @@ class LinearRegressionTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_algorithms import *
+    from pyspark.ml.tests.test_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

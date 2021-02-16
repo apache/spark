@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark._
 import org.apache.spark.api.python._
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A helper class to run Python UDFs in Spark.
@@ -33,6 +34,8 @@ class PythonUDFRunner(
     argOffsets: Array[Array[Int]])
   extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, evalType, argOffsets) {
+
+  override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
 
   protected override def newWriterThread(
       env: SparkEnv,
@@ -73,7 +76,7 @@ class PythonUDFRunner(
               val obj = new Array[Byte](length)
               stream.readFully(obj)
               obj
-            case 0 => Array.empty[Byte]
+            case 0 => Array.emptyByteArray
             case SpecialLengths.TIMING_DATA =>
               handleTimingData()
               read()
@@ -104,7 +107,7 @@ object PythonUDFRunner {
       dataOut.writeInt(chained.funcs.length)
       chained.funcs.foreach { f =>
         dataOut.writeInt(f.command.length)
-        dataOut.write(f.command)
+        dataOut.write(f.command.toArray)
       }
     }
   }

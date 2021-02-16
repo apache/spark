@@ -38,7 +38,7 @@ public class ArrayKeyIndexType {
 
   @Override
   public int hashCode() {
-    return key.hashCode();
+    return Arrays.hashCode(key) ^ Arrays.hashCode(id);
   }
 
 }

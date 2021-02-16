@@ -25,6 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLite
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper {
 
@@ -32,6 +34,8 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
+      Batch("Infer Filters", Once,
+          InferFiltersFromConstraints) ::
       Batch("Constant Folding", FixedPoint(50),
         NullPropagation,
         ConstantFolding,
@@ -43,12 +47,15 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
   val nullableRelation = LocalRelation('a.int.withNullability(true))
   val nonNullableRelation = LocalRelation('a.int.withNullability(false))
 
-  test("Preserve nullable exprs in general") {
-    for (e <- Seq('a === 'a, 'a <= 'a, 'a >= 'a, 'a < 'a, 'a > 'a)) {
-      val plan = nullableRelation.where(e).analyze
-      val actual = Optimize.execute(plan)
-      val correctAnswer = plan
-      comparePlans(actual, correctAnswer)
+  test("Preserve nullable exprs when constraintPropagation is false") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val a = Symbol("a")
+      for (e <- Seq(a === a, a <= a, a >= a, a < a, a > a)) {
+        val plan = nullableRelation.where(e).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = plan
+        comparePlans(actual, correctAnswer)
+      }
     }
   }
 
@@ -91,5 +98,79 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
     val actual = Optimize.execute(plan)
     val correctAnswer = nonNullableRelation.analyze
     comparePlans(actual, correctAnswer)
+  }
+
+  test("SPARK-26402: accessing nested fields with different cases in case insensitive mode") {
+    val expId = NamedExpression.newExprId
+    val qualifier = Seq.empty[String]
+    val structType = StructType(
+      StructField("a", StructType(StructField("b", IntegerType, false) :: Nil), false) :: Nil)
+
+    val fieldA1 = GetStructField(
+      GetStructField(
+        AttributeReference("data1", structType, false)(expId, qualifier),
+        0, Some("a1")),
+      0, Some("b1"))
+    val fieldA2 = GetStructField(
+      GetStructField(
+        AttributeReference("data2", structType, false)(expId, qualifier),
+        0, Some("a2")),
+      0, Some("b2"))
+
+    // GetStructField with different names are semantically equal; thus, `EqualTo(fieldA1, fieldA2)`
+    // will be optimized to `TrueLiteral` by `SimplifyBinaryComparison`.
+    val originalQuery = nonNullableRelation.where(EqualTo(fieldA1, fieldA2))
+
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = nonNullableRelation.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Simplify null and nonnull with filter constraints") {
+    val a = Symbol("a")
+    Seq(a === a, a <= a, a >= a, a < a, a > a).foreach { condition =>
+      val plan = nonNullableRelation.where(condition).analyze
+      val actual = Optimize.execute(plan)
+      val correctAnswer = nonNullableRelation.analyze
+      comparePlans(actual, correctAnswer)
+    }
+
+    // infer filter constraints will add IsNotNull
+    Seq(a === a, a <= a, a >= a).foreach { condition =>
+      val plan = nullableRelation.where(condition).analyze
+      val actual = Optimize.execute(plan)
+      val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+      comparePlans(actual, correctAnswer)
+    }
+
+    Seq(a < a, a > a).foreach { condition =>
+      val plan = nullableRelation.where(condition).analyze
+      val actual = Optimize.execute(plan)
+      val correctAnswer = nullableRelation.analyze
+      comparePlans(actual, correctAnswer)
+    }
+  }
+
+  test("Simplify nullable without constraints propagation") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val a = Symbol("a")
+      Seq(And(a === a, a.isNotNull),
+        And(a <= a, a.isNotNull),
+        And(a >= a, a.isNotNull)).foreach { condition =>
+        val plan = nullableRelation.where(condition).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = nullableRelation.where('a.isNotNull).analyze
+        comparePlans(actual, correctAnswer)
+      }
+
+      Seq(And(a < a, a.isNotNull), And(a > a, a.isNotNull))
+        .foreach { condition =>
+        val plan = nullableRelation.where(condition).analyze
+        val actual = Optimize.execute(plan)
+        val correctAnswer = nullableRelation.analyze
+        comparePlans(actual, correctAnswer)
+      }
+    }
   }
 }

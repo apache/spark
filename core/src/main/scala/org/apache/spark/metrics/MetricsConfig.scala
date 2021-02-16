@@ -26,6 +26,7 @@ import scala.util.matching.Regex
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.METRICS_CONF
 import org.apache.spark.util.Utils
 
 private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
@@ -37,7 +38,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
   private[metrics] val properties = new Properties()
   private[metrics] var perInstanceSubProperties: mutable.HashMap[String, Properties] = null
 
-  private def setDefaultProperties(prop: Properties) {
+  private def setDefaultProperties(prop: Properties): Unit = {
     prop.setProperty("*.sink.servlet.class", "org.apache.spark.metrics.sink.MetricsServlet")
     prop.setProperty("*.sink.servlet.path", "/metrics/json")
     prop.setProperty("master.sink.servlet.path", "/metrics/master/json")
@@ -48,11 +49,11 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
    * Load properties from various places, based on precedence
    * If the same property is set again latter on in the method, it overwrites the previous value
    */
-  def initialize() {
+  def initialize(): Unit = {
     // Add default properties in case there's no properties file
     setDefaultProperties(properties)
 
-    loadPropertiesFromFile(conf.getOption("spark.metrics.conf"))
+    loadPropertiesFromFile(conf.get(METRICS_CONF))
 
     // Also look for the properties in provided Spark configuration
     val prefix = "spark.metrics.conf."
@@ -101,7 +102,7 @@ private[spark] class MetricsConfig(conf: SparkConf) extends Logging {
    *
    * @param prop the flat list of properties to "unflatten" based on prefixes
    * @param regex the regex that the prefix has to comply with
-   * @return an unflatted map, mapping prefix with sub-properties under that prefix
+   * @return an unflattened map, mapping prefix with sub-properties under that prefix
    */
   def subProperties(prop: Properties, regex: Regex): mutable.HashMap[String, Properties] = {
     val subProperties = new mutable.HashMap[String, Properties]

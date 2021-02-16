@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Apache Avro Data Source Guide
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -66,19 +81,17 @@ write.df(select(df, "name", "favorite_color"), "namesAndFavColors.avro", "avro")
 ## to_avro() and from_avro()
 The Avro package provides function `to_avro` to encode a column as binary in Avro 
 format, and `from_avro()` to decode Avro binary data into a column. Both functions transform one column to 
-another column, and the input/output SQL data type can be complex type or primitive type.
+another column, and the input/output SQL data type can be a complex type or a primitive type.
 
-Using Avro record as columns are useful when reading from or writing to a streaming source like Kafka. Each 
+Using Avro record as columns is useful when reading from or writing to a streaming source like Kafka. Each
 Kafka key-value record will be augmented with some metadata, such as the ingestion timestamp into Kafka, the offset in Kafka, etc.
 * If the "value" field that contains your data is in Avro, you could use `from_avro()` to extract your data, enrich it, clean it, and then push it downstream to Kafka again or write it out to a file.
 * `to_avro()` can be used to turn structs into Avro records. This method is particularly useful when you would like to re-encode multiple columns into a single one when writing data out to Kafka.
 
-Both functions are currently only available in Scala and Java.
-
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-import org.apache.spark.sql.avro._
+import org.apache.spark.sql.avro.functions._
 
 // `from_avro` requires Avro schema in JSON string format.
 val jsonFormatSchema = new String(Files.readAllBytes(Paths.get("./examples/src/main/resources/user.avsc")))
@@ -109,7 +122,8 @@ val query = output
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
-import org.apache.spark.sql.avro.*;
+import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.avro.functions.*;
 
 // `from_avro` requires Avro schema in JSON string format.
 String jsonFormatSchema = new String(Files.readAllBytes(Paths.get("./examples/src/main/resources/user.avsc")));
@@ -138,6 +152,69 @@ StreamingQuery query = output
 
 {% endhighlight %}
 </div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+from pyspark.sql.avro.functions import from_avro, to_avro
+
+# `from_avro` requires Avro schema in JSON string format.
+jsonFormatSchema = open("examples/src/main/resources/user.avsc", "r").read()
+
+df = spark\
+  .readStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("subscribe", "topic1")\
+  .load()
+
+# 1. Decode the Avro data into a struct;
+# 2. Filter by column `favorite_color`;
+# 3. Encode the column `name` in Avro format.
+output = df\
+  .select(from_avro("value", jsonFormatSchema).alias("user"))\
+  .where('user.favorite_color == "red"')\
+  .select(to_avro("user.name").alias("value"))
+
+query = output\
+  .writeStream\
+  .format("kafka")\
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2")\
+  .option("topic", "topic2")\
+  .start()
+
+{% endhighlight %}
+</div>
+<div data-lang="r" markdown="1">
+{% highlight r %}
+
+# `from_avro` requires Avro schema in JSON string format.
+jsonFormatSchema <- paste0(readLines("examples/src/main/resources/user.avsc"), collapse=" ")
+
+df <- read.stream(
+  "kafka",
+  kafka.bootstrap.servers = "host1:port1,host2:port2",
+  subscribe = "topic1"
+)
+
+# 1. Decode the Avro data into a struct;
+# 2. Filter by column `favorite_color`;
+# 3. Encode the column `name` in Avro format.
+
+output <- select(
+  filter(
+    select(df, alias(from_avro("value", jsonFormatSchema), "user")),
+    column("user.favorite_color") == "red"
+  ),
+  alias(to_avro("user.name"), "value")
+)
+
+write.stream(
+  output,
+  "kafka",
+  kafka.bootstrap.servers = "host1:port1,host2:port2",
+  topic = "topic2"
+)
+{% endhighlight %}
+</div>
 </div>
 
 ## Data Source Option
@@ -151,9 +228,22 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
-    <td>Optional Avro schema provided by an user in JSON format. The date type and naming of record fields
-    should match the input Avro data or Catalyst data, otherwise the read/write action will fail.</td>
-    <td>read and write</td>
+    <td>Optional schema provided by a user in JSON format.
+      <ul>
+        <li>
+          When reading Avro, this option can be set to an evolved schema, which is compatible but different with
+          the actual Avro schema. The deserialization schema will be consistent with the evolved schema.
+          For example, if we set an evolved schema containing one additional column with a default value,
+          the reading result in Spark will contain the new column too.
+        </li>
+        <li>
+          When writing Avro, this option can be set if the expected output Avro schema doesn't match the
+          schema converted by Spark. For example, the expected schema of one column is of "enum" type,
+          instead of "string" type in the default converted schema.
+        </li>
+      </ul>
+    </td>
+    <td> read, write and function <code>from_avro</code></td>
   </tr>
   <tr>
     <td><code>recordName</code></td>
@@ -170,7 +260,7 @@ Data source options of Avro can be set via:
   <tr>
     <td><code>ignoreExtension</code></td>
     <td>true</td>
-    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.</td>
+    <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-global-filter">pathGlobFilter</a> for filtering file names.</td>
     <td>read</td>
   </tr>
   <tr>
@@ -198,21 +288,34 @@ Data source options of Avro can be set via:
 ## Configuration
 Configuration of Avro can be done using the `setConf` method on SparkSession or by running `SET key=value` commands using SQL.
 <table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Since Version</b></th></tr>
   <tr>
     <td>spark.sql.legacy.replaceDatabricksSparkAvro.enabled</td>
     <td>true</td>
-    <td>If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped to the built-in but external Avro data source module for backward compatibility.</td>
+    <td>
+      If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped
+      to the built-in but external Avro data source module for backward compatibility.
+    </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.compression.codec</td>
     <td>snappy</td>
-    <td>Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate, snappy, bzip2 and xz. Default codec is snappy.</td>
+    <td>
+      Compression codec used in writing of AVRO files. Supported codecs: uncompressed, deflate,
+      snappy, bzip2 and xz. Default codec is snappy.
+    </td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td>spark.sql.avro.deflate.level</td>
     <td>-1</td>
-    <td>Compression level for the deflate codec used in writing of AVRO files. Valid value must be in the range of from 1 to 9 inclusive or -1. The default value is -1 which corresponds to 6 level in the current implementation.</td>
+    <td>
+      Compression level for the deflate codec used in writing of AVRO files. Valid value must be in
+      the range of from 1 to 9 inclusive or -1. The default value is -1 which corresponds to 6 level
+      in the current implementation.
+    </td>
+    <td>2.4.0</td>
   </tr>
 </table>
 
@@ -236,7 +339,7 @@ applications. Read the [Advanced Dependency Management](https://spark.apache
 Submission Guide for more details. 
 
 ## Supported types for Avro -> Spark SQL conversion
-Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.8.2/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.8.2/spec.html#schema_complex) under records of Avro.
+Currently Spark supports reading all [primitive types](https://avro.apache.org/docs/1.10.1/spec.html#schema_primitive) and [complex types](https://avro.apache.org/docs/1.10.1/spec.html#schema_complex) under records of Avro.
 <table class="table">
   <tr><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>
   <tr>
@@ -300,7 +403,7 @@ In addition to the types listed above, it supports reading `union` types. The fo
 3. `union(something, null)`, where something is any supported Avro type. This will be mapped to the same Spark SQL type as that of something, with nullable set to true.
 All other union types are considered complex. They will be mapped to StructType where field names are member0, member1, etc., in accordance with members of the union. This is consistent with the behavior when converting between Avro and Parquet.
 
-It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.8.2/spec.html#Logical+Types):
+It also supports reading the following Avro [logical types](https://avro.apache.org/docs/1.10.1/spec.html#Logical+Types):
 
 <table class="table">
   <tr><th><b>Avro logical type</b></th><th><b>Avro type</b></th><th><b>Spark SQL type</b></th></tr>

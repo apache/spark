@@ -45,7 +45,7 @@ object CosineSimilarity {
   case class Params(inputFile: String = null, threshold: Double = 0.1)
     extends AbstractParams[Params]
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("CosineSimilarity") {

@@ -25,6 +25,7 @@ private[spark] object MinikubeTestBackend extends IntegrationTestBackend {
   private var defaultClient: DefaultKubernetesClient = _
 
   override def initialize(): Unit = {
+    Minikube.logVersion()
     val minikubeStatus = Minikube.getMinikubeStatus
     require(minikubeStatus == MinikubeStatus.RUNNING,
         s"Minikube must be running to use the Minikube backend for integration tests." +

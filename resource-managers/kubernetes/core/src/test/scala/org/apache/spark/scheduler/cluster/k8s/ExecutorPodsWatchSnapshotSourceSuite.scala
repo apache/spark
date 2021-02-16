@@ -53,7 +53,7 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
   private var watchSourceUnderTest: ExecutorPodsWatchSnapshotSource = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     watch = ArgumentCaptor.forClass(classOf[Watcher[Pod]])
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
@@ -67,9 +67,11 @@ class ExecutorPodsWatchSnapshotSourceSuite extends SparkFunSuite with BeforeAndA
   }
 
   test("Watch events should be pushed to the snapshots store as snapshot updates.") {
-    watch.getValue.eventReceived(Action.ADDED, runningExecutor(1))
-    watch.getValue.eventReceived(Action.MODIFIED, runningExecutor(2))
-    verify(eventQueue).updatePod(runningExecutor(1))
-    verify(eventQueue).updatePod(runningExecutor(2))
+    val exec1 = runningExecutor(1)
+    val exec2 = runningExecutor(2)
+    watch.getValue.eventReceived(Action.ADDED, exec1)
+    watch.getValue.eventReceived(Action.MODIFIED, exec2)
+    verify(eventQueue).updatePod(exec1)
+    verify(eventQueue).updatePod(exec2)
   }
 }

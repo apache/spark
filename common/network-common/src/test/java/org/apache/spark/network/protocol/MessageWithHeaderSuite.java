@@ -129,8 +129,8 @@ public class MessageWithHeaderSuite {
   private ByteBuf doWrite(MessageWithHeader msg, int minExpectedWrites) throws Exception {
     int writes = 0;
     ByteArrayWritableChannel channel = new ByteArrayWritableChannel((int) msg.count());
-    while (msg.transfered() < msg.count()) {
-      msg.transferTo(channel, msg.transfered());
+    while (msg.transferred() < msg.count()) {
+      msg.transferTo(channel, msg.transferred());
       writes++;
     }
     assertTrue("Not enough writes!", minExpectedWrites <= writes);

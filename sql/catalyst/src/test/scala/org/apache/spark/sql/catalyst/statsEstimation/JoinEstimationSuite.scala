@@ -79,8 +79,8 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     val c1 = generateJoinChild(col1, leftHistogram, expectedMin, expectedMax)
     val c2 = generateJoinChild(col2, rightHistogram, expectedMin, expectedMax)
 
-    val c1JoinC2 = Join(c1, c2, Inner, Some(EqualTo(col1, col2)))
-    val c2JoinC1 = Join(c2, c1, Inner, Some(EqualTo(col2, col1)))
+    val c1JoinC2 = Join(c1, c2, Inner, Some(EqualTo(col1, col2)), JoinHint.NONE)
+    val c2JoinC1 = Join(c2, c1, Inner, Some(EqualTo(col2, col1)), JoinHint.NONE)
     val expectedStatsAfterJoin = Statistics(
       sizeInBytes = expectedRows * (8 + 2 * 4),
       rowCount = Some(expectedRows),
@@ -284,7 +284,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
   test("cross join") {
     // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
-    val join = Join(table1, table2, Cross, None)
+    val join = Join(table1, table2, Cross, None, JoinHint.NONE)
     val expectedStats = Statistics(
       sizeInBytes = 5 * 3 * (8 + 4 * 4),
       rowCount = Some(5 * 3),
@@ -299,7 +299,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // key-5-9 and key-2-4 are disjoint
     val join = Join(table1, table2, Inner,
-      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))), JoinHint.NONE)
     val expectedStats = Statistics(
       sizeInBytes = 1,
       rowCount = Some(0),
@@ -312,7 +312,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // key-5-9 and key-2-4 are disjoint
     val join = Join(table1, table2, LeftOuter,
-      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))), JoinHint.NONE)
     val expectedStats = Statistics(
       sizeInBytes = 5 * (8 + 4 * 4),
       rowCount = Some(5),
@@ -328,7 +328,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // key-5-9 and key-2-4 are disjoint
     val join = Join(table1, table2, RightOuter,
-      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))), JoinHint.NONE)
     val expectedStats = Statistics(
       sizeInBytes = 3 * (8 + 4 * 4),
       rowCount = Some(3),
@@ -344,7 +344,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // key-5-9 and key-2-4 are disjoint
     val join = Join(table1, table2, FullOuter,
-      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))))
+      Some(EqualTo(nameToAttr("key-5-9"), nameToAttr("key-2-4"))), JoinHint.NONE)
     val expectedStats = Statistics(
       sizeInBytes = (5 + 3) * (8 + 4 * 4),
       rowCount = Some(5 + 3),
@@ -361,7 +361,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     val join = Join(table1, table2, Inner,
-      Some(EqualTo(nameToAttr("key-1-5"), nameToAttr("key-1-2"))))
+      Some(EqualTo(nameToAttr("key-1-5"), nameToAttr("key-1-2"))), JoinHint.NONE)
     // Update column stats for equi-join keys (key-1-5 and key-1-2).
     val joinedColStat = ColumnStat(distinctCount = Some(2), min = Some(1), max = Some(2),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
@@ -383,7 +383,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
     val join = Join(table2, table3, Inner, Some(
       And(EqualTo(nameToAttr("key-1-2"), nameToAttr("key-1-2")),
-        EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3")))))
+        EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3")))), JoinHint.NONE)
 
     // Update column stats for join keys.
     val joinedColStat1 = ColumnStat(distinctCount = Some(2), min = Some(1), max = Some(2),
@@ -404,7 +404,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
     val join = Join(table3, table2, LeftOuter,
-      Some(EqualTo(nameToAttr("key-2-3"), nameToAttr("key-2-4"))))
+      Some(EqualTo(nameToAttr("key-2-3"), nameToAttr("key-2-4"))), JoinHint.NONE)
     val joinedColStat = ColumnStat(distinctCount = Some(2), min = Some(2), max = Some(3),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
@@ -422,7 +422,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
     val join = Join(table2, table3, RightOuter,
-      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))))
+      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
     val joinedColStat = ColumnStat(distinctCount = Some(2), min = Some(2), max = Some(3),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 
@@ -440,7 +440,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
     // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
     val join = Join(table2, table3, FullOuter,
-      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))))
+      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
 
     val expectedStats = Statistics(
       sizeInBytes = 3 * (8 + 4 * 4),
@@ -456,7 +456,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     // table3 (key-1-2 int, key-2-3 int): (1, 2), (2, 3)
     Seq(LeftSemi, LeftAnti).foreach { jt =>
       val join = Join(table2, table3, jt,
-        Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))))
+        Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
       // For now we just propagate the statistics from left side for left semi/anti join.
       val expectedStats = Statistics(
         sizeInBytes = 3 * (8 + 4 * 2),
@@ -525,7 +525,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       withClue(s"For data type ${key1.dataType}") {
         // All values in two tables are the same, so column stats after join are also the same.
         val join = Join(Project(Seq(key1), table1), Project(Seq(key2), table2), Inner,
-          Some(EqualTo(key1, key2)))
+          Some(EqualTo(key1, key2)), JoinHint.NONE)
         val expectedStats = Statistics(
           sizeInBytes = 1 * (8 + 2 * getColSize(key1, columnInfo1(key1))),
           rowCount = Some(1),
@@ -543,11 +543,34 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       outputList = Seq(nullColumn),
       rowCount = 1,
       attributeStats = AttributeMap(Seq(nullColumn -> nullColStat)))
-    val join = Join(table1, nullTable, Inner, Some(EqualTo(nameToAttr("key-1-5"), nullColumn)))
+    val join = Join(table1, nullTable, Inner,
+      Some(EqualTo(nameToAttr("key-1-5"), nullColumn)), JoinHint.NONE)
     val expectedStats = Statistics(
       sizeInBytes = 1,
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
     assert(join.stats == expectedStats)
+  }
+
+  test("SPARK-33018 Fix estimate statistics issue if child has 0 bytes") {
+    case class MyStatsTestPlan(
+        outputList: Seq[Attribute],
+        sizeInBytes: BigInt) extends LeafNode {
+      override def output: Seq[Attribute] = outputList
+      override def computeStats(): Statistics = Statistics(sizeInBytes = sizeInBytes)
+    }
+
+    val left = MyStatsTestPlan(
+      outputList = Seq("key-1-2", "key-2-4").map(nameToAttr),
+      sizeInBytes = BigInt(100))
+
+    val right = MyStatsTestPlan(
+      outputList = Seq("key-1-2", "key-2-3").map(nameToAttr),
+      sizeInBytes = BigInt(0))
+
+    val join = Join(left, right, LeftOuter,
+      Some(EqualTo(nameToAttr("key-2-4"), nameToAttr("key-2-3"))), JoinHint.NONE)
+
+    assert(join.stats == Statistics(sizeInBytes = 100))
   }
 }

@@ -48,11 +48,13 @@ class JoinTypesTest extends SparkFunSuite {
   test("construct a LeftSemi type") {
     assert(JoinType("leftsemi") === LeftSemi)
     assert(JoinType("left_semi") === LeftSemi)
+    assert(JoinType("semi") === LeftSemi)
   }
 
   test("construct a LeftAnti type") {
     assert(JoinType("leftanti") === LeftAnti)
     assert(JoinType("left_anti") === LeftAnti)
+    assert(JoinType("anti") === LeftAnti)
   }
 
   test("construct a Cross type") {

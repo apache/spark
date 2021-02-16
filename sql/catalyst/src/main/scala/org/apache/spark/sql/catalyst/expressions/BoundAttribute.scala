@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -34,15 +33,11 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
-  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType, nullable)
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
-    if (nullable && input.isNullAt(ordinal)) {
-      null
-    } else {
-      accessor(input, ordinal)
-    }
+    accessor(input, ordinal)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -76,18 +71,26 @@ object BindReferences extends Logging {
       input: AttributeSeq,
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
-      attachTree(a, "Binding attribute") {
-        val ordinal = input.indexOf(a.exprId)
-        if (ordinal == -1) {
-          if (allowFailures) {
-            a
-          } else {
-            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
-          }
+      val ordinal = input.indexOf(a.exprId)
+      if (ordinal == -1) {
+        if (allowFailures) {
+          a
         } else {
-          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
+          throw new IllegalStateException(
+            s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
+      } else {
+        BoundReference(ordinal, a.dataType, input(ordinal).nullable)
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
+  }
+
+  /**
+   * A helper function to bind given expressions to an input schema.
+   */
+  def bindReferences[A <: Expression](
+      expressions: Seq[A],
+      input: AttributeSeq): Seq[A] = {
+    expressions.map(BindReferences.bindReference(_, input))
   }
 }

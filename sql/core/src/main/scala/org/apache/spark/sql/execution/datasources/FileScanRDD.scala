@@ -19,11 +19,9 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.{FileNotFoundException, IOException}
 
-import scala.collection.mutable
-
 import org.apache.parquet.io.ParquetDecodingException
 
-import org.apache.spark.{Partition => RDDPartition, TaskContext, TaskKilledException}
+import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -37,7 +35,7 @@ import org.apache.spark.util.NextIterator
  * that need to be prepended to each row.
  *
  * @param partitionValues value of partition columns to be prepended to each row.
- * @param filePath path of the file to read
+ * @param filePath URI of the file to read
  * @param start the beginning offset (in bytes) of the block.
  * @param length number of bytes to read.
  * @param locations locality information (list of nodes that have the data).
@@ -52,12 +50,6 @@ case class PartitionedFile(
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
 }
-
-/**
- * A collection of file blocks that should be read as a single task
- * (possibly from multiple partitioned directories).
- */
-case class FilePartition(index: Int, files: Seq[PartitionedFile]) extends RDDPartition
 
 /**
  * An RDD that scans a list of file partitions.
@@ -186,7 +178,9 @@ class FileScanRDD(
                 s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
               throw new QueryExecutionException(message, e)
             case e: ParquetDecodingException =>
-              if (e.getMessage.contains("Can not read value at")) {
+              if (e.getCause.isInstanceOf[SparkUpgradeException]) {
+                throw e.getCause
+              } else if (e.getMessage.contains("Can not read value at")) {
                 val message = "Encounter error while reading parquet files. " +
                   "One possible cause: Parquet column cannot be converted in the " +
                   "corresponding files. Details: "
@@ -216,21 +210,6 @@ class FileScanRDD(
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
-    val files = split.asInstanceOf[FilePartition].files
-
-    // Computes total number of bytes can be retrieved from each host.
-    val hostToNumBytes = mutable.HashMap.empty[String, Long]
-    files.foreach { file =>
-      file.locations.filter(_ != "localhost").foreach { host =>
-        hostToNumBytes(host) = hostToNumBytes.getOrElse(host, 0L) + file.length
-      }
-    }
-
-    // Takes the first 3 hosts with the most data to be retrieved
-    hostToNumBytes.toSeq.sortBy {
-      case (host, numBytes) => numBytes
-    }.reverse.take(3).map {
-      case (host, numBytes) => host
-    }
+    split.asInstanceOf[FilePartition].preferredLocations()
   }
 }

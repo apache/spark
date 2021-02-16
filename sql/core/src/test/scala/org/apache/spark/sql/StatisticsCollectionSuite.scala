@@ -17,15 +17,21 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{File, PrintWriter}
+import java.net.URI
+import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
+import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -34,7 +40,7 @@ import org.apache.spark.util.Utils
 /**
  * End-to-end suite testing statistics collection and use on both entire table and columns.
  */
-class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSQLContext {
+class StatisticsCollectionSuite extends StatisticsCollectionTestBase with SharedSparkSession {
   import testImplicits._
 
   test("estimates the size of a limit 0 on outer join") {
@@ -168,6 +174,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
+    withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
+      statsWithHgms.foreach { case (k, v) =>
+        val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
@@ -227,37 +242,18 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       BigInt(0) -> (("0.0 B", "0")),
       BigInt(100) -> (("100.0 B", "100")),
       BigInt(2047) -> (("2047.0 B", "2.05E+3")),
-      BigInt(2048) -> (("2.0 KB", "2.05E+3")),
-      BigInt(3333333) -> (("3.2 MB", "3.33E+6")),
-      BigInt(4444444444L) -> (("4.1 GB", "4.44E+9")),
-      BigInt(5555555555555L) -> (("5.1 TB", "5.56E+12")),
-      BigInt(6666666666666666L) -> (("5.9 PB", "6.67E+15")),
-      BigInt(1L << 10 ) * (1L << 60) -> (("1024.0 EB", "1.18E+21")),
+      BigInt(2048) -> (("2.0 KiB", "2.05E+3")),
+      BigInt(3333333) -> (("3.2 MiB", "3.33E+6")),
+      BigInt(4444444444L) -> (("4.1 GiB", "4.44E+9")),
+      BigInt(5555555555555L) -> (("5.1 TiB", "5.56E+12")),
+      BigInt(6666666666666666L) -> (("5.9 PiB", "6.67E+15")),
+      BigInt(1L << 10 ) * (1L << 60) -> (("1024.0 EiB", "1.18E+21")),
       BigInt(1L << 11) * (1L << 60) -> (("2.36E+21 B", "2.36E+21"))
     )
     numbers.foreach { case (input, (expectedSize, expectedRows)) =>
       val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
-      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows," +
-        s" hints=none"
+      val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows"
       assert(stats.simpleString == expectedString)
-    }
-  }
-
-  test("change stats after truncate command") {
-    val table = "change_stats_truncate_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
-
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
     }
   }
 
@@ -334,6 +330,26 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("auto gather stats after insert command") {
+    val table = "change_stats_insert_datasource_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
+        withTable(table) {
+          sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
+          // insert into command
+          sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
+          val stats = getCatalogTable(table).stats
+          if (autoUpdate) {
+            assert(stats.isDefined)
+            assert(stats.get.sizeInBytes >= 0)
+          } else {
+            assert(stats.isEmpty)
+          }
+        }
+      }
+    }
+  }
+
   test("invalidation of tableRelationCache after inserts") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
@@ -346,22 +362,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
           spark.table(table)
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
-        }
-      }
-    }
-  }
-
-  test("invalidation of tableRelationCache after table truncation") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          sql(s"TRUNCATE TABLE $table")
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
         }
       }
     }
@@ -425,6 +425,256 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           """.stripMargin)
         df2.createTempView("TBL2")
         sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
+      }
+    }
+  }
+
+  test("store and retrieve column stats in different time zones") {
+    val (start, end) = (0, TimeUnit.DAYS.toSeconds(2))
+
+    def checkTimestampStats(
+        t: DataType,
+        srcTimeZone: TimeZone,
+        dstTimeZone: TimeZone)(checker: ColumnStat => Unit): Unit = {
+      val table = "time_table"
+      val column = "T"
+      val original = TimeZone.getDefault
+      try {
+        withTable(table) {
+          TimeZone.setDefault(srcTimeZone)
+          spark.range(start, end)
+            .select(timestamp_seconds($"id").cast(t).as(column))
+            .write.saveAsTable(table)
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS $column")
+
+          TimeZone.setDefault(dstTimeZone)
+          val stats = getCatalogTable(table)
+            .stats.get.colStats(column).toPlanStat(column, t)
+          checker(stats)
+        }
+      } finally {
+        TimeZone.setDefault(original)
+      }
+    }
+
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      val timeZone = TimeZone.getTimeZone(zid)
+      checkTimestampStats(DateType, TimeZoneUTC, timeZone) { stats =>
+        assert(stats.min.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(start))
+        assert(stats.max.get.asInstanceOf[Int] == TimeUnit.SECONDS.toDays(end - 1))
+      }
+      checkTimestampStats(TimestampType, TimeZoneUTC, timeZone) { stats =>
+        assert(stats.min.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(start))
+        assert(stats.max.get.asInstanceOf[Long] == TimeUnit.SECONDS.toMicros(end - 1))
+      }
+    }
+  }
+
+  def getStatAttrNames(tableName: String): Set[String] = {
+    val queryStats = spark.table(tableName).queryExecution.optimizedPlan.stats.attributeStats
+    queryStats.map(_._1.name).toSet
+  }
+
+  test("analyzes column statistics in cached query") {
+    withTempView("cachedQuery") {
+      sql(
+        """CACHE TABLE cachedQuery AS
+          |  SELECT c0, avg(c1) AS v1, avg(c2) AS v2
+          |  FROM (SELECT id % 3 AS c0, id % 5 AS c1, 2 AS c2 FROM range(1, 30))
+          |  GROUP BY c0
+        """.stripMargin)
+
+      // Analyzes one column in the cached logical plan
+      sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS v1")
+      assert(getStatAttrNames("cachedQuery") === Set("v1"))
+
+      // Analyzes two more columns
+      sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS c0, v2")
+      assert(getStatAttrNames("cachedQuery")  === Set("c0", "v1", "v2"))
+    }
+  }
+
+  test("analyzes column statistics in cached local temporary view") {
+    withTempView("tempView") {
+      // Analyzes in a temporary view
+      sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
+      val errMsg = intercept[AnalysisException] {
+        sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg.contains("Temporary view `tempView` is not cached for analyzing columns"))
+
+      // Cache the view then analyze it
+      sql("CACHE TABLE tempView")
+      assert(getStatAttrNames("tempView") !== Set("id"))
+      sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
+      assert(getStatAttrNames("tempView") === Set("id"))
+    }
+  }
+
+  test("analyzes column statistics in cached global temporary view") {
+    withGlobalTempView("gTempView") {
+      val globalTempDB = spark.sharedState.globalTempViewManager.database
+      val errMsg1 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg1.contains("Table or view not found: " +
+        s"$globalTempDB.gTempView"))
+      // Analyzes in a global temporary view
+      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
+      val errMsg2 = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage
+      assert(errMsg2.contains(
+        s"Temporary view `$globalTempDB`.`gTempView` is not cached for analyzing columns"))
+
+      // Cache the view then analyze it
+      sql(s"CACHE TABLE $globalTempDB.gTempView")
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") !== Set("id"))
+      sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
+      assert(getStatAttrNames(s"$globalTempDB.gTempView") === Set("id"))
+    }
+  }
+
+  test("analyzes column statistics in cached catalog view") {
+    withTempDatabase { database =>
+      sql(s"CREATE VIEW $database.v AS SELECT 1 c")
+      sql(s"CACHE TABLE $database.v")
+      assert(getStatAttrNames(s"$database.v") !== Set("c"))
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS FOR COLUMNS c")
+      assert(getStatAttrNames(s"$database.v") === Set("c"))
+    }
+  }
+
+  test("analyzes table statistics in cached catalog view") {
+    def getTableStats(tableName: String): Statistics = {
+      spark.table(tableName).queryExecution.optimizedPlan.stats
+    }
+
+    withTempDatabase { database =>
+      sql(s"CREATE VIEW $database.v AS SELECT 1 c")
+      // Cache data eagerly by default, so this operation collects table stats
+      sql(s"CACHE TABLE $database.v")
+      val stats1 = getTableStats(s"$database.v")
+      assert(stats1.sizeInBytes > 0)
+      assert(stats1.rowCount === Some(1))
+      sql(s"UNCACHE TABLE $database.v")
+
+      // Cache data lazily, then analyze table stats
+      sql(s"CACHE LAZY TABLE $database.v")
+      val stats2 = getTableStats(s"$database.v")
+      assert(stats2.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats2.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS NOSCAN")
+      val stats3 = getTableStats(s"$database.v")
+      assert(stats3.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
+      assert(stats3.rowCount === None)
+
+      sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
+      val stats4 = getTableStats(s"$database.v")
+      assert(stats4.sizeInBytes === stats1.sizeInBytes)
+      assert(stats4.rowCount === Some(1))
+    }
+  }
+
+  test(s"CTAS should update statistics if ${SQLConf.AUTO_SIZE_UPDATE_ENABLED.key} is enabled") {
+    val tableName = "spark_27694"
+    Seq(false, true).foreach { updateEnabled =>
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> updateEnabled.toString) {
+        withTable(tableName) {
+          // Create a data source table using the result of a query.
+          sql(s"CREATE TABLE $tableName USING parquet AS SELECT 'a', 'b'")
+          val catalogTable = getCatalogTable(tableName)
+          if (updateEnabled) {
+            assert(catalogTable.stats.nonEmpty)
+          } else {
+            assert(catalogTable.stats.isEmpty)
+          }
+        }
+      }
+    }
+  }
+
+  test("Metadata files and temporary files should not be counted as data files") {
+    withTempDir { tempDir =>
+      val tableName = "t1"
+      val stagingDirName = ".test-staging-dir"
+      val tableLocation = s"${tempDir.toURI}/$tableName"
+      withSQLConf(
+        SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true",
+        "hive.exec.stagingdir" -> stagingDirName) {
+        withTable("t1") {
+          sql(s"CREATE TABLE $tableName(c1 BIGINT) USING PARQUET LOCATION '$tableLocation'")
+          sql(s"INSERT INTO TABLE $tableName VALUES(1)")
+
+          val staging = new File(new URI(s"$tableLocation/$stagingDirName"))
+          Utils.tryWithResource(new PrintWriter(staging)) { stagingWriter =>
+            stagingWriter.write("12")
+          }
+
+          val metadata = new File(new URI(s"$tableLocation/_metadata"))
+          Utils.tryWithResource(new PrintWriter(metadata)) { metadataWriter =>
+            metadataWriter.write("1234")
+          }
+
+          sql(s"INSERT INTO TABLE $tableName VALUES(1)")
+
+          val stagingFileSize = staging.length()
+          val metadataFileSize = metadata.length()
+          val tableLocationSize = getDataSize(new File(new URI(tableLocation)))
+
+          val stats = checkTableStats(tableName, hasSizeInBytes = true, expectedRowCounts = None)
+          assert(stats.get.sizeInBytes === tableLocationSize - stagingFileSize - metadataFileSize)
+        }
+      }
+    }
+  }
+
+  Seq(true, false).foreach { caseSensitive =>
+    test(s"SPARK-30903: Fail fast on duplicate columns when analyze columns " +
+      s"- caseSensitive=$caseSensitive") {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val table = "test_table"
+        withTable(table) {
+          sql(s"CREATE TABLE $table (value string, name string) USING PARQUET")
+          val dupCol = if (caseSensitive) "value" else "VaLuE"
+          val errorMsg = intercept[AnalysisException] {
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS value, name, $dupCol")
+          }.getMessage
+          assert(errorMsg.contains("Found duplicate column(s)"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }

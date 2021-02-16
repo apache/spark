@@ -23,17 +23,17 @@ import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.Origin
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Base SQL parsing infrastructure.
  */
-abstract class AbstractSqlParser extends ParserInterface with Logging {
+abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with Logging {
 
   /** Creates/Resolves DataType for a given SQL string. */
   override def parseDataType(sqlText: String): DataType = parse(sqlText) { parser =>
@@ -57,6 +57,13 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     }
   }
 
+  /** Creates a multi-part identifier for a given SQL string */
+  override def parseMultipartIdentifier(sqlText: String): Seq[String] = {
+    parse(sqlText) { parser =>
+      astBuilder.visitSingleMultipartIdentifier(parser.singleMultipartIdentifier())
+    }
+  }
+
   /**
    * Creates StructType for a given SQL string, which is a comma separated list of field
    * definitions which will preserve the correct Hive metadata.
@@ -71,7 +78,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
       case plan: LogicalPlan => plan
       case _ =>
         val position = Origin(None, None)
-        throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
+        throw QueryParsingErrors.sqlStatementUnsupportedError(sqlText, position)
     }
   }
 
@@ -84,14 +91,15 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
     val lexer = new SqlBaseLexer(new UpperCaseCharStream(CharStreams.fromString(command)))
     lexer.removeErrorListeners()
     lexer.addErrorListener(ParseErrorListener)
-    lexer.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
 
     val tokenStream = new CommonTokenStream(lexer)
     val parser = new SqlBaseParser(tokenStream)
     parser.addParseListener(PostProcessor)
     parser.removeErrorListeners()
     parser.addErrorListener(ParseErrorListener)
-    parser.legacy_setops_precedence_enbled = SQLConf.get.setOpsPrecedenceEnforced
+    parser.legacy_setops_precedence_enabled = conf.setOpsPrecedenceEnforced
+    parser.legacy_exponent_literal_as_decimal_enabled = conf.exponentLiteralAsDecimalEnabled
+    parser.SQL_standard_keyword_behavior = conf.ansiEnabled
 
     try {
       try {
@@ -125,14 +133,12 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
 /**
  * Concrete SQL parser for Catalyst-only SQL statements.
  */
-class CatalystSqlParser(conf: SQLConf) extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(conf)
+class CatalystSqlParser extends AbstractSqlParser {
+  val astBuilder = new AstBuilder
 }
 
 /** For test-only. */
-object CatalystSqlParser extends AbstractSqlParser {
-  val astBuilder = new AstBuilder(new SQLConf())
-}
+object CatalystSqlParser extends CatalystSqlParser
 
 /**
  * This string stream provides the lexer with upper case characters only. This greatly simplifies
@@ -194,8 +200,17 @@ case object ParseErrorListener extends BaseErrorListener {
       charPositionInLine: Int,
       msg: String,
       e: RecognitionException): Unit = {
-    val position = Origin(Some(line), Some(charPositionInLine))
-    throw new ParseException(None, msg, position, position)
+    val (start, stop) = offendingSymbol match {
+      case token: CommonToken =>
+        val start = Origin(Some(line), Some(token.getCharPositionInLine))
+        val length = token.getStopIndex - token.getStartIndex + 1
+        val stop = Origin(Some(line), Some(token.getCharPositionInLine + length))
+        (start, stop)
+      case _ =>
+        val start = Origin(Some(line), Some(charPositionInLine))
+        (start, start)
+    }
+    throw new ParseException(None, msg, start, stop)
   }
 }
 
@@ -246,6 +261,13 @@ class ParseException(
  * The post-processor validates & cleans-up the parse tree during the parse process.
  */
 case object PostProcessor extends SqlBaseBaseListener {
+
+  /** Throws error message when exiting a explicitly captured wrong identifier rule */
+  override def exitErrorIdent(ctx: SqlBaseParser.ErrorIdentContext): Unit = {
+    val ident = ctx.getParent.getText
+
+    throw QueryParsingErrors.unquotedIdentifierError(ident, ctx)
+  }
 
   /** Remove the back ticks from an Identifier. */
   override def exitQuotedIdentifier(ctx: SqlBaseParser.QuotedIdentifierContext): Unit = {

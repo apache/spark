@@ -85,7 +85,7 @@ object TriangleCount {
     }
 
     // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(ctx: EdgeContext[VertexSet, ED, Int]) {
+    def edgeFunc(ctx: EdgeContext[VertexSet, ED, Int]): Unit = {
       val (smallSet, largeSet) = if (ctx.srcAttr.size < ctx.dstAttr.size) {
         (ctx.srcAttr, ctx.dstAttr)
       } else {

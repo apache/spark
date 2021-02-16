@@ -194,7 +194,7 @@ class LocalLDAModel private[spark] (
     override protected[spark] val gammaShape: Double = 100)
   extends LDAModel with Serializable {
 
-  private var seed: Long = Utils.random.nextLong()
+  private[spark] var seed: Long = Utils.random.nextLong()
 
   @Since("1.3.0")
   override def k: Int = topics.numCols
@@ -212,11 +212,9 @@ class LocalLDAModel private[spark] (
       val topic = normalize(brzTopics(::, topicIndex), 1.0)
       val (termWeights, terms) =
         topic.toArray.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic).unzip
-      (terms.toArray, termWeights.toArray)
+      (terms, termWeights)
     }.toArray
   }
-
-  override protected def formatVersion = "1.0"
 
   /**
    * Random seed for cluster initialization.
@@ -328,7 +326,7 @@ class LocalLDAModel private[spark] (
         val Elogthetad: BDV[Double] = LDAUtils.dirichletExpectation(gammad)
 
         // E[log p(doc | theta, beta)]
-        termCounts.foreachActive { case (idx, count) =>
+        termCounts.foreachNonZero { case (idx, count) =>
           docBound += count * LDAUtils.logSumExp(Elogthetad + localElogbeta(idx, ::).t)
         }
         // E[log p(theta | alpha) - log q(theta | gamma)]
@@ -338,7 +336,7 @@ class LocalLDAModel private[spark] (
 
         docBound
       }.sum()
-    ElogbetaBc.destroy(blocking = false)
+    ElogbetaBc.destroy()
 
     // Bound component for prob(topic-term distributions):
     //   E[log p(beta | eta) - log q(beta | lambda)]
@@ -386,31 +384,6 @@ class LocalLDAModel private[spark] (
         (id, Vectors.dense(normalize(gamma, 1.0).toArray))
       }
     }
-  }
-
-  /**
-   * Get a method usable as a UDF for `topicDistributions()`
-   */
-  private[spark] def getTopicDistributionMethod: Vector => Vector = {
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
-    val docConcentrationBrz = this.docConcentration.asBreeze
-    val gammaShape = this.gammaShape
-    val k = this.k
-    val gammaSeed = this.seed
-
-    (termCounts: Vector) =>
-      if (termCounts.numNonzeros == 0) {
-        Vectors.zeros(k)
-      } else {
-        val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts,
-          expElogbeta,
-          docConcentrationBrz,
-          gammaShape,
-          k,
-          gammaSeed)
-        Vectors.dense(normalize(gamma, 1.0).toArray)
-      }
   }
 
   /**
@@ -633,7 +606,7 @@ class DistributedLDAModel private[clustering] (
       }
     topicsInQueues.map { q =>
       val (termWeights, terms) = q.toArray.sortBy(-_._1).unzip
-      (terms.toArray, termWeights.toArray)
+      (terms, termWeights)
     }
   }
 
@@ -668,7 +641,7 @@ class DistributedLDAModel private[clustering] (
       }
     topicsInQueues.map { q =>
       val (docTopics, docs) = q.toArray.sortBy(-_._1).unzip
-      (docs.toArray, docTopics.toArray)
+      (docs, docTopics)
     }
   }
 
@@ -708,7 +681,7 @@ class DistributedLDAModel private[clustering] (
     perDocAssignments.map { case (docID: Long, (terms: Array[Int], topics: Array[Int])) =>
       // TODO: Avoid zip, which is inefficient.
       val (sortedTerms, sortedTopics) = terms.zip(topics).sortBy(_._1).unzip
-      (docID, sortedTerms.toArray, sortedTopics.toArray)
+      (docID, sortedTerms, sortedTopics)
     }
   }
 
@@ -834,8 +807,6 @@ class DistributedLDAModel private[clustering] (
 
   // TODO:
   // override def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = ???
-
-  override protected def formatVersion = "1.0"
 
   @Since("1.5.0")
   override def save(sc: SparkContext, path: String): Unit = {

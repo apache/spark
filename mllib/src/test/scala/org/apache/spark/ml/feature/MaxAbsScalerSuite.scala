@@ -44,6 +44,9 @@ class MaxAbsScalerSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCol("scaled")
 
     val model = scaler.fit(df)
+    val transformed = model.transform(df)
+    checkVectorSizeOnDF(transformed, "scaled", model.maxAbs.size)
+
     testTransformer[(Vector, Vector)](df, model, "expected", "scaled") {
       case Row(expectedVec: Vector, actualVec: Vector) =>
         assert(expectedVec === actualVec,

@@ -118,18 +118,19 @@ class HiveSchemaInferenceSuite
         properties = Map.empty),
       true)
 
-    // Add partition records (if specified)
-    if (!partitionCols.isEmpty) {
-      spark.catalog.recoverPartitions(TEST_TABLE_NAME)
-    }
-
     // Check that the table returned by HiveExternalCatalog has schemaPreservesCase set to false
     // and that the raw table returned by the Hive client doesn't have any Spark SQL properties
     // set (table needs to be obtained from client since HiveExternalCatalog filters these
     // properties out).
     assert(!externalCatalog.getTable(DATABASE, TEST_TABLE_NAME).schemaPreservesCase)
     val rawTable = client.getTable(DATABASE, TEST_TABLE_NAME)
-    assert(rawTable.properties.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)) == Map.empty)
+    assert(rawTable.properties.filterKeys(_.startsWith(DATASOURCE_SCHEMA_PREFIX)).isEmpty)
+
+    // Add partition records (if specified)
+    if (!partitionCols.isEmpty) {
+      spark.catalog.recoverPartitions(TEST_TABLE_NAME)
+    }
+
     schema
   }
 
@@ -263,6 +264,32 @@ class HiveSchemaInferenceSuite
         StructType(Seq(StructField("lower", StringType, nullable = false))),
         StructType(Seq(StructField("lowerCase", BinaryType))))
     }
+
+    // Parquet schema is subset of metaStore schema and has uppercase field name
+    assertResult(
+      StructType(Seq(
+        StructField("UPPERCase", DoubleType, nullable = true),
+        StructField("lowerCase", BinaryType, nullable = true)))) {
+
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = true),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }
+
+    // Metastore schema contains additional nullable fields.
+    assert(intercept[Throwable] {
+      HiveMetastoreCatalog.mergeWithMetastoreSchema(
+        StructType(Seq(
+          StructField("UPPERCase", DoubleType, nullable = false),
+          StructField("lowerCase", BinaryType, nullable = true))),
+
+        StructType(Seq(
+          StructField("lowerCase", BinaryType, nullable = true))))
+    }.getMessage.contains("Detected conflicting schemas"))
 
     // Check that merging missing nullable fields works as expected.
     assertResult(

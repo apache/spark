@@ -22,10 +22,12 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.FooEnum.FooEnum
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression, If, SpecificInternalRow, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, NewInstance}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 case class PrimitiveData(
     intField: Int,
@@ -48,7 +50,8 @@ case class NullableData(
     decimalField: java.math.BigDecimal,
     dateField: Date,
     timestampField: Timestamp,
-    binaryField: Array[Byte])
+    binaryField: Array[Byte],
+    intervalField: CalendarInterval)
 
 case class OptionalData(
     intField: Option[Int],
@@ -58,7 +61,8 @@ case class OptionalData(
     shortField: Option[Short],
     byteField: Option[Byte],
     booleanField: Option[Boolean],
-    structField: Option[PrimitiveData])
+    structField: Option[PrimitiveData],
+    intervalField: Option[CalendarInterval])
 
 case class ComplexData(
     arrayField: Seq[Int],
@@ -81,7 +85,18 @@ case class MultipleConstructorsData(a: Int, b: String, c: Double) {
   def this(b: String, a: Int) = this(a, b, c = 1.0)
 }
 
+class FooAnnotation extends scala.annotation.StaticAnnotation
+
+case class FooWithAnnotation(f1: String @FooAnnotation, f2: Option[String] @FooAnnotation)
+
 case class SpecialCharAsFieldData(`field.1`: String, `field 2`: String)
+
+object FooEnum extends Enumeration {
+  type FooEnum = Value
+  val E1, E2 = Value
+}
+
+case class FooClassWithEnum(i: Int, e: FooEnum)
 
 object TestingUDT {
   @SQLUserDefinedType(udt = classOf[NestedStructUDT])
@@ -109,6 +124,37 @@ object TestingUDT {
   }
 }
 
+/** An example derived from Twitter/Scrooge codegen for thrift  */
+object ScroogeLikeExample {
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
+
+  def unapply(_item: ScroogeLikeExample): Option[Int] = Some(_item.x)
+
+  class Immutable(val x: Int) extends ScroogeLikeExample
+}
+
+trait ScroogeLikeExample extends Product1[Int] with Serializable {
+
+  def x: Int
+
+  def _1: Int = x
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+
+  override def equals(other: Any): Boolean =
+    canEqual(other) &&
+      this.x ==  other.asInstanceOf[ScroogeLikeExample].x
+
+  override def hashCode: Int = x
+}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait without a companion object constructor */
+trait TraitProductWithoutCompanion extends Product1[Int] {}
+
+/** Counter-examples to [[ScroogeLikeExample]] as a trait with no-constructor companion object */
+object TraitProductWithNoConstructorCompanion {}
+
+trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
@@ -120,6 +166,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
   // A helper method used to test `ScalaReflection.deserializerForType`.
   private def deserializerFor[T: TypeTag]: Expression =
     deserializerForType(ScalaReflection.localTypeOf[T])
+
+  test("isSubtype") {
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[_]]))
+    assert(isSubtype(localTypeOf[Option[Int]], localTypeOf[Option[Int]]))
+    assert(!isSubtype(localTypeOf[Option[_]], localTypeOf[Option[Int]]))
+  }
 
   test("SQLUserDefinedType annotation on Scala structure") {
     val schema = schemaFor[TestingUDT.NestedStruct]
@@ -158,7 +210,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("decimalField", DecimalType.SYSTEM_DEFAULT, nullable = true),
         StructField("dateField", DateType, nullable = true),
         StructField("timestampField", TimestampType, nullable = true),
-        StructField("binaryField", BinaryType, nullable = true))),
+        StructField("binaryField", BinaryType, nullable = true),
+        StructField("intervalField", CalendarIntervalType, nullable = true))),
       nullable = true))
   }
 
@@ -173,7 +226,8 @@ class ScalaReflectionSuite extends SparkFunSuite {
         StructField("shortField", ShortType, nullable = true),
         StructField("byteField", ByteType, nullable = true),
         StructField("booleanField", BooleanType, nullable = true),
-        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true))),
+        StructField("structField", schemaFor[PrimitiveData].dataType, nullable = true),
+        StructField("intervalField", CalendarIntervalType, nullable = true))),
       nullable = true))
   }
 
@@ -253,10 +307,10 @@ class ScalaReflectionSuite extends SparkFunSuite {
   test("convert Option[Product] to catalyst") {
     val primitiveData = PrimitiveData(1, 1, 1, 1, 1, 1, true)
     val data = OptionalData(Some(2), Some(2), Some(2), Some(2), Some(2), Some(2), Some(true),
-      Some(primitiveData))
+      Some(primitiveData), Some(new CalendarInterval(1, 2, 3)))
     val dataType = schemaFor[OptionalData].dataType
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      InternalRow(1, 1, 1, 1, 1, 1, true))
+      InternalRow(1, 1, 1, 1, 1, 1, true), new CalendarInterval(1, 2, 3))
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
@@ -361,5 +415,40 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("SPARK-8288: schemaFor works for a class with only a companion object constructor") {
+    val schema = schemaFor[ScroogeLikeExample]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("x", IntegerType, nullable = false))), nullable = true))
+  }
+
+  test("SPARK-29026: schemaFor for trait without companion object throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithoutCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-29026: schemaFor for trait with no-constructor companion throws exception ") {
+    val e = intercept[UnsupportedOperationException] {
+      schemaFor[TraitProductWithNoConstructorCompanion]
+    }
+    assert(e.getMessage.contains("Unable to find constructor"))
+  }
+
+  test("SPARK-27625: annotated data types") {
+    assert(serializerFor[FooWithAnnotation].dataType == StructType(Seq(
+      StructField("f1", StringType),
+      StructField("f2", StringType))))
+    assert(deserializerFor[FooWithAnnotation].dataType == ObjectType(classOf[FooWithAnnotation]))
+  }
+
+  test("SPARK-32585: Support scala enumeration in ScalaReflection") {
+    assert(serializerFor[FooClassWithEnum].dataType == StructType(Seq(
+      StructField("i", IntegerType, false),
+      StructField("e", StringType, true))))
+    assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
   }
 }

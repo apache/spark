@@ -105,7 +105,7 @@ public class JavaDataFrameSuite {
 
     // Varargs in column expressions
     df.groupBy().agg(countDistinct("key", "value"));
-    df.groupBy().agg(countDistinct(col("key"), col("value")));
+    df.groupBy().agg(count_distinct(col("key"), col("value")));
     df.select(coalesce(col("key")));
 
     // Varargs with mathfunctions
@@ -467,10 +467,11 @@ public class JavaDataFrameSuite {
     BeanWithoutGetter bean = new BeanWithoutGetter();
     List<BeanWithoutGetter> data = Arrays.asList(bean);
     Dataset<Row> df = spark.createDataFrame(data, BeanWithoutGetter.class);
-    Assert.assertEquals(df.schema().length(), 0);
-    Assert.assertEquals(df.collectAsList().size(), 1);
+    Assert.assertEquals(0, df.schema().length());
+    Assert.assertEquals(1, df.collectAsList().size());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void testJsonRDDToDataFrame() {
     // This is a test for the deprecated API in SPARK-15615.

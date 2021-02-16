@@ -28,21 +28,23 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
   override protected val enableAutoThreadAudit = false
   protected var client: HiveClient = null
 
-  protected def buildClient(
-      hadoopConf: Configuration,
-      sharesHadoopClasses: Boolean = true): HiveClient = {
+  protected def buildClient(hadoopConf: Configuration): HiveClient = {
     // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
     // hive.metastore.schema.verification from false to true since 2.0
     // For details, see the JIRA HIVE-6113 and HIVE-12463
-    if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3") {
+    if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3" ||
+        version == "3.0" || version == "3.1") {
       hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
       hadoopConf.set("hive.metastore.schema.verification", "false")
+    }
+    // Since Hive 3.0, HIVE-19310 skipped `ensureDbInit` if `hive.in.test=false`.
+    if (version == "3.0" || version == "3.1") {
+      hadoopConf.set("hive.in.test", "true")
     }
     HiveClientBuilder.buildClient(
       version,
       hadoopConf,
-      HiveUtils.formatTimeVarsForHiveClient(hadoopConf),
-      sharesHadoopClasses = sharesHadoopClasses)
+      HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
   }
 
   override def suiteName: String = s"${super.suiteName}($version)"

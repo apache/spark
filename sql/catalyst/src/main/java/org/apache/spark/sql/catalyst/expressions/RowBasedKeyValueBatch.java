@@ -20,6 +20,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -78,13 +79,11 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
     boolean allFixedLength = true;
     // checking if there is any variable length fields
     // there is probably a more succinct impl of this
-    for (String name : keySchema.fieldNames()) {
-      allFixedLength = allFixedLength
-              && UnsafeRow.isFixedLength(keySchema.apply(name).dataType());
+    for (StructField field : keySchema.fields()) {
+      allFixedLength = allFixedLength && UnsafeRow.isFixedLength(field.dataType());
     }
-    for (String name : valueSchema.fieldNames()) {
-      allFixedLength = allFixedLength
-              && UnsafeRow.isFixedLength(valueSchema.apply(name).dataType());
+    for (StructField field : valueSchema.fields()) {
+      allFixedLength = allFixedLength && UnsafeRow.isFixedLength(field.dataType());
     }
 
     if (allFixedLength) {
@@ -126,7 +125,7 @@ public abstract class RowBasedKeyValueBatch extends MemoryConsumer implements Cl
   private boolean acquirePage(long requiredSize) {
     try {
       page = allocatePage(requiredSize);
-    } catch (OutOfMemoryError e) {
+    } catch (SparkOutOfMemoryError e) {
       logger.warn("Failed to allocate page ({} bytes).", requiredSize);
       return false;
     }

@@ -21,11 +21,14 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, File}
 import java.util.Properties
 
 import org.apache.spark._
+import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_MEMORY
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{LocalSparkSession, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.ExternalSorter
@@ -96,9 +99,10 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
 
   test("SPARK-10466: external sorter spilling with unsafe row serializer") {
     val conf = new SparkConf()
-      .set("spark.shuffle.spill.initialMemoryThreshold", "1")
-      .set("spark.shuffle.sort.bypassMergeThreshold", "0")
-      .set("spark.testing.memory", "80000")
+      .set(SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD, 1L)
+      .set(SHUFFLE_SORT_BYPASS_MERGE_THRESHOLD, 0)
+      .set(TEST_MEMORY, 80000L)
+
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
     val outputFile = File.createTempFile("test-unsafe-row-serializer-spill", "")
     outputFile.deleteOnExit()
@@ -125,7 +129,7 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
   }
 
   test("SPARK-10403: unsafe row serializer with SortShuffleManager") {
-    val conf = new SparkConf().set("spark.shuffle.manager", "sort")
+    val conf = new SparkConf().set(SHUFFLE_MANAGER, "sort")
     spark = SparkSession.builder().master("local").appName("test").config(conf).getOrCreate()
     val row = Row("Hello", 123)
     val unsafeRow = toUnsafeRow(row, Array(StringType, IntegerType))
@@ -137,7 +141,9 @@ class UnsafeRowSerializerSuite extends SparkFunSuite with LocalSparkSession {
         rowsRDD,
         new PartitionIdPassthrough(2),
         new UnsafeRowSerializer(2))
-    val shuffled = new ShuffledRowRDD(dependency)
+    val shuffled = new ShuffledRowRDD(
+      dependency,
+      SQLShuffleReadMetricsReporter.createShuffleReadMetrics(spark.sparkContext))
     shuffled.count()
   }
 }

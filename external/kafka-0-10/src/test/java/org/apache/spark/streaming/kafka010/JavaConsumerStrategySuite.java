@@ -42,21 +42,18 @@ public class JavaConsumerStrategySuite implements Serializable {
     final Collection<TopicPartition> parts = Arrays.asList(tp1, tp2);
     final scala.collection.Iterable<TopicPartition> sParts =
       JavaConverters.collectionAsScalaIterableConverter(parts).asScala();
-    final Map<String, Object> kafkaParams = new HashMap<String, Object>();
+    final Map<String, Object> kafkaParams = new HashMap<>();
     kafkaParams.put("bootstrap.servers", "not used");
     final scala.collection.Map<String, Object> sKafkaParams =
       JavaConverters.mapAsScalaMapConverter(kafkaParams).asScala();
     final Map<TopicPartition, Long> offsets = new HashMap<>();
     offsets.put(tp1, 23L);
+    final Map<TopicPartition, Object> dummyOffsets = new HashMap<>();
+    for (Map.Entry<TopicPartition, Long> kv : offsets.entrySet()) {
+      dummyOffsets.put(kv.getKey(), kv.getValue());
+    }
     final scala.collection.Map<TopicPartition, Object> sOffsets =
-      JavaConverters.mapAsScalaMapConverter(offsets).asScala().mapValues(
-        new scala.runtime.AbstractFunction1<Long, Object>() {
-          @Override
-          public Object apply(Long x) {
-            return (Object) x;
-          }
-        }
-      );
+      JavaConverters.mapAsScalaMap(dummyOffsets);
 
     final ConsumerStrategy<String, String> sub1 =
       ConsumerStrategies.Subscribe(sTopics, sKafkaParams, sOffsets);

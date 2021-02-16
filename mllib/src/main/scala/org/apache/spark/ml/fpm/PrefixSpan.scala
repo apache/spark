@@ -17,20 +17,20 @@
 
 package org.apache.spark.ml.fpm
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.fpm.{PrefixSpan => mllibPrefixSpan}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
 
 /**
- * :: Experimental ::
  * A parallel PrefixSpan algorithm to mine frequent sequential patterns.
  * The PrefixSpan algorithm is described in J. Pei, et al., PrefixSpan: Mining Sequential Patterns
  * Efficiently by Prefix-Projected Pattern Growth
- * (see <a href="http://doi.org/10.1109/ICDE.2001.914830">here</a>).
+ * (see <a href="https://doi.org/10.1109/ICDE.2001.914830">here</a>).
  * This class is not yet an Estimator/Transformer, use `findFrequentSequentialPatterns` method to
  * run the PrefixSpan algorithm.
  *
@@ -38,7 +38,6 @@ import org.apache.spark.sql.types.{ArrayType, LongType, StructField, StructType}
  * (Wikipedia)</a>
  */
 @Since("2.4.0")
-@Experimental
 final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params {
 
   @Since("2.4.0")
@@ -124,7 +123,6 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
     sequenceCol -> "sequence")
 
   /**
-   * :: Experimental ::
    * Finds the complete set of frequent sequential patterns in the input sequences of itemsets.
    *
    * @param dataset A dataset or a dataframe containing a sequence column which is
@@ -135,7 +133,10 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
    *          - `freq: Long`
    */
   @Since("2.4.0")
-  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = {
+  def findFrequentSequentialPatterns(dataset: Dataset[_]): DataFrame = instrumented { instr =>
+    instr.logDataset(dataset)
+    instr.logParams(this, params: _*)
+
     val sequenceColParam = $(sequenceCol)
     val inputType = dataset.schema(sequenceColParam).dataType
     require(inputType.isInstanceOf[ArrayType] &&
@@ -145,7 +146,7 @@ final class PrefixSpan(@Since("2.4.0") override val uid: String) extends Params 
 
     val data = dataset.select(sequenceColParam)
     val sequences = data.where(col(sequenceColParam).isNotNull).rdd
-      .map(r => r.getAs[Seq[Seq[Any]]](0).map(_.toArray).toArray)
+      .map(r => r.getSeq[scala.collection.Seq[Any]](0).map(_.toArray).toArray)
 
     val mllibPrefixSpan = new mllibPrefixSpan()
       .setMinSupport($(minSupport))

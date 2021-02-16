@@ -91,14 +91,14 @@ abstract class AbstractCommandBuilder {
    */
   List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<>();
-    String envJavaHome;
 
-    if (javaHome != null) {
-      cmd.add(join(File.separator, javaHome, "bin", "java"));
-    } else if ((envJavaHome = System.getenv("JAVA_HOME")) != null) {
-        cmd.add(join(File.separator, envJavaHome, "bin", "java"));
-    } else {
-        cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
+    String firstJavaHome = firstNonEmpty(javaHome,
+      childEnv.get("JAVA_HOME"),
+      System.getenv("JAVA_HOME"),
+      System.getProperty("java.home"));
+
+    if (firstJavaHome != null) {
+      cmd.add(join(File.separator, firstJavaHome, "bin", "java"));
     }
 
     // Load extra JAVA_OPTS from conf/java-opts, if it exists.
@@ -232,15 +232,15 @@ abstract class AbstractCommandBuilder {
     }
     String sparkHome = getSparkHome();
     File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
-    File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
-    checkState(!scala212.isDirectory() || !scala211.isDirectory(),
+    File scala213 = new File(sparkHome, "launcher/target/scala-2.13");
+    checkState(!scala212.isDirectory() || !scala213.isDirectory(),
       "Presence of build for multiple Scala versions detected.\n" +
       "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala212.isDirectory()) {
-      return "2.12";
+    if (scala213.isDirectory()) {
+      return "2.13";
     } else {
-      checkState(scala211.isDirectory(), "Cannot find any build directories.");
-      return "2.11";
+      checkState(scala212.isDirectory(), "Cannot find any build directories.");
+      return "2.12";
     }
   }
 

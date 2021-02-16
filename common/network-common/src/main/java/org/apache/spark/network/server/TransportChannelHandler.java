@@ -21,6 +21,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
+import org.apache.spark.network.TransportContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,18 +58,24 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
   private final TransportRequestHandler requestHandler;
   private final long requestTimeoutNs;
   private final boolean closeIdleConnections;
+  private final boolean skipChunkFetchRequest;
+  private final TransportContext transportContext;
 
   public TransportChannelHandler(
       TransportClient client,
       TransportResponseHandler responseHandler,
       TransportRequestHandler requestHandler,
       long requestTimeoutMs,
-      boolean closeIdleConnections) {
+      boolean skipChunkFetchRequest,
+      boolean closeIdleConnections,
+      TransportContext transportContext) {
     this.client = client;
     this.responseHandler = responseHandler;
     this.requestHandler = requestHandler;
     this.requestTimeoutNs = requestTimeoutMs * 1000L * 1000;
+    this.skipChunkFetchRequest = skipChunkFetchRequest;
     this.closeIdleConnections = closeIdleConnections;
+    this.transportContext = transportContext;
   }
 
   public TransportClient getClient() {
@@ -120,7 +127,7 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
    */
   @Override
   public boolean acceptInboundMessage(Object msg) throws Exception {
-    if (msg instanceof ChunkFetchRequest) {
+    if (skipChunkFetchRequest && msg instanceof ChunkFetchRequest) {
       return false;
     } else {
       return super.acceptInboundMessage(msg);
@@ -151,10 +158,11 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
       // To avoid a race between TransportClientFactory.createClient() and this code which could
       // result in an inactive client being returned, this needs to run in a synchronized block.
       synchronized (this) {
+        boolean hasInFlightRequests = responseHandler.numOutstandingRequests() > 0;
         boolean isActuallyOverdue =
           System.nanoTime() - responseHandler.getTimeOfLastRequestNs() > requestTimeoutNs;
         if (e.state() == IdleState.ALL_IDLE && isActuallyOverdue) {
-          if (responseHandler.numOutstandingRequests() > 0) {
+          if (hasInFlightRequests) {
             String address = getRemoteAddress(ctx.channel());
             logger.error("Connection to {} has been quiet for {} ms while there are outstanding " +
               "requests. Assuming connection is dead; please adjust spark.network.timeout if " +
@@ -174,6 +182,18 @@ public class TransportChannelHandler extends SimpleChannelInboundHandler<Message
 
   public TransportResponseHandler getResponseHandler() {
     return responseHandler;
+  }
+
+  @Override
+  public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+    transportContext.getRegisteredConnections().inc();
+    super.channelRegistered(ctx);
+  }
+
+  @Override
+  public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+    transportContext.getRegisteredConnections().dec();
+    super.channelUnregistered(ctx);
   }
 
 }

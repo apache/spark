@@ -24,7 +24,7 @@ import java.nio.file.Files
 import java.util.{Arrays, Random, UUID}
 
 import com.google.common.io.ByteStreams
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 
 import org.apache.spark._
@@ -54,14 +54,14 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
   test("shuffle encryption key length should be 128 by default") {
     val conf = createConf()
-    var key = CryptoStreamUtils.createKey(conf)
+    val key = CryptoStreamUtils.createKey(conf)
     val actual = key.length * (java.lang.Byte.SIZE)
     assert(actual === 128)
   }
 
   test("create 256-bit key") {
     val conf = createConf(IO_ENCRYPTION_KEY_SIZE_BITS.key -> "256")
-    var key = CryptoStreamUtils.createKey(conf)
+    val key = CryptoStreamUtils.createKey(conf)
     val actual = key.length * (java.lang.Byte.SIZE)
     assert(actual === 256)
   }
@@ -75,8 +75,8 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
 
   test("serializer manager integration") {
     val conf = createConf()
-      .set("spark.shuffle.compress", "true")
-      .set("spark.shuffle.spill.compress", "true")
+      .set(SHUFFLE_COMPRESS, true)
+      .set(SHUFFLE_SPILL_COMPRESS, true)
 
     val plainStr = "hello world"
     val blockId = new TempShuffleBlockId(UUID.randomUUID())

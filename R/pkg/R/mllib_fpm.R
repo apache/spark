@@ -122,11 +122,12 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 # Get association rules.
 
 #' @return A \code{SparkDataFrame} with association rules.
-#'         The \code{SparkDataFrame} contains four columns:
+#'         The \code{SparkDataFrame} contains five columns:
 #'         \code{antecedent} (an array of the same type as the input column),
 #'         \code{consequent} (an array of the same type as the input column),
-#'         \code{condfidence} (confidence for the rule)
-#'         and \code{lift} (lift for the rule)
+#'         \code{confidence} (confidence for the rule)
+#'         \code{lift} (lift for the rule)
+#'         and \code{support} (support for the rule)
 #' @rdname spark.fpGrowth
 #' @aliases associationRules,FPGrowthModel-method
 #' @note spark.associationRules(FPGrowthModel) since 2.2.0
@@ -183,16 +184,17 @@ setMethod("write.ml", signature(object = "FPGrowthModel", path = "character"),
 #' @return A complete set of frequent sequential patterns in the input sequences of itemsets.
 #'         The returned \code{SparkDataFrame} contains columns of sequence and corresponding
 #'         frequency. The schema of it will be:
-#'         \code{sequence: ArrayType(ArrayType(T))} (T is the item type)
-#'         \code{freq: Long}
+#'         \code{sequence: ArrayType(ArrayType(T))}, \code{freq: integer}
+#'         where T is the item type
 #' @rdname spark.prefixSpan
 #' @aliases findFrequentSequentialPatterns,PrefixSpan,SparkDataFrame-method
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(list(list(list(list(1L, 2L), list(3L))),
-#'                       list(list(list(1L), list(3L, 2L), list(1L, 2L))),
-#'                       list(list(list(1L, 2L), list(5L))),
-#'                       list(list(list(6L)))), schema = c("sequence"))
+#'                            list(list(list(1L), list(3L, 2L), list(1L, 2L))),
+#'                            list(list(list(1L, 2L), list(5L))),
+#'                            list(list(list(6L)))),
+#'                       schema = c("sequence"))
 #' frequency <- spark.findFrequentSequentialPatterns(df, minSupport = 0.5, maxPatternLength = 5L,
 #'                                                   maxLocalProjDBSize = 32000000L)
 #' showDF(frequency)

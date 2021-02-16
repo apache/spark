@@ -78,7 +78,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
-   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * This should ''not'' be called by users directly, but is available for implementers of custom
    * subclasses of RDD.
    */
   def iterator(split: Partition, taskContext: TaskContext): JIterator[T] =
@@ -265,14 +265,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String]): JavaRDD[String] = {
-    rdd.pipe(command.asScala)
+    rdd.pipe(command.asScala.toSeq)
   }
 
   /**
    * Return an RDD created by piping elements to a forked external process.
    */
   def pipe(command: JList[String], env: JMap[String, String]): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala)
+    rdd.pipe(command.asScala.toSeq, env.asScala)
   }
 
   /**
@@ -282,7 +282,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            env: JMap[String, String],
            separateWorkingDir: Boolean,
            bufferSize: Int): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize)
+    rdd.pipe(command.asScala.toSeq, env.asScala, null, null, separateWorkingDir, bufferSize)
   }
 
   /**
@@ -293,7 +293,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            separateWorkingDir: Boolean,
            bufferSize: Int,
            encoding: String): JavaRDD[String] = {
-    rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize, encoding)
+    rdd.pipe(command.asScala.toSeq, env.asScala, null, null, separateWorkingDir, bufferSize,
+      encoding)
   }
 
   /**
@@ -347,7 +348,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Applies a function f to all elements of this RDD.
    */
-  def foreach(f: VoidFunction[T]) {
+  def foreach(f: VoidFunction[T]): Unit = {
     rdd.foreach(x => f.call(x))
   }
 
@@ -685,7 +686,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    *
    * The algorithm used is based on streamlib's implementation of "HyperLogLog in Practice:
    * Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm", available
-   * <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+   * <a href="https://doi.org/10.1145/2452376.2452456">here</a>.
    *
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.

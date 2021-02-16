@@ -28,12 +28,12 @@ import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
-class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSQLContext {
+class BucketedWriteWithoutHiveSupportSuite extends BucketedWriteSuite with SharedSparkSession {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    assert(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
   }
 
   override protected def fileFormatsToTest: Seq[String] = Seq("parquet", "json")
@@ -63,7 +63,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val maxNrBuckets: Int = 200000
     val catalog = spark.sessionState.catalog
 
-    withSQLConf("spark.sql.sources.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+    withSQLConf(SQLConf.BUCKETING_MAX_BUCKETS.key -> maxNrBuckets.toString) {
       // within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {
         withTable("t") {
@@ -88,7 +88,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.sortBy("j").saveAsTable("tt")
     }
-    assert(e.getMessage == "sortBy must be used together with bucketBy;")
+    assert(e.getMessage == "sortBy must be used together with bucketBy")
   }
 
   test("sorting by non-orderable column") {
@@ -102,7 +102,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").parquet("/tmp/path")
     }
-    assert(e.getMessage == "'save' does not support bucketBy right now;")
+    assert(e.getMessage == "'save' does not support bucketBy right now")
   }
 
   test("write bucketed and sorted data using save()") {
@@ -111,7 +111,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").sortBy("i").parquet("/tmp/path")
     }
-    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now;")
+    assert(e.getMessage == "'save' does not support bucketBy and sortBy right now")
   }
 
   test("write bucketed data using insertInto()") {
@@ -120,7 +120,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").insertInto("tt")
     }
-    assert(e.getMessage == "'insertInto' does not support bucketBy right now;")
+    assert(e.getMessage == "'insertInto' does not support bucketBy right now")
   }
 
   test("write bucketed and sorted data using insertInto()") {
@@ -129,7 +129,7 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     val e = intercept[AnalysisException] {
       df.write.bucketBy(2, "i").sortBy("i").insertInto("tt")
     }
-    assert(e.getMessage == "'insertInto' does not support bucketBy and sortBy right now;")
+    assert(e.getMessage == "'insertInto' does not support bucketBy and sortBy right now")
   }
 
   private lazy val df = {

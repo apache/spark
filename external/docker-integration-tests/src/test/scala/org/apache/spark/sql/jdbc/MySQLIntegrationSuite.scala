@@ -21,12 +21,22 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.tags.DockerTest
 
+/**
+ * To run this test suite for a specific version (e.g., mysql:5.7.31):
+ * {{{
+ *   MYSQL_DOCKER_IMAGE_NAME=mysql:5.7.31
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.MySQLIntegrationSuite"
+ * }}}
+ */
 @DockerTest
 class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "mysql:5.7.9"
+    override val imageName = sys.env.getOrElse("MYSQL_DOCKER_IMAGE_NAME", "mysql:5.7.31")
     override val env = Map(
       "MYSQL_ROOT_PASSWORD" -> "rootpass"
     )
@@ -34,10 +44,11 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     override val jdbcPort: Int = 3306
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:mysql://$ip:$port/mysql?user=root&password=rootpass"
-    override def getStartupProcessName: Option[String] = None
   }
 
   override def dataPreparation(conn: Connection): Unit = {
+    // Since MySQL 5.7.14+, we need to disable strict mode
+    conn.prepareStatement("SET GLOBAL sql_mode = ''").executeUpdate()
     conn.prepareStatement("CREATE DATABASE foo").executeUpdate()
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y TEXT(8))").executeUpdate()
     conn.prepareStatement("INSERT INTO tbl VALUES (42,'fred')").executeUpdate()
@@ -101,21 +112,24 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
   }
 
   test("Date types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
-    val rows = df.collect()
-    assert(rows.length == 1)
-    val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 5)
-    assert(types(0).equals("class java.sql.Date"))
-    assert(types(1).equals("class java.sql.Timestamp"))
-    assert(types(2).equals("class java.sql.Timestamp"))
-    assert(types(3).equals("class java.sql.Timestamp"))
-    assert(types(4).equals("class java.sql.Date"))
-    assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
-    assert(rows(0).getAs[Timestamp](1).equals(Timestamp.valueOf("1970-01-01 13:31:24")))
-    assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
-    assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
-    assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+    withDefaultTimeZone(UTC) {
+      val df = sqlContext.read.jdbc(jdbcUrl, "dates", new Properties)
+      val rows = df.collect()
+      assert(rows.length == 1)
+      val types = rows(0).toSeq.map(x => x.getClass.toString)
+      assert(types.length == 5)
+      assert(types(0).equals("class java.sql.Date"))
+      assert(types(1).equals("class java.sql.Timestamp"))
+      assert(types(2).equals("class java.sql.Timestamp"))
+      assert(types(3).equals("class java.sql.Timestamp"))
+      assert(types(4).equals("class java.sql.Date"))
+      assert(rows(0).getAs[Date](0).equals(Date.valueOf("1991-11-09")))
+      assert(
+        rows(0).getAs[Timestamp](1) === Timestamp.valueOf("1970-01-01 13:31:24"))
+      assert(rows(0).getAs[Timestamp](2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+      assert(rows(0).getAs[Timestamp](3).equals(Timestamp.valueOf("2009-02-13 23:31:30")))
+      assert(rows(0).getAs[Date](4).equals(Date.valueOf("2001-01-01")))
+    }
   }
 
   test("String types") {
@@ -151,5 +165,31 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite {
     df1.write.jdbc(jdbcUrl, "numberscopy", new Properties)
     df2.write.jdbc(jdbcUrl, "datescopy", new Properties)
     df3.write.jdbc(jdbcUrl, "stringscopy", new Properties)
+  }
+
+  test("query JDBC option") {
+    val expectedResult = Set(
+      (42, "fred"),
+      (17, "dave")
+    ).map { case (x, y) =>
+      Row(Integer.valueOf(x), String.valueOf(y))
+    }
+
+    val query = "SELECT x, y FROM tbl WHERE x > 10"
+    // query option to pass on the query string.
+    val df = spark.read.format("jdbc")
+      .option("url", jdbcUrl)
+      .option("query", query)
+      .load()
+    assert(df.collect.toSet === expectedResult)
+
+    // query option in the create table path.
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW queryOption
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', query '$query')
+       """.stripMargin.replaceAll("\n", " "))
+    assert(sql("select x, y from queryOption").collect.toSet == expectedResult)
   }
 }

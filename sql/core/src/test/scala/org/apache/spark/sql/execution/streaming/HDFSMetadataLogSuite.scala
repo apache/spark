@@ -25,11 +25,11 @@ import scala.language.implicitConversions
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.UninterruptibleThread
 
-class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
+class HDFSMetadataLogSuite extends SharedSparkSession {
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
@@ -59,6 +59,21 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("HDFSMetadataLog: purge") {
+    testPurge()
+  }
+
+  Seq(
+    classOf[FileSystemBasedCheckpointFileManager],
+    classOf[FileContextBasedCheckpointFileManager]
+  ).map(_.getCanonicalName).foreach { cls =>
+    test(s"HDFSMetadataLog: purge - explicit file manager - $cls") {
+      withSQLConf(SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key -> cls) {
+        testPurge()
+      }
+    }
+  }
+
+  private def testPurge(): Unit = {
     withTempDir { temp =>
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.add(0, "batch0"))
@@ -75,12 +90,16 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       assert(metadataLog.get(2).isDefined)
       assert(metadataLog.getLatest().get._1 == 2)
 
-      // There should be exactly one file, called "2", in the metadata directory.
+      // There should be at most two files, called "2", and optionally crc file,
+      // in the metadata directory.
       // This check also tests for regressions of SPARK-17475
-      val allFiles = new File(metadataLog.metadataPath.toString).listFiles()
-        .filter(!_.getName.startsWith(".")).toSeq
-      assert(allFiles.size == 1)
-      assert(allFiles(0).getName() == "2")
+      val allFiles = new File(metadataLog.metadataPath.toString).listFiles().toSeq
+      assert(allFiles.size <= 2)
+      assert(allFiles.exists(_.getName == "2"))
+      if (allFiles.size == 2) {
+        // there's possibly crc file being left as well
+        assert(allFiles.exists(_.getName == ".2.crc"))
+      }
     }
   }
 
@@ -91,17 +110,17 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
         val e = intercept[IllegalStateException] { func }
         assert(e.getMessage.contains(s"Log file was malformed: failed to read correct log version"))
       }
-      assertLogFileMalformed { metadataLog.parseVersion("", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("xyz", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("v10.x", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("10", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("v0", 100) }
-      assertLogFileMalformed { metadataLog.parseVersion("v-10", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("xyz", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("v10.x", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("10", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("v0", 100) }
+      assertLogFileMalformed { metadataLog.validateVersion("v-10", 100) }
 
-      assert(metadataLog.parseVersion("v10", 10) === 10)
-      assert(metadataLog.parseVersion("v10", 100) === 10)
+      assert(metadataLog.validateVersion("v10", 10) === 10)
+      assert(metadataLog.validateVersion("v10", 100) === 10)
 
-      val e = intercept[IllegalStateException] { metadataLog.parseVersion("v200", 100) }
+      val e = intercept[IllegalStateException] { metadataLog.validateVersion("v200", 100) }
       Seq(
         "maximum supported log version is v100, but encountered v200",
         "produced by a newer version of Spark and cannot be read by this version"
@@ -131,9 +150,10 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
   testQuietly("HDFSMetadataLog: metadata directory collision") {
     withTempDir { temp =>
-      val waiter = new Waiter
-      val maxBatchId = 100
-      for (id <- 0 until 10) {
+      val waiter = new Waiter()
+      val maxBatchId = 10
+      val numThreads = 5
+      for (id <- 0 until numThreads) {
         new UninterruptibleThread(s"HDFSMetadataLog: metadata directory collision - thread $id") {
           override def run(): Unit = waiter {
             val metadataLog =
@@ -146,7 +166,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
                 nextBatchId += 1
               }
             } catch {
-              case e: ConcurrentModificationException =>
+              case _: ConcurrentModificationException =>
               // This is expected since there are multiple writers
             } finally {
               waiter.dismiss()
@@ -155,7 +175,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
         }.start()
       }
 
-      waiter.await(timeout(10.seconds), dismissals(10))
+      waiter.await(timeout(10.seconds), dismissals(numThreads))
       val metadataLog = new HDFSMetadataLog[String](spark, temp.getAbsolutePath)
       assert(metadataLog.getLatest() === Some(maxBatchId -> maxBatchId.toString))
       assert(
@@ -178,5 +198,11 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), None, Some(5L)))
     intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
     intercept[IllegalStateException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
+
+    // Related to SPARK-26629, this captures the behavior for verifyBatchIds when startId > endId
+    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(2L), Some(1L)))
+    intercept[AssertionError](verifyBatchIds(Seq(2), Some(2L), Some(1L)))
+    intercept[AssertionError](verifyBatchIds(Seq(1), Some(2L), Some(1L)))
+    intercept[AssertionError](verifyBatchIds(Seq(0), Some(2L), Some(1L)))
   }
 }

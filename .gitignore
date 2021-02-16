@@ -8,6 +8,7 @@
 *.swp
 *~
 .DS_Store
+.bsp/
 .cache
 .classpath
 .ensime
@@ -45,7 +46,7 @@ dev/create-release/*final
 dev/create-release/*txt
 dev/pr-deps/
 dist/
-docs/_site
+docs/_site/
 docs/api
 sql/docs
 sql/site
@@ -61,10 +62,14 @@ project/plugins/project/build.properties
 project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
+python/.eggs/
 python/deps
+python/docs/_site/
+python/docs/source/reference/api/
 python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
+.mypy_cache/
 reports/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml
@@ -77,6 +82,7 @@ target/
 unit-tests.log
 work/
 docs/.jekyll-metadata
+docs/.jekyll-cache
 
 # For Hive
 TempStatsStore/
@@ -94,3 +100,6 @@ spark-warehouse/
 *.Rproj.*
 
 .Rproj.user
+
+# For SBT
+.jvmopts

@@ -26,8 +26,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.service.AbstractService;
@@ -37,6 +35,7 @@ import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.auth.TSetIpAddressProcessor;
 import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.SessionManager;
+import org.apache.hive.service.rpc.thrift.*;
 import org.apache.hive.service.server.HiveServer2;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
@@ -44,6 +43,8 @@ import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.transport.TTransport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * ThriftCLIService.
@@ -51,7 +52,7 @@ import org.apache.thrift.transport.TTransport;
  */
 public abstract class ThriftCLIService extends AbstractService implements TCLIService.Iface, Runnable {
 
-  public static final Log LOG = LogFactory.getLog(ThriftCLIService.class.getName());
+  public static final Logger LOG = LoggerFactory.getLogger(ThriftCLIService.class.getName());
 
   protected CLIService cliService;
   private static final TStatus OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS);
@@ -175,6 +176,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   public synchronized void start() {
     super.start();
     if (!isStarted && !isEmbedded) {
+      initializeServer();
       new Thread(this).start();
       isStarted = true;
     }
@@ -258,6 +260,28 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;
+  }
+
+  @Override
+  public TSetClientInfoResp SetClientInfo(TSetClientInfoReq req) throws TException {
+    // TODO: We don't do anything for now, just log this for debugging.
+    //       We may be able to make use of this later, e.g. for workload management.
+    if (req.isSetConfiguration()) {
+      StringBuilder sb = null;
+      for (Map.Entry<String, String> e : req.getConfiguration().entrySet()) {
+        if (sb == null) {
+          SessionHandle sh = new SessionHandle(req.getSessionHandle());
+          sb = new StringBuilder("Client information for ").append(sh).append(": ");
+        } else {
+          sb.append(", ");
+        }
+        sb.append(e.getKey()).append(" = ").append(e.getValue());
+      }
+      if (sb != null) {
+        LOG.info("{}", sb);
+      }
+    }
+    return new TSetClientInfoResp(OK_STATUS);
   }
 
   private String getIpAddress() {
@@ -344,6 +368,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     String ipAddress = getIpAddress();
     TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION,
         req.getClient_protocol());
+    res.setServerProtocolVersion(protocol);
     SessionHandle sessionHandle;
     if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         (userName != null)) {
@@ -354,7 +379,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       sessionHandle = cliService.openSession(protocol, userName, req.getPassword(),
           ipAddress, req.getConfiguration());
     }
-    res.setServerProtocolVersion(protocol);
     return sessionHandle;
   }
 
@@ -432,9 +456,10 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       String statement = req.getStatement();
       Map<String, String> confOverlay = req.getConfOverlay();
       Boolean runAsync = req.isRunAsync();
+      long queryTimeout = req.getQueryTimeout();
       OperationHandle operationHandle = runAsync ?
-          cliService.executeStatementAsync(sessionHandle, statement, confOverlay)
-          : cliService.executeStatement(sessionHandle, statement, confOverlay);
+          cliService.executeStatementAsync(sessionHandle, statement, confOverlay, queryTimeout)
+          : cliService.executeStatement(sessionHandle, statement, confOverlay, queryTimeout);
           resp.setOperationHandle(operationHandle.toTOperationHandle());
           resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -563,7 +588,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       if (opException != null) {
         resp.setSqlState(opException.getSQLState());
         resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(opException.getMessage());
+        resp.setErrorMessage(org.apache.hadoop.util.StringUtils
+            .stringifyException(opException));
       }
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -631,6 +657,52 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;
+  }
+
+  @Override
+  public TGetPrimaryKeysResp GetPrimaryKeys(TGetPrimaryKeysReq req)
+      throws TException {
+    TGetPrimaryKeysResp resp = new TGetPrimaryKeysResp();
+    try {
+      OperationHandle opHandle = cliService.getPrimaryKeys(
+      new SessionHandle(req.getSessionHandle()), req.getCatalogName(),
+      req.getSchemaName(), req.getTableName());
+      resp.setOperationHandle(opHandle.toTOperationHandle());
+      resp.setStatus(OK_STATUS);
+    } catch (Exception e) {
+     LOG.warn("Error getting primary keys: ", e);
+     resp.setStatus(HiveSQLException.toTStatus(e));
+    }
+    return resp;
+  }
+
+  @Override
+  public TGetCrossReferenceResp GetCrossReference(TGetCrossReferenceReq req)
+      throws TException {
+    TGetCrossReferenceResp resp = new TGetCrossReferenceResp();
+    try {
+      OperationHandle opHandle = cliService.getCrossReference(
+        new SessionHandle(req.getSessionHandle()), req.getParentCatalogName(),
+          req.getParentSchemaName(), req.getParentTableName(),
+          req.getForeignCatalogName(), req.getForeignSchemaName(), req.getForeignTableName());
+          resp.setOperationHandle(opHandle.toTOperationHandle());
+          resp.setStatus(OK_STATUS);
+    } catch (Exception e) {
+      LOG.warn("Error getting cross reference: ", e);
+      resp.setStatus(HiveSQLException.toTStatus(e));
+    }
+    return resp;
+  }
+
+  protected abstract void initializeServer();
+
+  @Override
+  public TGetQueryIdResp GetQueryId(TGetQueryIdReq req) throws TException {
+    try {
+      return new TGetQueryIdResp(cliService.getQueryId(req.getOperationHandle()));
+    } catch (HiveSQLException e) {
+      throw new TException(e);
+    }
   }
 
   @Override

@@ -187,6 +187,17 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   }
 
   /**
+   * For testing only. Wait until there are no more events in the queue, or until the default
+   * wait time has elapsed. Throw `TimeoutException` if the specified time elapsed before the queue
+   * emptied.
+   * Exposed for testing.
+   */
+  @throws(classOf[TimeoutException])
+  private[spark] def waitUntilEmpty(): Unit = {
+    waitUntilEmpty(TimeUnit.SECONDS.toMillis(10))
+  }
+
+  /**
    * For testing only. Wait until there are no more events in the queue, or until the specified
    * time has elapsed. Throw `TimeoutException` if the specified time elapsed before the queue
    * emptied.
@@ -215,15 +226,13 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       return
     }
 
-    synchronized {
-      queues.asScala.foreach(_.stop())
-      queues.clear()
-    }
+    queues.asScala.foreach(_.stop())
+    queues.clear()
   }
 
   // For testing only.
   private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag](): Seq[T] = {
-    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }
+    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }.toSeq
   }
 
   // For testing only.
@@ -236,6 +245,10 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     queues.asScala.map(_.name).toSet
   }
 
+  // For testing only.
+  private[scheduler] def getQueueCapacity(name: String): Option[Int] = {
+    queues.asScala.find(_.name == name).map(_.capacity)
+  }
 }
 
 private[spark] object LiveListenerBus {

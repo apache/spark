@@ -25,6 +25,7 @@ import breeze.linalg.{norm => brzNorm, svd => brzSvd, DenseMatrix => BDM, DenseV
 import breeze.numerics.abs
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.config.MAX_RESULT_SIZE
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
@@ -57,7 +58,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
   var denseMat: RowMatrix = _
   var sparseMat: RowMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     denseMat = new RowMatrix(sc.parallelize(denseData, 2))
     sparseMat = new RowMatrix(sc.parallelize(sparseData, 2))
@@ -98,6 +99,40 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (mat <- Seq(denseMat, sparseMat)) {
       val G = mat.computeGramianMatrix()
       assert(G.asBreeze === expected.asBreeze)
+    }
+  }
+
+  test("getTreeAggregateIdealDepth") {
+    val nbPartitions = 100
+    val vectors = sc.emptyRDD[Vector]
+      .repartition(nbPartitions)
+    val rowMat = new RowMatrix(vectors)
+
+    assert(rowMat.getTreeAggregateIdealDepth(100 * 1024 * 1024) === 2)
+    assert(rowMat.getTreeAggregateIdealDepth(110 * 1024 * 1024) === 3)
+    assert(rowMat.getTreeAggregateIdealDepth(700 * 1024 * 1024) === 10)
+
+    val zeroSizeException = intercept[Exception]{
+      rowMat.getTreeAggregateIdealDepth(0)
+    }
+    assert(zeroSizeException.getMessage.contains("zero-size object to aggregate"))
+    val objectBiggerThanResultSize = intercept[Exception]{
+      rowMat.getTreeAggregateIdealDepth(1100 * 1024 * 1024)
+    }
+    assert(objectBiggerThanResultSize.getMessage.contains("it's bigger than maxResultSize"))
+  }
+
+  test("SPARK-33043: getTreeAggregateIdealDepth with unlimited driver size") {
+    val originalMaxResultSize = sc.conf.get[Long](MAX_RESULT_SIZE)
+    sc.conf.set(MAX_RESULT_SIZE, 0L)
+    try {
+      val nbPartitions = 100
+      val vectors = sc.emptyRDD[Vector]
+        .repartition(nbPartitions)
+      val rowMat = new RowMatrix(vectors)
+      assert(rowMat.getTreeAggregateIdealDepth(700 * 1024 * 1024) === 1)
+    } finally {
+      sc.conf.set(MAX_RESULT_SIZE, originalMaxResultSize)
     }
   }
 
@@ -193,7 +228,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     brzNorm(v, 1.0) < 1e-6
   }
 
-  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int) {
+  def assertColumnEqualUpToSign(A: BDM[Double], B: BDM[Double], k: Int): Unit = {
     assert(A.rows === B.rows)
     for (j <- 0 until k) {
       val aj = A(::, j)
@@ -266,6 +301,20 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("dense vector covariance accuracy (SPARK-26158)") {
+    val denseData = Seq(
+      Vectors.dense(100000.000004, 199999.999999),
+      Vectors.dense(100000.000012, 200000.000002),
+      Vectors.dense(99999.9999931, 200000.000003),
+      Vectors.dense(99999.9999977, 200000.000001)
+    )
+    val denseMat = new RowMatrix(sc.parallelize(denseData, 2))
+
+    val result = denseMat.computeCovariance()
+    val expected = breeze.linalg.cov(denseMat.toBreeze())
+    assert(closeToZero(abs(expected) - abs(result.asBreeze.asInstanceOf[BDM[Double]])))
+  }
+
   test("compute covariance") {
     for (mat <- Seq(denseMat, sparseMat)) {
       val result = mat.computeCovariance()
@@ -304,7 +353,7 @@ class RowMatrixClusterSuite extends SparkFunSuite with LocalClusterSparkContext 
 
   var mat: RowMatrix = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     val m = 4
     val n = 200000

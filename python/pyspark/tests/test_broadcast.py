@@ -16,6 +16,7 @@
 #
 import os
 import random
+import time
 import tempfile
 import unittest
 
@@ -67,6 +68,38 @@ class BroadcastTest(unittest.TestCase):
     def test_broadcast_no_encryption(self):
         self._test_multiple_broadcasts()
 
+    def _test_broadcast_on_driver(self, *extra_confs):
+        conf = SparkConf()
+        for key, value in extra_confs:
+            conf.set(key, value)
+        conf.setMaster("local-cluster[2,1,1024]")
+        self.sc = SparkContext(conf=conf)
+        bs = self.sc.broadcast(value=5)
+        self.assertEqual(5, bs.value)
+
+    def test_broadcast_value_driver_no_encryption(self):
+        self._test_broadcast_on_driver()
+
+    def test_broadcast_value_driver_encryption(self):
+        self._test_broadcast_on_driver(("spark.io.encryption.enabled", "true"))
+
+    def test_broadcast_value_against_gc(self):
+        # Test broadcast value against gc.
+        conf = SparkConf()
+        conf.setMaster("local[1,1]")
+        conf.set("spark.memory.fraction", "0.0001")
+        self.sc = SparkContext(conf=conf)
+        b = self.sc.broadcast([100])
+        try:
+            res = self.sc.parallelize([0], 1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
+            self.assertEqual([0], res)
+            self.sc._jvm.java.lang.System.gc()
+            time.sleep(5)
+            res = self.sc.parallelize([1], 1).map(lambda x: 0 if x == 0 else b.value[0]).collect()
+            self.assertEqual([100], res)
+        finally:
+            b.destroy()
+
 
 class BroadcastFrameProtocolTest(unittest.TestCase):
 
@@ -112,11 +145,11 @@ class BroadcastFrameProtocolTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    from pyspark.tests.test_broadcast import *
+    from pyspark.tests.test_broadcast import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

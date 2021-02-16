@@ -18,6 +18,7 @@
 package org.apache.spark.ml.attribute
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Kryo._
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.types._
 
@@ -225,7 +226,7 @@ class AttributeSuite extends SparkFunSuite {
 
   test("Kryo class register") {
     val conf = new SparkConf(false)
-    conf.set("spark.kryo.registrationRequired", "true")
+    conf.set(KRYO_REGISTRATION_REQUIRED, true)
 
     val ser = new KryoSerializer(conf).newInstance()
 

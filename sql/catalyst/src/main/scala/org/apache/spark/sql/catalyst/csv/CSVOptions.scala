@@ -18,14 +18,15 @@
 package org.apache.spark.sql.catalyst.csv
 
 import java.nio.charset.StandardCharsets
-import java.util.{Locale, TimeZone}
+import java.time.ZoneId
+import java.util.Locale
 
 import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, UnescapedQuoteHandling}
-import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
@@ -95,7 +96,7 @@ class CSVOptions(
     }
   }
 
-  val delimiter = CSVExprUtils.toChar(
+  val delimiter = CSVExprUtils.toDelimiterStr(
     parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
@@ -140,19 +141,20 @@ class CSVOptions(
     name.map(CompressionCodecs.getCodecClassName)
   }
 
-  val timeZone: TimeZone = DateTimeUtils.getTimeZone(
+  val zoneId: ZoneId = DateTimeUtils.getZoneId(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
 
   // A language tag in IETF BCP 47 format
   val locale: Locale = parameters.get("locale").map(Locale.forLanguageTag).getOrElse(Locale.US)
 
-  // Uses `FastDateFormat` which can be direct replacement for `SimpleDateFormat` and thread-safe.
-  val dateFormat: FastDateFormat =
-    FastDateFormat.getInstance(parameters.getOrElse("dateFormat", "yyyy-MM-dd"), locale)
+  val dateFormat: String = parameters.getOrElse("dateFormat", DateFormatter.defaultPattern)
 
-  val timestampFormat: FastDateFormat =
-    FastDateFormat.getInstance(
-      parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, locale)
+  val timestampFormat: String = parameters.getOrElse("timestampFormat",
+    if (SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY) {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss.SSSXXX"
+    } else {
+      s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
+    })
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
@@ -165,6 +167,11 @@ class CSVOptions(
   val quoteAll = getBool("quoteAll", false)
 
   val inputBufferSize = 128
+
+  /**
+   * The max error content length in CSV parser/writer exception message.
+   */
+  val maxErrorContentLength = 1000
 
   val isCommentSet = this.comment != '\u0000'
 
@@ -192,6 +199,26 @@ class CSVOptions(
    */
   val emptyValueInWrite = emptyValue.getOrElse("\"\"")
 
+  /**
+   * A string between two consecutive JSON records.
+   */
+  val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
+    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
+    require(sep.length == 1, "'lineSep' can contain only 1 character.")
+    sep
+  }
+
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
+    lineSep.getBytes(charset)
+  }
+  val lineSeparatorInWrite: Option[String] = lineSeparator
+
+  /**
+   * The handling method to be used when unescaped quotes are found in the input.
+   */
+  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
+    .getOrElse("unescapedQuoteHandling", "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -199,7 +226,11 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
-    format.setComment(comment)
+    if (isCommentSet) {
+      format.setComment(comment)
+    }
+    lineSeparatorInWrite.foreach(format.setLineSeparator)
+
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
@@ -207,6 +238,7 @@ class CSVOptions(
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(quoteAll)
     writerSettings.setQuoteEscapingEnabled(escapeQuotes)
+    writerSettings.setErrorContentLength(maxErrorContentLength)
     writerSettings
   }
 
@@ -216,8 +248,14 @@ class CSVOptions(
     format.setDelimiter(delimiter)
     format.setQuote(quote)
     format.setQuoteEscape(escape)
+    lineSeparator.foreach(format.setLineSeparator)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
-    format.setComment(comment)
+    if (isCommentSet) {
+      format.setComment(comment)
+    } else {
+      settings.setCommentProcessingEnabled(false)
+    }
+
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
@@ -226,8 +264,12 @@ class CSVOptions(
     settings.setNullValue(nullValue)
     settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
-    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
-    settings.setLineSeparatorDetectionEnabled(multiLine == true)
+    settings.setUnescapedQuoteHandling(unescapedQuoteHandling)
+    settings.setLineSeparatorDetectionEnabled(lineSeparatorInRead.isEmpty && multiLine)
+    lineSeparatorInRead.foreach { _ =>
+      settings.setNormalizeLineEndingsWithinQuotes(!multiLine)
+    }
+    settings.setErrorContentLength(maxErrorContentLength)
 
     settings
   }

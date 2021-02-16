@@ -22,14 +22,16 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
+import scala.language.implicitConversions
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.mockito.Matchers.any
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doThrow, reset, spy}
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
@@ -94,6 +96,27 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
+  }
+
+  test("block addition, and block to batch allocation with many blocks") {
+    val receivedBlockTracker = createTracker()
+    receivedBlockTracker.isWriteAheadLogEnabled should be (true)
+
+    val blockInfos = generateBlockInfos(100000)
+    blockInfos.map(receivedBlockTracker.addBlock)
+    receivedBlockTracker.allocateBlocksToBatch(1)
+
+    receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual Seq.empty
+    receivedBlockTracker.hasUnallocatedReceivedBlocks should be (false)
+    receivedBlockTracker.getBlocksOfBatch(1) shouldEqual Map(streamId -> blockInfos)
+    receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
+
+    val expectedWrittenData1 = blockInfos.map(BlockAdditionEvent) :+
+      BatchAllocationEvent(1, AllocatedBlocks(Map(streamId -> blockInfos)))
+    getWrittenLogData() shouldEqual expectedWrittenData1
+    getWriteAheadLogFiles() should have size 1
+
+    receivedBlockTracker.stop()
   }
 
   test("recovery with write ahead logs should remove only allocated blocks from received queue") {
@@ -163,7 +186,7 @@ class ReceivedBlockTrackerSuite
     // Set the time increment level to twice the rotation interval so that every increment creates
     // a new log file
 
-    def incrementTime() {
+    def incrementTime(): Unit = {
       val timeIncrementMillis = 2000L
       manualClock.advance(timeIncrementMillis)
     }
@@ -176,7 +199,7 @@ class ReceivedBlockTrackerSuite
     }
 
     // Print the data present in the log ahead files in the log directory
-    def printLogFiles(message: String) {
+    def printLogFiles(message: String): Unit = {
       val fileContents = getWriteAheadLogFiles().map { file =>
         (s"\n>>>>> $file: <<<<<\n${getWrittenLogData(file).mkString("\n")}")
       }.mkString("\n")
@@ -255,7 +278,7 @@ class ReceivedBlockTrackerSuite
     getWrittenLogData(getWriteAheadLogFiles().last) should contain(createBatchCleanup(batchTime1))
 
     // Verify that at least one log file gets deleted
-    eventually(timeout(10 seconds), interval(10 millisecond)) {
+    eventually(timeout(10.seconds), interval(10.millisecond)) {
       getWriteAheadLogFiles() should not contain oldestLogFile
     }
     printLogFiles("After clean")
@@ -362,8 +385,8 @@ class ReceivedBlockTrackerSuite
   }
 
   /** Generate blocks infos using random ids */
-  def generateBlockInfos(): Seq[ReceivedBlockInfo] = {
-    List.fill(5)(ReceivedBlockInfo(streamId, Some(0L), None,
+  def generateBlockInfos(blockCount: Int = 5): Seq[ReceivedBlockInfo] = {
+    List.fill(blockCount)(ReceivedBlockInfo(streamId, Some(0L), None,
       BlockManagerBasedStoreResult(StreamBlockId(streamId, math.abs(Random.nextInt)), Some(0L))))
   }
 

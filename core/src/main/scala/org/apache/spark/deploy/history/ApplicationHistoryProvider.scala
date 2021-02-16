@@ -115,6 +115,12 @@ private[history] abstract class ApplicationHistoryProvider {
   def stop(): Unit = { }
 
   /**
+   * Called when the server is starting up. Implement this function to init the provider and start
+   * background threads. With this function we can start provider later after it is created.
+   */
+  def start(): Unit = { }
+
+  /**
    * Returns configuration data to be shown in the History Server home page.
    *
    * @return A map with the configuration data. Data is show in the order returned by the map.
@@ -143,5 +149,12 @@ private[history] abstract class ApplicationHistoryProvider {
    * Called when an application UI is unloaded from the history server.
    */
   def onUIDetached(appId: String, attemptId: Option[String], ui: SparkUI): Unit = { }
+
+  /**
+   * Returns true if the given user has permission to view the UI of the given attempt.
+   *
+   * @throws NoSuchElementException if the given attempt doesn't exist
+   */
+  def checkUIViewPermissions(appId: String, attemptId: Option[String], user: String): Boolean
 
 }

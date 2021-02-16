@@ -15,40 +15,28 @@
 # limitations under the License.
 #
 
-import sys
 import array as pyarray
 import unittest
 
 from numpy import array, array_equal, zeros, arange, tile, ones, inf
 
 import pyspark.ml.linalg as newlinalg
-from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector, \
+from pyspark.serializers import PickleSerializer
+from pyspark.mllib.linalg import (  # type: ignore[attr-defined]
+    Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
+)
+from pyspark.mllib.linalg.distributed import RowMatrix, IndexedRowMatrix
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.testing.mllibutils import make_serializer, MLlibTestCase
-
-_have_scipy = False
-try:
-    import scipy.sparse
-    _have_scipy = True
-except:
-    # No SciPy, but that's okay, we'll skip those tests
-    pass
-
-
-ser = make_serializer()
-
-
-def _squared_distance(a, b):
-    if isinstance(a, Vector):
-        return a.squared_distance(b)
-    else:
-        return b.squared_distance(a)
+from pyspark.sql import Row
+from pyspark.testing.mllibutils import MLlibTestCase
+from pyspark.testing.utils import have_scipy
 
 
 class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
+        ser = PickleSerializer()
         self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.loads(bytearray(ser.dumps(v)))
         nv = ser.loads(bytes(self.sc._jvm.org.apache.spark.mllib.api.python.SerDe.dumps(jvec)))
@@ -87,24 +75,30 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(7.0, sv.dot(arr))
 
     def test_squared_distance(self):
+        def squared_distance(a, b):
+            if isinstance(a, Vector):
+                return a.squared_distance(b)
+            else:
+                return b.squared_distance(a)
+
         sv = SparseVector(4, {1: 1, 3: 2})
         dv = DenseVector(array([1., 2., 3., 4.]))
         lst = DenseVector([4, 3, 2, 1])
         lst1 = [4, 3, 2, 1]
         arr = pyarray.array('d', [0, 2, 1, 3])
         narr = array([0, 2, 1, 3])
-        self.assertEqual(15.0, _squared_distance(sv, dv))
-        self.assertEqual(25.0, _squared_distance(sv, lst))
-        self.assertEqual(20.0, _squared_distance(dv, lst))
-        self.assertEqual(15.0, _squared_distance(dv, sv))
-        self.assertEqual(25.0, _squared_distance(lst, sv))
-        self.assertEqual(20.0, _squared_distance(lst, dv))
-        self.assertEqual(0.0, _squared_distance(sv, sv))
-        self.assertEqual(0.0, _squared_distance(dv, dv))
-        self.assertEqual(0.0, _squared_distance(lst, lst))
-        self.assertEqual(25.0, _squared_distance(sv, lst1))
-        self.assertEqual(3.0, _squared_distance(sv, arr))
-        self.assertEqual(3.0, _squared_distance(sv, narr))
+        self.assertEqual(15.0, squared_distance(sv, dv))
+        self.assertEqual(25.0, squared_distance(sv, lst))
+        self.assertEqual(20.0, squared_distance(dv, lst))
+        self.assertEqual(15.0, squared_distance(dv, sv))
+        self.assertEqual(25.0, squared_distance(lst, sv))
+        self.assertEqual(20.0, squared_distance(lst, dv))
+        self.assertEqual(0.0, squared_distance(sv, sv))
+        self.assertEqual(0.0, squared_distance(dv, dv))
+        self.assertEqual(0.0, squared_distance(lst, lst))
+        self.assertEqual(25.0, squared_distance(sv, lst1))
+        self.assertEqual(3.0, squared_distance(sv, arr))
+        self.assertEqual(3.0, squared_distance(sv, narr))
 
     def test_hash(self):
         v1 = DenseVector([0.0, 1.0, 0.0, 5.5])
@@ -124,11 +118,17 @@ class VectorTests(MLlibTestCase):
         v4 = SparseVector(6, [(1, 1.0), (3, 5.5)])
         v5 = DenseVector([0.0, 1.0, 0.0, 2.5])
         v6 = SparseVector(4, [(1, 1.0), (3, 2.5)])
+        dm1 = DenseMatrix(2, 2, [2, 0, 0, 0])
+        sm1 = SparseMatrix(2, 2, [0, 2, 3], [0], [2])
         self.assertEqual(v1, v2)
         self.assertEqual(v1, v3)
         self.assertFalse(v2 == v4)
         self.assertFalse(v1 == v5)
         self.assertFalse(v1 == v6)
+        # this is done as Dense and Sparse matrices can be semantically
+        # equal while still implementing a different __eq__ method
+        self.assertEqual(dm1, sm1)
+        self.assertEqual(sm1, dm1)
 
     def test_equals(self):
         indices = [1, 2, 4]
@@ -434,6 +434,24 @@ class VectorUDTTests(MLlibTestCase):
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
+    def test_row_matrix_from_dataframe(self):
+        from pyspark.sql.utils import IllegalArgumentException
+        df = self.spark.createDataFrame([Row(Vectors.dense(1))])
+        row_matrix = RowMatrix(df)
+        self.assertEqual(row_matrix.numRows(), 1)
+        self.assertEqual(row_matrix.numCols(), 1)
+        with self.assertRaises(IllegalArgumentException):
+            RowMatrix(df.selectExpr("'monkey'"))
+
+    def test_indexed_row_matrix_from_dataframe(self):
+        from pyspark.sql.utils import IllegalArgumentException
+        df = self.spark.createDataFrame([Row(int(0), Vectors.dense(1))])
+        matrix = IndexedRowMatrix(df)
+        self.assertEqual(matrix.numRows(), 1)
+        self.assertEqual(matrix.numCols(), 1)
+        with self.assertRaises(IllegalArgumentException):
+            IndexedRowMatrix(df.drop("_1"))
+
 
 class MatrixUDTTests(MLlibTestCase):
 
@@ -466,7 +484,7 @@ class MatrixUDTTests(MLlibTestCase):
                 raise ValueError("Expected a matrix but got type %r" % type(m))
 
 
-@unittest.skipIf(not _have_scipy, "SciPy not installed")
+@unittest.skipIf(not have_scipy, "SciPy not installed")
 class SciPyTests(MLlibTestCase):
 
     """
@@ -476,6 +494,8 @@ class SciPyTests(MLlibTestCase):
 
     def test_serialize(self):
         from scipy.sparse import lil_matrix
+
+        ser = PickleSerializer()
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
         lil[3, 0] = 2
@@ -620,14 +640,11 @@ class SciPyTests(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_linalg import *
-    if not _have_scipy:
-        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
+    from pyspark.mllib.tests.test_linalg import *  # noqa: F401
+
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)
-    if not _have_scipy:
-        print("NOTE: SciPy tests were skipped as it does not seem to be installed")

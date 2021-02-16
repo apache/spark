@@ -17,10 +17,10 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
-import java.nio.charset.StandardCharsets
 import java.util.Arrays
+import java.util.concurrent.TimeUnit
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -28,6 +28,7 @@ import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -41,7 +42,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   // currently only works on UNIX-based systems now because it uses signals for child management,
   // so we can also fall back to launching workers, pyspark/worker.py (by default) directly.
   private val useDaemon = {
-    val useDaemonEnabled = SparkEnv.get.conf.getBoolean("spark.python.use.daemon", true)
+    val useDaemonEnabled = SparkEnv.get.conf.get(PYTHON_USE_DAEMON)
 
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
@@ -53,21 +54,21 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
   // This configuration indicates the module to run the daemon to execute its Python workers.
   private val daemonModule =
-    SparkEnv.get.conf.getOption("spark.python.daemon.module").map { value =>
+    SparkEnv.get.conf.get(PYTHON_DAEMON_MODULE).map { value =>
       logInfo(
-        s"Python daemon module in PySpark is set to [$value] in 'spark.python.daemon.module', " +
+        s"Python daemon module in PySpark is set to [$value] in '${PYTHON_DAEMON_MODULE.key}', " +
         "using this to start the daemon up. Note that this configuration only has an effect when " +
-        "'spark.python.use.daemon' is enabled and the platform is not Windows.")
+        s"'${PYTHON_USE_DAEMON.key}' is enabled and the platform is not Windows.")
       value
     }.getOrElse("pyspark.daemon")
 
   // This configuration indicates the module to run each Python worker.
   private val workerModule =
-    SparkEnv.get.conf.getOption("spark.python.worker.module").map { value =>
+    SparkEnv.get.conf.get(PYTHON_WORKER_MODULE).map { value =>
       logInfo(
-        s"Python worker module in PySpark is set to [$value] in 'spark.python.worker.module', " +
+        s"Python worker module in PySpark is set to [$value] in '${PYTHON_WORKER_MODULE.key}', " +
         "using this to start the worker up. Note that this configuration only has an effect when " +
-        "'spark.python.use.daemon' is disabled or the platform is Windows.")
+        s"'${PYTHON_USE_DAEMON.key}' is disabled or the platform is Windows.")
       value
     }.getOrElse("pyspark.worker")
 
@@ -83,7 +84,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   @GuardedBy("self")
   private val idleWorkers = new mutable.Queue[Socket]()
   @GuardedBy("self")
-  private var lastActivity = 0L
+  private var lastActivityNs = 0L
   new MonitorThread().start()
 
   @GuardedBy("self")
@@ -188,7 +189,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
-  private def startDaemon() {
+  private def startDaemon(): Unit = {
     self.synchronized {
       // Is it already running?
       if (daemon != null) {
@@ -211,8 +212,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         try {
           daemonPort = in.readInt()
         } catch {
+          case _: EOFException if daemon.isAlive =>
+            throw new SparkException("EOFException occurred while reading the port number " +
+              s"from $daemonModule's stdout")
           case _: EOFException =>
-            throw new SparkException(s"No port number in $daemonModule's stdout")
+            throw new SparkException(
+              s"EOFException occurred while reading the port number from $daemonModule's" +
+              s" stdout and terminated with code: ${daemon.exitValue}.")
         }
 
         // test that the returned port number is within a valid range.
@@ -270,7 +276,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Redirect the given streams to our stderr in separate threads.
    */
-  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream) {
+  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
     try {
       new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
@@ -287,12 +293,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
     setDaemon(true)
 
-    override def run() {
+    override def run(): Unit = {
       while (true) {
         self.synchronized {
-          if (lastActivity + IDLE_WORKER_TIMEOUT_MS < System.currentTimeMillis()) {
+          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
             cleanupIdleWorkers()
-            lastActivity = System.currentTimeMillis()
+            lastActivityNs = System.nanoTime()
           }
         }
         Thread.sleep(10000)
@@ -300,7 +306,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def cleanupIdleWorkers() {
+  private def cleanupIdleWorkers(): Unit = {
     while (idleWorkers.nonEmpty) {
       val worker = idleWorkers.dequeue()
       try {
@@ -313,7 +319,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def stopDaemon() {
+  private def stopDaemon(): Unit = {
     self.synchronized {
       if (useDaemon) {
         cleanupIdleWorkers()
@@ -331,11 +337,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     stopDaemon()
   }
 
-  def stopWorker(worker: Socket) {
+  def stopWorker(worker: Socket): Unit = {
     self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
@@ -354,10 +360,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     worker.close()
   }
 
-  def releaseWorker(worker: Socket) {
+  def releaseWorker(worker: Socket): Unit = {
     if (useDaemon) {
       self.synchronized {
-        lastActivity = System.currentTimeMillis()
+        lastActivityNs = System.nanoTime()
         idleWorkers.enqueue(worker)
       }
     } else {
@@ -374,5 +380,5 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
 private object PythonWorkerFactory {
   val PROCESS_WAIT_TIMEOUT_MS = 10000
-  val IDLE_WORKER_TIMEOUT_MS = 60000  // kill idle workers after 1 minute
+  val IDLE_WORKER_TIMEOUT_NS = TimeUnit.MINUTES.toNanos(1)  // kill idle workers after 1 minute
 }

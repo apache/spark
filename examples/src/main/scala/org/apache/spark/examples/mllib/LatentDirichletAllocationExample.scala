@@ -26,7 +26,7 @@ import org.apache.spark.mllib.linalg.Vectors
 
 object LatentDirichletAllocationExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("LatentDirichletAllocationExample")
     val sc = new SparkContext(conf)

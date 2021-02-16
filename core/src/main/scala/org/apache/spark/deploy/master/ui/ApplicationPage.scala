@@ -23,6 +23,7 @@ import scala.xml.Node
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
+import org.apache.spark.deploy.StandaloneResourceUtils.{formatResourceRequirements, formatResourcesAddresses}
 import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -33,17 +34,17 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
-    // stripXSS is called first to remove suspicious characters used in XSS attacks
-    val appId = UIUtils.stripXSS(request.getParameter("appId"))
+    val appId = request.getParameter("appId")
     val state = master.askSync[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
     if (app == null) {
-      val msg = <div class="row-fluid">No running application with ID {appId}</div>
+      val msg = <div class="row">No running application with ID {appId}</div>
       return UIUtils.basicSparkPage(request, msg, "Not Found")
     }
 
-    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "State", "Logs")
+    val executorHeaders = Seq("ExecutorID", "Worker", "Cores", "Memory", "Resources",
+      "State", "Logs")
     val allExecutors = (app.executors.values ++ app.removedExecutors).toSet.toSeq
     // This includes executors that are either still running or have exited cleanly
     val executors = allExecutors.filter { exec =>
@@ -54,9 +55,9 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
     val removedExecutorsTable = UIUtils.listingTable(executorHeaders, executorRow, removedExecutors)
 
     val content =
-      <div class="row-fluid">
-        <div class="span12">
-          <ul class="unstyled">
+      <div class="row">
+        <div class="col-12">
+          <ul class="list-unstyled">
             <li><strong>ID:</strong> {app.id}</li>
             <li><strong>Name:</strong> {app.desc.name}</li>
             <li><strong>User:</strong> {app.desc.user}</li>
@@ -72,7 +73,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             </li>
             <li>
               <span data-toggle="tooltip" title={ToolTips.APPLICATION_EXECUTOR_LIMIT}
-                    data-placement="right">
+                    data-placement="top">
                 <strong>Executor Limit: </strong>
                 {
                   if (app.executorLimit == Int.MaxValue) "Unlimited" else app.executorLimit
@@ -83,6 +84,10 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             <li>
               <strong>Executor Memory:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
+            </li>
+            <li>
+              <strong>Executor Resources:</strong>
+              {formatResourceRequirements(app.desc.resourceReqsPerExecutor)}
             </li>
             <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
             <li><strong>State:</strong> {app.state}</li>
@@ -98,8 +103,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
         </div>
       </div>
 
-      <div class="row-fluid"> <!-- Executors -->
-        <div class="span12">
+      <div class="row"> <!-- Executors -->
+        <div class="col-12">
           <span class="collapse-aggregated-executors collapse-table"
               onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
             <h4>
@@ -140,6 +145,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       </td>
       <td>{executor.cores}</td>
       <td>{executor.memory}</td>
+      <td>{formatResourcesAddresses(executor.resources)}</td>
       <td>{executor.state}</td>
       <td>
         <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.

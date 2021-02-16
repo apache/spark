@@ -54,6 +54,8 @@ public class ColumnVectorUtils {
     } else {
       if (t == DataTypes.BooleanType) {
         col.putBooleans(0, capacity, row.getBoolean(fieldIdx));
+      } else if (t == DataTypes.BinaryType) {
+        col.putByteArray(0, row.getBinary(fieldIdx));
       } else if (t == DataTypes.ByteType) {
         col.putBytes(0, capacity, row.getByte(fieldIdx));
       } else if (t == DataTypes.ShortType) {
@@ -94,6 +96,9 @@ public class ColumnVectorUtils {
         col.putInts(0, capacity, row.getInt(fieldIdx));
       } else if (t instanceof TimestampType) {
         col.putLongs(0, capacity, row.getLong(fieldIdx));
+      } else {
+        throw new RuntimeException(String.format("DataType %s is not supported" +
+            " in column vectorized reader.", t.sql()));
       }
     }
   }
@@ -165,7 +170,8 @@ public class ColumnVectorUtils {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
         dst.getChild(0).appendInt(c.months);
-        dst.getChild(1).appendLong(c.microseconds);
+        dst.getChild(1).appendInt(c.days);
+        dst.getChild(2).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {

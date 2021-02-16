@@ -23,12 +23,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * End-to-end tests for approximate percentile aggregate function.
  */
-class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
+class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   private val table = "percentile_test"
@@ -124,20 +124,24 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
   test("percentile_approx, with different accuracies") {
 
     withTempView(table) {
-      (1 to 1000).toDF("col").createOrReplaceTempView(table)
+      val tableCount = 1000
+      (1 to tableCount).toDF("col").createOrReplaceTempView(table)
 
       // With different accuracies
-      val expectedPercentile = 250D
       val accuracies = Array(1, 10, 100, 1000, 10000)
-      val errors = accuracies.map { accuracy =>
-        val df = spark.sql(s"SELECT percentile_approx(col, 0.25, $accuracy) FROM $table")
-        val approximatePercentile = df.collect().head.getInt(0)
-        val error = Math.abs(approximatePercentile - expectedPercentile)
-        error
+      val expectedPercentiles = Array(100D, 200D, 250D, 314D, 777D)
+      for (accuracy <- accuracies) {
+        for (expectedPercentile <- expectedPercentiles) {
+          val df = spark.sql(
+            s"""SELECT
+               | percentile_approx(col, $expectedPercentile/$tableCount, $accuracy)
+               |FROM $table
+             """.stripMargin)
+          val approximatePercentile = df.collect().head.getInt(0)
+          val error = Math.abs(approximatePercentile - expectedPercentile)
+          assert(error <= math.floor(tableCount.toDouble / accuracy.toDouble))
+        }
       }
-
-      // The larger accuracy value we use, the smaller error we get
-      assert(errors.sorted.sameElements(errors.reverse))
     }
   }
 
@@ -145,8 +149,8 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
-        spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800D) FROM $table"),
-        Row(Seq(499))
+        spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800) FROM $table"),
+        Row(Seq(500))
       )
     }
   }
@@ -291,5 +295,24 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     assert(compressCounts > 0)
     buffer.quantileSummaries
     assert(buffer.isCompressed)
+  }
+
+  test("SPARK-32908: maximum target error in percentile_approx") {
+    withTempView(table) {
+      spark.read
+        .schema("col int")
+        .csv(testFile("test-data/percentile_approx-input.csv.bz2"))
+        .repartition(1)
+        .createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""SELECT
+             |  percentile_approx(col, 0.77, 1000),
+             |  percentile_approx(col, 0.77, 10000),
+             |  percentile_approx(col, 0.77, 100000),
+             |  percentile_approx(col, 0.77, 1000000)
+             |FROM $table""".stripMargin),
+        Row(18, 17, 17, 17))
+    }
   }
 }

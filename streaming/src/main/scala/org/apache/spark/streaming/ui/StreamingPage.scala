@@ -20,79 +20,12 @@ package org.apache.spark.streaming.ui
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ui._
-import org.apache.spark.ui.{UIUtils => SparkUIUtils}
-
-/**
- * A helper class to generate JavaScript and HTML for both timeline and histogram graphs.
- *
- * @param timelineDivId the timeline `id` used in the html `div` tag
- * @param histogramDivId the timeline `id` used in the html `div` tag
- * @param data the data for the graph
- * @param minX the min value of X axis
- * @param maxX the max value of X axis
- * @param minY the min value of Y axis
- * @param maxY the max value of Y axis
- * @param unitY the unit of Y axis
- * @param batchInterval if `batchInterval` is not None, we will draw a line for `batchInterval` in
- *                      the graph
- */
-private[ui] class GraphUIData(
-    timelineDivId: String,
-    histogramDivId: String,
-    data: Seq[(Long, Double)],
-    minX: Long,
-    maxX: Long,
-    minY: Double,
-    maxY: Double,
-    unitY: String,
-    batchInterval: Option[Double] = None) {
-
-  private var dataJavaScriptName: String = _
-
-  def generateDataJs(jsCollector: JsCollector): Unit = {
-    val jsForData = data.map { case (x, y) =>
-      s"""{"x": $x, "y": $y}"""
-    }.mkString("[", ",", "]")
-    dataJavaScriptName = jsCollector.nextVariableName
-    jsCollector.addPreparedStatement(s"var $dataJavaScriptName = $jsForData;")
-  }
-
-  def generateTimelineHtml(jsCollector: JsCollector): Seq[Node] = {
-    jsCollector.addPreparedStatement(s"registerTimeline($minY, $maxY);")
-    if (batchInterval.isDefined) {
-      jsCollector.addStatement(
-        "drawTimeline(" +
-          s"'#$timelineDivId', $dataJavaScriptName, $minX, $maxX, $minY, $maxY, '$unitY'," +
-          s" ${batchInterval.get}" +
-          ");")
-    } else {
-      jsCollector.addStatement(
-        s"drawTimeline('#$timelineDivId', $dataJavaScriptName, $minX, $maxX, $minY, $maxY," +
-          s" '$unitY');")
-    }
-    <div id={timelineDivId}></div>
-  }
-
-  def generateHistogramHtml(jsCollector: JsCollector): Seq[Node] = {
-    val histogramData = s"$dataJavaScriptName.map(function(d) { return d.y; })"
-    jsCollector.addPreparedStatement(s"registerHistogram($histogramData, $minY, $maxY);")
-    if (batchInterval.isDefined) {
-      jsCollector.addStatement(
-        "drawHistogram(" +
-          s"'#$histogramDivId', $histogramData, $minY, $maxY, '$unitY', ${batchInterval.get}" +
-          ");")
-    } else {
-      jsCollector.addStatement(
-        s"drawHistogram('#$histogramDivId', $histogramData, $minY, $maxY, '$unitY');")
-    }
-    <div id={histogramDivId}></div>
-  }
-}
+import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
+import org.apache.spark.util.Utils
 
 /**
  * A helper class for "scheduling delay", "processing time" and "total delay" to generate data that
@@ -149,12 +82,13 @@ private[ui] class StreamingPage(parent: StreamingTab)
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val resources = generateLoadResources(request)
+    val onClickTimelineFunc = generateOnClickTimelineFunction()
     val basicInfo = generateBasicInfo()
     val content = resources ++
-      basicInfo ++
+      onClickTimelineFunc ++ basicInfo ++
       listener.synchronized {
         generateStatTable() ++
-          generateBatchListTables()
+          generateBatchListTables(request)
       }
     SparkUIUtils.headerSparkPage(request, "Streaming Statistics", content, parent)
   }
@@ -165,9 +99,15 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
     <script src={SparkUIUtils.prependBaseUri(request, "/static/d3.min.js")}></script>
-      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.css")} type="text/css"/>
-      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming/streaming-page.js")}></script>
+      <link rel="stylesheet" href={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.css")} type="text/css"/>
+      <script src={SparkUIUtils.prependBaseUri(request, "/static/streaming-page.js")}></script>
     // scalastyle:on
+  }
+
+  /** Generate html that will set onClickTimeline declared in streaming-page.js */
+  private def generateOnClickTimelineFunction(): Seq[Node] = {
+    val js = "onClickTimeline = getOnClickTimelineFunction();"
+    <script>{Unparsed(js)}</script>
   }
 
   /** Generate basic information of the streaming program */
@@ -202,8 +142,18 @@ private[ui] class StreamingPage(parent: StreamingTab)
   private def generateTimeMap(times: Seq[Long]): Seq[Node] = {
     val js = "var timeFormat = {};\n" + times.map { time =>
       val formattedTime =
-        UIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
+        SparkUIUtils.formatBatchTime(time, listener.batchDuration, showYYYYMMSS = false)
       s"timeFormat[$time] = '$formattedTime';"
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
+  private def generateTimeTipStrings(times: Seq[Long]): Seq[Node] = {
+    // We leverage timeFormat as the value would be same as timeFormat. This means it is
+    // sensitive to the order - generateTimeMap should be called earlier than this.
+    val js = "var timeTipStrings = {};\n" + times.map { time =>
+      s"timeTipStrings[$time] = timeFormat[$time];"
     }.mkString("\n")
 
     <script>{Unparsed(js)}</script>
@@ -321,7 +271,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
                 if (hasStream) {
                   <span class="expand-input-rate">
                     <span class="expand-input-rate-arrow arrow-closed"></span>
-                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="right">
+                    <a data-toggle="tooltip" title="Show/hide details of each receiver" data-placement="top">
                       <strong>Input Rate</strong>
                     </a>
                   </span>
@@ -351,7 +301,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "right")}</strong></div>
+              <div><strong>Scheduling Delay {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}</strong></div>
               <div>Avg: {schedulingDelay.formattedAvg}</div>
             </div>
           </td>
@@ -361,7 +311,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "right")}</strong></div>
+              <div><strong>Processing Time {SparkUIUtils.tooltip("Time taken to process all jobs of a batch", "top")}</strong></div>
               <div>Avg: {processingTime.formattedAvg}</div>
             </div>
           </td>
@@ -371,7 +321,7 @@ private[ui] class StreamingPage(parent: StreamingTab)
         <tr>
           <td style="vertical-align: middle;">
             <div style="width: 160px;">
-              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "right")}</strong></div>
+              <div><strong>Total Delay {SparkUIUtils.tooltip("Total time taken to handle a batch", "top")}</strong></div>
               <div>Avg: {totalDelay.formattedAvg}</div>
             </div>
           </td>
@@ -382,7 +332,8 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </table>
     // scalastyle:on
 
-    generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchTimes) ++ table ++
+      jsCollector.toHtml
   }
 
   private def generateInputDStreamsTable(
@@ -483,50 +434,97 @@ private[ui] class StreamingPage(parent: StreamingTab)
     </tr>
   }
 
-  private def generateBatchListTables(): Seq[Node] = {
+  private def streamingTable(request: HttpServletRequest, batches: Seq[BatchUIData],
+      tableTag: String): Seq[Node] = {
+    val interval: Long = listener.batchDuration
+    val streamingPage = Option(request.getParameter(s"$tableTag.page")).map(_.toInt).getOrElse(1)
+
+    try {
+      new StreamingPagedTable(
+        request,
+        tableTag,
+        batches,
+        SparkUIUtils.prependBaseUri(request, parent.basePath),
+        "streaming",
+        interval
+      ).table(streamingPage)
+    } catch {
+      case e @ (_: IllegalArgumentException | _: IndexOutOfBoundsException) =>
+        <div class="alert alert-error">
+          <p>Error while rendering streaming table:</p>
+          <pre>
+            {Utils.exceptionString(e)}
+          </pre>
+        </div>
+    }
+  }
+
+  private def generateBatchListTables(request: HttpServletRequest): Seq[Node] = {
     val runningBatches = listener.runningBatches.sortBy(_.batchTime.milliseconds).reverse
     val waitingBatches = listener.waitingBatches.sortBy(_.batchTime.milliseconds).reverse
     val completedBatches = listener.retainedCompletedBatches.
       sortBy(_.batchTime.milliseconds).reverse
 
-    val activeBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
-          <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
-                onClick="collapseTable('collapse-aggregated-activeBatches',
-                'aggregated-activeBatches')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Active Batches ({runningBatches.size + waitingBatches.size})</a>
-            </h4>
-          </span>
-          <div class="aggregated-activeBatches collapsible-table">
-            {new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq}
+    val content = mutable.ListBuffer[Node]()
+
+    if (runningBatches.nonEmpty) {
+      content ++=
+        <div class="row">
+          <div class="col-12">
+            <span id="runningBatches" class="collapse-aggregated-runningBatches collapse-table"
+                  onClick="collapseTable('collapse-aggregated-runningBatches',
+                  'aggregated-runningBatches')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Running Batches ({runningBatches.size})</a>
+              </h4>
+            </span>
+            <div class="aggregated-runningBatches collapsible-table">
+              { streamingTable(request, runningBatches, "runningBatches") }
+            </div>
           </div>
         </div>
-      </div>
     }
 
-    val completedBatchesContent = {
-      <div class="row-fluid">
-        <div class="span12">
-          <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
-                onClick="collapseTable('collapse-aggregated-completedBatches',
-                'aggregated-completedBatches')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Completed Batches (last {completedBatches.size}
-                out of {listener.numTotalCompletedBatches})</a>
-            </h4>
-          </span>
-          <div class="aggregated-completedBatches collapsible-table">
-            {new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq}
+    if (waitingBatches.nonEmpty) {
+      content ++=
+        <div class="row">
+          <div class="col-12">
+            <span id="waitingBatches" class="collapse-aggregated-waitingBatches collapse-table"
+                  onClick="collapseTable('collapse-aggregated-waitingBatches',
+                  'aggregated-waitingBatches')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Waiting Batches ({waitingBatches.size})</a>
+              </h4>
+            </span>
+            <div class="aggregated-waitingBatches collapsible-table">
+              { streamingTable(request, waitingBatches, "waitingBatches") }
+            </div>
           </div>
         </div>
-      </div>
     }
 
-    activeBatchesContent ++ completedBatchesContent
+    if (completedBatches.nonEmpty) {
+      content ++=
+        <div class="row">
+          <div class="col-12">
+            <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
+                  onClick="collapseTable('collapse-aggregated-completedBatches',
+                  'aggregated-completedBatches')">
+              <h4>
+                <span class="collapse-table-arrow arrow-open"></span>
+                <a>Completed Batches (last {completedBatches.size}
+                  out of {listener.numTotalCompletedBatches})</a>
+              </h4>
+            </span>
+            <div class="aggregated-completedBatches collapsible-table">
+              { streamingTable(request, completedBatches, "completedBatches") }
+            </div>
+          </div>
+        </div>
+    }
+    content
   }
 }
 
@@ -543,54 +541,5 @@ private[ui] object StreamingPage {
     msOption.map(SparkUIUtils.formatDurationVerbose).getOrElse(emptyCell)
   }
 
-}
-
-/**
- * A helper class that allows the user to add JavaScript statements which will be executed when the
- * DOM has finished loading.
- */
-private[ui] class JsCollector {
-
-  private var variableId = 0
-
-  /**
-   * Return the next unused JavaScript variable name
-   */
-  def nextVariableName: String = {
-    variableId += 1
-    "v" + variableId
-  }
-
-  /**
-   * JavaScript statements that will execute before `statements`
-   */
-  private val preparedStatements = ArrayBuffer[String]()
-
-  /**
-   * JavaScript statements that will execute after `preparedStatements`
-   */
-  private val statements = ArrayBuffer[String]()
-
-  def addPreparedStatement(js: String): Unit = {
-    preparedStatements += js
-  }
-
-  def addStatement(js: String): Unit = {
-    statements += js
-  }
-
-  /**
-   * Generate a html snippet that will execute all scripts when the DOM has finished loading.
-   */
-  def toHtml: Seq[Node] = {
-    val js =
-      s"""
-         |$$(document).ready(function() {
-         |    ${preparedStatements.mkString("\n")}
-         |    ${statements.mkString("\n")}
-         |});""".stripMargin
-
-   <script>{Unparsed(js)}</script>
-  }
 }
 

@@ -26,17 +26,30 @@ function getThreadDumpEnabled() {
 }
 
 function formatStatus(status, type, row) {
-    if (row.isBlacklisted) {
-        return "Blacklisted";
+    if (row.isExcluded) {
+        return "Excluded";
     }
 
     if (status) {
-        if (row.blacklistedInStages.length == 0) {
+        if (row.excludedInStages.length == 0) {
             return "Active"
         }
-        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
+        return "Active (Excluded in Stages: [" + row.excludedInStages.join(", ") + "])";
     }
     return "Dead"
+}
+
+function formatResourceCells(resources) {
+    var result = ""
+    var count = 0
+    $.each(resources, function (name, resInfo) {
+        if (count > 0) {
+            result += ", "
+        }
+        result += name + ': [' + resInfo.addresses.join(", ") + ']'
+        count += 1
+    });
+    return result
 }
 
 jQuery.extend(jQuery.fn.dataTableExt.oSort, {
@@ -58,78 +71,6 @@ $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
-
-function createTemplateURI(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    ind = words.indexOf("history");
-    if(ind > 0) {
-        var baseURI = words.slice(0, ind).join('/') + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    return location.origin + "/static/executorspage-template.html";
-}
-
-function getStandAloneppId(cb) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    //Looks like Web UI is running in standalone mode
-    //Let's get application-id using REST End Point
-    $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
-        if (response && response.length > 0) {
-            var appId = response[0].id
-            cb(appId);
-            return;
-        }
-    });
-}
-
-function createRESTEndPoint(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var newBaseURI = words.slice(0, ind + 2).join('/');
-        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        var attemptId = words[ind + 2];
-        var newBaseURI = words.slice(0, ind).join('/');
-        if (isNaN(attemptId)) {
-            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
-        } else {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
-        }
-    }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
-}
-
-function formatLogsCells(execLogs, type) {
-    if (type !== 'display') return Object.keys(execLogs);
-    if (!execLogs) return;
-    var result = '';
-    $.each(execLogs, function (logName, logUrl) {
-        result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
-    });
-    return result;
-}
 
 function logsExist(execs) {
     return execs.some(function(exec) {
@@ -177,20 +118,36 @@ function totalDurationColor(totalGCTime, totalDuration) {
     return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
 }
 
+var sumOptionalColumns = [3, 4];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14];
+var execDataTable;
+var sumDataTable;
+
+function reselectCheckboxesBasedOnTaskTableState() {
+    var allChecked = true;
+    if (typeof execDataTable !== "undefined") {
+        for (var k = 0; k < execOptionalColumns.length; k++) {
+            if (execDataTable.column(execOptionalColumns[k]).visible()) {
+                $("[data-exec-col-idx=" + execOptionalColumns[k] + "]").prop("checked", true);
+            } else {
+                allChecked = false;
+            }
+        }
+    }
+    if (allChecked) {
+        $("#select-all-box").prop("checked", true);
+    }
+}
+
 $(document).ready(function () {
-    $.extend($.fn.dataTable.defaults, {
-        stateSave: true,
-        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
-        pageLength: 20
-    });
+    setDataTableDefaults();
 
-    executorsSummary = $("#active-executors");
+    var executorsSummary = $("#active-executors");
 
-    getStandAloneppId(function (appId) {
+    getStandAloneAppId(function (appId) {
 
-        var endPoint = createRESTEndPoint(appId);
+        var endPoint = createRESTEndPointForExecutorsPage(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
-            var summary = [];
             var allExecCnt = 0;
             var allRDDBlocks = 0;
             var allMemoryUsed = 0;
@@ -211,7 +168,7 @@ $(document).ready(function () {
             var allTotalInputBytes = 0;
             var allTotalShuffleRead = 0;
             var allTotalShuffleWrite = 0;
-            var allTotalBlacklisted = 0;
+            var allTotalExcluded = 0;
 
             var activeExecCnt = 0;
             var activeRDDBlocks = 0;
@@ -233,7 +190,7 @@ $(document).ready(function () {
             var activeTotalInputBytes = 0;
             var activeTotalShuffleRead = 0;
             var activeTotalShuffleWrite = 0;
-            var activeTotalBlacklisted = 0;
+            var activeTotalExcluded = 0;
 
             var deadExecCnt = 0;
             var deadRDDBlocks = 0;
@@ -255,7 +212,7 @@ $(document).ready(function () {
             var deadTotalInputBytes = 0;
             var deadTotalShuffleRead = 0;
             var deadTotalShuffleWrite = 0;
-            var deadTotalBlacklisted = 0;
+            var deadTotalExcluded = 0;
 
             response.forEach(function (exec) {
                 var memoryMetrics = {
@@ -289,7 +246,7 @@ $(document).ready(function () {
                 allTotalInputBytes += exec.totalInputBytes;
                 allTotalShuffleRead += exec.totalShuffleRead;
                 allTotalShuffleWrite += exec.totalShuffleWrite;
-                allTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                allTotalExcluded += exec.isExcluded ? 1 : 0;
                 if (exec.isActive) {
                     activeExecCnt += 1;
                     activeRDDBlocks += exec.rddBlocks;
@@ -311,7 +268,7 @@ $(document).ready(function () {
                     activeTotalInputBytes += exec.totalInputBytes;
                     activeTotalShuffleRead += exec.totalShuffleRead;
                     activeTotalShuffleWrite += exec.totalShuffleWrite;
-                    activeTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                    activeTotalExcluded += exec.isExcluded ? 1 : 0;
                 } else {
                     deadExecCnt += 1;
                     deadRDDBlocks += exec.rddBlocks;
@@ -333,7 +290,7 @@ $(document).ready(function () {
                     deadTotalInputBytes += exec.totalInputBytes;
                     deadTotalShuffleRead += exec.totalShuffleRead;
                     deadTotalShuffleWrite += exec.totalShuffleWrite;
-                    deadTotalBlacklisted += exec.isBlacklisted ? 1 : 0;
+                    deadTotalExcluded += exec.isExcluded ? 1 : 0; // todo - TEST BACKWARDS compatibility history?
                 }
             });
 
@@ -358,7 +315,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": allTotalInputBytes,
                 "allTotalShuffleRead": allTotalShuffleRead,
                 "allTotalShuffleWrite": allTotalShuffleWrite,
-                "allTotalBlacklisted": allTotalBlacklisted
+                "allTotalExcluded": allTotalExcluded
             };
             var activeSummary = {
                 "execCnt": ( "Active(" + activeExecCnt + ")"),
@@ -381,7 +338,7 @@ $(document).ready(function () {
                 "allTotalInputBytes": activeTotalInputBytes,
                 "allTotalShuffleRead": activeTotalShuffleRead,
                 "allTotalShuffleWrite": activeTotalShuffleWrite,
-                "allTotalBlacklisted": activeTotalBlacklisted
+                "allTotalExcluded": activeTotalExcluded
             };
             var deadSummary = {
                 "execCnt": ( "Dead(" + deadExecCnt + ")" ),
@@ -404,11 +361,11 @@ $(document).ready(function () {
                 "allTotalInputBytes": deadTotalInputBytes,
                 "allTotalShuffleRead": deadTotalShuffleRead,
                 "allTotalShuffleWrite": deadTotalShuffleWrite,
-                "allTotalBlacklisted": deadTotalBlacklisted
+                "allTotalExcluded": deadTotalExcluded
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
-            $.get(createTemplateURI(appId), function (template) {
+            $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
                 executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
                 var selector = "#active-executors-table";
@@ -444,9 +401,6 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.memoryMetrics.usedOnHeapStorageMemory, type) + ' / ' +
                                         formatBytes(row.memoryMetrics.totalOnHeapStorageMemory, type));
-                            },
-                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                                $(nTd).addClass('on_heap_memory')
                             }
                         },
                         {
@@ -456,13 +410,84 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.memoryMetrics.usedOffHeapStorageMemory, type) + ' / ' +
                                         formatBytes(row.memoryMetrics.totalOffHeapStorageMemory, type));
-                            },
-                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                                $(nTd).addClass('off_heap_memory')
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.JVMHeapMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.JVMHeapMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.JVMOffHeapMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapExecutionMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapExecutionMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapExecutionMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.OnHeapStorageMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.OnHeapStorageMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.OffHeapStorageMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            data: function (row, type) {
+                                var peakMemoryMetrics = row.peakMemoryMetrics;
+                                if (typeof peakMemoryMetrics !== 'undefined') {
+                                    if (type !== 'display')
+                                        return peakMemoryMetrics.DirectPoolMemory;
+                                    else
+                                        return (formatBytes(peakMemoryMetrics.DirectPoolMemory, type) + ' / ' +
+                                            formatBytes(peakMemoryMetrics.MappedPoolMemory, type));
+                                } else {
+                                    if (type !== 'display') {
+                                        return 0;
+                                    } else {
+                                        return '0.0 B / 0.0 B';
+                                    }
+                                }
                             }
                         },
                         {data: 'diskUsed', render: formatBytes},
                         {data: 'totalCores'},
+                        {name: 'resourcesCol', data: 'resources', render: formatResourceCells, orderable: false},
+                        {name: 'resourceProfileIdCol', data: 'resourceProfileId'},
                         {
                             data: 'activeTasks',
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
@@ -505,12 +530,23 @@ $(document).ready(function () {
                             }
                         }
                     ],
-                    "order": [[0, "asc"]]
+                    "order": [[0, "asc"]],
+                    "columnDefs": [
+                        {"visible": false, "targets": 5},
+                        {"visible": false, "targets": 6},
+                        {"visible": false, "targets": 7},
+                        {"visible": false, "targets": 8},
+                        {"visible": false, "targets": 9},
+                        {"visible": false, "targets": 10},
+                        {"visible": false, "targets": 13},
+                        {"visible": false, "targets": 14}
+                    ],
+                    "deferRender": true
                 };
-    
-                var dt = $(selector).DataTable(conf);
-                dt.column('executorLogsCol:name').visible(logsExist(response));
-                dt.column('threadDumpCol:name').visible(getThreadDumpEnabled());
+
+                execDataTable = $(selector).DataTable(conf);
+                execDataTable.column('executorLogsCol:name').visible(logsExist(response));
+                execDataTable.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
@@ -540,9 +576,6 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.allOnHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.allOnHeapMaxMemory, type));
-                            },
-                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                                $(nTd).addClass('on_heap_memory')
                             }
                         },
                         {
@@ -552,9 +585,6 @@ $(document).ready(function () {
                                 else
                                     return (formatBytes(row.allOffHeapMemoryUsed, type) + ' / ' +
                                         formatBytes(row.allOffHeapMaxMemory, type));
-                            },
-                            "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
-                                $(nTd).addClass('off_heap_memory')
                             }
                         },
                         {data: 'allDiskUsed', render: formatBytes},
@@ -581,7 +611,7 @@ $(document).ready(function () {
                         {data: 'allTotalTasks'},
                         {
                             data: function (row, type) {
-                                return type === 'display' ? (formatDuration(row.allTotalDuration, type) + ' (' + formatDuration(row.allTotalGCTime, type) + ')') : row.allTotalDuration
+                                return type === 'display' ? (formatDuration(row.allTotalDuration) + ' (' + formatDuration(row.allTotalGCTime) + ')') : row.allTotalDuration
                             },
                             "fnCreatedCell": function (nTd, sData, oData, iRow, iCol) {
                                 if (oData.allTotalDuration > 0) {
@@ -593,17 +623,81 @@ $(document).ready(function () {
                         {data: 'allTotalInputBytes', render: formatBytes},
                         {data: 'allTotalShuffleRead', render: formatBytes},
                         {data: 'allTotalShuffleWrite', render: formatBytes},
-                        {data: 'allTotalBlacklisted'}
+                        {data: 'allTotalExcluded'}
                     ],
                     "paging": false,
                     "searching": false,
-                    "info": false
+                    "info": false,
+                    "columnDefs": [
+                        {"visible": false, "targets": 3},
+                        {"visible": false, "targets": 4}
+                    ]
 
                 };
     
-                $(sumSelector).DataTable(sumConf);
+                sumDataTable = $(sumSelector).DataTable(sumConf);
                 $('#execSummary [data-toggle="tooltip"]').tooltip();
-    
+
+                $("#showAdditionalMetrics").append(
+                    "<div><a id='additionalMetrics' class='collapse-table'>" +
+                    "<span class='expand-input-rate-arrow arrow-closed' id='arrowtoggle-optional-metrics'></span>" +
+                    "Show Additional Metrics" +
+                    "</a></div>" +
+                    "<div class='container-fluid-div ml-4 d-none' id='toggle-metrics'>" +
+                    "<div><input type='checkbox' class='toggle-vis' id='select-all-box'> Select All</div>" +
+                    "<div id='on_heap_memory' class='on-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='3' data-exec-col-idx='5'> On Heap Memory</div>" +
+                    "<div id='off_heap_memory' class='off-heap-memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='4' data-exec-col-idx='6'> Off Heap Memory</div>" +
+                    "<div id='jvm_on_off_heap_memory' class='jvm_on_off_heap_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='7'> Peak JVM Memory OnHeap / OffHeap</div>" +
+                    "<div id='on_off_heap_execution_memory' class='on_off_heap_execution_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='8'> Peak Execution Memory OnHeap / OffHeap</div>" +
+                    "<div id='on_off_heap_storage_memory' class='on_off_heap_storage_memory'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='9'> Peak Storage Memory OnHeap / OffHeap</div>" +
+                    "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
+                    "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
+                    "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
+                    "</div>");
+
+                reselectCheckboxesBasedOnTaskTableState();
+
+                $("#additionalMetrics").click(function() {
+                    $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
+                    $("#toggle-metrics").toggleClass("d-none");
+                    if (window.localStorage) {
+                        window.localStorage.setItem("arrowtoggle-optional-metrics-class", $("#arrowtoggle-optional-metrics").attr('class'));
+                    }
+                });
+
+                $(".toggle-vis").on("click", function() {
+                    var thisBox = $(this);
+                    if (thisBox.is("#select-all-box")) {
+                        var sumColumn = sumDataTable.columns(sumOptionalColumns);
+                        var execColumn = execDataTable.columns(execOptionalColumns);
+                        if (thisBox.is(":checked")) {
+                            $(".toggle-vis").prop("checked", true);
+                            sumColumn.visible(true);
+                            execColumn.visible(true);
+                        } else {
+                            $(".toggle-vis").prop("checked", false);
+                            sumColumn.visible(false);
+                            execColumn.visible(false);
+                        }
+                    } else {
+                        var execColIdx = thisBox.attr("data-exec-col-idx");
+                        var execCol = execDataTable.column(execColIdx);
+                        execCol.visible(!execCol.visible());
+                        var sumColIdx = thisBox.attr("data-sum-col-idx");
+                        if (sumColIdx) {
+                            var sumCol = sumDataTable.column(sumColIdx);
+                            sumCol.visible(!sumCol.visible());
+                        }
+                    }
+                });
+
+                if (window.localStorage) {
+                    if (window.localStorage.getItem("arrowtoggle-optional-metrics-class") != null &&
+                        window.localStorage.getItem("arrowtoggle-optional-metrics-class").includes("arrow-open")) {
+                        $("#arrowtoggle-optional-metrics").toggleClass("arrow-open arrow-closed");
+                        $("#toggle-metrics").toggleClass("d-none");
+                    }
+                }
             });
         });
     });

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -91,14 +91,13 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   @Since("2.4.0")
   def getDstCol: String = $(dstCol)
 
-  setDefault(srcCol -> "src", dstCol -> "dst")
+  setDefault(srcCol -> "src", dstCol -> "dst", k -> 2, maxIter -> 20, initMode -> "random")
 }
 
 /**
- * :: Experimental ::
  * Power Iteration Clustering (PIC), a scalable graph clustering algorithm developed by
- * <a href=http://www.icml2010.org/papers/387.pdf>Lin and Cohen</a>. From the abstract:
- * PIC finds a very low-dimensional embedding of a dataset using truncated power
+ * <a href=http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf>Lin and Cohen</a>. From
+ * the abstract: PIC finds a very low-dimensional embedding of a dataset using truncated power
  * iteration on a normalized pair-wise similarity matrix of the data.
  *
  * This class is not yet an Estimator/Transformer, use `assignClusters` method to run the
@@ -108,15 +107,9 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
  * Spectral clustering (Wikipedia)</a>
  */
 @Since("2.4.0")
-@Experimental
 class PowerIterationClustering private[clustering] (
     @Since("2.4.0") override val uid: String)
   extends PowerIterationClusteringParams with DefaultParamsWritable {
-
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> "random")
 
   @Since("2.4.0")
   def this() = this(Identifiable.randomUID("PowerIterationClustering"))
@@ -166,6 +159,7 @@ class PowerIterationClustering private[clustering] (
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) {
       lit(1.0)
     } else {
+      SchemaUtils.checkNumericType(dataset.schema, $(weightCol))
       col($(weightCol)).cast(DoubleType)
     }
 

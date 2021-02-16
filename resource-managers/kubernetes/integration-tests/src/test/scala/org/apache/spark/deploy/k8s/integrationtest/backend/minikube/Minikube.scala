@@ -16,8 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest.backend.minikube
 
-import java.io.File
-import java.nio.file.Paths
+import java.nio.file.{Files, Paths}
 
 import io.fabric8.kubernetes.client.{ConfigBuilder, DefaultKubernetesClient}
 
@@ -26,8 +25,19 @@ import org.apache.spark.internal.Logging
 
 // TODO support windows
 private[spark] object Minikube extends Logging {
-
   private val MINIKUBE_STARTUP_TIMEOUT_SECONDS = 60
+  private val HOST_PREFIX = "host:"
+  private val KUBELET_PREFIX = "kubelet:"
+  private val APISERVER_PREFIX = "apiserver:"
+  private val KUBECTL_PREFIX = "kubectl:"
+  private val KUBECONFIG_PREFIX = "kubeconfig:"
+  private val MINIKUBE_VM_PREFIX = "minikubeVM: "
+  private val MINIKUBE_PREFIX = "minikube: "
+  private val MINIKUBE_PATH = ".minikube"
+
+  def logVersion(): Unit = {
+    logInfo(executeMinikube("version").mkString("\n"))
+  }
 
   def getMinikubeIp: String = {
     val outputs = executeMinikube("ip")
@@ -38,30 +48,95 @@ private[spark] object Minikube extends Logging {
 
   def getMinikubeStatus: MinikubeStatus.Value = {
     val statusString = executeMinikube("status")
-      .filter(line => line.contains("minikubeVM: ") || line.contains("minikube:"))
-      .head
-      .replaceFirst("minikubeVM: ", "")
-      .replaceFirst("minikube: ", "")
-    MinikubeStatus.unapply(statusString)
+    logInfo(s"Minikube status command output:\n$statusString")
+    // up to minikube version v0.30.0 use this to check for minikube status
+    val oldMinikube = statusString
+      .filter(line => line.contains(MINIKUBE_VM_PREFIX) || line.contains(MINIKUBE_PREFIX))
+
+    if (oldMinikube.isEmpty) {
+      getIfNewMinikubeStatus(statusString)
+    } else {
+      val finalStatusString = oldMinikube
+        .head
+        .replaceFirst(MINIKUBE_VM_PREFIX, "")
+        .replaceFirst(MINIKUBE_PREFIX, "")
+      MinikubeStatus.unapply(finalStatusString)
         .getOrElse(throw new IllegalStateException(s"Unknown status $statusString"))
+    }
   }
 
   def getKubernetesClient: DefaultKubernetesClient = {
     val kubernetesMaster = s"https://${getMinikubeIp}:8443"
     val userHome = System.getProperty("user.home")
+    val minikubeBasePath = Paths.get(userHome, MINIKUBE_PATH).toString
+    val profileDir = if (Files.exists(Paths.get(minikubeBasePath, "apiserver.crt"))) {
+      // For Minikube <1.9
+      ""
+    } else {
+      // For Minikube >=1.9
+      Paths.get("profiles", executeMinikube("profile")(0)).toString
+    }
+    val apiServerCertPath = Paths.get(minikubeBasePath, profileDir, "apiserver.crt")
+    val apiServerKeyPath = Paths.get(minikubeBasePath, profileDir, "apiserver.key")
     val kubernetesConf = new ConfigBuilder()
       .withApiVersion("v1")
       .withMasterUrl(kubernetesMaster)
-      .withCaCertFile(Paths.get(userHome, ".minikube", "ca.crt").toFile.getAbsolutePath)
-      .withClientCertFile(Paths.get(userHome, ".minikube", "apiserver.crt").toFile.getAbsolutePath)
-      .withClientKeyFile(Paths.get(userHome, ".minikube", "apiserver.key").toFile.getAbsolutePath)
+      .withCaCertFile(
+        Paths.get(userHome, MINIKUBE_PATH, "ca.crt").toFile.getAbsolutePath)
+      .withClientCertFile(apiServerCertPath.toFile.getAbsolutePath)
+      .withClientKeyFile(apiServerKeyPath.toFile.getAbsolutePath)
       .build()
     new DefaultKubernetesClient(kubernetesConf)
   }
 
-  private def executeMinikube(action: String, args: String*): Seq[String] = {
+  // Covers minikube status output after Minikube V0.30.
+  private def getIfNewMinikubeStatus(statusString: Seq[String]): MinikubeStatus.Value = {
+    val hostString = statusString.find(_.contains(s"$HOST_PREFIX "))
+    val kubeletString = statusString.find(_.contains(s"$KUBELET_PREFIX "))
+    val apiserverString = statusString.find(_.contains(s"$APISERVER_PREFIX "))
+    val kubectlString = statusString.find(_.contains(s"$KUBECTL_PREFIX "))
+    val kubeconfigString = statusString.find(_.contains(s"$KUBECONFIG_PREFIX "))
+    val hasConfigStatus = kubectlString.isDefined || kubeconfigString.isDefined
+
+    if (hostString.isEmpty || kubeletString.isEmpty || apiserverString.isEmpty ||
+        !hasConfigStatus) {
+      MinikubeStatus.NONE
+    } else {
+      val status1 = hostString.get.replaceFirst(s"$HOST_PREFIX ", "")
+      val status2 = kubeletString.get.replaceFirst(s"$KUBELET_PREFIX ", "")
+      val status3 = apiserverString.get.replaceFirst(s"$APISERVER_PREFIX ", "")
+      val isConfigured = if (kubectlString.isDefined) {
+        val cfgStatus = kubectlString.get.replaceFirst(s"$KUBECTL_PREFIX ", "")
+        cfgStatus.contains("Correctly Configured:")
+      } else {
+        kubeconfigString.get.replaceFirst(s"$KUBECONFIG_PREFIX ", "") == "Configured"
+      }
+      if (isConfigured) {
+        val stats = List(status1, status2, status3)
+          .map(MinikubeStatus.unapply)
+          .map(_.getOrElse(throw new IllegalStateException(s"Unknown status $statusString")))
+        if (stats.exists(_ != MinikubeStatus.RUNNING)) {
+          MinikubeStatus.NONE
+        } else {
+          MinikubeStatus.RUNNING
+        }
+      } else {
+        MinikubeStatus.NONE
+      }
+    }
+  }
+
+  def executeMinikube(action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
-      Array("bash", "-c", s"minikube $action") ++ args, MINIKUBE_STARTUP_TIMEOUT_SECONDS)
+      Array("bash", "-c", s"MINIKUBE_IN_STYLE=true minikube $action ${args.mkString(" ")}"),
+      MINIKUBE_STARTUP_TIMEOUT_SECONDS).filter{x =>
+      !x.contains("There is a newer version of minikube") &&
+      !x.contains("https://github.com/kubernetes")
+    }
+  }
+
+  def minikubeServiceAction(args: String*): String = {
+    executeMinikube("service", args: _*).head
   }
 }
 

@@ -15,15 +15,13 @@
 # limitations under the License.
 #
 
-from __future__ import print_function
-
 # $example on$
 from numpy import array
 # $example off$
 
 from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.clustering import BisectingKMeans, BisectingKMeansModel
+from pyspark.mllib.clustering import BisectingKMeans
 # $example off$
 
 if __name__ == "__main__":

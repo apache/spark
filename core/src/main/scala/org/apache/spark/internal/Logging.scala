@@ -17,11 +17,10 @@
 
 package org.apache.spark.internal
 
-import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.JavaConverters._
 
 import org.apache.log4j._
+import org.apache.log4j.spi.{Filter, LoggingEvent}
 import org.slf4j.{Logger, LoggerFactory}
 import org.slf4j.impl.StaticLoggerBinder
 
@@ -54,44 +53,44 @@ trait Logging {
   }
 
   // Log methods that take only a String
-  protected def logInfo(msg: => String) {
+  protected def logInfo(msg: => String): Unit = {
     if (log.isInfoEnabled) log.info(msg)
   }
 
-  protected def logDebug(msg: => String) {
+  protected def logDebug(msg: => String): Unit = {
     if (log.isDebugEnabled) log.debug(msg)
   }
 
-  protected def logTrace(msg: => String) {
+  protected def logTrace(msg: => String): Unit = {
     if (log.isTraceEnabled) log.trace(msg)
   }
 
-  protected def logWarning(msg: => String) {
+  protected def logWarning(msg: => String): Unit = {
     if (log.isWarnEnabled) log.warn(msg)
   }
 
-  protected def logError(msg: => String) {
+  protected def logError(msg: => String): Unit = {
     if (log.isErrorEnabled) log.error(msg)
   }
 
   // Log methods that take Throwables (Exceptions/Errors) too
-  protected def logInfo(msg: => String, throwable: Throwable) {
+  protected def logInfo(msg: => String, throwable: Throwable): Unit = {
     if (log.isInfoEnabled) log.info(msg, throwable)
   }
 
-  protected def logDebug(msg: => String, throwable: Throwable) {
+  protected def logDebug(msg: => String, throwable: Throwable): Unit = {
     if (log.isDebugEnabled) log.debug(msg, throwable)
   }
 
-  protected def logTrace(msg: => String, throwable: Throwable) {
+  protected def logTrace(msg: => String, throwable: Throwable): Unit = {
     if (log.isTraceEnabled) log.trace(msg, throwable)
   }
 
-  protected def logWarning(msg: => String, throwable: Throwable) {
+  protected def logWarning(msg: => String, throwable: Throwable): Unit = {
     if (log.isWarnEnabled) log.warn(msg, throwable)
   }
 
-  protected def logError(msg: => String, throwable: Throwable) {
+  protected def logError(msg: => String, throwable: Throwable): Unit = {
     if (log.isErrorEnabled) log.error(msg, throwable)
   }
 
@@ -115,6 +114,11 @@ trait Logging {
       }
     }
     false
+  }
+
+  // For testing
+  private[spark] def initializeForcefully(isInterpreter: Boolean, silent: Boolean): Unit = {
+    initializeLogging(isInterpreter, silent)
   }
 
   private def initializeLogging(isInterpreter: Boolean, silent: Boolean): Unit = {
@@ -154,16 +158,10 @@ trait Logging {
             System.err.println("To adjust logging level use sc.setLogLevel(newLevel). " +
               "For SparkR, use setLogLevel(newLevel).")
           }
+          Logging.sparkShellThresholdLevel = replLevel
           rootLogger.getAllAppenders().asScala.foreach {
             case ca: ConsoleAppender =>
-              Option(ca.getThreshold()) match {
-                case Some(t) =>
-                  Logging.consoleAppenderToThreshold.put(ca, t)
-                  if (!t.isGreaterOrEqual(replLevel)) {
-                    ca.setThreshold(replLevel)
-                  }
-                case None => ca.setThreshold(replLevel)
-              }
+              ca.addFilter(new SparkShellLoggingFilter())
             case _ => // no-op
           }
         }
@@ -182,7 +180,7 @@ private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
   @volatile private var defaultSparkLog4jConfig = false
-  private val consoleAppenderToThreshold = new ConcurrentHashMap[ConsoleAppender, Priority]()
+  @volatile private[spark] var sparkShellThresholdLevel: Level = null
 
   val initLock = new Object()
   try {
@@ -211,11 +209,7 @@ private[spark] object Logging {
       } else {
         val rootLogger = LogManager.getRootLogger()
         rootLogger.setLevel(defaultRootLevel)
-        rootLogger.getAllAppenders().asScala.foreach {
-          case ca: ConsoleAppender =>
-            ca.setThreshold(consoleAppenderToThreshold.get(ca))
-          case _ => // no-op
-        }
+        sparkShellThresholdLevel = null
       }
     }
     this.initialized = false
@@ -227,5 +221,32 @@ private[spark] object Logging {
     // org.apache.logging.slf4j.Log4jLoggerFactory
     val binderClass = StaticLoggerBinder.getSingleton.getLoggerFactoryClassStr
     "org.slf4j.impl.Log4jLoggerFactory".equals(binderClass)
+  }
+}
+
+private class SparkShellLoggingFilter extends Filter {
+
+  /**
+   * If sparkShellThresholdLevel is not defined, this filter is a no-op.
+   * If log level of event is not equal to root level, the event is allowed. Otherwise,
+   * the decision is made based on whether the log came from root or some custom configuration
+   * @param loggingEvent
+   * @return decision for accept/deny log event
+   */
+  def decide(loggingEvent: LoggingEvent): Int = {
+    if (Logging.sparkShellThresholdLevel == null) {
+      Filter.NEUTRAL
+    } else if (loggingEvent.getLevel.isGreaterOrEqual(Logging.sparkShellThresholdLevel)) {
+      Filter.NEUTRAL
+    } else {
+      var logger = loggingEvent.getLogger()
+      while (logger.getParent() != null) {
+        if (logger.getLevel != null || logger.getAllAppenders.hasMoreElements) {
+          return Filter.NEUTRAL
+        }
+        logger = logger.getParent()
+      }
+      Filter.DENY
+    }
   }
 }

@@ -17,6 +17,9 @@
 
 package org.apache.spark.api.java
 
+import java.io.{DataInputStream, EOFException, FileInputStream, InputStream}
+
+import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -24,6 +27,7 @@ import org.apache.spark._
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
@@ -45,6 +49,20 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
    * have a storage level set yet..
    */
   def persist(newLevel: StorageLevel): JavaRDD[T] = wrapRDD(rdd.persist(newLevel))
+
+  /**
+   * Specify a ResourceProfile to use when calculating this RDD. This is only supported on
+   * certain cluster managers and currently requires dynamic allocation to be enabled.
+   * It will result in new executors with the resources specified being acquired to
+   * calculate the RDD.
+   */
+  def withResources(rp: ResourceProfile): JavaRDD[T] = wrapRDD(rdd.withResources(rp))
+
+  /**
+   * Get the ResourceProfile specified with this RDD or None if it wasn't specified.
+   * @return the user specified ResourceProfile or null if none was specified
+   */
+  def getResourceProfile(): ResourceProfile = rdd.getResourceProfile()
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
@@ -213,4 +231,34 @@ object JavaRDD {
   implicit def fromRDD[T: ClassTag](rdd: RDD[T]): JavaRDD[T] = new JavaRDD[T](rdd)
 
   implicit def toRDD[T](rdd: JavaRDD[T]): RDD[T] = rdd.rdd
+
+  private[api] def readRDDFromFile(
+      sc: JavaSparkContext,
+      filename: String,
+      parallelism: Int): JavaRDD[Array[Byte]] = {
+    readRDDFromInputStream(sc.sc, new FileInputStream(filename), parallelism)
+  }
+
+  private[api] def readRDDFromInputStream(
+      sc: SparkContext,
+      in: InputStream,
+      parallelism: Int): JavaRDD[Array[Byte]] = {
+    val din = new DataInputStream(in)
+    try {
+      val objs = new mutable.ArrayBuffer[Array[Byte]]
+      try {
+        while (true) {
+          val length = din.readInt()
+          val obj = new Array[Byte](length)
+          din.readFully(obj)
+          objs += obj
+        }
+      } catch {
+        case eof: EOFException => // No-op
+      }
+      JavaRDD.fromRDD(sc.parallelize(objs.toSeq, parallelism))
+    } finally {
+      din.close()
+    }
+  }
 }

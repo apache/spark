@@ -18,6 +18,7 @@
 package test.org.apache.spark.sql.streaming;
 
 import java.io.File;
+import java.util.concurrent.TimeoutException;
 
 import org.junit.After;
 import org.junit.Before;
@@ -52,7 +53,7 @@ public class JavaDataStreamReaderWriterSuite {
   }
 
   @Test
-  public void testForeachBatchAPI() {
+  public void testForeachBatchAPI() throws TimeoutException {
     StreamingQuery query = spark
       .readStream()
       .textFile(input)
@@ -66,7 +67,7 @@ public class JavaDataStreamReaderWriterSuite {
   }
 
   @Test
-  public void testForeachAPI() {
+  public void testForeachAPI() throws TimeoutException {
     StreamingQuery query = spark
       .readStream()
       .textFile(input)

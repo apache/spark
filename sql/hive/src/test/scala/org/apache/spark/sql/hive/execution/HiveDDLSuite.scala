@@ -19,9 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.util.Date
-
-import scala.language.existentials
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
@@ -31,22 +29,28 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.FakeV2Provider
+import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.HiveUtils.{CONVERT_METASTORE_ORC, CONVERT_METASTORE_PARQUET}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton, TestHiveSparkSession}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
+@SlowHiveTest
 class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     try {
@@ -125,7 +129,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
       // View texts are checked separately
       viewText = None
     )
@@ -155,22 +159,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
     testChangeColumn(isDatasourceTable = false)
   }
 
-  test("alter table: rename partition") {
-    testRenamePartitions(isDatasourceTable = false)
-  }
-
-  test("alter table: drop partition") {
-    testDropPartitions(isDatasourceTable = false)
-  }
-
-  test("alter table: add partition") {
-    testAddPartitions(isDatasourceTable = false)
-  }
-
-  test("drop table") {
-    testDropTable(isDatasourceTable = false)
-  }
-
   test("alter datasource table add columns - orc") {
     testAddColumn("orc")
   }
@@ -181,8 +169,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("SPARK-22431: illegal nested type") {
     val queries = Seq(
-      "CREATE TABLE t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
-      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT)",
+      "CREATE TABLE t USING hive AS SELECT STRUCT('a' AS `$a`, 1 AS b) q",
+      "CREATE TABLE t(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING hive",
       "CREATE VIEW t AS SELECT STRUCT('a' AS `$a`, 1 AS b) q")
 
     queries.foreach(query => {
@@ -253,15 +241,158 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("SPARK-22431: negative alter table tests with nested types") {
     withTable("t1") {
-      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT)")
+      spark.sql("CREATE TABLE t1 (q STRUCT<col1:INT, col2:STRING>, i1 INT) USING hive")
       val err = intercept[SparkException] {
         spark.sql("ALTER TABLE t1 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
       }.getMessage
       assert(err.contains("Cannot recognize hive type string:"))
    }
   }
+
+  test("SPARK-26630: table with old input format and without partitioned will use HadoopRDD") {
+    withTable("table_old", "table_ctas_old") {
+      sql(
+        """
+          |CREATE TABLE table_old (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+        """.stripMargin)
+      sql(
+        """
+          |INSERT INTO table_old
+          |VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 FROM table_old"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+
+      sql("CREATE TABLE table_ctas_old AS SELECT col1, col2, col3, col4 FROM table_old")
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 from table_ctas_old"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+    }
+  }
+
+  test("SPARK-26630: table with old input format and partitioned will use HadoopRDD") {
+    withTable("table_pt_old", "table_ctas_pt_old") {
+      sql(
+        """
+          |CREATE TABLE table_pt_old (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |PARTITIONED BY (pt INT)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+        """.stripMargin)
+      sql(
+        """
+          |INSERT INTO table_pt_old PARTITION (pt = 1)
+          |VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 FROM table_pt_old WHERE pt = 1"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+
+      sql("CREATE TABLE table_ctas_pt_old AS SELECT col1, col2, col3, col4 FROM table_pt_old")
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 from table_ctas_pt_old"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+    }
+  }
+
+  test("SPARK-26630: table with new input format and without partitioned will use NewHadoopRDD") {
+    withTable("table_new", "table_ctas_new") {
+      sql(
+        """
+          |CREATE TABLE table_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+        """.stripMargin)
+      sql(
+        """
+          |INSERT INTO table_new
+          |VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 FROM table_new"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+
+      sql("CREATE TABLE table_ctas_new AS SELECT col1, col2, col3, col4 FROM table_new")
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 from table_ctas_new"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+    }
+  }
+
+  test("SPARK-26630: table with new input format and partitioned will use NewHadoopRDD") {
+    withTable("table_pt_new", "table_ctas_pt_new") {
+      sql(
+        """
+          |CREATE TABLE table_pt_new (col1 LONG, col2 STRING, col3 DOUBLE, col4 BOOLEAN)
+          |PARTITIONED BY (pt INT)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.mapreduce.lib.input.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+        """.stripMargin)
+      sql(
+        """
+          |INSERT INTO table_pt_new PARTITION (pt = 1)
+          |VALUES (2147483648, 'AAA', 3.14, false), (2147483649, 'BBB', 3.142, true)
+        """.stripMargin)
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 FROM table_pt_new WHERE pt = 1"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+
+      sql("CREATE TABLE table_ctas_pt_new AS SELECT col1, col2, col3, col4 FROM table_pt_new")
+      checkAnswer(
+        sql("SELECT col1, col2, col3, col4 from table_ctas_pt_new"),
+        Row(2147483648L, "AAA", 3.14, false) :: Row(2147483649L, "BBB", 3.142, true) :: Nil)
+    }
+  }
+
+  test("Create Table LIKE USING Hive built-in ORC in Hive catalog") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING parquet")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.provider == Some("parquet"))
+      sql("CREATE TABLE t LIKE s USING org.apache.spark.sql.hive.orc")
+      val table = catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.provider == Some("org.apache.spark.sql.hive.orc"))
+    }
+  }
+
+  test("Database Ownership") {
+    val catalog = spark.sessionState.catalog
+    try {
+      val db = "spark_29425_1"
+      sql(s"CREATE DATABASE $db")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("database_description_item='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+      sql(s"ALTER DATABASE $db SET DBPROPERTIES('abc'='xyz')")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("database_description_item='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+    } finally {
+      catalog.reset()
+    }
+  }
+
+  test("Table Ownership") {
+    val catalog = spark.sessionState.catalog
+    try {
+      sql(s"CREATE TABLE spark_30019(k int)")
+      assert(sql(s"DESCRIBE TABLE EXTENDED spark_30019").where("col_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+    } finally {
+      catalog.reset()
+    }
+  }
 }
 
+@SlowHiveTest
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
   import testImplicits._
@@ -312,15 +443,15 @@ class HiveDDLSuite
       withTable("tab1", "tab2") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
 
-        var e = intercept[AnalysisException] { sql("CREATE TABLE tab1 USING hive") }.getMessage
-        assert(e.contains("Unable to infer the schema. The schema specification is required to " +
-          "create the table `default`.`tab1`"))
+        assertAnalysisError(
+          "CREATE TABLE tab1 USING hive",
+          "Unable to infer the schema. The schema specification is required to " +
+            "create the table `default`.`tab1`")
 
-        e = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tab2 location '${tempDir.getCanonicalPath}'")
-        }.getMessage
-        assert(e.contains("Unable to infer the schema. The schema specification is required to " +
-          "create the table `default`.`tab2`"))
+        assertAnalysisError(
+          s"CREATE TABLE tab2 USING hive location '${tempDir.getCanonicalPath}'",
+          "Unable to infer the schema. The schema specification is required to " +
+            "create the table `default`.`tab2`")
       }
     }
   }
@@ -442,18 +573,23 @@ class HiveDDLSuite
   }
 
   test("create table: partition column names exist in table definition") {
-    val e = intercept[AnalysisException] {
-      sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
-    }
-    assert(e.message == "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
+    assertAnalysisError(
+      "CREATE TABLE tbl(a int) PARTITIONED BY (a string)",
+      "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
+  }
+
+  test("create partitioned table without specifying data type for the partition columns") {
+    assertAnalysisError(
+      "CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet",
+      "partition column b is not defined in table")
   }
 
   test("add/drop partition with location - managed table") {
     val tab = "tab_with_partitions"
     withTempDir { tmpDir =>
       val basePath = new File(tmpDir.getCanonicalPath)
-      val part1Path = new File(basePath + "/part1")
-      val part2Path = new File(basePath + "/part2")
+      val part1Path = new File(new File(basePath, "part10"), "part11")
+      val part2Path = new File(new File(basePath, "part20"), "part21")
       val dirSet = part1Path :: part2Path :: Nil
 
       // Before data insertion, all the directory are empty
@@ -497,11 +633,10 @@ class HiveDDLSuite
   test("SPARK-19129: drop partition with a empty string will drop the whole table") {
     val df = spark.createDataFrame(Seq((0, "a"), (1, "b"))).toDF("partCol1", "name")
     df.write.mode("overwrite").partitionBy("partCol1").saveAsTable("partitionedTable")
-    val e = intercept[AnalysisException] {
-      spark.sql("alter table partitionedTable drop partition(partCol1='')")
-    }.getMessage
-    assert(e.contains("Partition spec is invalid. The spec ([partCol1=]) contains an empty " +
-      "partition column value"))
+    assertAnalysisError(
+      "alter table partitionedTable drop partition(partCol1='')",
+      "Partition spec is invalid. The spec ([partCol1=]) contains an empty " +
+        "partition column value")
   }
 
   test("add/drop partitions - external table") {
@@ -546,11 +681,10 @@ class HiveDDLSuite
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
-        val message = intercept[AnalysisException] {
-          sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
-        }
-        assert(message.getMessage.contains("unknownCol is not a valid partition column in table " +
-          "`default`.`exttable_with_partitions`"))
+        assertAnalysisError(
+          s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')",
+          "unknownCol is not a valid partition column in table " +
+            "`default`.`exttable_with_partitions`")
 
         sql(
           s"""
@@ -652,13 +786,16 @@ class HiveDDLSuite
         sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         checkProperties(Map())
 
-        val message = intercept[AnalysisException] {
-          sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
-        }.getMessage
-        assert(message.contains(
-          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'"))
+        assertAnalysisError(
+          s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')",
+          "Attempted to unset non-existent property 'p' in table '`default`.`view1`'")
       }
     }
+  }
+
+  private def assertAnalysisError(sqlText: String, message: String): Unit = {
+    val e = intercept[AnalysisException](sql(sqlText))
+    assert(e.message.contains(message))
   }
 
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
@@ -671,13 +808,26 @@ class HiveDDLSuite
     assert(message.contains("Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead"))
   }
 
+  private def assertErrorForAlterTableOnView(
+      sqlText: String, viewName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$viewName is a view. '$cmdName' expects a table. Please use ALTER VIEW instead.")
+  }
+
+  private def assertErrorForAlterViewOnTable(
+      sqlText: String, tableName: String, cmdName: String): Unit = {
+    assertAnalysisError(
+      sqlText,
+      s"$tableName is a table. '$cmdName' expects a view. Please use ALTER TABLE instead.")
+  }
+
   test("create table - SET TBLPROPERTIES EXTERNAL to TRUE") {
     val tabName = "tab1"
     withTable(tabName) {
-      val message = intercept[AnalysisException] {
-        sql(s"CREATE TABLE $tabName (height INT, length INT) TBLPROPERTIES('EXTERNAL'='TRUE')")
-      }.getMessage
-      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+      assertAnalysisError(
+        s"CREATE TABLE $tabName (height INT, length INT) TBLPROPERTIES('EXTERNAL'='TRUE')",
+        "Cannot set or change the preserved property key: 'EXTERNAL'")
     }
   }
 
@@ -688,10 +838,9 @@ class HiveDDLSuite
       sql(s"CREATE TABLE $tabName (height INT, length INT)")
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
-      val message = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')")
-      }.getMessage
-      assert(message.contains("Cannot set or change the preserved property key: 'EXTERNAL'"))
+      assertAnalysisError(
+        s"ALTER TABLE $tabName SET TBLPROPERTIES ('EXTERNAL' = 'TRUE')",
+        "Cannot set or change the preserved property key: 'EXTERNAL'")
       // The table type is not changed to external
       assert(
         catalog.getTableMetadata(TableIdentifier(tabName)).tableType == CatalogTableType.MANAGED)
@@ -721,32 +870,65 @@ class HiveDDLSuite
 
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RENAME TO $newViewName")
 
-        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')")
-
-        assertErrorForAlterViewOnTable(s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDE 'whatever'")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')")
+        assertErrorForAlterViewOnTable(
+          s"ALTER VIEW $tabName SET TBLPROPERTIES ('p' = 'an')",
+          tabName,
+          "ALTER VIEW ... SET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
+          s"ALTER TABLE $oldViewName SET TBLPROPERTIES ('p' = 'an')",
+          oldViewName,
+          "ALTER TABLE ... SET TBLPROPERTIES")
+
+        assertErrorForAlterViewOnTable(
+          s"ALTER VIEW $tabName UNSET TBLPROPERTIES ('p')",
+          tabName,
+          "ALTER VIEW ... UNSET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
+          s"ALTER TABLE $oldViewName UNSET TBLPROPERTIES ('p')",
+          oldViewName,
+          "ALTER TABLE ... UNSET TBLPROPERTIES")
 
         assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
+          s"ALTER TABLE $oldViewName SET LOCATION '/path/to/home'",
+          oldViewName,
+          "ALTER TABLE ... SET LOCATION ...")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName SET SERDE 'whatever'",
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName SET SERDEPROPERTIES ('x' = 'y')",
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')",
+          oldViewName,
+          "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName RECOVER PARTITIONS",
+          oldViewName,
+          "ALTER TABLE ... RECOVER PARTITIONS")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')",
+          oldViewName,
+          "ALTER TABLE ... RENAME TO PARTITION")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+          oldViewName,
+          "ALTER TABLE ... ADD PARTITION ...")
+
+        assertErrorForAlterTableOnView(
+          s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
+          oldViewName,
+          "ALTER TABLE ... DROP PARTITION ...")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -823,7 +1005,7 @@ class HiveDDLSuite
   }
 
   test("alter table partition - storage information") {
-    sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
+    sql("CREATE TABLE boxes (height INT, length INT) STORED AS textfile PARTITIONED BY (width INT)")
     sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
     val catalog = spark.sessionState.catalog
     val expectedSerde = "com.sparkbricks.serde.ColumnarSerDe"
@@ -831,8 +1013,8 @@ class HiveDDLSuite
     val expectedSerdePropsString =
       expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
     val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
-    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
-    assume(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
+    assert(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
+    assert(oldPart.storage.properties.filterKeys(expectedSerdeProps.contains) !=
       expectedSerdeProps, "bad test: serde properties were already set")
     sql(s"""ALTER TABLE boxes PARTITION (width=4)
       |    SET SERDE '$expectedSerde'
@@ -840,7 +1022,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains) ==
+    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains).toMap ==
       expectedSerdeProps)
   }
 
@@ -885,10 +1067,9 @@ class HiveDDLSuite
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
-      val message = intercept[AnalysisException] {
-        sql("DROP VIEW tab1")
-      }.getMessage
-      assert(message.contains("Cannot drop a table with DROP VIEW. Please use DROP TABLE instead"))
+      assertAnalysisError(
+        "DROP VIEW tab1",
+        "tab1 is a table. 'DROP VIEW' expects a view. Please use DROP TABLE instead.")
     }
   }
 
@@ -897,10 +1078,9 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
-        val message = intercept[AnalysisException] {
-          sql("DROP TABLE view1")
-        }.getMessage
-        assert(message.contains("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
+        assertAnalysisError(
+          "DROP TABLE view1",
+          "Cannot drop a view with DROP TABLE. Please use DROP VIEW instead")
       }
     }
   }
@@ -992,7 +1172,8 @@ class HiveDDLSuite
       sql(s"CREATE DATABASE $dbName Location '${tmpDir.toURI.getPath.stripSuffix("/")}'")
       val db1 = catalog.getDatabaseMetadata(dbName)
       val dbPath = new URI(tmpDir.toURI.toString.stripSuffix("/"))
-      assert(db1 == CatalogDatabase(dbName, "", dbPath, Map.empty))
+      assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ===
+        CatalogDatabase(dbName, "", dbPath, Map.empty))
       sql("USE db1")
 
       sql(s"CREATE TABLE $tabName as SELECT 1")
@@ -1030,13 +1211,14 @@ class HiveDDLSuite
     val expectedDBLocation = s"file:${dbPath.toUri.getPath.stripSuffix("/")}/$dbName.db"
     val expectedDBUri = CatalogUtils.stringToURI(expectedDBLocation)
     val db1 = catalog.getDatabaseMetadata(dbName)
-    assert(db1 == CatalogDatabase(
+    assert(db1.copy(properties = db1.properties -- Seq(PROP_OWNER)) ==
+      CatalogDatabase(
       dbName,
       "",
       expectedDBUri,
       Map.empty))
     // the database directory was created
-    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+    assert(fs.exists(dbPath) && fs.getFileStatus(dbPath).isDirectory)
     sql(s"USE $dbName")
 
     val tabName = "tab1"
@@ -1052,10 +1234,9 @@ class HiveDDLSuite
     sql(s"USE default")
     val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
     if (tableExists && !cascade) {
-      val message = intercept[AnalysisException] {
-        sql(sqlDropDatabase)
-      }.getMessage
-      assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
+      assertAnalysisError(
+        sqlDropDatabase,
+        s"Database $dbName is not empty. One or more tables exist.")
       // the database directory was not removed
       assert(fs.exists(new Path(expectedDBLocation)))
     } else {
@@ -1084,17 +1265,15 @@ class HiveDDLSuite
   test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
-        var message = intercept[AnalysisException] {
-          sql("DROP DATABASE default")
-        }.getMessage
-        assert(message.contains("Can not drop default database"))
+        assertAnalysisError(
+          "DROP DATABASE default",
+          "Can not drop default database")
 
         // SQLConf.CASE_SENSITIVE does not affect the result
         // because the Hive metastore is not case sensitive.
-        message = intercept[AnalysisException] {
-          sql("DROP DATABASE DeFault")
-        }.getMessage
-        assert(message.contains("Can not drop default database"))
+        assertAnalysisError(
+          "DROP DATABASE DeFault",
+          "Can not drop default database")
       }
     }
   }
@@ -1115,57 +1294,64 @@ class HiveDDLSuite
   }
 
   test("CREATE TABLE LIKE a temporary view") {
-    // CREATE TABLE LIKE a temporary view.
-    withCreateTableLikeTempView(location = None)
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
+      // CREATE TABLE LIKE a temporary view.
+      withCreateTableLikeTempView(location = None, provider)
 
-    // CREATE TABLE LIKE a temporary view location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeTempView(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE a temporary view location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeTempView(Some(tmpDir.toURI.toString), provider)
+      }
     }
   }
 
-  private def withCreateTableLikeTempView(location : Option[String]): Unit = {
+  private def withCreateTableLikeTempView(
+      location : Option[String], provider: Option[String]): Unit = {
     val sourceViewName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTempView(sourceViewName) {
       withTable(targetTabName) {
-        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
           .createTempView(sourceViewName)
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause")
+        val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $providerClause $locationClause")
 
         val sourceTable = spark.sessionState.catalog.getTempViewOrPermanentTableMetadata(
           TableIdentifier(sourceViewName))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-
-        checkCreateTableLike(sourceTable, targetTable, tableType)
+        checkCreateTableLike(sourceTable, targetTable, tableType, provider)
       }
     }
   }
 
   test("CREATE TABLE LIKE a data source table") {
-    // CREATE TABLE LIKE a data source table.
-    withCreateTableLikeDSTable(location = None)
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
+      // CREATE TABLE LIKE a data source table.
+      withCreateTableLikeDSTable(location = None, provider)
 
-    // CREATE TABLE LIKE a data source table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeDSTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE a data source table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeDSTable(Some(tmpDir.toURI.toString), provider)
+      }
     }
   }
 
-  private def withCreateTableLikeDSTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeDSTable(
+      location : Option[String], provider: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTable(sourceTabName, targetTabName) {
-      spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+      spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
         .write.format("json").saveAsTable(sourceTabName)
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+      val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
       val sourceTable =
         spark.sessionState.catalog.getTableMetadata(
@@ -1176,34 +1362,37 @@ class HiveDDLSuite
       // The table type of the source table should be a Hive-managed data source table
       assert(DDLUtils.isDatasourceTable(sourceTable))
       assert(sourceTable.tableType == CatalogTableType.MANAGED)
-
-      checkCreateTableLike(sourceTable, targetTable, tableType)
+      checkCreateTableLike(sourceTable, targetTable, tableType, provider)
     }
   }
 
   test("CREATE TABLE LIKE an external data source table") {
-    // CREATE TABLE LIKE an external data source table.
-    withCreateTableLikeExtDSTable(location = None)
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
+      // CREATE TABLE LIKE an external data source table.
+      withCreateTableLikeExtDSTable(location = None, provider)
 
-    // CREATE TABLE LIKE an external data source table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeExtDSTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE an external data source table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeExtDSTable(Some(tmpDir.toURI.toString), provider)
+      }
     }
   }
 
-  private def withCreateTableLikeExtDSTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeExtDSTable(
+      location : Option[String], provider: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTable(sourceTabName, targetTabName) {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
           .write.format("parquet").save(path)
         sql(s"CREATE TABLE $sourceTabName USING parquet OPTIONS (PATH '${dir.toURI}')")
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+        val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
         // The source table should be an external data source table
         val sourceTable = spark.sessionState.catalog.getTableMetadata(
@@ -1213,23 +1402,25 @@ class HiveDDLSuite
         // The table type of the source table should be an external data source table
         assert(DDLUtils.isDatasourceTable(sourceTable))
         assert(sourceTable.tableType == CatalogTableType.EXTERNAL)
-
-        checkCreateTableLike(sourceTable, targetTable, tableType)
+        checkCreateTableLike(sourceTable, targetTable, tableType, provider)
       }
     }
   }
 
   test("CREATE TABLE LIKE a managed Hive serde table") {
-    // CREATE TABLE LIKE a managed Hive serde table.
-    withCreateTableLikeManagedHiveTable(location = None)
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
+      // CREATE TABLE LIKE a managed Hive serde table.
+      withCreateTableLikeManagedHiveTable(location = None, provider)
 
-    // CREATE TABLE LIKE a managed Hive serde table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeManagedHiveTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE a managed Hive serde table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeManagedHiveTable(Some(tmpDir.toURI.toString), provider)
+      }
     }
   }
 
-  private def withCreateTableLikeManagedHiveTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeManagedHiveTable(
+      location : Option[String], provider: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
@@ -1238,7 +1429,8 @@ class HiveDDLSuite
       sql(s"CREATE TABLE $sourceTabName TBLPROPERTIES('prop1'='value1') AS SELECT 1 key, 'a'")
 
       val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+      val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+      sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
       val sourceTable = catalog.getTableMetadata(
         TableIdentifier(sourceTabName, Some("default")))
@@ -1246,22 +1438,24 @@ class HiveDDLSuite
       assert(sourceTable.properties.get("prop1").nonEmpty)
       val targetTable = catalog.getTableMetadata(
         TableIdentifier(targetTabName, Some("default")))
-
-      checkCreateTableLike(sourceTable, targetTable, tableType)
+      checkCreateTableLike(sourceTable, targetTable, tableType, provider)
     }
   }
 
   test("CREATE TABLE LIKE an external Hive serde table") {
-    // CREATE TABLE LIKE an external Hive serde table.
-    withCreateTableLikeExtHiveTable(location = None)
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
+      // CREATE TABLE LIKE an external Hive serde table.
+      withCreateTableLikeExtHiveTable(location = None, provider)
 
-    // CREATE TABLE LIKE an external Hive serde table location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeExtHiveTable(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE an external Hive serde table location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeExtHiveTable(Some(tmpDir.toURI.toString), provider)
+      }
     }
   }
 
-  private def withCreateTableLikeExtHiveTable(location : Option[String]): Unit = {
+  private def withCreateTableLikeExtHiveTable(
+      location : Option[String], provider: Option[String]): Unit = {
     val catalog = spark.sessionState.catalog
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTempDir { tmpDir =>
@@ -1287,7 +1481,8 @@ class HiveDDLSuite
         }
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $locationClause")
+        val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceTabName $providerClause $locationClause")
 
         val sourceTable = catalog.getTableMetadata(
           TableIdentifier(sourceTabName, Some("default")))
@@ -1295,63 +1490,67 @@ class HiveDDLSuite
         assert(sourceTable.comment == Option("Apache Spark"))
         val targetTable = catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-
-        checkCreateTableLike(sourceTable, targetTable, tableType)
+        checkCreateTableLike(sourceTable, targetTable, tableType, provider)
       }
     }
   }
 
   test("CREATE TABLE LIKE a view") {
-    // CREATE TABLE LIKE a view.
-    withCreateTableLikeView(location = None)
+    Seq(None, Some("parquet"), Some("orc"), Some("hive")) foreach { provider =>
+      // CREATE TABLE LIKE a view.
+      withCreateTableLikeView(location = None, provider)
 
-    // CREATE TABLE LIKE a view location ...
-    withTempDir { tmpDir =>
-      withCreateTableLikeView(Some(tmpDir.toURI.toString))
+      // CREATE TABLE LIKE a view location ...
+      withTempDir { tmpDir =>
+        withCreateTableLikeView(Some(tmpDir.toURI.toString), provider)
+      }
     }
   }
 
-  private def withCreateTableLikeView(location : Option[String]): Unit = {
+  private def withCreateTableLikeView(
+      location : Option[String], provider: Option[String]): Unit = {
     val sourceTabName = "tab1"
     val sourceViewName = "view"
     val targetTabName = "tab2"
     val tableType = if (location.isDefined) CatalogTableType.EXTERNAL else CatalogTableType.MANAGED
     withTable(sourceTabName, targetTabName) {
       withView(sourceViewName) {
-        spark.range(10).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+        spark.range(10).select($"id" as "a", $"id" as "b", $"id" as "c", $"id" as "d")
           .write.format("json").saveAsTable(sourceTabName)
         sql(s"CREATE VIEW $sourceViewName AS SELECT * FROM $sourceTabName")
 
         val locationClause = if (location.nonEmpty) s"LOCATION '${location.getOrElse("")}'" else ""
-        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $locationClause")
+        val providerClause = if (provider.nonEmpty) s"USING ${provider.get}" else ""
+        sql(s"CREATE TABLE $targetTabName LIKE $sourceViewName $providerClause $locationClause")
 
         val sourceView = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(sourceViewName, Some("default")))
         // The original source should be a VIEW with an empty path
         assert(sourceView.tableType == CatalogTableType.VIEW)
         assert(sourceView.viewText.nonEmpty)
-        assert(sourceView.viewDefaultDatabase == Some("default"))
+        assert(sourceView.viewCatalogAndNamespace ==
+          Seq(CatalogManager.SESSION_CATALOG_NAME, "default"))
         assert(sourceView.viewQueryColumnNames == Seq("a", "b", "c", "d"))
         val targetTable = spark.sessionState.catalog.getTableMetadata(
           TableIdentifier(targetTabName, Some("default")))
-
-        checkCreateTableLike(sourceView, targetTable, tableType)
+        checkCreateTableLike(sourceView, targetTable, tableType, provider)
       }
     }
   }
 
   private def checkCreateTableLike(
-    sourceTable: CatalogTable,
-    targetTable: CatalogTable,
-    tableType: CatalogTableType): Unit = {
+      sourceTable: CatalogTable,
+      targetTable: CatalogTable,
+      tableType: CatalogTableType,
+      provider: Option[String]): Unit = {
     // The created table should be a MANAGED table or EXTERNAL table with empty view text
     // and original text.
     assert(targetTable.tableType == tableType,
       s"the created table must be a/an ${tableType.name} table")
     assert(targetTable.viewText.isEmpty,
       "the view text in the created table must be empty")
-    assert(targetTable.viewDefaultDatabase.isEmpty,
-      "the view default database in the created table must be empty")
+    assert(targetTable.viewCatalogAndNamespace.isEmpty,
+      "the view catalog and namespace in the created table must be empty")
     assert(targetTable.viewQueryColumnNames.isEmpty,
       "the view query output columns in the created table must be empty")
     assert(targetTable.comment.isEmpty,
@@ -1374,21 +1573,29 @@ class HiveDDLSuite
     assert(targetTable.properties.filterKeys(!metastoreGeneratedProperties.contains(_)).isEmpty,
       "the table properties of source tables should not be copied in the created table")
 
-    if (DDLUtils.isDatasourceTable(sourceTable) ||
-        sourceTable.tableType == CatalogTableType.VIEW) {
-      assert(DDLUtils.isDatasourceTable(targetTable),
-        "the target table should be a data source table")
-    } else {
-      assert(!DDLUtils.isDatasourceTable(targetTable),
-        "the target table should be a Hive serde table")
-    }
-
-    if (sourceTable.tableType == CatalogTableType.VIEW) {
-      // Source table is a temporary/permanent view, which does not have a provider. The created
-      // target table uses the default data source format
-      assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
-    } else {
-      assert(targetTable.provider == sourceTable.provider)
+    provider match {
+      case Some(_) =>
+        assert(targetTable.provider == provider)
+        if (DDLUtils.isHiveTable(provider)) {
+          assert(DDLUtils.isHiveTable(targetTable),
+            "the target table should be a hive table if provider is hive")
+        }
+      case None =>
+        if (sourceTable.tableType == CatalogTableType.VIEW) {
+          // Source table is a temporary/permanent view, which does not have a provider.
+          // The created target table uses the default data source format
+          assert(targetTable.provider == Option(spark.sessionState.conf.defaultDataSourceName))
+        } else {
+          assert(targetTable.provider == sourceTable.provider)
+        }
+        if (DDLUtils.isDatasourceTable(sourceTable) ||
+            sourceTable.tableType == CatalogTableType.VIEW) {
+          assert(DDLUtils.isDatasourceTable(targetTable),
+            "the target table should be a data source table")
+        } else {
+          assert(!DDLUtils.isDatasourceTable(targetTable),
+            "the target table should be a Hive serde table")
+        }
     }
 
     assert(targetTable.storage.locationUri.nonEmpty, "target table path should not be empty")
@@ -1398,6 +1605,12 @@ class HiveDDLSuite
     if (tableType != CatalogTableType.EXTERNAL) {
       assert(sourceTable.storage.locationUri != targetTable.storage.locationUri,
         "source table/view path should be different from target table path")
+    }
+
+    if (DDLUtils.isHiveTable(targetTable)) {
+      assert(targetTable.tracksPartitionsInCatalog)
+    } else {
+      assert(targetTable.tracksPartitionsInCatalog == sourceTable.tracksPartitionsInCatalog)
     }
 
     // The source table contents should not been seen in the target table.
@@ -1443,17 +1656,16 @@ class HiveDDLSuite
         assert(spark.catalog.getTable("default", indexTabName).name === indexTabName)
 
         intercept[TableAlreadyExistsException] {
-          sql(s"CREATE TABLE $indexTabName(b int)")
+          sql(s"CREATE TABLE $indexTabName(b int) USING hive")
         }
         intercept[TableAlreadyExistsException] {
           sql(s"ALTER TABLE $tabName RENAME TO $indexTabName")
         }
 
         // When tableExists is not invoked, we still can get an AnalysisException
-        val e = intercept[AnalysisException] {
-          sql(s"DESCRIBE $indexTabName")
-        }.getMessage
-        assert(e.contains("Hive index table is not supported."))
+        assertAnalysisError(
+          s"DESCRIBE $indexTabName",
+          "Hive index table is not supported.")
       } finally {
         client.runSqlHive(s"DROP INDEX IF EXISTS $indexName ON $tabName")
       }
@@ -1523,84 +1735,18 @@ class HiveDDLSuite
       sql("CREATE TABLE tbl(a INT) STORED AS parquet")
 
       Seq(DATASOURCE_PREFIX, STATISTICS_PREFIX).foreach { forbiddenPrefix =>
-        val e = intercept[AnalysisException] {
-          sql(s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')")
-        }
-        assert(e.getMessage.contains(forbiddenPrefix + "foo"))
+        assertAnalysisError(
+          s"ALTER TABLE tbl SET TBLPROPERTIES ('${forbiddenPrefix}foo' = 'loser')",
+          s"${forbiddenPrefix}foo")
 
-        val e2 = intercept[AnalysisException] {
-          sql(s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')")
-        }
-        assert(e2.getMessage.contains(forbiddenPrefix + "foo"))
+        assertAnalysisError(
+          s"ALTER TABLE tbl UNSET TBLPROPERTIES ('${forbiddenPrefix}foo')",
+          s"${forbiddenPrefix}foo")
 
-        val e3 = intercept[AnalysisException] {
-          sql(s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')")
-        }
-        assert(e3.getMessage.contains(forbiddenPrefix + "foo"))
+        assertAnalysisError(
+          s"CREATE TABLE tbl2 (a INT) TBLPROPERTIES ('${forbiddenPrefix}foo'='anything')",
+          s"${forbiddenPrefix}foo")
       }
-    }
-  }
-
-  test("truncate table - datasource table") {
-    import testImplicits._
-
-    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
-    // Test both a Hive compatible and incompatible code path.
-    Seq("json", "parquet").foreach { format =>
-      withTable("rectangles") {
-        data.write.format(format).saveAsTable("rectangles")
-        assume(spark.table("rectangles").collect().nonEmpty,
-          "bad test; table was empty to begin with")
-
-        sql("TRUNCATE TABLE rectangles")
-        assert(spark.table("rectangles").collect().isEmpty)
-
-        // not supported since the table is not partitioned
-        val e = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE rectangles PARTITION (width=1)")
-        }
-        assert(e.message.contains("Operation not allowed"))
-      }
-    }
-  }
-
-  test("truncate partitioned table - datasource table") {
-    import testImplicits._
-
-    val data = (1 to 10).map { i => (i % 3, i % 5, i) }.toDF("width", "length", "height")
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // supported since partitions are stored in the metastore
-      sql("TRUNCATE TABLE partTable PARTITION (width=1, length=1)")
-      assert(spark.table("partTable").filter($"width" === 1).collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1 && $"length" === 1).collect().isEmpty)
-    }
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // support partial partition spec
-      sql("TRUNCATE TABLE partTable PARTITION (width=1)")
-      assert(spark.table("partTable").collect().nonEmpty)
-      assert(spark.table("partTable").filter($"width" === 1).collect().isEmpty)
-    }
-
-    withTable("partTable") {
-      data.write.partitionBy("width", "length").saveAsTable("partTable")
-      // do nothing if no partition is matched for the given partial partition spec
-      sql("TRUNCATE TABLE partTable PARTITION (width=100)")
-      assert(spark.table("partTable").count() == data.count())
-
-      // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
-        sql("TRUNCATE TABLE partTable PARTITION (width=100, length=100)")
-      }
-
-      // throw exception if the column in partition spec is not a partition column.
-      val e = intercept[AnalysisException] {
-        sql("TRUNCATE TABLE partTable PARTITION (unknown=1)")
-      }
-      assert(e.message.contains("unknown is not a valid partition column"))
     }
   }
 
@@ -1641,7 +1787,7 @@ class HiveDDLSuite
   test("create hive serde table with Catalog") {
     withTable("t") {
       withTempDir { dir =>
-        val df = spark.catalog.createExternalTable(
+        val df = spark.catalog.createTable(
           "t",
           "hive",
           new StructType().add("i", "int"),
@@ -1707,6 +1853,138 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-34370: support Avro schema evolution (add column with avro.schema.url)") {
+    checkAvroSchemaEvolutionAddColumn(
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithOneField.avsc").toURI}'",
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithTwoFields.avsc").toURI}'")
+  }
+
+  test("SPARK-26836: support Avro schema evolution (add column with avro.schema.literal)") {
+    val originalSchema =
+      """
+        |{
+        |  "namespace": "test",
+        |  "name": "some_schema",
+        |  "type": "record",
+        |  "fields": [
+        |    {
+        |      "name": "col2",
+        |      "type": "string"
+        |    }
+        |  ]
+        |}
+      """.stripMargin
+    val evolvedSchema =
+      """
+        |{
+        |  "namespace": "test",
+        |  "name": "some_schema",
+        |  "type": "record",
+        |  "fields": [
+        |    {
+        |      "name": "col1",
+        |      "type": "string",
+        |      "default": "col1_default"
+        |    },
+        |    {
+        |      "name": "col2",
+        |      "type": "string"
+        |    }
+        |  ]
+        |}
+      """.stripMargin
+    checkAvroSchemaEvolutionAddColumn(
+      s"'avro.schema.literal'='$originalSchema'",
+      s"'avro.schema.literal'='$evolvedSchema'")
+  }
+
+  private def checkAvroSchemaEvolutionAddColumn(
+    originalSerdeProperties: String,
+    evolvedSerdeProperties: String) = {
+    withTable("t") {
+      sql(
+        s"""
+          |CREATE TABLE t PARTITIONED BY (ds string)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |WITH SERDEPROPERTIES ($originalSerdeProperties)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+        """.stripMargin)
+      sql("INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
+      sql(s"ALTER TABLE t SET SERDEPROPERTIES ($evolvedSerdeProperties)")
+      sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
+      checkAnswer(spark.table("t"), Row("col1_default", "col2_value", "1981-01-07")
+        :: Row("col1_value", "col2_value", "1983-04-27") :: Nil)
+    }
+  }
+
+  test("SPARK-34370: support Avro schema evolution (remove column with avro.schema.url)") {
+    checkAvroSchemaEvolutionRemoveColumn(
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithTwoFields.avsc").toURI}'",
+      s"'avro.schema.url'='${TestHive.getHiveFile("schemaWithOneField.avsc").toURI}'")
+  }
+
+  test("SPARK-26836: support Avro schema evolution (remove column with avro.schema.literal)") {
+    val originalSchema =
+      """
+        |{
+        |  "namespace": "test",
+        |  "name": "some_schema",
+        |  "type": "record",
+        |  "fields": [
+        |    {
+        |      "name": "col1",
+        |      "type": "string",
+        |      "default": "col1_default"
+        |    },
+        |    {
+        |      "name": "col2",
+        |      "type": "string"
+        |    }
+        |  ]
+        |}
+      """.stripMargin
+    val evolvedSchema =
+      """
+        |{
+        |  "namespace": "test",
+        |  "name": "some_schema",
+        |  "type": "record",
+        |  "fields": [
+        |    {
+        |      "name": "col2",
+        |      "type": "string"
+        |    }
+        |  ]
+        |}
+      """.stripMargin
+    checkAvroSchemaEvolutionRemoveColumn(
+      s"'avro.schema.literal'='$originalSchema'",
+      s"'avro.schema.literal'='$evolvedSchema'")
+  }
+
+  private def checkAvroSchemaEvolutionRemoveColumn(
+    originalSerdeProperties: String,
+    evolvedSerdeProperties: String) = {
+    withTable("t") {
+      sql(
+        s"""
+          |CREATE TABLE t PARTITIONED BY (ds string)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |WITH SERDEPROPERTIES ($originalSerdeProperties)
+          |STORED AS
+          |INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+        """.stripMargin)
+      sql("INSERT INTO t partition (ds='1983-04-27') VALUES ('col1_value', 'col2_value')")
+      sql(s"ALTER TABLE t SET SERDEPROPERTIES ($evolvedSerdeProperties)")
+      sql("INSERT INTO t partition (ds='1981-01-07') VALUES ('col2_value')")
+      checkAnswer(spark.table("t"), Row("col2_value", "1981-01-07")
+        :: Row("col2_value", "1983-04-27") :: Nil)
+    }
+  }
+
   test("append data to hive serde table") {
     withTable("t", "t1") {
       Seq(1 -> "a").toDF("i", "j")
@@ -1720,10 +1998,10 @@ class HiveDDLSuite
         .write.format("hive").mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Nil)
 
-      Seq("c" -> 3).toDF("i", "j")
+      Seq(3.5 -> 3).toDF("i", "j")
         .write.format("hive").mode("append").saveAsTable("t")
       checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c")
-        :: Row(null, "3") :: Nil)
+        :: Row(3, "3") :: Nil)
 
       Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
 
@@ -1958,10 +2236,9 @@ class HiveDDLSuite
             assert(loc.listFiles().length >= 1)
             checkAnswer(spark.table("t"), Row("1") :: Nil)
           } else {
-            val e = intercept[AnalysisException] {
-              spark.sql("INSERT INTO TABLE t SELECT 1")
-            }.getMessage
-            assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+            assertAnalysisError(
+              "INSERT INTO TABLE t SELECT 1",
+              "java.net.URISyntaxException: Relative path in absolute URI: a:b")
           }
         }
 
@@ -2000,15 +2277,13 @@ class HiveDDLSuite
                 Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
             }
           } else {
-            val e = intercept[AnalysisException] {
-              spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
-            }.getMessage
-            assert(e.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+            assertAnalysisError(
+              "INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1",
+              "java.net.URISyntaxException: Relative path in absolute URI: a:b")
 
-            val e1 = intercept[AnalysisException] {
-              spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
-            }.getMessage
-            assert(e1.contains("java.net.URISyntaxException: Relative path in absolute URI: a:b"))
+            assertAnalysisError(
+              "INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1",
+              "java.net.URISyntaxException: Relative path in absolute URI: a:b")
           }
         }
       }
@@ -2055,8 +2330,8 @@ class HiveDDLSuite
         )
 
         sql("ALTER TABLE tab ADD COLUMNS (c5 char(10))")
-        assert(spark.table("tab").schema.find(_.name == "c5")
-          .get.metadata.getString("HIVE_TYPE_STRING") == "char(10)")
+        assert(spark.sharedState.externalCatalog.getTable("default", "tab")
+          .schema.find(_.name == "c5").get.dataType == CharType(10))
       }
     }
   }
@@ -2093,33 +2368,140 @@ class HiveDDLSuite
           sql("CREATE TABLE tab (c1 int) PARTITIONED BY (c2 int) STORED AS PARQUET")
           if (!caseSensitive) {
             // duplicating partitioning column name
-            val e1 = intercept[AnalysisException] {
-              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
-            }.getMessage
-            assert(e1.contains("Found duplicate column(s)"))
+            assertAnalysisError(
+              "ALTER TABLE tab ADD COLUMNS (C2 string)",
+              "Found duplicate column(s)")
 
             // duplicating data column name
-            val e2 = intercept[AnalysisException] {
-              sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
-            }.getMessage
-            assert(e2.contains("Found duplicate column(s)"))
+            assertAnalysisError(
+              "ALTER TABLE tab ADD COLUMNS (C1 string)",
+              "Found duplicate column(s)")
           } else {
             // hive catalog will still complains that c1 is duplicate column name because hive
             // identifiers are case insensitive.
-            val e1 = intercept[AnalysisException] {
-              sql("ALTER TABLE tab ADD COLUMNS (C2 string)")
-            }.getMessage
-            assert(e1.contains("HiveException"))
+            assertAnalysisError(
+              "ALTER TABLE tab ADD COLUMNS (C2 string)",
+              "HiveException")
 
             // hive catalog will still complains that c1 is duplicate column name because hive
             // identifiers are case insensitive.
-            val e2 = intercept[AnalysisException] {
-              sql("ALTER TABLE tab ADD COLUMNS (C1 string)")
-            }.getMessage
-            assert(e2.contains("HiveException"))
+            assertAnalysisError(
+              "ALTER TABLE tab ADD COLUMNS (C1 string)",
+              "HiveException")
           }
         }
       }
+    }
+  }
+
+  test("SPARK-20680: do not support for null column datatype") {
+    withTable("t") {
+      withView("tabNullType") {
+        hiveClient.runSqlHive("CREATE TABLE t (t1 int)")
+        hiveClient.runSqlHive("INSERT INTO t VALUES (3)")
+        hiveClient.runSqlHive("CREATE VIEW tabNullType AS SELECT NULL AS col FROM t")
+        checkAnswer(spark.table("tabNullType"), Row(null))
+        // No exception shows
+        val desc = spark.sql("DESC tabNullType").collect().toSeq
+        assert(desc.contains(Row("col", NullType.simpleString, null)))
+      }
+    }
+
+    // Forbid CTAS with null type
+    withTable("t1", "t2", "t3") {
+      assertAnalysisError(
+        "CREATE TABLE t1 USING PARQUET AS SELECT null as null_col",
+        "Cannot create tables with null type")
+
+      assertAnalysisError(
+        "CREATE TABLE t2 AS SELECT null as null_col",
+        "Cannot create tables with null type")
+
+      assertAnalysisError(
+        "CREATE TABLE t3 STORED AS PARQUET AS SELECT null as null_col",
+        "Cannot create tables with null type")
+    }
+
+    // Forbid Replace table AS SELECT with null type
+    withTable("t") {
+      val v2Source = classOf[FakeV2Provider].getName
+      assertAnalysisError(
+        s"CREATE OR REPLACE TABLE t USING $v2Source AS SELECT null as null_col",
+        "Cannot create tables with null type")
+    }
+
+    // Forbid creating table with VOID type in Spark
+    withTable("t1", "t2", "t3", "t4") {
+      assertAnalysisError(
+        "CREATE TABLE t1 (v VOID) USING PARQUET",
+        "Cannot create tables with null type")
+      assertAnalysisError(
+        "CREATE TABLE t2 (v VOID) USING hive",
+        "Cannot create tables with null type")
+      assertAnalysisError(
+        "CREATE TABLE t3 (v VOID)",
+        "Cannot create tables with null type")
+      assertAnalysisError(
+        "CREATE TABLE t4 (v VOID) STORED AS PARQUET",
+        "Cannot create tables with null type")
+    }
+
+    // Forbid Replace table with VOID type
+    withTable("t") {
+      val v2Source = classOf[FakeV2Provider].getName
+      assertAnalysisError(
+        s"CREATE OR REPLACE TABLE t (v VOID) USING $v2Source",
+        "Cannot create tables with null type")
+    }
+
+    // Make sure spark.catalog.createTable with null type will fail
+    val schema1 = new StructType().add("c", NullType)
+    assertHiveTableNullType(schema1)
+    assertDSTableNullType(schema1)
+
+    val schema2 = new StructType()
+      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
+    assertHiveTableNullType(schema2)
+    assertDSTableNullType(schema2)
+
+    val schema3 = new StructType().add("c", ArrayType(NullType))
+    assertHiveTableNullType(schema3)
+    assertDSTableNullType(schema3)
+
+    val schema4 = new StructType()
+      .add("c", MapType(StringType, NullType))
+    assertHiveTableNullType(schema4)
+    assertDSTableNullType(schema4)
+
+    val schema5 = new StructType()
+      .add("c", MapType(NullType, StringType))
+    assertHiveTableNullType(schema5)
+    assertDSTableNullType(schema5)
+  }
+
+  private def assertHiveTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "hive",
+          schema = schema,
+          options = Map("fileFormat" -> "parquet"))
+      }.getMessage
+      assert(e.contains("Cannot create tables with null type"))
+    }
+  }
+
+  private def assertDSTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "json",
+          schema = schema,
+          options = Map.empty[String, String])
+      }.getMessage
+      assert(e.contains("Cannot create tables with null type"))
     }
   }
 
@@ -2129,37 +2511,39 @@ class HiveDDLSuite
 
     implicit val _sqlContext = spark.sqlContext
 
-    Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
-    // Make a table and ensure it will be broadcast.
-    sql("""CREATE TABLE smallTable(word string, number int)
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |STORED AS TEXTFILE
+    withTempView("t1") {
+      Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
+      // Make a table and ensure it will be broadcast.
+      sql("""CREATE TABLE smallTable(word string, number int)
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            |STORED AS TEXTFILE
+          """.stripMargin)
+
+      sql(
+        """INSERT INTO smallTable
+          |SELECT word, number from t1
         """.stripMargin)
 
-    sql(
-      """INSERT INTO smallTable
-        |SELECT word, number from t1
-      """.stripMargin)
+      val inputData = MemoryStream[Int]
+      val joined = inputData.toDS().toDF()
+        .join(spark.table("smallTable"), $"value" === $"number")
 
-    val inputData = MemoryStream[Int]
-    val joined = inputData.toDS().toDF()
-      .join(spark.table("smallTable"), $"value" === $"number")
+      val sq = joined.writeStream
+        .format("memory")
+        .queryName("t2")
+        .start()
+      try {
+        inputData.addData(1, 2)
 
-    val sq = joined.writeStream
-      .format("memory")
-      .queryName("t2")
-      .start()
-    try {
-      inputData.addData(1, 2)
+        sq.processAllAvailable()
 
-      sq.processAllAvailable()
-
-      checkAnswer(
-        spark.table("t2"),
-        Seq(Row(1, "one", 1), Row(2, "two", 2))
-      )
-    } finally {
-      sq.stop()
+        checkAnswer(
+          spark.table("t2"),
+          Seq(Row(1, "one", 1), Row(2, "two", 2))
+        )
+      } finally {
+        sq.stop()
+      }
     }
   }
 
@@ -2258,10 +2642,11 @@ class HiveDDLSuite
             checkAnswer(spark.table("t"), Row(1))
             val maybeFile = path.listFiles().find(_.getName.startsWith("part"))
 
-            val reader = getReader(maybeFile.head.getCanonicalPath)
-            assert(reader.getCompressionKind.name === "ZLIB")
-            assert(reader.getCompressionSize == 1001)
-            assert(reader.getRowIndexStride == 2002)
+            Utils.tryWithResource(getReader(maybeFile.head.getCanonicalPath)) { reader =>
+              assert(reader.getCompressionKind.name === "ZLIB")
+              assert(reader.getCompressionSize == 1001)
+              assert(reader.getRowIndexStride == 2002)
+            }
           }
         }
       }
@@ -2299,21 +2684,21 @@ class HiveDDLSuite
 
   test("load command for non local invalid path validation") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING)")
-      val e = intercept[AnalysisException](
-        sql("load data inpath '/doesnotexist.csv' into table tbl"))
-      assert(e.message.contains("LOAD DATA input path does not exist"))
+      sql("CREATE TABLE tbl(i INT, j STRING) USING hive")
+      assertAnalysisError(
+        "load data inpath '/doesnotexist.csv' into table tbl",
+        "LOAD DATA input path does not exist")
     }
   }
 
   test("SPARK-22252: FileFormatWriter should respect the input query schema in HIVE") {
     withTable("t1", "t2", "t3", "t4") {
-      spark.range(1).select('id as 'col1, 'id as 'col2).write.saveAsTable("t1")
+      spark.range(1).select($"id" as "col1", $"id" as "col2").write.saveAsTable("t1")
       spark.sql("select COL1, COL2 from t1").write.format("hive").saveAsTable("t2")
       checkAnswer(spark.table("t2"), Row(0, 0))
 
       // Test picking part of the columns when writing.
-      spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
+      spark.range(1).select($"id", $"id" as "col1", $"id" as "col2").write.saveAsTable("t3")
       spark.sql("select COL1, COL2 from t3").write.format("hive").saveAsTable("t4")
       checkAnswer(spark.table("t4"), Row(0, 0))
     }
@@ -2325,9 +2710,9 @@ class HiveDDLSuite
         "CREATE TABLE IF NOT EXISTS t1 (c1_int INT, c2_string STRING, c3_float FLOAT)")
       val desc = sql("DESC FORMATTED t1").filter($"col_name".startsWith("Last Access"))
         .select("data_type")
-      // check if the last access time doesnt have the default date of year
+      // check if the last access time doesn't have the default date of year
       // 1970 as its a wrong access time
-      assert(!(desc.first.toString.contains("1970")))
+      assert((desc.first.toString.contains("UNKNOWN")))
     }
   }
 
@@ -2368,6 +2753,280 @@ class HiveDDLSuite
           Row("View Original Text", "SELECT * FROM (SELECT 1) T", "")
         )
       ))
+    }
+  }
+
+  test("Hive CTAS can't create partitioned table by specifying schema") {
+    val err1 = intercept[ParseException] {
+      spark.sql(
+        s"""
+           |CREATE TABLE t (a int)
+           |PARTITIONED BY (b string)
+           |STORED AS parquet
+           |AS SELECT 1 as a, "a" as b
+                 """.stripMargin)
+    }.getMessage
+    assert(err1.contains("Schema may not be specified in a Create Table As Select"))
+
+    val err2 = intercept[ParseException] {
+      spark.sql(
+        s"""
+           |CREATE TABLE t
+           |PARTITIONED BY (b string)
+           |STORED AS parquet
+           |AS SELECT 1 as a, "a" as b
+                 """.stripMargin)
+    }.getMessage
+    assert(err2.contains("Partition column types may not be specified in Create Table As Select"))
+  }
+
+  test("Hive CTAS with dynamic partition") {
+    Seq("orc", "parquet").foreach { format =>
+      withTable("t") {
+        withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+          spark.sql(
+            s"""
+               |CREATE TABLE t
+               |PARTITIONED BY (b)
+               |STORED AS $format
+               |AS SELECT 1 as a, "a" as b
+               """.stripMargin)
+          checkAnswer(spark.table("t"), Row(1, "a"))
+
+          assert(spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+            .partitionColumnNames === Seq("b"))
+        }
+      }
+    }
+  }
+
+  test("Create Table LIKE STORED AS Hive Format") {
+    val catalog = spark.sessionState.catalog
+    withTable("s") {
+      sql("CREATE TABLE s(a INT, b INT) STORED AS ORC")
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        withTable("t") {
+          sql(s"CREATE TABLE t LIKE s STORED AS $tableType")
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.provider == Some("hive"))
+          assert(table.storage.serde == expectedSerde.get.serde)
+          assert(table.storage.inputFormat == expectedSerde.get.inputFormat)
+          assert(table.storage.outputFormat == expectedSerde.get.outputFormat)
+        }
+      }
+    }
+  }
+
+  test("Create Table LIKE with specified TBLPROPERTIES") {
+    val catalog = spark.sessionState.catalog
+    withTable("s", "t") {
+      sql("CREATE TABLE s(a INT, b INT) USING hive TBLPROPERTIES('a'='apple')")
+      val source = catalog.getTableMetadata(TableIdentifier("s"))
+      assert(source.properties("a") == "apple")
+      sql("CREATE TABLE t LIKE s STORED AS parquet TBLPROPERTIES('f'='foo', 'b'='bar')")
+      val table = catalog.getTableMetadata(TableIdentifier("t"))
+      assert(table.properties.get("a") === None)
+      assert(table.properties("f") == "foo")
+      assert(table.properties("b") == "bar")
+    }
+  }
+
+  test("Create Table LIKE with row format") {
+    val catalog = spark.sessionState.catalog
+    withTable("sourceHiveTable", "sourceDsTable") {
+      sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
+      sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
+
+      // row format doesn't work in create targetDsTable
+      assertAnalysisError(
+        """
+          |CREATE TABLE targetDsTable LIKE sourceHiveTable USING PARQUET
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        """.stripMargin,
+        "Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE")
+
+      // row format doesn't work with provider hive
+      assertAnalysisError(
+        """
+          |CREATE TABLE targetHiveTable LIKE sourceHiveTable USING hive
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES ('test' = 'test')
+        """.stripMargin,
+        "Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE")
+
+      // row format doesn't work without 'STORED AS'
+      assertAnalysisError(
+        """
+          |CREATE TABLE targetDsTable LIKE sourceDsTable
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |WITH SERDEPROPERTIES ('test' = 'test')
+        """.stripMargin,
+        "'ROW FORMAT' must be used with 'STORED AS'")
+
+      // 'INPUTFORMAT' and 'OUTPUTFORMAT' conflict with 'USING'
+      assertAnalysisError(
+        """
+          |CREATE TABLE targetDsTable LIKE sourceDsTable USING format
+          |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        """.stripMargin,
+        "Operation not allowed: CREATE TABLE LIKE ... USING ... STORED AS")
+    }
+  }
+
+  test("SPARK-30785: create table like a partitioned table") {
+    val catalog = spark.sessionState.catalog
+    withTable("sc_part", "ta_part") {
+      sql("CREATE TABLE sc_part (key string, ts int) USING parquet PARTITIONED BY (ts)")
+      sql("CREATE TABLE ta_part like sc_part")
+      val sourceTable = catalog.getTableMetadata(TableIdentifier("sc_part", Some("default")))
+      val targetTable = catalog.getTableMetadata(TableIdentifier("ta_part", Some("default")))
+      assert(sourceTable.tracksPartitionsInCatalog)
+      assert(targetTable.tracksPartitionsInCatalog)
+      assert(targetTable.partitionColumnNames == Seq("ts"))
+      sql("ALTER TABLE ta_part ADD PARTITION (ts=10)") // no exception
+      checkAnswer(sql("SHOW PARTITIONS ta_part"), Row("ts=10") :: Nil)
+    }
+  }
+
+  test("SPARK-31904: Fix case sensitive problem of char and varchar partition columns") {
+    withTable("t1", "t2") {
+      sql("CREATE TABLE t1(a STRING, B VARCHAR(10), C CHAR(10)) STORED AS parquet")
+      sql("CREATE TABLE t2 USING parquet PARTITIONED BY (b, c) AS SELECT * FROM t1")
+      // make sure there is no exception
+      assert(sql("SELECT * FROM t2 WHERE b = 'A'").collect().isEmpty)
+      assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
+    }
+  }
+
+  test("SPARK-33546: CREATE TABLE LIKE should validate row format & file format") {
+    val catalog = spark.sessionState.catalog
+    withTable("sourceHiveTable", "sourceDsTable") {
+      sql("CREATE TABLE sourceHiveTable(a INT, b INT) STORED AS PARQUET")
+      sql("CREATE TABLE sourceDsTable(a INT, b INT) USING PARQUET")
+
+      // ROW FORMAT SERDE ... STORED AS [SEQUENCEFILE | RCFILE | TEXTFILE]
+      val allowSerdeFileFormats = Seq("TEXTFILE", "SEQUENCEFILE", "RCFILE")
+      Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
+        allowSerdeFileFormats.foreach { format =>
+          withTable("targetTable") {
+            spark.sql(
+              s"""
+                 |CREATE TABLE targetTable LIKE $sourceTable
+                 |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+                 |STORED AS $format
+             """.stripMargin)
+
+            val expectedSerde = HiveSerDe.sourceToSerDe(format)
+            val table = catalog.getTableMetadata(TableIdentifier("targetTable", Some("default")))
+            assert(table.provider === Some("hive"))
+            assert(table.storage.inputFormat === Some(expectedSerde.get.inputFormat.get))
+            assert(table.storage.outputFormat === Some(expectedSerde.get.outputFormat.get))
+            assert(table.storage.serde ===
+              Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+          }
+        }
+
+        // negative case
+        hiveFormats.filterNot(allowSerdeFileFormats.contains(_)).foreach { format =>
+          withTable("targetTable") {
+            assertAnalysisError(
+              s"""
+                 |CREATE TABLE targetTable LIKE $sourceTable
+                 |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+                 |STORED AS $format
+              """.stripMargin,
+              s"ROW FORMAT SERDE is incompatible with format '${format.toLowerCase(Locale.ROOT)}'")
+          }
+        }
+      }
+
+      // ROW FORMAT DELIMITED ... STORED AS TEXTFILE
+      Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
+        withTable("targetTable") {
+          spark.sql(
+            s"""
+               |CREATE TABLE targetTable LIKE $sourceTable
+               |ROW FORMAT DELIMITED
+               |STORED AS TEXTFILE
+             """.stripMargin)
+
+          val expectedSerde = HiveSerDe.sourceToSerDe("TEXTFILE")
+          val table = catalog.getTableMetadata(TableIdentifier("targetTable", Some("default")))
+          assert(table.provider === Some("hive"))
+          assert(table.storage.inputFormat === Some(expectedSerde.get.inputFormat.get))
+          assert(table.storage.outputFormat === Some(expectedSerde.get.outputFormat.get))
+          assert(table.storage.serde === Some(expectedSerde.get.serde.get))
+
+          // negative case
+          assertAnalysisError(
+            s"""
+               |CREATE TABLE targetTable LIKE $sourceTable
+               |ROW FORMAT DELIMITED
+               |STORED AS PARQUET
+            """.stripMargin,
+            "ROW FORMAT DELIMITED is only compatible with 'textfile'")
+        }
+      }
+
+      // ROW FORMAT ... STORED AS INPUTFORMAT ... OUTPUTFORMAT ...
+      hiveFormats.foreach { tableType =>
+        val expectedSerde = HiveSerDe.sourceToSerDe(tableType)
+        Seq("sourceHiveTable", "sourceDsTable").foreach { sourceTable =>
+          withTable("targetTable") {
+            spark.sql(
+              s"""
+                 |CREATE TABLE targetTable LIKE $sourceTable
+                 |ROW FORMAT SERDE '${expectedSerde.get.serde.get}'
+                 |STORED AS INPUTFORMAT '${expectedSerde.get.inputFormat.get}'
+                 |OUTPUTFORMAT '${expectedSerde.get.outputFormat.get}'
+               """.stripMargin)
+
+            val table = catalog.getTableMetadata(TableIdentifier("targetTable", Some("default")))
+            assert(table.provider === Some("hive"))
+            assert(table.storage.inputFormat === Some(expectedSerde.get.inputFormat.get))
+            assert(table.storage.outputFormat === Some(expectedSerde.get.outputFormat.get))
+            assert(table.storage.serde === Some(expectedSerde.get.serde.get))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33844: Insert overwrite directory should check schema too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[AnalysisException] {
+          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+        }.getMessage
+        assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
+          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
+      }
+    }
+  }
+
+  test("SPARK-34261: Avoid side effect if create exists temporary function") {
+    withUserDefinedFunction("f1" -> true) {
+      sql("CREATE TEMPORARY FUNCTION f1 AS 'org.apache.hadoop.hive.ql.udf.UDFUUID'")
+
+      val jarName = "TestUDTF.jar"
+      val jar = spark.asInstanceOf[TestHiveSparkSession].getHiveFile(jarName).toURI.toString
+      spark.sparkContext.addedJars.keys.find(_.contains(jarName))
+        .foreach(spark.sparkContext.addedJars.remove)
+      assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
+      val msg = intercept[AnalysisException] {
+        sql("CREATE TEMPORARY FUNCTION f1 AS " +
+          s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
+      }.getMessage
+      assert(msg.contains("Function f1 already exists"))
+      assert(!spark.sparkContext.listJars().exists(_.contains(jarName)))
+
+      sql("CREATE OR REPLACE TEMPORARY FUNCTION f1 AS " +
+        s"'org.apache.hadoop.hive.ql.udf.UDFUUID' USING JAR '$jar'")
+      assert(spark.sparkContext.listJars().exists(_.contains(jarName)))
     }
   }
 }

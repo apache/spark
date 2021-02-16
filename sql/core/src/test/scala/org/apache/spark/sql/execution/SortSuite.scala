@@ -22,14 +22,14 @@ import scala.util.Random
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one
  * sorted by a reference implementation ([[ReferenceSort]]).
  */
-class SortSuite extends SparkPlanTest with SharedSQLContext {
+class SortSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 
@@ -95,6 +95,19 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
         (child: SparkPlan) => ReferenceSort('a.asc :: Nil, global = true, child),
         sortAnswers = false)
     }
+  }
+
+  test("SPARK-33260: sort order is a Stream") {
+    val input = Seq(
+      ("Hello", 4, 2.0),
+      ("Hello", 1, 1.0),
+      ("World", 8, 3.0)
+    )
+    checkAnswer(
+      input.toDF("a", "b", "c"),
+      (child: SparkPlan) => SortExec(Stream('a.asc, 'b.asc, 'c.asc), global = true, child = child),
+      input.sortBy(t => (t._1, t._2, t._3)).map(Row.fromTuple),
+      sortAnswers = false)
   }
 
   // Test sorting on different data types

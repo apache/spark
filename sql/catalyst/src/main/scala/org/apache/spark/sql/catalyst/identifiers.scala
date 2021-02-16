@@ -49,19 +49,21 @@ sealed trait IdentifierWithDatabase {
 
 /**
  * Encapsulates an identifier that is either a alias name or an identifier that has table
- * name and optionally a database name.
+ * name and a qualifier.
  * The SubqueryAlias node keeps track of the qualifier using the information in this structure
- * @param identifier - Is an alias name or a table name
- * @param database - Is a database name and is optional
+ * @param name - Is an alias name or a table name
+ * @param qualifier - Is a qualifier
  */
-case class AliasIdentifier(identifier: String, database: Option[String])
-  extends IdentifierWithDatabase {
+case class AliasIdentifier(name: String, qualifier: Seq[String]) {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
-  def this(identifier: String) = this(identifier, None)
+  def this(identifier: String) = this(identifier, Seq())
+
+  override def toString: String = (qualifier :+ name).quoted
 }
 
 object AliasIdentifier {
-  def apply(identifier: String): AliasIdentifier = new AliasIdentifier(identifier)
+  def apply(name: String): AliasIdentifier = new AliasIdentifier(name)
 }
 
 /**

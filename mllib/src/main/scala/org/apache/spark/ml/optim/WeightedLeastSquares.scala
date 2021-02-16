@@ -88,7 +88,7 @@ private[ml] class WeightedLeastSquares(
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
   require(elasticNetParam >= 0.0 && elasticNetParam <= 1.0,
     s"elasticNetParam must be in [0, 1]: $elasticNetParam")
-  require(maxIter >= 0, s"maxIter must be a positive integer: $maxIter")
+  require(maxIter > 0, s"maxIter must be a positive integer: $maxIter")
   require(tol >= 0.0, s"tol must be >= 0, but was set to $tol")
 
   /**
@@ -96,13 +96,15 @@ private[ml] class WeightedLeastSquares(
    */
   def fit(
       instances: RDD[Instance],
-      instr: OptionalInstrumentation = OptionalInstrumentation.create(classOf[WeightedLeastSquares])
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(
+        classOf[WeightedLeastSquares]),
+      depth: Int = 2
     ): WeightedLeastSquaresModel = {
     if (regParam == 0.0) {
       instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
     }
 
-    val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
+    val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_), depth)
     summary.validate()
     instr.logInfo(s"Number of instances: ${summary.count}.")
     val k = if (fitIntercept) summary.k + 1 else summary.k
@@ -133,7 +135,7 @@ private[ml] class WeightedLeastSquares(
         return new WeightedLeastSquaresModel(coefficients, intercept, diagInvAtWA, Array(0D))
       } else {
         require(!(regParam > 0.0 && standardizeLabel), "The standard deviation of the label is " +
-          "zero. Model cannot be regularized with standardization=true")
+          "zero. Model cannot be regularized when labels are standardized.")
         instr.logWarning(s"The standard deviation of the label is zero. Consider setting " +
           s"fitIntercept=true.")
       }

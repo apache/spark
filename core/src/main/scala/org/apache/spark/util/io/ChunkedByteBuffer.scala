@@ -172,8 +172,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
 private[spark] object ChunkedByteBuffer {
 
-
-  // TODO SPARK-25905 eliminate this method if we switch BlockManager to getting InputStreams
   def fromManagedBuffer(data: ManagedBuffer): ChunkedByteBuffer = {
     data match {
       case f: FileSegmentManagedBuffer =>
@@ -195,7 +193,7 @@ private[spark] object ChunkedByteBuffer {
       length: Long): ChunkedByteBuffer = {
     // We do *not* memory map the file, because we may end up putting this into the memory store,
     // and spark currently is not expecting memory-mapped buffers in the memory store, it conflicts
-    // with other parts that manage the lifecyle of buffers and dispose them.  See SPARK-25422.
+    // with other parts that manage the lifecycle of buffers and dispose them.  See SPARK-25422.
     val is = new FileInputStream(file)
     ByteStreams.skipFully(is, offset)
     val in = new LimitedInputStream(is, length)

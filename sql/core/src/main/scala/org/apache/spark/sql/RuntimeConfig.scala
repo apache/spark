@@ -47,7 +47,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Boolean): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -57,7 +56,6 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Long): Unit = {
-    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -152,6 +150,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   private def requireNonStaticConf(key: String): Unit = {
     if (SQLConf.staticConfKeys.contains(key)) {
       throw new AnalysisException(s"Cannot modify the value of a static config: $key")
+    }
+    if (sqlConf.setCommandRejectsSparkCoreConfs &&
+        ConfigEntry.findEntry(key) != null && !SQLConf.sqlConfEntries.containsKey(key)) {
+      throw new AnalysisException(s"Cannot modify the value of a Spark config: $key")
     }
   }
 }

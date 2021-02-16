@@ -38,11 +38,7 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       f: (ExternalCatalog, Seq[ExternalCatalogEvent] => Unit) => Unit): Unit = test(name) {
     val catalog = new ExternalCatalogWithListener(newCatalog)
     val recorder = mutable.Buffer.empty[ExternalCatalogEvent]
-    catalog.addListener(new ExternalCatalogEventListener {
-      override def onEvent(event: ExternalCatalogEvent): Unit = {
-        recorder += event
-      }
-    })
+    catalog.addListener((event: ExternalCatalogEvent) => recorder += event)
     f(catalog, (expected: Seq[ExternalCatalogEvent]) => {
       val actual = recorder.clone()
       recorder.clear()
@@ -173,9 +169,6 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
       identifier = FunctionIdentifier("fn7", Some("db5")),
       className = "",
       resources = Seq.empty)
-
-    val newIdentifier = functionDefinition.identifier.copy(funcName = "fn4")
-    val renamedFunctionDefinition = functionDefinition.copy(identifier = newIdentifier)
 
     catalog.createDatabase(dbDefinition, ignoreIfExists = false)
     checkEvents(CreateDatabasePreEvent("db5") :: CreateDatabaseEvent("db5") :: Nil)

@@ -18,11 +18,13 @@
 package org.apache.spark
 
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
+import org.apache.spark.TestUtils.createTempScriptWithExpectedOutput
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
+import org.apache.spark.resource.TestResourceIDs.{EXECUTOR_GPU_ID, TASK_GPU_ID, WORKER_GPU_ID}
 import org.apache.spark.scheduler.BarrierJobAllocationFailed._
-import org.apache.spark.scheduler.DAGScheduler
+import org.apache.spark.scheduler.BarrierJobSlotsNumberCheckFailed
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -52,7 +54,7 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     )
 
     val error = intercept[SparkException] {
-      ThreadUtils.awaitResult(futureAction, 5 seconds)
+      ThreadUtils.awaitResult(futureAction, 5.seconds)
     }.getCause.getMessage
     assert(error.contains(message))
   }
@@ -157,8 +159,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
 
   test("submit a barrier ResultStage with dynamic resource allocation enabled") {
     val conf = new SparkConf()
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -172,8 +174,8 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
 
   test("submit a barrier ShuffleMapStage with dynamic resource allocation enabled") {
     val conf = new SparkConf()
-      .set("spark.dynamicAllocation.enabled", "true")
-      .set("spark.dynamicAllocation.testing", "true")
+      .set(DYN_ALLOCATION_ENABLED, true)
+      .set(DYN_ALLOCATION_TESTING, true)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -191,9 +193,9 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       "mode") {
     val conf = new SparkConf()
       // Shorten the time interval between two failed checks to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
       // Reduce max check failures allowed to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -208,9 +210,9 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
     "local mode") {
     val conf = new SparkConf()
       // Shorten the time interval between two failed checks to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
       // Reduce max check failures allowed to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
       .setMaster("local[4]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -226,11 +228,11 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
   test("submit a barrier ResultStage that requires more slots than current total under " +
     "local-cluster mode") {
     val conf = new SparkConf()
-      .set("spark.task.cpus", "2")
+      .set(CPUS_PER_TASK, 2)
       // Shorten the time interval between two failed checks to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
       // Reduce max check failures allowed to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -244,11 +246,11 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
   test("submit a barrier ShuffleMapStage that requires more slots than current total under " +
     "local-cluster mode") {
     val conf = new SparkConf()
-      .set("spark.task.cpus", "2")
+      .set(CPUS_PER_TASK, 2)
       // Shorten the time interval between two failed checks to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.interval", "1s")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_INTERVAL.key, "1s")
       // Reduce max check failures allowed to make the test fail faster.
-      .set("spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures", "3")
+      .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 3)
       .setMaster("local-cluster[4, 3, 1024]")
       .setAppName("test")
     sc = createSparkContext(Some(conf))
@@ -259,5 +261,38 @@ class BarrierStageOnSubmittedSuite extends SparkFunSuite with LocalSparkContext 
       .map(x => x + 1)
     testSubmitJob(sc, rdd,
       message = ERROR_MESSAGE_BARRIER_REQUIRE_MORE_SLOTS_THAN_CURRENT_TOTAL_NUMBER)
+  }
+
+  test("SPARK-32518: CoarseGrainedSchedulerBackend.maxNumConcurrentTasks should " +
+    "consider all kinds of resources for the barrier stage") {
+    withTempDir { dir =>
+      val discoveryScript = createTempScriptWithExpectedOutput(
+        dir, "gpuDiscoveryScript", """{"name": "gpu","addresses":["0"]}""")
+
+      val conf = new SparkConf()
+        // Setup a local cluster which would only has one executor with 2 CPUs and 1 GPU.
+        .setMaster("local-cluster[1, 2, 1024]")
+        .setAppName("test-cluster")
+        .set(WORKER_GPU_ID.amountConf, "1")
+        .set(WORKER_GPU_ID.discoveryScriptConf, discoveryScript)
+        .set(EXECUTOR_GPU_ID.amountConf, "1")
+        .set(TASK_GPU_ID.amountConf, "1")
+        // disable barrier stage retry to fail the application as soon as possible
+        .set(BARRIER_MAX_CONCURRENT_TASKS_CHECK_MAX_FAILURES, 1)
+      sc = new SparkContext(conf)
+      TestUtils.waitUntilExecutorsUp(sc, 1, 60000)
+
+      val exception = intercept[BarrierJobSlotsNumberCheckFailed] {
+        // Setup a barrier stage which contains 2 tasks and each task requires 1 CPU and 1 GPU.
+        // Therefore, the total resources requirement (2 CPUs and 2 GPUs) of this barrier stage
+        // can not be satisfied since the cluster only has 2 CPUs and 1 GPU in total.
+        sc.parallelize(Range(1, 10), 2)
+          .barrier()
+          .mapPartitions { iter => iter }
+          .collect()
+      }
+      assert(exception.getMessage.contains("[SPARK-24819]: Barrier execution " +
+        "mode does not allow run a barrier stage that requires more slots"))
+    }
   }
 }

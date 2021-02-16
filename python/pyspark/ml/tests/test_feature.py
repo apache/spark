@@ -16,11 +16,7 @@
 # limitations under the License.
 #
 
-import sys
 import unittest
-
-if sys.version > '3':
-    basestring = str
 
 from pyspark.ml.feature import Binarizer, CountVectorizer, CountVectorizerModel, HashingTF, IDF, \
     NGram, RFormula, StopWordsRemover, StringIndexer, StringIndexerModel, VectorSizeHint
@@ -34,12 +30,13 @@ class FeatureTests(SparkSessionTestCase):
 
     def test_binarizer(self):
         b0 = Binarizer()
-        self.assertListEqual(b0.params, [b0.inputCol, b0.outputCol, b0.threshold])
+        self.assertListEqual(b0.params, [b0.inputCol, b0.inputCols, b0.outputCol,
+                                         b0.outputCols, b0.threshold, b0.thresholds])
         self.assertTrue(all([~b0.isSet(p) for p in b0.params]))
         self.assertTrue(b0.hasDefault(b0.threshold))
         self.assertEqual(b0.getThreshold(), 0.0)
         b0.setParams(inputCol="input", outputCol="output").setThreshold(1.0)
-        self.assertTrue(all([b0.isSet(p) for p in b0.params]))
+        self.assertTrue(not all([b0.isSet(p) for p in b0.params]))
         self.assertEqual(b0.getThreshold(), 1.0)
         self.assertEqual(b0.getInputCol(), "input")
         self.assertEqual(b0.getOutputCol(), "output")
@@ -67,6 +64,8 @@ class FeatureTests(SparkSessionTestCase):
                          "Model should inherit the UID from its parent estimator.")
         output = idf0m.transform(dataset)
         self.assertIsNotNone(output.head().idf)
+        self.assertIsNotNone(idf0m.docFreq)
+        self.assertEqual(idf0m.numDocs, 3)
         # Test that parameters transferred to Python Model
         check_params(self, idf0m)
 
@@ -88,7 +87,7 @@ class FeatureTests(SparkSessionTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["panda"])
         self.assertEqual(type(stopWordRemover.getStopWords()), list)
-        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
+        self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], str))
         # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
@@ -170,7 +169,7 @@ class FeatureTests(SparkSessionTestCase):
 
         # Test an empty vocabulary
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+            with self.assertRaisesRegex(Exception, "vocabSize.*invalid.*0"):
                 CountVectorizerModel.from_vocabulary([], inputCol="words")
 
         # Test model with default settings can transform
@@ -233,6 +232,7 @@ class FeatureTests(SparkSessionTestCase):
         model = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label",
                                                outputCol="indexed", handleInvalid="keep")
         self.assertEqual(model.labels, ["a", "b", "c"])
+        self.assertEqual(model.labelsArray, [("a", "b", "c")])
 
         df1 = self.spark.createDataFrame([
             (0, "a"),
@@ -294,18 +294,18 @@ class HashingTFTest(SparkSessionTestCase):
         hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
         output = hashingTF.transform(df)
         features = output.select("features").first().features.toArray()
-        expected = Vectors.dense([1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).toArray()
+        expected = Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0]).toArray()
         for i in range(0, n):
             self.assertAlmostEqual(features[i], expected[i], 14, "Error at " + str(i) +
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_feature import *
+    from pyspark.ml.tests.test_feature import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

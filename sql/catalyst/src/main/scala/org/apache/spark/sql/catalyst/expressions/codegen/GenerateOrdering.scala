@@ -25,28 +25,21 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-/**
- * Inherits some default implementation for Java from `Ordering[Row]`
- */
-class BaseOrdering extends Ordering[InternalRow] {
-  def compare(a: InternalRow, b: InternalRow): Int = {
-    throw new UnsupportedOperationException
-  }
-}
 
 /**
  * Generates bytecode for an [[Ordering]] of rows for a given set of expressions.
  */
-object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalRow]] with Logging {
+object GenerateOrdering extends CodeGenerator[Seq[SortOrder], BaseOrdering] with Logging {
 
   protected def canonicalize(in: Seq[SortOrder]): Seq[SortOrder] =
     in.map(ExpressionCanonicalizer.execute(_).asInstanceOf[SortOrder])
 
   protected def bind(in: Seq[SortOrder], inputSchema: Seq[Attribute]): Seq[SortOrder] =
-    in.map(BindReferences.bindReference(_, inputSchema))
+    bindReferences(in, inputSchema)
 
   /**
    * Creates a code gen ordering for sorting this schema, in ascending order.
@@ -78,7 +71,9 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
     ctx.INPUT_ROW = row
     // to use INPUT_ROW we must make sure currentVars is null
     ctx.currentVars = null
-    ordering.map(_.child.genCode(ctx))
+    // SPARK-33260: To avoid unpredictable modifications to `ctx` when `ordering` is a Stream, we
+    // use `toIndexedSeq` to make the transformation eager.
+    ordering.toIndexedSeq.map(_.child.genCode(ctx))
   }
 
   /**
@@ -188,7 +183,7 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder])
   extends Ordering[InternalRow] with KryoSerializable {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
-    this(ordering.map(BindReferences.bindReference(_, inputSchema)))
+    this(bindReferences(ordering, inputSchema))
 
   @transient
   private[this] var generatedOrdering = GenerateOrdering.generate(ordering)

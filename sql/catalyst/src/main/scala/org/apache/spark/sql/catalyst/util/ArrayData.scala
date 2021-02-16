@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
 object ArrayData {
@@ -172,11 +171,7 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
     val values = new Array[T](size)
     var i = 0
     while (i < size) {
-      if (isNullAt(i)) {
-        values(i) = null.asInstanceOf[T]
-      } else {
-        values(i) = accessor(this, i).asInstanceOf[T]
-      }
+      values(i) = accessor(this, i).asInstanceOf[T]
       i += 1
     }
     values
@@ -187,11 +182,7 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
     val accessor = InternalRow.getAccessor(elementType)
     var i = 0
     while (i < size) {
-      if (isNullAt(i)) {
-        f(i, null)
-      } else {
-        f(i, accessor(this, i))
-      }
+      f(i, accessor(this, i))
       i += 1
     }
   }
@@ -208,11 +199,7 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
 
   override def apply(idx: Int): T =
     if (0 <= idx && idx < arrayData.numElements()) {
-      if (arrayData.isNullAt(idx)) {
-        null.asInstanceOf[T]
-      } else {
-        accessor(arrayData, idx).asInstanceOf[T]
-      }
+      accessor(arrayData, idx).asInstanceOf[T]
     } else {
       throw new IndexOutOfBoundsException(
         s"Index $idx must be between 0 and the length of the ArrayData.")

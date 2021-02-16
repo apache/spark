@@ -37,7 +37,7 @@ public class KVTypeInfo {
   private final Map<String, KVIndex> indices;
   private final Map<String, Accessor> accessors;
 
-  public KVTypeInfo(Class<?> type) throws Exception {
+  public KVTypeInfo(Class<?> type) {
     this.type = type;
     this.accessors = new HashMap<>();
     this.indices = new HashMap<>();
@@ -68,8 +68,6 @@ public class KVTypeInfo {
 
     Preconditions.checkArgument(indices.containsKey(KVIndex.NATURAL_INDEX_NAME),
         "No natural index defined for type %s.", type.getName());
-    Preconditions.checkArgument(indices.get(KVIndex.NATURAL_INDEX_NAME).parent().isEmpty(),
-        "Natural index of %s cannot have a parent.", type.getName());
 
     for (KVIndex idx : indices.values()) {
       if (!idx.parent().isEmpty()) {
@@ -117,13 +115,19 @@ public class KVTypeInfo {
     return index.parent().isEmpty() ? null : getAccessor(index.parent());
   }
 
+  String getParentIndexName(String indexName) {
+    KVIndex index = indices.get(indexName);
+    return index.parent();
+  }
+
   /**
    * Abstracts the difference between invoking a Field and a Method.
    */
   interface Accessor {
 
-    Object get(Object instance) throws Exception;
+    Object get(Object instance) throws ReflectiveOperationException;
 
+    Class<?> getType();
   }
 
   private class FieldAccessor implements Accessor {
@@ -135,10 +139,14 @@ public class KVTypeInfo {
     }
 
     @Override
-    public Object get(Object instance) throws Exception {
+    public Object get(Object instance) throws ReflectiveOperationException {
       return field.get(instance);
     }
 
+    @Override
+    public Class<?> getType() {
+      return field.getType();
+    }
   }
 
   private class MethodAccessor implements Accessor {
@@ -150,10 +158,14 @@ public class KVTypeInfo {
     }
 
     @Override
-    public Object get(Object instance) throws Exception {
+    public Object get(Object instance) throws ReflectiveOperationException {
       return method.invoke(instance);
     }
 
+    @Override
+    public Class<?> getType() {
+      return method.getReturnType();
+    }
   }
 
 }

@@ -21,7 +21,6 @@ import java.util.concurrent._
 import scala.util.control.NonFatal
 
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorCheckpointer
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.ShutdownReason
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Duration
@@ -68,7 +67,7 @@ private[kinesis] class KinesisCheckpointer(
     if (checkpointer != null) {
       try {
         // We must call `checkpoint()` with no parameter to finish reading shards.
-        // See an URL below for details:
+        // See a URL below for details:
         // https://forums.aws.amazon.com/thread.jspa?threadID=244218
         KinesisRecordProcessor.retryRandom(checkpointer.checkpoint(), 4, 100)
       } catch {
