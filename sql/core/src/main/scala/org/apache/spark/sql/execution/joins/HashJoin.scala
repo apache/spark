@@ -157,7 +157,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         numMatchedRows += 1
         true
       }
-  }
+    }
 
   protected def createResultProjection(): (InternalRow) => InternalRow = joinType match {
     case LeftExistence(_) =>
@@ -433,7 +433,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val matched = ctx.freshName("matched")
     val numMatched = metricTerm(ctx, "numMatchedRows")
     val buildVars = genBuildSideVars(ctx, matched)
-    val conditionDef = if (condition.isDefined) {
+    val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
@@ -443,14 +443,16 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       val skipRow = s"${ev.isNull} || !${ev.value}"
       s"""
+         |$numMatched.add(1);
          |$eval
          |${ev.code}
          |if (!($skipRow))
        """.stripMargin
     } else {
-      ""
+      s"""
+         |$numMatched.add(1);
+       """.stripMargin
     }
-    val checkCondition = s"$numMatched.add(1);\n$conditionDef"
     (matched, checkCondition, buildVars)
   }
 
@@ -725,7 +727,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
 
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
-    val conditionDef = if (condition.isDefined) {
+    val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
@@ -734,14 +736,17 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       val ev =
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
       s"""
+         |$numMatched.add(1);
          |$eval
          |${ev.code}
          |$existsVar = !${ev.isNull} && ${ev.value};
        """.stripMargin
     } else {
-      s"$existsVar = true;"
+      s"""
+         |$numMatched.add(1);
+         |$existsVar = true;
+       """.stripMargin
     }
-    val checkCondition = s"$numMatched.add(1);\n$conditionDef"
 
     val resultVar = input ++ Seq(ExprCode.forNonNullValue(
       JavaCode.variable(existsVar, BooleanType)))

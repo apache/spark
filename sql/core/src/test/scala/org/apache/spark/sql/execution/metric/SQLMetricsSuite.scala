@@ -292,19 +292,18 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
             "shuffle records written" -> 2L)))),
           enableWholeStage
         )
+      }
 
-        val query2 = "SELECT * FROM testData2 JOIN testDataForJoin ON " +
-          "testData2.a = testDataForJoin.a AND testData2.b <= testDataForJoin.b"
-        val df2 = spark.sql(query2)
-        Seq(false, true).foreach { case  enableWholeStage =>
-          testSparkPlanMetrics(df2, 1, Map(
-            0L -> ("SortMergeJoin", Map(
-              "number of output rows" -> 3L,
-              "number of matched rows" -> 4L))),
-            enableWholeStage
-          )
-        }
-
+      val query2 = "SELECT * FROM testData2 JOIN testDataForJoin ON " +
+        "testData2.a = testDataForJoin.a AND testData2.b <= testDataForJoin.b"
+      val df2 = spark.sql(query2)
+      Seq(false, true).foreach { case  enableWholeStage =>
+        testSparkPlanMetrics(df2, 1, Map(
+          0L -> ("SortMergeJoin", Map(
+            "number of output rows" -> 3L,
+            "number of matched rows" -> 4L))),
+          enableWholeStage
+        )
       }
     }
   }
@@ -343,7 +342,6 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         val df = spark.sql(query)
         testSparkPlanMetrics(df, 1, Map(
           0L -> (("SortMergeJoin", Map(
-            // It's 8 because we read 6 rows in the left and 2 row in the right one
             "number of output rows" -> rows,
             "number of matched rows" -> 4L)))),
           enableWholeStage
@@ -355,14 +353,15 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   test("BroadcastHashJoin metrics") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key", "value")
-    val df3 = Seq((1, 1), (2, 4)).toDF("key", "value1")
+    val df3 = Seq((1, 1), (2, 3), (2, 4), (2, 4)).toDF("key", "value1")
     val df4 = Seq((1, 1), (2, 2), (3, 3), (4, 4)).toDF("key", "value2")
 
-    Seq((false, df1, df2, 1L, 2L, false),
-      (false, df1, df2, 2L, 2L, true),
-      (true, df3, df4, 2L, 1L, true),
-      (true, df3, df4, 1L, 1L, false)
-    ).foreach { case (boundCondition, dfLeft, dfRight, nodeId, rows, enableWholeStage) =>
+    Seq((false, df1, df2, 1L, 2L, 2L, false),
+      (false, df1, df2, 2L, 2L, 2L, true),
+      (true, df3, df4, 2L, 3L, 4L, true),
+      (true, df3, df4, 1L, 3L, 4L, false)
+    ).foreach {
+      case (boundCondition, dfLeft, dfRight, nodeId, rows, matchedRows, enableWholeStage) =>
       var df = dfLeft.join(broadcast(dfRight), "key")
       if (boundCondition) {
         df = df.filter("value1 > value2")
@@ -370,7 +369,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       testSparkPlanMetrics(df, 2, Map(
         nodeId -> (("BroadcastHashJoin", Map(
           "number of output rows" -> rows,
-          "number of matched rows" -> 2L)))),
+          "number of matched rows" -> matchedRows)))),
         enableWholeStage
       )
     }
@@ -409,7 +408,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
-  test("ShuffledHashJoin(left/right/outer/semi/anti, outer) metrics") {
+  test("SPARK-34369: ShuffledHashJoin(left/right/outer/semi/anti, outer) metrics") {
     val leftDf = Seq((1, 2), (2, 1)).toDF("key", "value1")
     val rightDf = (1 to 10).map(i => (i, i)).toSeq.toDF("key2", "value2")
     Seq((false, 0L, "right_outer", leftDf, rightDf, 10L, 2L, false),
