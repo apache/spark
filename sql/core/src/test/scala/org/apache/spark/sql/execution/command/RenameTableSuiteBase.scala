@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -32,6 +32,25 @@ import org.apache.spark.storage.StorageLevel
  */
 trait RenameTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "RENAME TABLE"
+
+  test("rename a table in a database/namespace") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+
+      sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
+      checkTables("ns", "dst_tbl")
+      QueryTest.checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+    }
+  }
+
+  test("table to rename does not exist") {
+    val errMsg = intercept[AnalysisException] {
+      sql(s"ALTER TABLE $catalog.dbx.does_not_exist RENAME TO dbx.tab2")
+    }.getMessage
+    assert(errMsg.contains("Table or view not found"))
+  }
 
   test("SPARK-33786: Cache's storage level should be respected when a table name is altered") {
     withNamespaceAndTable("ns", "dst_tbl") { dst =>

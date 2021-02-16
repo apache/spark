@@ -978,37 +978,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("alter table: rename") {
-    val catalog = spark.sessionState.catalog
-    val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
-    val tableIdent2 = TableIdentifier("tab2", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createDatabase(catalog, "dby")
-    createTable(catalog, tableIdent1)
-
-    assert(catalog.listTables("dbx") == Seq(tableIdent1))
-    sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
-    assert(catalog.listTables("dbx") == Seq(tableIdent2))
-
-    // The database in destination table name can be omitted, and we will use the database of source
-    // table for it.
-    sql("ALTER TABLE dbx.tab2 RENAME TO tab1")
-    assert(catalog.listTables("dbx") == Seq(tableIdent1))
-
-    catalog.setCurrentDatabase("dbx")
-    // rename without explicitly specifying database
-    sql("ALTER TABLE tab1 RENAME TO tab2")
-    assert(catalog.listTables("dbx") == Seq(tableIdent2))
-    // table to rename does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
-    }
-    // destination database is different
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
-    }
-  }
-
   test("alter table: rename cached table") {
     import testImplicits._
     sql("CREATE TABLE students (age INT, name STRING) USING parquet")

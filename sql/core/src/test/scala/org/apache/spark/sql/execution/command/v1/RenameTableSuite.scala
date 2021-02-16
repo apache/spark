@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -28,6 +29,48 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.RenameTableSuite`
  */
 trait RenameTableSuiteBase extends command.RenameTableSuiteBase {
+  test("omit namespace in the destination table") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+
+      sql(s"ALTER TABLE $src RENAME TO dst_tbl")
+      checkTables("ns", "dst_tbl")
+      checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+    }
+  }
+
+  test("destination database is different") {
+    withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>
+      withNamespace("src_ns") {
+        sql(s"CREATE NAMESPACE $catalog.src_ns")
+        val src = dst.replace("dst", "src")
+        sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
+        }.getMessage
+        assert(errMsg.contains("source and destination databases do not match"))
+      }
+    }
+  }
+
+  test("rename without explicitly specifying database") {
+    try {
+      withNamespaceAndTable("ns", "dst_tbl") { dst =>
+        val src = dst.replace("dst", "src")
+        sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+        sql(s"INSERT INTO $src SELECT 0")
+
+        sql(s"USE $catalog.ns")
+        sql(s"ALTER TABLE src_tbl RENAME TO dst_tbl")
+        checkTables("ns", "dst_tbl")
+        checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+      }
+    } finally {
+      spark.sessionState.catalogManager.reset()
+    }
+  }
 }
 
 /**

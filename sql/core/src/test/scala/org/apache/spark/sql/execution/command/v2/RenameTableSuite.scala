@@ -22,4 +22,16 @@ import org.apache.spark.sql.execution.command
 /**
  * The class contains tests for the `RENAME TABLE` command to check V2 table catalogs.
  */
-class RenameTableSuite extends command.RenameTableSuiteBase with CommandSuiteBase
+class RenameTableSuite extends command.RenameTableSuiteBase with CommandSuiteBase {
+  test("destination namespace is different") {
+    withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>
+      withNamespace("src_ns") {
+        sql(s"CREATE NAMESPACE $catalog.src_ns")
+        val src = dst.replace("dst", "src")
+        sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+        sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
+        checkTables("dst_ns", "dst_tbl")
+      }
+    }
+  }
+}

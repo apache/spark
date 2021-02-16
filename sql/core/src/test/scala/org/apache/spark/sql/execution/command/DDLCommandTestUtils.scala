@@ -126,4 +126,10 @@ trait DDLCommandTestUtils extends SQLTestUtils {
     assert(spark.catalog.isCached(name))
     QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
   }
+
+  def checkTables(namespace: String, expectedTables: String*): Unit = {
+    val tables = sql(s"SHOW TABLES IN $catalog.$namespace").select("tableName")
+    val rows = expectedTables.map(Row(_))
+    QueryTest.checkAnswer(tables, rows)
+  }
 }
