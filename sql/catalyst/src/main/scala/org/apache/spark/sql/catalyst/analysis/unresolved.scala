@@ -147,7 +147,8 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
   override def exprId: ExprId = throw invalidCallFunctionOnUnresolvedObjectError("exprId")
   override def dataType: DataType = throw invalidCallFunctionOnUnresolvedObjectError("dataType")
   override def nullable: Boolean = throw invalidCallFunctionOnUnresolvedObjectError("nullable")
-  override def qualifier: Seq[String] = throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def qualifier: Seq[String] =
+    throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
   override lazy val resolved = false
 
   override def newInstance(): UnresolvedAttribute = this
@@ -234,7 +235,8 @@ object UnresolvedAttribute {
 case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expression])
   extends Generator {
 
-  override def elementSchema: StructType = throw invalidCallFunctionOnUnresolvedObjectError("elementTypes")
+  override def elementSchema: StructType =
+    throw invalidCallFunctionOnUnresolvedObjectError("elementTypes")
   override def dataType: DataType = throw invalidCallFunctionOnUnresolvedObjectError("dataType")
   override def foldable: Boolean = throw invalidCallFunctionOnUnresolvedObjectError("foldable")
   override def nullable: Boolean = throw invalidCallFunctionOnUnresolvedObjectError("nullable")
@@ -290,9 +292,12 @@ abstract class Star extends LeafExpression with NamedExpression {
   override def exprId: ExprId = throw invalidCallFunctionOnUnresolvedObjectError("exprId")
   override def dataType: DataType = throw invalidCallFunctionOnUnresolvedObjectError("dataType")
   override def nullable: Boolean = throw invalidCallFunctionOnUnresolvedObjectError("nullable")
-  override def qualifier: Seq[String] = throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
-  override def toAttribute: Attribute = throw invalidCallFunctionOnUnresolvedObjectError("toAttribute")
-  override def newInstance(): NamedExpression = throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
+  override def qualifier: Seq[String] =
+    throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def toAttribute: Attribute =
+    throw invalidCallFunctionOnUnresolvedObjectError("toAttribute")
+  override def newInstance(): NamedExpression =
+    throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
   override lazy val resolved = false
 
   def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression]
@@ -419,11 +424,14 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def nullable: Boolean = throw invalidCallFunctionOnUnresolvedObjectError("nullable")
 
-  override def qualifier: Seq[String] = throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def qualifier: Seq[String] =
+    throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
 
-  override def toAttribute: Attribute = throw invalidCallFunctionOnUnresolvedObjectError("toAttribute")
+  override def toAttribute: Attribute =
+    throw invalidCallFunctionOnUnresolvedObjectError("toAttribute")
 
-  override def newInstance(): NamedExpression = throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
+  override def newInstance(): NamedExpression =
+    throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
 
   override lazy val resolved = false
 
@@ -438,7 +446,8 @@ case class MultiAlias(child: Expression, names: Seq[String])
  * @param expressions Expressions to expand.
  */
 case class ResolvedStar(expressions: Seq[NamedExpression]) extends Star with Unevaluable {
-  override def newInstance(): NamedExpression = throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
+  override def newInstance(): NamedExpression =
+    throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
   override def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")
 }
@@ -478,13 +487,16 @@ case class UnresolvedAlias(
     aliasFunc: Option[Expression => String] = None)
   extends UnaryExpression with NamedExpression with Unevaluable {
 
-  override def toAttribute: Attribute = throw invalidCallFunctionOnUnresolvedObjectError("toAttribute")
-  override def qualifier: Seq[String] = throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
+  override def toAttribute: Attribute =
+    throw invalidCallFunctionOnUnresolvedObjectError("toAttribute")
+  override def qualifier: Seq[String] =
+    throw invalidCallFunctionOnUnresolvedObjectError("qualifier")
   override def exprId: ExprId = throw invalidCallFunctionOnUnresolvedObjectError("exprId")
   override def nullable: Boolean = throw invalidCallFunctionOnUnresolvedObjectError("nullable")
   override def dataType: DataType = throw invalidCallFunctionOnUnresolvedObjectError("dataType")
   override def name: String = throw invalidCallFunctionOnUnresolvedObjectError("name")
-  override def newInstance(): NamedExpression = throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
+  override def newInstance(): NamedExpression =
+    throw invalidCallFunctionOnUnresolvedObjectError("newInstance")
 
   override lazy val resolved = false
 }
