@@ -131,9 +131,6 @@ class ParamRandomBuilder extends ParamGridBuilder {
   def addLog10Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
     addLogRandom(param, lim, n, 10)
 
-  def addLog2Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
-    addLogRandom(param, lim, n, 2)
-
   private def addLogRandom[T: Generator](param: Param[T], lim: Limits[T],
                                          n: Int, base: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
@@ -148,25 +145,16 @@ class ParamRandomBuilder extends ParamGridBuilder {
   def addLog10Random(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(DoubleGenerator)
 
-  def addLog2Random(param: DoubleParam, x: Double, y: Double, n: Int): this.type =
-    addLogRandom(param, Limits(x, y), n, 2)(DoubleGenerator)
-
   def addRandom(param: FloatParam, x: Float, y: Float, n: Int): this.type =
     addRandom(param, Limits(x, y), n)(FloatGenerator)
 
   def addLog10Random(param: FloatParam, x: Float, y: Float, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(FloatGenerator)
 
-  def addLog2Random(param: FloatParam, x: Float, y: Float, n: Int): this.type =
-    addLogRandom(param, Limits(x, y), n, 2)(FloatGenerator)
-
   def addRandom(param: IntParam, x: Int, y: Int, n: Int): this.type =
     addRandom(param, Limits(x, y), n)(IntGenerator)
 
   def addLog10Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(IntGenerator)
-
-  def addLog2Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
-    addLogRandom(param, Limits(x, y), n, 2)(IntGenerator)
 
 }

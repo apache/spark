@@ -48,13 +48,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
       DummyDoubleParam)
   }
 
-  test("Java API random Double log2 params mixed with fixed values") {
-    checkRangeAndCardinality(
-      _.addLog2Random(DummyDoubleParam, DoubleLimits.x, DoubleLimits.y, nRandoms),
-      DoubleLimits,
-      DummyDoubleParam)
-  }
-
   test("Java API random Double log10 params mixed with fixed values") {
     checkRangeAndCardinality(
       _.addLog10Random(DummyDoubleParam, DoubleLimits.x, DoubleLimits.y, nRandoms),
@@ -65,13 +58,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   test("Java API random Float linear params mixed with fixed values") {
     checkRangeAndCardinality(
       _.addRandom(DummyFloatParam, FloatLimits.x, FloatLimits.y, nRandoms),
-      FloatLimits,
-      DummyFloatParam)
-  }
-
-  test("Java API random Float log2 params mixed with fixed values") {
-    checkRangeAndCardinality(
-      _.addLog2Random(DummyFloatParam, FloatLimits.x, FloatLimits.y, nRandoms),
       FloatLimits,
       DummyFloatParam)
   }
@@ -90,13 +76,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
       DummyIntParam)
   }
 
-  test("Java API random Int log2 params mixed with fixed values") {
-    checkRangeAndCardinality(
-      _.addLog2Random(DummyIntParam, IntLimits.x, IntLimits.y, nRandoms),
-      IntLimits,
-      DummyIntParam)
-  }
-
   test("Java API random Int log10 params mixed with fixed values") {
     checkRangeAndCardinality(
       _.addLog10Random(DummyIntParam, IntLimits.x, IntLimits.y, nRandoms),
@@ -109,13 +88,6 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
   test("random linear params mixed with fixed values") {
     import RandomRanges._
     checkRangeAndCardinality(_.addRandom(DummyDoubleParam, DoubleLimits, nRandoms),
-      DoubleLimits,
-      DummyDoubleParam)
-  }
-
-  test("random log2 params mixed with fixed values") {
-    import RandomRanges._
-    checkRangeAndCardinality(_.addLog2Random(DummyDoubleParam, DoubleLimits, nRandoms),
       DoubleLimits,
       DummyDoubleParam)
   }

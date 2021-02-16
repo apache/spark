@@ -94,7 +94,7 @@ Refer to the [`ParamRandomBuilder` Scala docs](api/scala/org/apache/spark/ml/tun
 
 Refer to the [`ParamRandomBuilder` Java docs](api/java/org/apache/spark/ml/tuning/ParamRandomBuilder.html) for details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaCrossValidationExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaModelSelectionViaRandomHyperparametersExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
