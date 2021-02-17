@@ -833,6 +833,24 @@ class SparkSubmitSuite
         PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)))
       conf3.get(PYSPARK_DRIVER_PYTHON.key) should be("python3.4")
       conf3.get(PYSPARK_PYTHON.key) should be("python3.5")
+
+      // Test remote python driver with query part
+      val clArgs4 = Seq(
+        "https://bucket-name.s3.us-east-1.amazonaws.com/driver.py" +
+          "?X-Amz-Algorithm=AWS4-HMAC-SHA256" +
+          "&X-Amz-Credential=AKIATBNPKWPCNUMWMLUR%2F20210214%2Fus-east-1%2Fs3%2Faws4_request" +
+          "&X-Amz-Date=20210214T062047Z&X-Amz-Expires=172800&X-Amz-SignedHeaders=host" +
+          "&X-Amz-Signature=49ef39b6bb7090001af9312692788892551916a6ac0ff6c961ce52efb9acc235"
+      )
+      val appArgs4 = new SparkSubmitArguments(clArgs3)
+      val (args4, _, conf4, mainClass4) = submit.prepareSubmitEnvironment(appArgs3)
+
+      appArgs4.isPython should be(true)
+      print("+++ HERE WE GO +++")
+      print(appArgs4.mainClass)
+      print(args4)
+      print(conf4)
+      print(mainClass4)
     }
   }
 
