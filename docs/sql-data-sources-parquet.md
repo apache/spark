@@ -262,7 +262,7 @@ Data source options of Parquet can be set via:
   <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.legacy.parquet</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>The SQL config <code>spark.sql.parquet</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
     <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
@@ -366,7 +366,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>1.6.0</td>
 </tr>
 <tr>
-<td>spark.sql.legacy.parquet.datetimeRebaseModeInRead</td>
+<td>spark.sql.parquet.datetimeRebaseModeInRead</td>
   <td><code>EXCEPTION</code></td>
   <td>The rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Julian to Proleptic Gregorian calendar:<br>
     <ul>
@@ -379,7 +379,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td>spark.sql.legacy.parquet.datetimeRebaseModeInWrite</td>
+  <td>spark.sql.parquet.datetimeRebaseModeInWrite</td>
   <td><code>EXCEPTION</code></td>
   <td>The rebasing mode for the values of the <code>DATE</code>, <code>TIMESTAMP_MILLIS</code>, <code>TIMESTAMP_MICROS</code> logical types from the Proleptic Gregorian to Julian calendar:<br>
     <ul>
@@ -391,7 +391,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>3.0.0</td>
 </tr>
 <tr>
-  <td>spark.sql.legacy.parquet.int96RebaseModeInRead</td>
+  <td>spark.sql.parquet.int96RebaseModeInRead</td>
   <td><code>EXCEPTION</code></td>
   <td>The rebasing mode for the values of the <code>INT96</code> timestamp type from the Julian to Proleptic Gregorian calendar:<br>
     <ul>
@@ -404,7 +404,7 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>3.1.0</td>
 </tr>
 <tr>
-  <td>spark.sql.legacy.parquet.int96RebaseModeInWrite</td>
+  <td>spark.sql.parquet.int96RebaseModeInWrite</td>
   <td><code>EXCEPTION</code></td>
   <td>The rebasing mode for the values of the <code>INT96</code> timestamp type from the Proleptic Gregorian to Julian calendar:<br>
     <ul>

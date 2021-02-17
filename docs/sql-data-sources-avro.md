@@ -285,7 +285,7 @@ Data source options of Avro can be set via:
   </tr>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.legacy.avro</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>The SQL config <code>spark.sql.avro</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
     <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
@@ -331,7 +331,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>2.4.0</td>
   </tr>
   <tr>
-    <td>spark.sql.legacy.avro.datetimeRebaseModeInRead</td>
+    <td>spark.sql.avro.datetimeRebaseModeInRead</td>
     <td><code>EXCEPTION</code></td>
     <td>The rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar:<br>
       <ul>
@@ -344,7 +344,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>3.0.0</td>
   </tr>
   <tr>
-    <td>spark.sql.legacy.avro.datetimeRebaseModeInWrite</td>
+    <td>spark.sql.avro.datetimeRebaseModeInWrite</td>
     <td><code>EXCEPTION</code></td>
     <td>The rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Proleptic Gregorian to Julian calendar:<br>
       <ul>
