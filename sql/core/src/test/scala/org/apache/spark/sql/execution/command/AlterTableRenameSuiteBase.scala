@@ -21,17 +21,18 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.storage.StorageLevel
 
 /**
- * This base suite contains unified tests for the `RENAME TABLE` command that check V1 and V2
- * table catalogs. The tests that cannot run for all supported catalogs are located in more
+ * This base suite contains unified tests for the `ALTER TABLE .. RENAME` command that check V1
+ * and V2 table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.RenameTableSuite`
- *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.RenameTableSuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.RenameTableSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.RenameTableSuite`
+ *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.AlterTableRenameSuite`
+ *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuiteBase`
+ *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
-trait RenameTableSuiteBase extends QueryTest with DDLCommandTestUtils {
-  override val command = "RENAME TABLE"
+trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
+  override val command = "ALTER TABLE .. RENAME"
 
   test("rename a table in a database/namespace") {
     withNamespaceAndTable("ns", "dst_tbl") { dst =>

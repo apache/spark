@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution.command
 import org.apache.spark.sql.execution.command.v1
 
 /**
- * The class contains tests for the `RENAME TABLE` command to check V1 Hive external table catalog.
+ * The class contains tests for the `ALTER TABLE .. RENAME` command to check
+ * V1 Hive external table catalog.
  */
-class RenameTableSuite extends v1.RenameTableSuiteBase with CommandSuiteBase
+class AlterTableRenameSuite extends v1.AlterTableRenameSuiteBase with CommandSuiteBase

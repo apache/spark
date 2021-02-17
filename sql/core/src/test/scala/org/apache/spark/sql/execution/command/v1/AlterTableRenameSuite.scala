@@ -21,14 +21,14 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 
 /**
- * This base suite contains unified tests for the `RENAME TABLE` command that check V1
+ * This base suite contains unified tests for the `ALTER TABLE .. RENAME` command that check V1
  * table catalogs. The tests that cannot run for all V1 catalogs are located in more
  * specific test suites:
  *
- *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.RenameTableSuite`
- *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.RenameTableSuite`
+ *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuite`
+ *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
-trait RenameTableSuiteBase extends command.RenameTableSuiteBase {
+trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase {
   test("omit namespace in the destination table") {
     withNamespaceAndTable("ns", "dst_tbl") { dst =>
       val src = dst.replace("dst", "src")
@@ -106,6 +106,7 @@ trait RenameTableSuiteBase extends command.RenameTableSuiteBase {
 }
 
 /**
- * The class contains tests for the `RENAME TABLE` command to check V1 In-Memory table catalog.
+ * The class contains tests for the `ALTER TABLE .. RENAME` command to check
+ * V1 In-Memory table catalog.
  */
-class RenameTableSuite extends RenameTableSuiteBase with CommandSuiteBase
+class AlterTableRenameSuite extends AlterTableRenameSuiteBase with CommandSuiteBase

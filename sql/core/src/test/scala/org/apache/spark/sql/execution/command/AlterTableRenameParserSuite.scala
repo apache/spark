@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.RenameTable
 
-class RenameTableParserSuite extends AnalysisTest {
+class AlterTableRenameParserSuite extends AnalysisTest {
   test("rename table") {
     comparePlans(
       parsePlan("ALTER TABLE a.b.c RENAME TO x.y.z"),
