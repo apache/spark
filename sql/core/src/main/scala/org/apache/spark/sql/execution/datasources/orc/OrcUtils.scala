@@ -81,10 +81,10 @@ object OrcUtils extends Logging {
     }
   }
 
-  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus])
+  def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
       : Option[StructType] = {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
-    val conf = sparkSession.sessionState.newHadoopConf()
+    val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
       case Some(schema) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
@@ -125,7 +125,7 @@ object OrcUtils extends Logging {
       SchemaMergeUtils.mergeSchemasInParallel(
         sparkSession, options, files, OrcUtils.readOrcSchemasInParallel)
     } else {
-      OrcUtils.readSchema(sparkSession, files)
+      OrcUtils.readSchema(sparkSession, files, options)
     }
   }
 

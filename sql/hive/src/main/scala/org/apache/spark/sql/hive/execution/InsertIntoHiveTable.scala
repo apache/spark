@@ -131,6 +131,7 @@ case class InsertIntoHiveTable(
     val numDynamicPartitions = partition.values.count(_.isEmpty)
     val numStaticPartitions = partition.values.count(_.nonEmpty)
     val partitionSpec = partition.map {
+      case (key, Some(null)) => key -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME
       case (key, Some(value)) => key -> value
       case (key, None) => key -> ""
     }
@@ -227,6 +228,7 @@ case class InsertIntoHiveTable(
             val caseInsensitiveDpMap = CaseInsensitiveMap(dpMap)
 
             val updatedPartitionSpec = partition.map {
+              case (key, Some(null)) => key -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME
               case (key, Some(value)) => key -> value
               case (key, None) if caseInsensitiveDpMap.contains(key) =>
                 key -> caseInsensitiveDpMap(key)

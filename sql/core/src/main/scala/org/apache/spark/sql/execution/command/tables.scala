@@ -21,7 +21,6 @@ import java.net.{URI, URISyntaxException}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileContext, FsConstants, Path}
@@ -192,18 +191,19 @@ case class AlterTableRenameCommand(
     } else {
       val table = catalog.getTableMetadata(oldName)
       DDLUtils.verifyAlterTableType(catalog, table, isView)
-      // If an exception is thrown here we can just assume the table is uncached;
-      // this can happen with Hive tables when the underlying catalog is in-memory.
-      val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
-      if (wasCached) {
+      // If `optStorageLevel` is defined, the old table was cached.
+      val optCachedData = sparkSession.sharedState.cacheManager.lookupCachedData(
+        sparkSession.table(oldName.unquotedString))
+      val optStorageLevel = optCachedData.map(_.cachedRepresentation.cacheBuilder.storageLevel)
+      if (optStorageLevel.isDefined) {
         CommandUtils.uncacheTableOrView(sparkSession, oldName.unquotedString)
       }
       // Invalidate the table last, otherwise uncaching the table would load the logical plan
       // back into the hive metastore cache
       catalog.refreshTable(oldName)
       catalog.renameTable(oldName, newName)
-      if (wasCached) {
-        sparkSession.catalog.cacheTable(newName.unquotedString)
+      optStorageLevel.foreach { storageLevel =>
+        sparkSession.catalog.cacheTable(newName.unquotedString, storageLevel)
       }
     }
     Seq.empty[Row]
@@ -389,8 +389,8 @@ case class LoadDataCommand(
         isSrcLocal = isLocal)
     }
 
-    // Refresh the metadata cache to ensure the data visible to the users
-    catalog.refreshTable(targetTable.identifier)
+    // Refresh the data and metadata cache to ensure the data visible to the users
+    sparkSession.catalog.refreshTable(tableIdentwithDB)
 
     CommandUtils.updateTableStats(sparkSession, targetTable)
     Seq.empty[Row]
@@ -884,12 +884,20 @@ case class ShowTablesCommand(
       //
       // Note: tableIdentifierPattern should be non-empty, otherwise a [[ParseException]]
       // should have been thrown by the sql parser.
-      val tableIdent = TableIdentifier(tableIdentifierPattern.get, Some(db))
-      val table = catalog.getTableMetadata(tableIdent).identifier
-      val partition = catalog.getPartition(tableIdent, partitionSpec.get)
-      val database = table.database.getOrElse("")
-      val tableName = table.table
-      val isTemp = catalog.isTemporaryTable(table)
+      val table = catalog.getTableMetadata(TableIdentifier(tableIdentifierPattern.get, Some(db)))
+
+      DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW TABLE EXTENDED")
+
+      val tableIdent = table.identifier
+      val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
+        partitionSpec.get,
+        table.partitionColumnNames,
+        tableIdent.quotedString,
+        sparkSession.sessionState.conf.resolver)
+      val partition = catalog.getPartition(tableIdent, normalizedSpec)
+      val database = tableIdent.database.getOrElse("")
+      val tableName = tableIdent.table
+      val isTemp = catalog.isTemporaryTable(tableIdent)
       val information = partition.simpleString
       Seq(Row(database, tableName, isTemp, s"$information\n"))
     }
@@ -1007,20 +1015,18 @@ case class ShowPartitionsCommand(
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
 
     /**
-     * Validate the partitioning spec by making sure all the referenced columns are
+     * Normalizes the partition spec w.r.t the partition columns and case sensitivity settings,
+     * and validates the spec by making sure all the referenced columns are
      * defined as partitioning columns in table definition. An AnalysisException exception is
      * thrown if the partitioning spec is invalid.
      */
-    if (spec.isDefined) {
-      val badColumns = spec.get.keySet.filterNot(table.partitionColumnNames.contains)
-      if (badColumns.nonEmpty) {
-        val badCols = badColumns.mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Non-partitioning column(s) $badCols are specified for SHOW PARTITIONS")
-      }
-    }
+    val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
+      partitionSpec,
+      table.partitionColumnNames,
+      table.identifier.quotedString,
+      sparkSession.sessionState.conf.resolver))
 
-    val partNames = catalog.listPartitionNames(tableName, spec)
+    val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
     partNames.map(Row(_))
   }
 }

@@ -230,6 +230,15 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
 
   def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
+  test("skipSchemaResolution should still require query to be resolved") {
+    val table = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("a", FloatType),
+      StructField("b", DoubleType))).toAttributes)
+    val query = UnresolvedRelation(Seq("t"))
+    val parsedPlan = byName(table, query)
+    assertNotResolved(parsedPlan)
+  }
+
   test("byName: basic behavior") {
     val query = TestRelation(table.schema.toAttributes)
 
@@ -579,9 +588,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
         Alias(Cast(a, DoubleType, Some(conf.sessionLocalTimeZone)), "x")(),
         Alias(Cast(b, DoubleType, Some(conf.sessionLocalTimeZone)), "y")()),
         query),
-      LessThanOrEqual(
-        AttributeReference("x", DoubleType, nullable = false)(x.exprId),
-        Literal(15.0d)))
+      LessThanOrEqual(x, Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
     checkAnalysis(parsedPlan, expectedPlan)
@@ -589,7 +596,7 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
   }
 
   protected def testNotResolvedOverwriteByExpression(): Unit = {
-    val xRequiredTable = TestRelation(StructType(Seq(
+    val table = TestRelation(StructType(Seq(
       StructField("x", DoubleType, nullable = false),
       StructField("y", DoubleType))).toAttributes)
 
@@ -598,10 +605,19 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       StructField("b", DoubleType))).toAttributes)
 
     // the write is resolved (checked above). this test plan is not because of the expression.
-    val parsedPlan = OverwriteByExpression.byPosition(xRequiredTable, query,
+    val parsedPlan = OverwriteByExpression.byPosition(table, query,
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
 
     assertNotResolved(parsedPlan)
     assertAnalysisError(parsedPlan, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
+
+    val tableAcceptAnySchema = TestRelationAcceptAnySchema(StructType(Seq(
+      StructField("x", DoubleType, nullable = false),
+      StructField("y", DoubleType))).toAttributes)
+
+    val parsedPlan2 = OverwriteByExpression.byPosition(tableAcceptAnySchema, query,
+      LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
+    assertNotResolved(parsedPlan2)
+    assertAnalysisError(parsedPlan2, Seq("cannot resolve", "`a`", "given input columns", "x, y"))
   }
 }

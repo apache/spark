@@ -61,7 +61,7 @@ val df = spark
   .option("includeHeaders", "true")
   .load()
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)", "headers")
-  .as[(String, String, Map)]
+  .as[(String, String, Array[(String, Array[Byte])])]
 
 // Subscribe to multiple topics
 val df = spark

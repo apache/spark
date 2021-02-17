@@ -51,6 +51,7 @@ import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtoc
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -791,7 +792,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       Seq(1).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
 
       val dataTypes =
-        Seq(StringType, BooleanType, ByteType, ShortType, IntegerType, LongType,
+        Seq(StringType, BooleanType, ByteType, BinaryType, ShortType, IntegerType, LongType,
           FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
 
       val constantValues =
@@ -799,6 +800,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           UTF8String.fromString("a string"),
           true,
           1.toByte,
+          "Spark SQL".getBytes,
           2.toShort,
           3,
           Long.MaxValue,
@@ -826,7 +828,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           // in order to use get(...) method which is not implemented in `ColumnarBatch`.
           val actual = row.copy().get(1, dt)
           val expected = v
-          assert(actual == expected)
+          if (dt.isInstanceOf[BinaryType]) {
+            assert(actual.asInstanceOf[Array[Byte]] sameElements expected.asInstanceOf[Array[Byte]])
+          } else {
+            assert(actual == expected)
+          }
         } finally {
           vectorizedReader.close()
         }
@@ -859,20 +865,24 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  private def getMetaData(dir: java.io.File): Map[String, String] = {
+    val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+    val conf = new Configuration()
+    val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
+    val parquetReadOptions = HadoopReadOptions.builder(conf).build()
+    val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
+    val metadata = try {
+      m.getFileMetaData.getKeyValueMetaData
+    } finally {
+      m.close()
+    }
+    metadata.asScala.toMap
+  }
+
   test("Write Spark version into Parquet metadata") {
     withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(1).repartition(1).write.parquet(path)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
-
-      val conf = new Configuration()
-      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
-      val parquetReadOptions = HadoopReadOptions.builder(conf).build()
-      val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
-      val metaData = m.getFileMetaData.getKeyValueMetaData
-      m.close()
-
-      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+      spark.range(1).repartition(1).write.parquet(dir.getAbsolutePath)
+      assert(getMetaData(dir)(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
 
@@ -1107,6 +1117,37 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
           }
         }
       }
+    }
+  }
+
+  test("SPARK-33163: write the metadata key 'org.apache.spark.legacyDateTime'") {
+    def checkMetadataKey(dir: java.io.File, exists: Boolean): Unit = {
+      Seq("timestamp '1000-01-01 01:02:03'", "date '1000-01-01'").foreach { dt =>
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
+          sql(s"SELECT $dt AS dt")
+            .repartition(1)
+            .write
+            .mode("overwrite")
+            .parquet(dir.getAbsolutePath)
+          val metaData = getMetaData(dir)
+          val expected = if (exists) Some("") else None
+          assert(metaData.get(SPARK_LEGACY_DATETIME) === expected)
+        }
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+      withTempPath { dir =>
+        checkMetadataKey(dir, exists = true)
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+      withTempPath { dir =>
+        checkMetadataKey(dir, exists = false)
+      }
+    }
+    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      withTempPath { dir => intercept[SparkException] { checkMetadataKey(dir, exists = false) } }
     }
   }
 }

@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
+import scala.math.Ordering
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
@@ -537,11 +539,24 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateMutableProjection.generate(exprs, true)
   }
 
-  test("SPARK-32624: Use getCanonicalName to fix byte[] compile issue") {
+  test("SPARK-32624: Use CodeGenerator.typeName() to fix byte[] compile issue") {
     val ctx = new CodegenContext
     val bytes = new Array[Byte](3)
-    val byteObj = ctx.addReferenceObj("bytes", bytes)
-    assert(byteObj == "((byte[]) references[0] /* bytes */)")
+    val refTerm = ctx.addReferenceObj("bytes", bytes)
+    assert(refTerm == "((byte[]) references[0] /* bytes */)")
+  }
+
+  test("SPARK-32624: CodegenContext.addReferenceObj should work for nested Scala class") {
+    // emulate TypeUtils.getInterpretedOrdering(StringType)
+    val ctx = new CodegenContext
+    val comparator = implicitly[Ordering[UTF8String]]
+    val refTerm = ctx.addReferenceObj("comparator", comparator)
+
+    // Expecting result:
+    //   "((scala.math.LowPriorityOrderingImplicits$$anon$3) references[0] /* comparator */)"
+    // Using lenient assertions to be resilient to annonymous class numbering changes
+    assert(!refTerm.contains("null"))
+    assert(refTerm.contains("scala.math.LowPriorityOrderingImplicits$$anon$"))
   }
 }
 

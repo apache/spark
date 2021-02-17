@@ -129,8 +129,7 @@ object AnalysisContext {
  */
 class Analyzer(
     override val catalogManager: CatalogManager,
-    conf: SQLConf,
-    maxIterations: Int)
+    conf: SQLConf)
   extends RuleExecutor[LogicalPlan] with CheckAnalysis with LookupCatalog {
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
@@ -141,15 +140,11 @@ class Analyzer(
   def this(catalog: SessionCatalog, conf: SQLConf) = {
     this(
       new CatalogManager(conf, FakeV2SessionCatalog, catalog),
-      conf,
-      conf.analyzerMaxIterations)
-  }
-
-  def this(catalogManager: CatalogManager, conf: SQLConf) = {
-    this(catalogManager, conf, conf.analyzerMaxIterations)
+      conf)
   }
 
   def executeAndCheck(plan: LogicalPlan, tracker: QueryPlanningTracker): LogicalPlan = {
+    if (plan.analyzed) return plan
     AnalysisHelper.markInAnalyzer {
       val analyzed = executeAndTrack(plan, tracker)
       try {
@@ -181,9 +176,9 @@ class Analyzer(
    * If the plan cannot be resolved within maxIterations, analyzer will throw exception to inform
    * user to increase the value of SQLConf.ANALYZER_MAX_ITERATIONS.
    */
-  protected val fixedPoint =
+  protected def fixedPoint =
     FixedPoint(
-      maxIterations,
+      conf.analyzerMaxIterations,
       errorOnExceed = true,
       maxIterationsSetting = SQLConf.ANALYZER_MAX_ITERATIONS.key)
 
@@ -199,7 +194,7 @@ class Analyzer(
    */
   val postHocResolutionRules: Seq[Rule[LogicalPlan]] = Nil
 
-  lazy val batches: Seq[Batch] = Seq(
+  override def batches: Seq[Batch] = Seq(
     Batch("Substitution", fixedPoint,
       CTESubstitution,
       WindowsSubstitution,
@@ -457,7 +452,7 @@ class Analyzer(
      */
     private def constructGroupByAlias(groupByExprs: Seq[Expression]): Seq[Alias] = {
       groupByExprs.map {
-        case e: NamedExpression => Alias(e, e.name)()
+        case e: NamedExpression => Alias(e, e.name)(qualifier = e.qualifier)
         case other => Alias(other, other.toString)()
       }
     }
@@ -1203,6 +1198,14 @@ class Analyzer(
             if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
           Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
 
+        case oldVersion @ FlatMapCoGroupsInPandas(_, _, _, output, _, _)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
+        case oldVersion @ MapInPandas(_, output, _)
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
         case oldVersion: Generate
             if oldVersion.producedAttributes.intersect(conflictingAttributes).nonEmpty =>
           val newOutput = oldVersion.generatorOutput.map(_.newInstance())
@@ -1239,108 +1242,13 @@ class Analyzer(
       if (conflictPlans.isEmpty) {
         right
       } else {
-        rewritePlan(right, conflictPlans.toMap)._1
-      }
-    }
-
-    private def rewritePlan(plan: LogicalPlan, conflictPlanMap: Map[LogicalPlan, LogicalPlan])
-      : (LogicalPlan, Seq[(Attribute, Attribute)]) = {
-      if (conflictPlanMap.contains(plan)) {
-        // If the plan is the one that conflict the with left one, we'd
-        // just replace it with the new plan and collect the rewrite
-        // attributes for the parent node.
-        val newRelation = conflictPlanMap(plan)
-        newRelation -> plan.output.zip(newRelation.output)
-      } else {
-        val attrMapping = new mutable.ArrayBuffer[(Attribute, Attribute)]()
-        val newPlan = plan.mapChildren { child =>
-          // If not, we'd rewrite child plan recursively until we find the
-          // conflict node or reach the leaf node.
-          val (newChild, childAttrMapping) = rewritePlan(child, conflictPlanMap)
-          attrMapping ++= childAttrMapping.filter { case (oldAttr, _) =>
-            // `attrMapping` is not only used to replace the attributes of the current `plan`,
-            // but also to be propagated to the parent plans of the current `plan`. Therefore,
-            // the `oldAttr` must be part of either `plan.references` (so that it can be used to
-            // replace attributes of the current `plan`) or `plan.outputSet` (so that it can be
-            // used by those parent plans).
-            (plan.outputSet ++ plan.references).contains(oldAttr)
-          }
-          newChild
-        }
-
-        if (attrMapping.isEmpty) {
-          newPlan -> attrMapping
-        } else {
-          assert(!attrMapping.groupBy(_._1.exprId)
-            .exists(_._2.map(_._2.exprId).distinct.length > 1),
-            "Found duplicate rewrite attributes")
-          val attributeRewrites = AttributeMap(attrMapping)
-          // Using attrMapping from the children plans to rewrite their parent node.
-          // Note that we shouldn't rewrite a node using attrMapping from its sibling nodes.
-          newPlan.transformExpressions {
-            case a: Attribute =>
-              dedupAttr(a, attributeRewrites)
-            case s: SubqueryExpression =>
-              s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attributeRewrites))
-          } -> attrMapping
-        }
-      }
-    }
-
-    private def dedupAttr(attr: Attribute, attrMap: AttributeMap[Attribute]): Attribute = {
-      val exprId = attrMap.getOrElse(attr, attr).exprId
-      attr.withExprId(exprId)
-    }
-
-    /**
-     * The outer plan may have been de-duplicated and the function below updates the
-     * outer references to refer to the de-duplicated attributes.
-     *
-     * For example (SQL):
-     * {{{
-     *   SELECT * FROM t1
-     *   INTERSECT
-     *   SELECT * FROM t1
-     *   WHERE EXISTS (SELECT 1
-     *                 FROM t2
-     *                 WHERE t1.c1 = t2.c1)
-     * }}}
-     * Plan before resolveReference rule.
-     *    'Intersect
-     *    :- Project [c1#245, c2#246]
-     *    :  +- SubqueryAlias t1
-     *    :     +- Relation[c1#245,c2#246] parquet
-     *    +- 'Project [*]
-     *       +- Filter exists#257 [c1#245]
-     *       :  +- Project [1 AS 1#258]
-     *       :     +- Filter (outer(c1#245) = c1#251)
-     *       :        +- SubqueryAlias t2
-     *       :           +- Relation[c1#251,c2#252] parquet
-     *       +- SubqueryAlias t1
-     *          +- Relation[c1#245,c2#246] parquet
-     * Plan after the resolveReference rule.
-     *    Intersect
-     *    :- Project [c1#245, c2#246]
-     *    :  +- SubqueryAlias t1
-     *    :     +- Relation[c1#245,c2#246] parquet
-     *    +- Project [c1#259, c2#260]
-     *       +- Filter exists#257 [c1#259]
-     *       :  +- Project [1 AS 1#258]
-     *       :     +- Filter (outer(c1#259) = c1#251) => Updated
-     *       :        +- SubqueryAlias t2
-     *       :           +- Relation[c1#251,c2#252] parquet
-     *       +- SubqueryAlias t1
-     *          +- Relation[c1#259,c2#260] parquet  => Outer plan's attributes are de-duplicated.
-     */
-    private def dedupOuterReferencesInSubquery(
-        plan: LogicalPlan,
-        attrMap: AttributeMap[Attribute]): LogicalPlan = {
-      plan transformDown { case currentFragment =>
-        currentFragment transformExpressions {
-          case OuterReference(a: Attribute) =>
-            OuterReference(dedupAttr(a, attrMap))
-          case s: SubqueryExpression =>
-            s.withNewPlan(dedupOuterReferencesInSubquery(s.plan, attrMap))
+        val planMapping = conflictPlans.toMap
+        right.transformUpWithNewOutput {
+          case oldPlan =>
+            val newPlanOpt = planMapping.get(oldPlan)
+            newPlanOpt.map { newPlan =>
+              newPlan -> oldPlan.output.zip(newPlan.output)
+            }.getOrElse(oldPlan -> Nil)
         }
       }
     }
@@ -1464,10 +1372,10 @@ class Analyzer(
       case a @ Aggregate(groupingExprs, aggExprs, appendColumns: AppendColumns) =>
         a.mapExpressions(resolveExpressionTopDown(_, appendColumns))
 
-      case o: OverwriteByExpression if !o.outputResolved =>
-        // do not resolve expression attributes until the query attributes are resolved against the
-        // table by ResolveOutputRelation. that rule will alias the attributes to the table's names.
-        o
+      case o: OverwriteByExpression if o.table.resolved =>
+        // The delete condition of `OverwriteByExpression` will be passed to the table
+        // implementation and should be resolved based on the table schema.
+        o.copy(deleteExpr = resolveExpressionBottomUp(o.deleteExpr, o.table))
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -2812,7 +2720,10 @@ class Analyzer(
 
     private def getNondeterToAttr(exprs: Seq[Expression]): Map[Expression, NamedExpression] = {
       exprs.filterNot(_.deterministic).flatMap { expr =>
-        val leafNondeterministic = expr.collect { case n: Nondeterministic => n }
+        val leafNondeterministic = expr.collect {
+          case n: Nondeterministic => n
+          case udf: UserDefinedExpression if !udf.deterministic => udf
+        }
         leafNondeterministic.distinct.map { e =>
           val ne = e match {
             case n: NamedExpression => n

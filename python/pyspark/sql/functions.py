@@ -909,7 +909,8 @@ def ntile(n):
 @since(1.5)
 def current_date():
     """
-    Returns the current date as a :class:`DateType` column.
+    Returns the current date at the start of query evaluation as a :class:`DateType` column.
+    All calls of current_date within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_date())
@@ -917,7 +918,8 @@ def current_date():
 
 def current_timestamp():
     """
-    Returns the current timestamp as a :class:`TimestampType` column.
+    Returns the current timestamp at the start of query evaluation as a :class:`TimestampType`
+    column. All calls of current_timestamp within the same query return the same value.
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.current_timestamp())

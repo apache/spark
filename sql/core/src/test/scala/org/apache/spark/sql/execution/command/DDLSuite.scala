@@ -32,7 +32,9 @@ import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
@@ -1323,6 +1325,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       Nil)
   }
 
+  test("SPARK-34359: keep the legacy output schema") {
+    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+      assert(sql("SHOW NAMESPACES").schema.fieldNames.toSeq == Seq("databaseName"))
+    }
+  }
+
   test("drop view - temporary view") {
     val catalog = spark.sessionState.catalog
     sql(
@@ -1729,6 +1737,13 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     // use int literal as partition value for int type partition column
     sql("ALTER TABLE tab1 DROP PARTITION (a=9, b=9)")
+    assert(catalog.listPartitions(tableIdent).isEmpty)
+
+    // null partition values
+    createTablePartition(catalog, Map("a" -> null, "b" -> null), tableIdent)
+    assert(catalog.listPartitions(tableIdent).map(_.spec).toSet ==
+      Set(Map("a" -> "__HIVE_DEFAULT_PARTITION__", "b" -> "__HIVE_DEFAULT_PARTITION__")))
+    sql("ALTER TABLE tab1 DROP PARTITION (a = null, b = null)")
     assert(catalog.listPartitions(tableIdent).isEmpty)
   }
 
@@ -3027,6 +3042,87 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           spark.sql(s"ADD FILE $testDir")
         }.getMessage
         assert(msg.contains("is a directory and recursive is not turned on"))
+      }
+    }
+  }
+
+  test("SPARK-33588: case sensitivity of partition spec in SHOW TABLE") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (price int, qty int, year int, month int)
+        |USING $dataSource
+        |PARTITIONED BY (year, month)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+      Seq(
+        true -> "PARTITION(year = 2015, month = 1)",
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          val df = sql(s"SHOW TABLE EXTENDED LIKE '$t' $partitionSpec")
+          val information = df.select("information").first().getString(0)
+          assert(information.contains("Partition Values: [year=2015, month=1]"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33667: case sensitivity of partition spec in SHOW PARTITIONS") {
+    val t = "part_table"
+    withTable(t) {
+      sql(s"""
+        |CREATE TABLE $t (price int, qty int, year int, month int)
+        |USING $dataSource
+        |PARTITIONED BY (year, month)""".stripMargin)
+      sql(s"INSERT INTO $t PARTITION(year = 2015, month = 1) SELECT 1, 1")
+      Seq(
+        true -> "PARTITION(year = 2015, month = 1)",
+        false -> "PARTITION(YEAR = 2015, Month = 1)"
+      ).foreach { case (caseSensitive, partitionSpec) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          checkAnswer(
+            sql(s"SHOW PARTITIONS $t $partitionSpec"),
+            Row("year=2015/month=1"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-33670: show partitions from a datasource table") {
+    import testImplicits._
+    val t = "part_datasrc"
+    withTable(t) {
+      val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
+      df.write.partitionBy("a").format("parquet").mode(SaveMode.Overwrite).saveAsTable(t)
+      assert(sql(s"SHOW TABLE EXTENDED LIKE '$t' PARTITION(a = 1)").count() === 1)
+    }
+  }
+
+  test("SPARK-33591, SPARK-34203: insert and drop partitions with null values") {
+    def checkPartitions(t: String, expected: Map[String, String]*): Unit = {
+      val partitions = sql(s"SHOW PARTITIONS $t")
+        .collect()
+        .toSet
+        .map((row: Row) => row.getString(0))
+        .map(PartitioningUtils.parsePathFragment)
+      assert(partitions === expected.toSet)
+    }
+    val defaultUsing = "USING " + (if (isUsingHiveMetastore) "hive" else "parquet")
+    def insertAndDropNullPart(t: String, insertCmd: String): Unit = {
+      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) $defaultUsing PARTITIONED BY (p1)")
+      sql(insertCmd)
+      checkPartitions(t, Map("p1" -> ExternalCatalogUtils.DEFAULT_PARTITION_NAME))
+      sql(s"ALTER TABLE $t DROP PARTITION (p1 = null)")
+      checkPartitions(t)
+    }
+
+    withTable("tbl") {
+      insertAndDropNullPart("tbl", s"INSERT INTO TABLE tbl PARTITION (p1 = null) SELECT 0")
+    }
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable("tbl") {
+        insertAndDropNullPart("tbl", s"INSERT OVERWRITE TABLE tbl VALUES (0, null)")
       }
     }
   }

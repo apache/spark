@@ -86,7 +86,7 @@ class JacksonParser(
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => Some(convertObject(parser, st, fieldConverters))
+      case START_OBJECT => Some(convertObject(parser, st, fieldConverters, isRoot = true))
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -375,7 +375,8 @@ class JacksonParser(
   private def convertObject(
       parser: JsonParser,
       schema: StructType,
-      fieldConverters: Array[ValueConverter]): InternalRow = {
+      fieldConverters: Array[ValueConverter],
+      isRoot: Boolean = false): InternalRow = {
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
 
@@ -386,7 +387,7 @@ class JacksonParser(
             row.update(index, fieldConverters(index).apply(parser))
           } catch {
             case e: SparkUpgradeException => throw e
-            case NonFatal(e) =>
+            case NonFatal(e) if isRoot =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
           }

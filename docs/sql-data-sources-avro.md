@@ -88,7 +88,7 @@ Kafka key-value record will be augmented with some metadata, such as the ingesti
 * If the "value" field that contains your data is in Avro, you could use `from_avro()` to extract your data, enrich it, clean it, and then push it downstream to Kafka again or write it out to a file.
 * `to_avro()` can be used to turn structs into Avro records. This method is particularly useful when you would like to re-encode multiple columns into a single one when writing data out to Kafka.
 
-Both functions are currently only available in Scala and Java.
+Both functions are currently only available in Scala, Java, and Python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

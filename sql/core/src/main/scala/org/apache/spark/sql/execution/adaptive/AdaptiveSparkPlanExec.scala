@@ -83,13 +83,15 @@ case class AdaptiveSparkPlanExec(
     )
   }
 
+  @transient private val removeRedundantSorts = RemoveRedundantSorts(conf)
   @transient private val ensureRequirements = EnsureRequirements(conf)
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    ensureRequirements
+    ensureRequirements,
+    removeRedundantSorts
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These

@@ -729,7 +729,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       def unapply(expr: Expression): Option[Attribute] = {
         expr match {
           case attr: Attribute => Some(attr)
-          case Cast(child @ AtomicType(), dt: AtomicType, _)
+          case Cast(child @ IntegralType(), dt: IntegralType, _)
               if Cast.canUpCast(child.dataType.asInstanceOf[AtomicType], dt) => unapply(child)
           case _ => None
         }
@@ -1327,10 +1327,7 @@ private[client] class Shim_v3_0 extends Shim_v2_3 {
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean,
       isSrcLocal: Boolean): Unit = {
-    val session = SparkSession.getActiveSession
-    assert(session.nonEmpty)
-    val database = session.get.sessionState.catalog.getCurrentDatabase
-    val table = hive.getTable(database, tableName)
+    val table = hive.getTable(tableName)
     val loadFileType = if (replace) {
       clazzLoadFileType.getEnumConstants.find(_.toString.equalsIgnoreCase("REPLACE_ALL"))
     } else {

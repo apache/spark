@@ -79,7 +79,12 @@ class QueryExecution(
   lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    val plan = sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+    // We do not want optimized plans to be re-analyzed as literals that have been constant folded
+    // and such can cause issues during analysis. While `clone` should maintain the `analyzed` state
+    // of the LogicalPlan, we set the plan as analyzed here as well out of paranoia.
+    plan.setAnalyzed()
+    plan
   }
 
   private def assertOptimized(): Unit = optimizedPlan
@@ -298,6 +303,9 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       EnsureRequirements(sparkSession.sessionState.conf),
+      // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
+      // number of partitions when instantiating PartitioningCollection.
+      RemoveRedundantSorts(sparkSession.sessionState.conf),
       ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
         sparkSession.sessionState.columnarRules),
       CollapseCodegenStages(sparkSession.sessionState.conf),

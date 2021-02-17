@@ -70,7 +70,7 @@ function stageEndPoint(appId) {
             return newBaseURI + "/api/v1/applications/" + appId + "/" + appAttemptId + "/stages/" + stageId;
         }
     }
-    return location.origin + "/api/v1/applications/" + appId + "/stages/" + stageId;
+    return uiRoot + "/api/v1/applications/" + appId + "/stages/" + stageId;
 }
 
 function getColumnNameForTaskMetricSummary(columnKey) {
@@ -821,7 +821,8 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if (row.taskMetrics && row.taskMetrics.shuffleReadMetrics && row.taskMetrics.shuffleReadMetrics.localBytesRead > 0) {
+                                if (row.taskMetrics && row.taskMetrics.shuffleReadMetrics &&
+                                    (row.taskMetrics.shuffleReadMetrics.localBytesRead > 0 || row.taskMetrics.shuffleReadMetrics.remoteBytesRead > 0)) {
                                     var totalBytesRead = parseInt(row.taskMetrics.shuffleReadMetrics.localBytesRead) + parseInt(row.taskMetrics.shuffleReadMetrics.remoteBytesRead);
                                     if (type === 'display') {
                                         return formatBytes(totalBytesRead, type) + " / " + row.taskMetrics.shuffleReadMetrics.recordsRead;
@@ -860,7 +861,8 @@ $(document).ready(function () {
                                 if (typeof msg === 'undefined') {
                                     return "";
                                 } else {
-                                    var formHead = msg.substring(0, msg.indexOf("at"));
+                                    var indexOfLineSeparator = msg.indexOf("\n");
+                                    var formHead = indexOfLineSeparator > 0 ? msg.substring(0, indexOfLineSeparator) : (msg.length > 100 ? msg.substring(0, 100) : msg);
                                     var form = "<span onclick=\"this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')\" class=\"expand-details\">+details</span>";
                                     var formMsg = "<div class=\"stacktrace-details collapsed\"><pre>" + row.errorMessage + "</pre></div>";
                                     return formHead + form + formMsg;

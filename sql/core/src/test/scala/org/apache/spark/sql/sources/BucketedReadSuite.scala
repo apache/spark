@@ -188,7 +188,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
       // Case 4: InSet
       val inSetExpr = expressions.InSet($"j".expr,
-        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3).map(lit(_).expr))
+        Set(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3))
       checkPrunedAnswers(
         bucketSpec,
         bucketValues = Seq(bucketValue, bucketValue + 1, bucketValue + 2, bucketValue + 3),
@@ -839,6 +839,34 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
             bucketedTableTestSpecRight = bucketedTableTestSpecRight,
             joinCondition = joinCondition(Seq("i", "j"))
           )
+        }
+      }
+    }
+  }
+
+  test("SPARK-32767 Bucket join should work if SHUFFLE_PARTITIONS larger than bucket number") {
+    withSQLConf(
+      SQLConf.SHUFFLE_PARTITIONS.key -> "9",
+      SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key -> "10")  {
+
+      val testSpec1 = BucketedTableTestSpec(
+        Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = false,
+        expectedSort = false)
+      val testSpec2 = BucketedTableTestSpec(
+        Some(BucketSpec(6, Seq("i", "j"), Seq("i", "j"))),
+        numPartitions = 1,
+        expectedShuffle = true,
+        expectedSort = true)
+      Seq(false, true).foreach { enableAdaptive =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> s"$enableAdaptive") {
+          Seq((testSpec1, testSpec2), (testSpec2, testSpec1)).foreach { specs =>
+            testBucketing(
+              bucketedTableTestSpecLeft = specs._1,
+              bucketedTableTestSpecRight = specs._2,
+              joinCondition = joinCondition(Seq("i", "j")))
+          }
         }
       }
     }

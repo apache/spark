@@ -44,7 +44,7 @@ abstract class DatabaseOnDocker {
   val env: Map[String, String]
 
   /**
-   * Wheather or not to use ipc mode for shared memory when starting docker image
+   * Whether or not to use ipc mode for shared memory when starting docker image
    */
   val usesIpc: Boolean
 
@@ -67,6 +67,7 @@ abstract class DatabaseOnDocker {
 abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
 
   val db: DatabaseOnDocker
+  val connectionTimeout = timeout(2.minutes)
 
   private var docker: DockerClient = _
   private var containerId: String = _
@@ -123,12 +124,11 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
       // Start the container and wait until the database can accept JDBC connections:
       docker.startContainer(containerId)
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
-      eventually(timeout(1.minute), interval(1.second)) {
-        val conn = java.sql.DriverManager.getConnection(jdbcUrl)
-        conn.close()
+      var conn: Connection = null
+      eventually(connectionTimeout, interval(1.second)) {
+        conn = java.sql.DriverManager.getConnection(jdbcUrl)
       }
       // Run any setup queries:
-      val conn: Connection = java.sql.DriverManager.getConnection(jdbcUrl)
       try {
         dataPreparation(conn)
       } finally {

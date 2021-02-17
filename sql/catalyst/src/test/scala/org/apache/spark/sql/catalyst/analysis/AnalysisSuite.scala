@@ -610,6 +610,48 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34319: analysis fails on self-join with FlatMapCoGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
+    val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
+      Seq(UnresolvedAttribute("a")),
+      Seq(UnresolvedAttribute("a")),
+      pythonUdf,
+      output,
+      project1,
+      project2)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-34319: analysis fails on self-join with MapInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInPandas = MapInPandas(
+      pythonUdf,
+      output,
+      project)
+    val left = SubqueryAlias("temp0", mapInPandas)
+    val right = SubqueryAlias("temp1", mapInPandas)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
@@ -909,5 +951,68 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       )
     )
     assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-33197: Make sure changes to ANALYZER_MAX_ITERATIONS take effect at runtime") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val maxIterationsEnough = 5
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val conf = SQLConf.get
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
+
+      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+
+      withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
+        try {
+          testAnalyzer.execute(plan)
+        } catch {
+          case ex: TreeNodeException[_]
+            if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
+              fail("analyzer.execute should not reach max iterations.")
+        }
+      }
+
+      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
+  }
+
+  test("SPARK-33733: PullOutNondeterministic should check and collect deterministic field") {
+    val reflect =
+      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head))
+    val udf = ScalaUDF(
+      (s: String) => s,
+      StringType,
+      Literal.create(null, StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      udfDeterministic = false)
+
+    Seq(reflect, udf).foreach { e: Expression =>
+      val plan = Sort(Seq(e.asc), false, testRelation)
+      val projected = Alias(e, "_nondeterministic")()
+      val expect =
+        Project(testRelation.output,
+          Sort(Seq(projected.toAttribute.asc), false,
+            Project(testRelation.output :+ projected,
+              testRelation)))
+      checkAnalysis(plan, expect)
+    }
   }
 }

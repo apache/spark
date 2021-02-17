@@ -15,23 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+object SQLOrderingUtil {
 
-/** Query execution that skips re-analysis and optimize. */
-class AlreadyOptimizedExecution(
-    session: SparkSession,
-    plan: LogicalPlan) extends QueryExecution(session, plan) {
-  override lazy val analyzed: LogicalPlan = plan
-  override lazy val optimizedPlan: LogicalPlan = plan
-}
+  /**
+   * A special version of double comparison that follows SQL semantic:
+   *  1. NaN == NaN
+   *  2. NaN is greater than any non-NaN double
+   *  3. -0.0 == 0.0
+   */
+  def compareDoubles(x: Double, y: Double): Int = {
+    if (x == y) 0 else java.lang.Double.compare(x, y)
+  }
 
-object AlreadyOptimized {
-  def dataFrame(sparkSession: SparkSession, optimized: LogicalPlan): DataFrame = {
-    val qe = new AlreadyOptimizedExecution(sparkSession, optimized)
-    new Dataset[Row](qe, RowEncoder(qe.analyzed.schema))
+  /**
+   * A special version of float comparison that follows SQL semantic:
+   *  1. NaN == NaN
+   *  2. NaN is greater than any non-NaN float
+   *  3. -0.0 == 0.0
+   */
+  def compareFloats(x: Float, y: Float): Int = {
+    if (x == y) 0 else java.lang.Float.compare(x, y)
   }
 }

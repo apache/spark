@@ -3765,6 +3765,15 @@ class StringIndexerModel(JavaModel, _StringIndexerParams, JavaMLReadable, JavaML
         """
         return self._call_java("labels")
 
+    @property
+    @since("3.0.2")
+    def labelsArray(self):
+        """
+        Array of ordered list of labels, corresponding to indices to be assigned
+        for each input column.
+        """
+        return self._call_java("labelsArray")
+
 
 @inherit_doc
 class IndexToString(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):

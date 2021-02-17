@@ -64,13 +64,13 @@ private[spark] class ExecutorPodsAllocator(
 
   // Executor IDs that have been requested from Kubernetes but have not been detected in any
   // snapshot yet. Mapped to the timestamp when they were created.
-  private val newlyCreatedExecutors = mutable.Map.empty[Long, Long]
+  private val newlyCreatedExecutors = mutable.LinkedHashMap.empty[Long, Long]
 
   private val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
   private val hasPendingPods = new AtomicBoolean()
 
-  private var lastSnapshot = ExecutorPodsSnapshot(Nil)
+  private var lastSnapshot = ExecutorPodsSnapshot()
 
   // Executors that have been deleted by this allocator but not yet detected as deleted in
   // a snapshot from the API server. This is used to deny registration from these executors

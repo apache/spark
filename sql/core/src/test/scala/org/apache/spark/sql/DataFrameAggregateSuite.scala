@@ -1044,6 +1044,28 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(sql(queryTemplate("FIRST")), Row(1))
     checkAnswer(sql(queryTemplate("LAST")), Row(3))
   }
+
+  test("SPARK-32906: struct field names should not change after normalizing floats") {
+    val df = Seq(Tuple1(Tuple2(-0.0d, Double.NaN)), Tuple1(Tuple2(0.0d, Double.NaN))).toDF("k")
+    val aggs = df.distinct().queryExecution.sparkPlan.collect { case a: HashAggregateExec => a }
+    assert(aggs.length == 2)
+    assert(aggs.head.output.map(_.dataType.simpleString).head ===
+      aggs.last.output.map(_.dataType.simpleString).head)
+  }
+
+  test("SPARK-33726: Aggregation on a table where a column name is reused") {
+    val query =
+      """|with T as (
+         |select id as a, -id as x from range(3)),
+         |U as (
+         |select id as b, cast(id as string) as x from range(3))
+         |select T.x, U.x, min(a) as ma, min(b) as mb
+         |from T join U on a=b
+         |group by U.x, T.x
+      """.stripMargin
+    val df = spark.sql(query)
+    checkAnswer(df, Row(0, "0", 0, 0) :: Row(-1, "1", 1, 1) :: Row(-2, "2", 2, 2) :: Nil)
+  }
 }
 
 case class B(c: Option[Double])

@@ -178,7 +178,7 @@ private[spark] class HadoopDelegationTokenManager(
 
   private def scheduleRenewal(delay: Long): Unit = {
     val _delay = math.max(0, delay)
-    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(delay)}.")
+    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(_delay)}.")
 
     val renewalTask = new Runnable() {
       override def run(): Unit = {
@@ -230,6 +230,8 @@ private[spark] class HadoopDelegationTokenManager(
         val now = System.currentTimeMillis
         val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
         val delay = (ratio * (nextRenewal - now)).toLong
+        logInfo(s"Calculated delay on renewal is $delay, based on next renewal $nextRenewal " +
+          s"and the ratio $ratio, and current time $now")
         scheduleRenewal(delay)
         creds
       }

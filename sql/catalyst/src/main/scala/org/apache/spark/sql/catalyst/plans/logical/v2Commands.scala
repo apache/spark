@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{NamedRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
@@ -35,20 +35,20 @@ trait V2WriteCommand extends Command {
 
   override def children: Seq[LogicalPlan] = Seq(query)
 
-  override lazy val resolved: Boolean = outputResolved
+  override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
   def outputResolved: Boolean = {
+    assert(table.resolved && query.resolved,
+      "`outputResolved` can only be called when `table` and `query` are both resolved.")
     // If the table doesn't require schema match, we don't need to resolve the output columns.
-    table.skipSchemaResolution || {
-      table.resolved && query.resolved && query.output.size == table.output.size &&
-        query.output.zip(table.output).forall {
-          case (inAttr, outAttr) =>
-            // names and types must match, nullability must be compatible
-            inAttr.name == outAttr.name &&
-              DataType.equalsIgnoreCompatibleNullability(outAttr.dataType, inAttr.dataType) &&
-              (outAttr.nullable || !inAttr.nullable)
-        }
-    }
+    table.skipSchemaResolution || (query.output.size == table.output.size &&
+      query.output.zip(table.output).forall {
+        case (inAttr, outAttr) =>
+          // names and types must match, nullability must be compatible
+          inAttr.name == outAttr.name &&
+            DataType.equalsIgnoreCompatibleNullability(inAttr.dataType, outAttr.dataType) &&
+            (outAttr.nullable || !inAttr.nullable)
+      })
   }
 }
 
@@ -86,7 +86,10 @@ case class OverwriteByExpression(
     query: LogicalPlan,
     writeOptions: Map[String, String],
     isByName: Boolean) extends V2WriteCommand {
-  override lazy val resolved: Boolean = outputResolved && deleteExpr.resolved
+  override lazy val resolved: Boolean = {
+    table.resolved && query.resolved && outputResolved && deleteExpr.resolved
+  }
+  override def inputSet: AttributeSet = AttributeSet(table.output)
 }
 
 object OverwriteByExpression {
@@ -297,11 +300,14 @@ case class AlterNamespaceSetLocation(
  */
 case class ShowNamespaces(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowNamespaces.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+  override def producedAttributes: AttributeSet = outputSet
+}
 
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)())
+object ShowNamespaces {
+  val OUTPUT = Seq(AttributeReference("namespace", StringType, nullable = false)())
 }
 
 /**

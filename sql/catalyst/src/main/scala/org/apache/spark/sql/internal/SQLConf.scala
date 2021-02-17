@@ -25,6 +25,7 @@ import java.util.zip.Deflater
 import scala.collection.JavaConverters._
 import scala.collection.immutable
 import scala.util.Try
+import scala.util.control.NonFatal
 import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
@@ -35,6 +36,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
@@ -1201,6 +1203,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val REMOVE_REDUNDANT_SORTS_ENABLED = buildConf("spark.sql.execution.removeRedundantSorts")
+    .internal()
+    .doc("Whether to remove redundant physical sort node")
+    .version("2.4.8")
+    .booleanConf
+    .createWithDefault(true)
+
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
       .internal()
@@ -1993,6 +2002,20 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val FASTFAIL_ON_FILEFORMAT_OUTPUT =
+    buildConf("spark.sql.execution.fastFailOnFileFormatOutput")
+      .internal()
+      .doc("Whether to fast fail task execution when writing output to FileFormat datasource. " +
+        "If this is enabled, in `FileFormatWriter` we will catch `FileAlreadyExistsException` " +
+        "and fast fail output task without further task retry. Only enabling this if you know " +
+        "the `FileAlreadyExistsException` of the output task is unrecoverable, i.e., further " +
+        "task attempts won't be able to success. If the `FileAlreadyExistsException` might be " +
+        "recoverable, you should keep this as disabled and let Spark to retry output tasks. " +
+        "This is disabled by default.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -2197,6 +2220,16 @@ object SQLConf {
     .version("2.4.0")
     .booleanConf
     .createWithDefault(true)
+
+  val LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL =
+    buildConf("spark.sql.legacy.parseNullPartitionSpecAsStringLiteral")
+      .internal()
+      .doc("If it is set to true, `PARTITION(col=null)` is parsed as a string literal of its " +
+        "text representation, e.g., string 'null', when the partition column is string type. " +
+        "Otherwise, it is always parsed as a null literal in the partition spec.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
 
   val LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED =
     buildConf("spark.sql.legacy.replaceDatabricksSparkAvro.enabled")
@@ -2516,7 +2549,9 @@ object SQLConf {
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
         "When CORRECTED, Spark will not do rebase and write the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
-        "ancient dates/timestamps that are ambiguous between the two calendars.")
+        "ancient dates/timestamps that are ambiguous between the two calendars. " +
+        "This config influences on writes of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. Spark always performs rebasing for the INT96 type.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2531,7 +2566,9 @@ object SQLConf {
         "When CORRECTED, Spark will not do rebase and read the dates/timestamps as it is. " +
         "When EXCEPTION, which is the default, Spark will fail the reading if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
-        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown.")
+        "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
+        "This config influences on reads of the following parquet logical types: DATE, " +
+        "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. Spark always performs rebasing for the INT96 type.")
       .version("3.0.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
@@ -2575,6 +2612,15 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ > 0, "The timeout value must be positive")
       .createWithDefault(10L)
+
+  val LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA =
+    buildConf("spark.sql.legacy.keepCommandOutputSchema")
+      .internal()
+      .doc("When true, Spark will keep the output schema of commands such as SHOW DATABASES " +
+        "unchanged, for v1 catalog and/or table.")
+      .version("3.0.2")
+      .booleanConf
+      .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -3090,6 +3136,8 @@ class SQLConf extends Serializable with Logging {
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
+  def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
+
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
@@ -3246,6 +3294,27 @@ class SQLConf extends Serializable with Logging {
     }
   }
 
+  private var definedConfsLoaded = false
+  /**
+   * Init [[StaticSQLConf]] and [[org.apache.spark.sql.hive.HiveUtils]] so that all the defined
+   * SQL Configurations will be registered to SQLConf
+   */
+  private def loadDefinedConfs(): Unit = {
+    if (!definedConfsLoaded) {
+      definedConfsLoaded = true
+      // Force to register static SQL configurations
+      StaticSQLConf
+      try {
+        // Force to register SQL configurations from Hive module
+        val symbol = ScalaReflection.mirror.staticModule("org.apache.spark.sql.hive.HiveUtils")
+        ScalaReflection.mirror.reflectModule(symbol).instance
+      } catch {
+        case NonFatal(e) =>
+          logWarning("SQL configurations from Hive module is not loaded", e)
+      }
+    }
+  }
+
   /**
    * Return all the configuration properties that have been set (i.e. not the default).
    * This creates a new copy of the config properties in the form of a Map.
@@ -3258,6 +3327,7 @@ class SQLConf extends Serializable with Logging {
    * definition contains key, defaultValue and doc.
    */
   def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
+    loadDefinedConfs()
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)

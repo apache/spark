@@ -75,7 +75,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
       OrcFileOperator.readSchema(
         files.map(_.getPath.toString),
-        Some(sparkSession.sessionState.newHadoopConf()),
+        Some(sparkSession.sessionState.newHadoopConfWithOptions(options)),
         ignoreCorruptFiles
       )
     }

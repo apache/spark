@@ -128,7 +128,9 @@ class InMemoryTable(
             ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(micros))
         }
       case BucketTransform(numBuckets, ref) =>
-        (extractor(ref.fieldNames, schema, row).hashCode() & Integer.MAX_VALUE) % numBuckets
+        val (value, dataType) = extractor(ref.fieldNames, schema, row)
+        val valueHashCode = if (value == null) 0 else value.hashCode
+        ((valueHashCode + 31 * dataType.hashCode()) & Integer.MAX_VALUE) % numBuckets
     }
   }
 

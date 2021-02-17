@@ -58,7 +58,7 @@ private[sql] class SharedState(
   private val (conf, hadoopConf) = {
     // Load hive-site.xml into hadoopConf and determine the warehouse path which will be set into
     // both spark conf and hadoop conf avoiding be affected by any SparkSession level options
-    SharedState.loadHiveConfFile(sparkContext.conf, sparkContext.hadoopConfiguration)
+    SharedState.resolveWarehousePath(sparkContext.conf, sparkContext.hadoopConfiguration)
     val confClone = sparkContext.conf.clone()
     val hadoopConfClone = new Configuration(sparkContext.hadoopConfiguration)
     // If `SparkSession` is instantiated using an existing `SparkContext` instance and no existing
@@ -222,22 +222,21 @@ object SharedState extends Logging {
   }
 
   /**
-   * Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
-   * the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
+   * Determine the warehouse path using the key `spark.sql.warehouse.dir` in the [[SparkConf]], and
+   * `hive.metastore.warehouse.dir` in hadoop [[Configuration]].
+   * The priority order is:
+   * s.s.w.d in spark conf (user specified)
+   *   > h.m.w.d in hadoop conf (user specified)
+   *   > s.s.w.d in spark conf (default)
+   *
+   * After resolved, the final value will be application wide reachable in the sparkConf and
+   * hadoopConf from [[SparkContext]].
+   *
    */
-  def loadHiveConfFile(
+  def resolveWarehousePath(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Unit = {
     val hiveWarehouseKey = "hive.metastore.warehouse.dir"
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
-    if (configFile != null) {
-      logInfo(s"loading hive config file: $configFile")
-      val hadoopConfTemp = new Configuration()
-      hadoopConfTemp.addResource(configFile)
-      hadoopConfTemp.asScala.foreach { entry =>
-        hadoopConf.setIfUnset(entry.getKey, entry.getValue)
-      }
-    }
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkConf.remove(hiveWarehouseKey)
     // Set the Hive metastore warehouse path to the one we use

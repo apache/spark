@@ -175,6 +175,8 @@
                   url: sql-ref-syntax-qry-select-hints.html
                 - text: Inline Table
                   url: sql-ref-syntax-qry-select-inline-table.html
+                - text: File
+                  url: sql-ref-syntax-qry-select-file.html
                 - text: JOIN
                   url: sql-ref-syntax-qry-select-join.html
                 - text: LIKE Predicate

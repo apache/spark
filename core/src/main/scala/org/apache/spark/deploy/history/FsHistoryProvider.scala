@@ -27,6 +27,7 @@ import java.util.zip.ZipOutputStream
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
+import scala.util.control.NonFatal
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -459,9 +460,21 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = clock.getTimeMillis()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
 
+      // Mark entries that are processing as not stale. Such entries do not have a chance to be
+      // updated with the new 'lastProcessed' time and thus any entity that completes processing
+      // right after this check and before the check for stale entities will be identified as stale
+      // and will be deleted from the UI until the next 'checkForLogs' run.
+      val notStale = mutable.HashSet[String]()
       val updated = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
         .filter { entry => !isBlacklisted(entry.getPath) }
-        .filter { entry => !isProcessing(entry.getPath) }
+        .filter { entry =>
+          if (isProcessing(entry.getPath)) {
+            notStale.add(entry.getPath.toString())
+            false
+          } else {
+            true
+          }
+        }
         .flatMap { entry => EventLogFileReader(fs, entry) }
         .filter { reader =>
           try {
@@ -526,9 +539,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
                 reader.fileSizeForLastIndex > 0
               } catch {
                 case _: FileNotFoundException => false
+                case NonFatal(e) =>
+                  logWarning(s"Error while reading new log ${reader.rootPath}", e)
+                  false
               }
 
-            case _: FileNotFoundException =>
+            case NonFatal(e) =>
+              logWarning(s"Error while filtering log ${reader.rootPath}", e)
               false
           }
         }
@@ -557,12 +574,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .last(newLastScanTime - 1)
         .asScala
         .toList
-      stale.filterNot(isProcessing).foreach { log =>
-        log.appId.foreach { appId =>
-          cleanAppData(appId, log.attemptId, log.logPath)
-          listing.delete(classOf[LogInfo], log.logPath)
+      stale.filterNot(isProcessing)
+        .filterNot(info => notStale.contains(info.logPath))
+        .foreach { log =>
+          log.appId.foreach { appId =>
+            cleanAppData(appId, log.attemptId, log.logPath)
+            listing.delete(classOf[LogInfo], log.logPath)
+          }
         }
-      }
 
       lastScanTime.set(newLastScanTime)
     } catch {

@@ -1,0 +1,33 @@
+name: Publish Snapshot
+
+on:
+  push:
+    branches:
+    - branch-3.0
+
+jobs:
+  publish-snapshot:
+    if: github.repository == 'apache/spark'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@master
+    - name: Cache Maven local repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: snapshot-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          snapshot-maven-
+    - name: Install Java 8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 8
+    - name: Publish snapshot
+      env:
+        ASF_USERNAME: ${{ secrets.NEXUS_USER }}
+        ASF_PASSWORD: ${{ secrets.NEXUS_PW }}
+        GPG_KEY: "not_used"
+        GPG_PASSPHRASE: "not_used"
+        GIT_REF: "branch-3.0"
+      run: ./dev/create-release/release-build.sh publish-snapshot

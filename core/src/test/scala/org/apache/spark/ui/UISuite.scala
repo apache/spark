@@ -76,7 +76,7 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if the ui is visible, and all the expected tabs are visible
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        val html = Source.fromURL(sc.ui.get.webUrl).mkString
+        val html = Utils.tryWithResource(Source.fromURL(sc.ui.get.webUrl))(_.mkString)
         assert(!html.contains("random data that should not be present"))
         assert(html.toLowerCase(Locale.ROOT).contains("stages"))
         assert(html.toLowerCase(Locale.ROOT).contains("storage"))
@@ -90,7 +90,7 @@ class UISuite extends SparkFunSuite {
     withSpark(newSparkContext()) { sc =>
       // test if visible from http://localhost:4040
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        val html = Source.fromURL("http://localhost:4040").mkString
+        val html = Utils.tryWithResource(Source.fromURL("http://localhost:4040"))(_.mkString)
         assert(html.toLowerCase(Locale.ROOT).contains("stages"))
       }
     }
@@ -214,6 +214,15 @@ class UISuite extends SparkFunSuite {
     assert(rewrittenURI.toString() === "http://localhost:8081/%F0%9F%98%84")
     rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-noid/json", null)
     assert(rewrittenURI === null)
+  }
+
+  test("SPARK-33611: Avoid encoding twice on the query parameter of proxy rewrittenURI") {
+    val prefix = "/worker-id"
+    val target = "http://localhost:8081"
+    val path = "/worker-id/json"
+    val rewrittenURI =
+      JettyUtils.createProxyURI(prefix, target, path, "order%5B0%5D%5Bcolumn%5D=0")
+    assert(rewrittenURI.toString === "http://localhost:8081/json?order%5B0%5D%5Bcolumn%5D=0")
   }
 
   test("verify rewriting location header for reverse proxy") {

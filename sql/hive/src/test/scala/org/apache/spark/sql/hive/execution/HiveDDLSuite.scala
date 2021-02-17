@@ -28,7 +28,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchPartitionsException, PartitionsAlreadyExistException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.CatalogManager
@@ -605,8 +605,8 @@ class HiveDDLSuite
     val tab = "tab_with_partitions"
     withTempDir { tmpDir =>
       val basePath = new File(tmpDir.getCanonicalPath)
-      val part1Path = new File(basePath + "/part1")
-      val part2Path = new File(basePath + "/part2")
+      val part1Path = new File(new File(basePath, "part10"), "part11")
+      val part2Path = new File(new File(basePath, "part20"), "part21")
       val dirSet = part1Path :: part2Path :: Nil
 
       // Before data insertion, all the directory are empty
@@ -1191,7 +1191,7 @@ class HiveDDLSuite
       expectedDBUri,
       Map.empty))
     // the database directory was created
-    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+    assert(fs.exists(dbPath) && fs.getFileStatus(dbPath).isDirectory)
     sql(s"USE $dbName")
 
     val tabName = "tab1"
@@ -2731,6 +2731,53 @@ class HiveDDLSuite
       // make sure there is no exception
       assert(sql("SELECT * FROM t2 WHERE b = 'A'").collect().isEmpty)
       assert(sql("SELECT * FROM t2 WHERE c = 'A'").collect().isEmpty)
+    }
+  }
+
+  test("SPARK-33742: partition already exists") {
+    withTable("t") {
+      sql(s"CREATE TABLE t (data string) PARTITIONED BY (id bigint)")
+      sql(s"ALTER TABLE t ADD PARTITION (id=2) LOCATION 'loc1'")
+
+      val errMsg = intercept[PartitionsAlreadyExistException] {
+        sql(s"ALTER TABLE t ADD PARTITION (id=1) LOCATION 'loc'" +
+          " PARTITION (id=2) LOCATION 'loc1'")
+      }.getMessage
+      assert(errMsg.contains("The following partitions already exists"))
+
+      sql(s"ALTER TABLE t ADD IF NOT EXISTS PARTITION (id=1) LOCATION 'loc'" +
+        " PARTITION (id=2) LOCATION 'loc1'")
+      checkAnswer(sql("SHOW PARTITIONS t"), Seq(Row("id=1"), Row("id=2")))
+    }
+  }
+
+  test("SPARK-33788: partition not exists") {
+    withTable("t") {
+      sql(s"CREATE TABLE t (data string) PARTITIONED BY (id bigint)")
+      sql(s"ALTER TABLE t ADD PARTITION (id=1)")
+
+      val errMsg = intercept[NoSuchPartitionsException] {
+        sql(s"ALTER TABLE t DROP PARTITION (id=1), PARTITION (id=2)")
+      }.getMessage
+      assert(errMsg.contains("partitions not found in table"))
+
+      checkAnswer(sql("SHOW PARTITIONS t"), Seq(Row("id=1")))
+      sql(s"ALTER TABLE t DROP IF EXISTS PARTITION (id=1), PARTITION (id=2)")
+      checkAnswer(sql("SHOW PARTITIONS t"), Seq.empty)
+    }
+  }
+
+  test("SPARK-33844: Insert overwrite directory should check schema too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[AnalysisException] {
+          spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
+            s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
+        }.getMessage
+        assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
+          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
+      }
     }
   }
 }

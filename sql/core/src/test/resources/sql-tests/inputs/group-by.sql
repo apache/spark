@@ -86,6 +86,16 @@ SELECT 1 FROM range(10) HAVING MAX(id) > 0;
 
 SELECT id FROM range(10) HAVING id > 0;
 
+SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=true;
+
+SELECT 1 FROM range(10) HAVING true;
+
+SELECT 1 FROM range(10) HAVING MAX(id) > 0;
+
+SELECT id FROM range(10) HAVING id > 0;
+
+SET spark.sql.legacy.parser.havingWithoutGroupByAsWhere=false;
+
 -- Test data
 CREATE OR REPLACE TEMPORARY VIEW test_agg AS SELECT * FROM VALUES
   (1, true), (1, false),

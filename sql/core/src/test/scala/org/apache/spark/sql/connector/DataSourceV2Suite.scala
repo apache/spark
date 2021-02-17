@@ -413,6 +413,16 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-33267: push down with condition 'in (..., null)' should not throw NPE") {
+    Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        val df = spark.read.format(cls.getName).load()
+        // before SPARK-33267 below query just threw NPE
+        df.select('i).where("i in (1, null)").collect()
+      }
+    }
+  }
 }
 
 

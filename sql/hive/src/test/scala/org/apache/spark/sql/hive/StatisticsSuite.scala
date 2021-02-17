@@ -993,12 +993,16 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           assert(fetched1.get.colStats.size == 2)
 
           withTempPaths(numPaths = 2) { case Seq(dir1, dir2) =>
-            val file1 = new File(dir1 + "/data")
+            val partDir1 = new File(new File(dir1, "ds=2008-04-09"), "hr=11")
+            val file1 = new File(partDir1, "data")
+            file1.getParentFile.mkdirs()
             Utils.tryWithResource(new PrintWriter(file1)) { writer =>
               writer.write("1,a")
             }
 
-            val file2 = new File(dir2 + "/data")
+            val partDir2 = new File(new File(dir2, "ds=2008-04-09"), "hr=12")
+            val file2 = new File(partDir2, "data")
+            file2.getParentFile.mkdirs()
             Utils.tryWithResource(new PrintWriter(file2)) { writer =>
               writer.write("1,a")
             }
@@ -1007,8 +1011,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             sql(
               s"""
                  |ALTER TABLE $table ADD
-                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${dir1.toURI.toString}'
-                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${dir2.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='11') LOCATION '${partDir1.toURI.toString}'
+                 |PARTITION (ds='2008-04-09', hr='12') LOCATION '${partDir1.toURI.toString}'
             """.stripMargin)
             if (autoUpdate) {
               val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
@@ -1554,6 +1558,22 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           partStats = getPartitionStats(tblName, Map("ds" -> "2019-12-13"))
           assert(partStats.sizeInBytes == 601)
           assert(partStats.rowCount.get == 1)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34084: auto update table stats") {
+    Seq("parquet", "hive").foreach { format =>
+      withTable("t") {
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "false") {
+          sql(s"CREATE TABLE t (col0 int, part int) USING $format PARTITIONED BY (part)")
+          sql("INSERT INTO t PARTITION (part=0) SELECT 0")
+          assert(getCatalogTable("t").stats.isEmpty)
+        }
+        withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+          sql("ALTER TABLE t ADD PARTITION (part=1)")
+          assert(getTableStats("t").sizeInBytes > 0)
         }
       }
     }

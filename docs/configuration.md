@@ -274,10 +274,9 @@ of the most common options to set are:
  <td><code>spark.executor.memoryOverhead</code></td>
   <td>executorMemory * 0.10, with minimum of 384 </td>
   <td>
-    Amount of additional memory to be allocated per executor process in cluster mode, in MiB unless
-    otherwise specified. This is memory that accounts for things like VM overheads, interned strings,
-    other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
-    This option is currently supported on YARN and Kubernetes.
+    Amount of additional memory to be allocated per executor process, in MiB unless otherwise specified.
+    This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc.
+    This tends to grow with the executor size (typically 6-10%). This option is currently supported on YARN and Kubernetes.
     <br/>
     <em>Note:</em> Additional memory includes PySpark executor memory 
     (when <code>spark.executor.pyspark.memory</code> is not configured) and memory used by other
@@ -918,8 +917,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enables the external shuffle service. This service preserves the shuffle files written by
-    executors so the executors can be safely removed. This must be enabled if
-    <code>spark.dynamicAllocation.enabled</code> is "true". The external shuffle service
+    executors so the executors can be safely removed. The external shuffle service
     must be set up in order to enable it. See
     <a href="job-scheduling.html#configuration-and-setup">dynamic allocation
     configuration and setup documentation</a> for more information.
@@ -1761,16 +1759,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version</code></td>
-  <td>Dependent on environment</td>
+  <td>1</td>
   <td>
     The file output committer algorithm version, valid algorithm version number: 1 or 2.
-    Version 2 may have better performance, but version 1 may handle failures better in certain situations,
-    as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
-    The default value depends on the Hadoop version used in an environment:
-    1 for Hadoop versions lower than 3.0
-    2 for Hadoop versions 3.0 and higher
-    It's important to note that this can change back to 1 again in the future once <a href="https://issues.apache.org/jira/browse/MAPREDUCE-7282">MAPREDUCE-7282</a>
-    is fixed and merged.
+    Note that 2 may cause a correctness issue like MAPREDUCE-7282.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -1894,7 +1886,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>120s</td>
   <td>
     Default timeout for all network interactions. This config will be used in place of
-    <code>spark.core.connection.ack.wait.timeout</code>,
     <code>spark.storage.blockManagerSlaveTimeoutMs</code>,
     <code>spark.shuffle.io.connectionTimeout</code>, <code>spark.rpc.askTimeout</code> or
     <code>spark.rpc.lookupTimeout</code> if they are not configured.
@@ -1956,16 +1947,6 @@ Apart from these, the following properties are also available, and may be useful
     Duration for an RPC remote endpoint lookup operation to wait before timing out.
   </td>
   <td>1.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td><code>spark.network.timeout</code></td>
-  <td>
-    How long for the connection to wait for ack to occur before timing
-    out and giving up. To avoid unwilling timeout caused by long pause like GC,
-    you can set larger value.
-  </td>
-  <td>1.1.1</td>
 </tr>
 <tr>
   <td><code>spark.network.maxRemoteBlockSizeFetchToMem</code></td>

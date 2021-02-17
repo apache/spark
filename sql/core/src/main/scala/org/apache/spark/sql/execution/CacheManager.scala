@@ -189,7 +189,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Remove the cache entry before creating a new ones.
       cachedData = cachedData.filterNot(cd => needToRecache.exists(_ eq cd))
     }
-    needToRecache.map { cd =>
+    needToRecache.foreach { cd =>
       cd.cachedRepresentation.cacheBuilder.clearCache()
       // Turn off AQE so that the outputPartitioning of the underlying plan can be leveraged.
       val sessionWithAqeOff = getOrCloneSessionWithAqeOff(spark)

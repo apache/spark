@@ -85,11 +85,16 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         childrenIndexes.map(children).filterNot(_.isInstanceOf[ShuffleExchangeExec])
           .map(_.outputPartitioning.numPartitions)
       val expectedChildrenNumPartitions = if (nonShuffleChildrenNumPartitions.nonEmpty) {
-        // Here we pick the max number of partitions among these non-shuffle children as the
-        // expected number of shuffle partitions. However, if it's smaller than
-        // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
-        // expected number of shuffle partitions.
-        math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+        if (nonShuffleChildrenNumPartitions.length == childrenIndexes.length) {
+          // Here we pick the max number of partitions among these non-shuffle children.
+          nonShuffleChildrenNumPartitions.max
+        } else {
+          // Here we pick the max number of partitions among these non-shuffle children as the
+          // expected number of shuffle partitions. However, if it's smaller than
+          // `conf.numShufflePartitions`, we pick `conf.numShufflePartitions` as the
+          // expected number of shuffle partitions.
+          math.max(nonShuffleChildrenNumPartitions.max, conf.defaultNumShufflePartitions)
+        }
       } else {
         childrenNumPartitions.max
       }

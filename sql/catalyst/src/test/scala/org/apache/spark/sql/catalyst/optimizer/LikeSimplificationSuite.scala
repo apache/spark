@@ -116,4 +116,52 @@ class LikeSimplificationSuite extends PlanTest {
     val optimized2 = Optimize.execute(originalQuery2.analyze)
     comparePlans(optimized2, originalQuery2.analyze)
   }
+
+  test("SPARK-33677: LikeSimplification should be skipped if pattern contains any escapeChar") {
+    val originalQuery1 =
+      testRelation
+        .where(('a like "abc%") || ('a like "\\abc%"))
+    val optimized1 = Optimize.execute(originalQuery1.analyze)
+    val correctAnswer1 = testRelation
+      .where(StartsWith('a, "abc") || ('a like "\\abc%"))
+      .analyze
+    comparePlans(optimized1, correctAnswer1)
+
+    val originalQuery2 =
+      testRelation
+        .where(('a like "%xyz") || ('a like "%xyz\\"))
+    val optimized2 = Optimize.execute(originalQuery2.analyze)
+    val correctAnswer2 = testRelation
+      .where(EndsWith('a, "xyz") || ('a like "%xyz\\"))
+      .analyze
+    comparePlans(optimized2, correctAnswer2)
+
+    val originalQuery3 =
+      testRelation
+        .where(('a like ("@bc%def", '@')) || ('a like "abc%def"))
+    val optimized3 = Optimize.execute(originalQuery3.analyze)
+    val correctAnswer3 = testRelation
+      .where(('a like ("@bc%def", '@')) ||
+        (Length('a) >= 6 && (StartsWith('a, "abc") && EndsWith('a, "def"))))
+      .analyze
+    comparePlans(optimized3, correctAnswer3)
+
+    val originalQuery4 =
+      testRelation
+        .where(('a like "%mn%") || ('a like ("%mn%", '%')))
+    val optimized4 = Optimize.execute(originalQuery4.analyze)
+    val correctAnswer4 = testRelation
+      .where(Contains('a, "mn") || ('a like ("%mn%", '%')))
+      .analyze
+    comparePlans(optimized4, correctAnswer4)
+
+    val originalQuery5 =
+      testRelation
+        .where(('a like "abc") || ('a like ("abbc", 'b')))
+    val optimized5 = Optimize.execute(originalQuery5.analyze)
+    val correctAnswer5 = testRelation
+      .where(('a === "abc") || ('a like ("abbc", 'b')))
+      .analyze
+    comparePlans(optimized5, correctAnswer5)
+  }
 }
