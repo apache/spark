@@ -37,9 +37,14 @@ Structured Streaming writes the schema of the state in checkpoint location, whic
 You can simply query about the schema in prior to know the schema of the state to craft the query you want to
 run with state data.
 
-You may want to provide the schema explicitly for some extreme cases, like schema information is not available
-in checkpoint location. Possible cases: Spark failed to write the information, or the query was only run from
-Spark prior to 3.1.
+In some cases, the schema of state is changed on compatible way. The changes of column name or the nullability from non-nullable
+to nullable are compatible for state and allowed from Spark. (Spark may change the schema of state via compatible way across versions.)
+For such case, the inferred schema may not reflect the latest schema of state, though the difference is only the name or nullability.
+You can simply use projection to correct, or provide the schema explicitly.
+
+You may want to provide the schema explicitly via `.schema(manualSchema)` for some extreme cases, like schema information
+is not available in checkpoint location.
+Possible cases: Spark failed to write the information, or the query was only run from Spark prior to 3.1.
 
 State data source supports the following case-insensitive options on reading:
 
