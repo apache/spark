@@ -1418,9 +1418,9 @@ outer (both cases, left or right) output may get delayed.*
 ##### Semi Joins with Watermarking
 A semi join returns values from the left side of the relation that has a match with the right.
 It is also referred to as a left semi join. Similar to outer joins, watermark + event-time
-constraints must be specified for semi join. This is because for not generating result for an input
-row on left side, the engine must know when an input row on left side is not going to match with
-anything on right side in future.
+constraints must be specified for semi join. This is to evict unmatched input rows on left side,
+the engine must know when an input row on left side is not going to match with anything on right
+side in future.
 
 ###### Semantic Guarantees of Stream-stream Semi Joins with Watermarking
 {:.no_toc}
