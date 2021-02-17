@@ -225,7 +225,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   /**
    * Does a length specified in the XAttr header get picked up?
    */
-  test("Xattr sourced length") {
+  test("XAttr sourced length") {
     val file = new Path(tempDirPath, "file")
     touch(file)
     val xattrFS = new FsWithFakeXAttrs(localfs)
@@ -240,7 +240,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
    * If a file is non-empty then the XAttr size declaration
    * is not used.
    */
-  test("Xattr sourced length only used for 0-byte-files") {
+  test("XAttr sourced length only used for 0-byte-files") {
     val file = new Path(tempDirPath, "file")
     write2(file)
     val xattrFS = new FsWithFakeXAttrs(localfs)
@@ -268,7 +268,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
    * If there are any problems parsing/validating the
    * header attribute, fall back to the file length.
    */
-  test("Xattr error recovery") {
+  test("XAttr error recovery") {
     val file = new Path(tempDirPath, "file")
     touch(file)
     val xattrFS = new FsWithFakeXAttrs(localfs)

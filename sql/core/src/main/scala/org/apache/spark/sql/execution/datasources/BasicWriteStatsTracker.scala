@@ -110,7 +110,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
         if (l > 0) {
           len = l
         } else {
-          logDebug("Ignoring negative value in Xattr file length")
+          logDebug("Ignoring negative value in XAttr file length")
         }
       }
     } catch {
@@ -124,7 +124,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
         logDebug(s"XAttr not supported on path $path", e);
       case e: Exception =>
         // Something else. Log at debug and continue.
-        logDebug(s"Xattr processing failure on $path", e);
+        logDebug(s"XAttr processing failure on $path", e);
     }
     Some(len)
   }

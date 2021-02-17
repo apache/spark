@@ -191,10 +191,6 @@ This avoids incurring bills from incompleted uploads.
 and only write code which generates idemportent output -including filenames,
 as it is *no more unsafe* than the v1 committer, and faster.
 
-```
-spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version 2
-```
-
 ### Parquet I/O Settings
 
 For optimal performance when working with Parquet data use the following settings:
