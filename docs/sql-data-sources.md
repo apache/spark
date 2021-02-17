@@ -60,4 +60,5 @@ goes into specific options that are available for the built-in data sources.
   * [Supported types for Avro -> Spark SQL conversion](sql-data-sources-avro.html#supported-types-for-avro---spark-sql-conversion)
   * [Supported types for Spark SQL -> Avro conversion](sql-data-sources-avro.html#supported-types-for-spark-sql---avro-conversion)
 * [Whole Binary Files](sql-data-sources-binaryFile.html)
+* [State](sql-data-sources-state.html)
 * [Troubleshooting](sql-data-sources-troubleshooting.html)
