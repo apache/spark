@@ -1876,7 +1876,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterTable: rename table basic test") {
+  test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
@@ -1886,10 +1886,6 @@ class DataSourceV2SQLSuite
       }
       assert(e.getMessage.contains(
         "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
-
-      sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new", false)))
     }
   }
 
