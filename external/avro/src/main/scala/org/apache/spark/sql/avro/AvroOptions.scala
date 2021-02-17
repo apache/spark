@@ -117,7 +117,7 @@ private[sql] class AvroOptions(
    */
   val datetimeRebaseModeInRead: String = parameters
     .get(AvroOptions.DATETIME_REBASE_MODE)
-    .getOrElse(SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+    .getOrElse(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_READ))
 }
 
 private[sql] object AvroOptions {
@@ -133,7 +133,7 @@ private[sql] object AvroOptions {
 
   // The option controls rebasing of the DATE and TIMESTAMP values between
   // Julian and Proleptic Gregorian calendars. It impacts on the behaviour of the Avro
-  // datasource similarly to the SQL config `spark.sql.legacy.avro.datetimeRebaseModeInRead`,
+  // datasource similarly to the SQL config `spark.sql.avro.datetimeRebaseModeInRead`,
   // and can be set to the same values: `EXCEPTION`, `LEGACY` or `CORRECTED`.
   val DATETIME_REBASE_MODE = "datetimeRebaseMode"
 }

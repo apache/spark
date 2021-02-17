@@ -135,11 +135,11 @@ object DataSourceUtils {
   def newRebaseExceptionInRead(format: String): SparkUpgradeException = {
     val (config, option) = format match {
       case "Parquet INT96" =>
-        (SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
+        (SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key, ParquetOptions.INT96_REBASE_MODE)
       case "Parquet" =>
-        (SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
+        (SQLConf.PARQUET_REBASE_MODE_IN_READ.key, ParquetOptions.DATETIME_REBASE_MODE)
       case "Avro" =>
-        (SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
+        (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
       case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "reading dates before 1582-10-15 or timestamps before " +
@@ -154,9 +154,9 @@ object DataSourceUtils {
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
     val config = format match {
-      case "Parquet INT96" => SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key
-      case "Parquet" => SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key
-      case "Avro" => SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key
+      case "Parquet INT96" => SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key
+      case "Parquet" => SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key
+      case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
       case _ => throw new IllegalStateException("unrecognized format " + format)
     }
     new SparkUpgradeException("3.0", "writing dates before 1582-10-15 or timestamps before " +

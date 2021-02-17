@@ -155,9 +155,9 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             java8ApiConfValues.foreach { java8Api =>
               withSQLConf(
                 SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-                SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
-                SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
-                SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+                SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
                 val dataGenerator = RandomDataGenerator.forType(
                   dataType = dataType,
                   nullable = true,
