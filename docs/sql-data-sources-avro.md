@@ -295,6 +295,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>
       If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped
       to the built-in but external Avro data source module for backward compatibility.
+      <br><b>Note:</b> the SQL config has been deprecated in Spark 3.2 and might be removed in the future.
     </td>
     <td>2.4.0</td>
   </tr>
