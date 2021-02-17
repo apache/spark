@@ -71,6 +71,19 @@ trait RenameTableSuiteBase extends command.RenameTableSuiteBase {
       spark.sessionState.catalogManager.reset()
     }
   }
+
+  test("preserve table stats") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+      sql(s"ANALYZE TABLE $src COMPUTE STATISTICS")
+      val size = getTableSize(src)
+      assert(size > 0)
+      sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
+      assert(size === getTableSize(dst))
+    }
+  }
 }
 
 /**
