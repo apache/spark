@@ -84,10 +84,28 @@ trait RenameTableSuiteBase extends command.RenameTableSuiteBase {
       assert(size === getTableSize(dst))
     }
   }
+
+  test("the destination folder exists already") {
+    withNamespaceAndTable("ns", "dst_tbl") { dst =>
+      val src = dst.replace("dst", "src")
+      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $src SELECT 0")
+
+      sql(s"CREATE TABLE $dst (c0 INT) $defaultUsing")
+      withTableDir(dst) { (fs, dst_dir) =>
+        sql(s"DROP TABLE $dst")
+        fs.mkdirs(dst_dir)
+        val errMsg = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $src RENAME TO ns.dst_tbl")
+        }.getMessage
+        assert(errMsg.matches("Can not rename the managed table(.+). " +
+          "The associated location(.+) already exists."))
+      }
+    }
+  }
 }
 
 /**
  * The class contains tests for the `RENAME TABLE` command to check V1 In-Memory table catalog.
  */
-class RenameTableSuite extends RenameTableSuiteBase with CommandSuiteBase {
-}
+class RenameTableSuite extends RenameTableSuiteBase with CommandSuiteBase

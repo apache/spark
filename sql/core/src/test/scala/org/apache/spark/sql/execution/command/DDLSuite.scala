@@ -480,19 +480,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename a managed table with existing empty directory") {
-    withEmptyDirInTablePath("tab2") { tableLoc =>
-      withTable("tab1") {
-        sql(s"CREATE TABLE tab1 USING $dataSource AS SELECT 1, 'a'")
-        val ex = intercept[AnalysisException] {
-          sql("ALTER TABLE tab1 RENAME TO tab2")
-        }.getMessage
-        assert(ex.contains(
-          "Can not rename the managed table('`default`.`tab1`'). The associated location"))
-      }
-    }
-  }
-
   private def checkSchemaInCreatedDataSourceTable(
       path: File,
       userSpecifiedSchema: Option[String],
