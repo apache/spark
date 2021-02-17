@@ -268,7 +268,6 @@ object AggUtils {
    *  - Partial Aggregation (now there is at most 1 tuple per group)
    *  - SessionStateStoreRestore (now there is 1 tuple from this batch + optionally one from
    *    the previous)
-   *  - PartialMerge (now there is at most 1 tuple per group)
    *  - SessionWindowMergeExec (merge session window by change window's starttime && endtime)
    *  - PartialMerge (now there is at most 1 tuple per group)
    *  - StateStoreSave (saves the tuple for the next batch)
@@ -306,35 +305,27 @@ object AggUtils {
         child = child)
     }
 
-    val (partialMerged1Distribution, partialMerged1Child) = if (sessionWindowAgg) {
-      (sessionSpecAttribute,
-        SessionWindowStateStoreRestoreExec(sessionSpecAttribute, None, partialAggregate))
-    } else {
-      (groupingAttributes, partialAggregate)
-    }
-
-    val partialMerged1: SparkPlan = {
-      val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
-      val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
-      createAggregate(
-        requiredChildDistributionExpressions =
-          Some(partialMerged1Distribution),
-        groupingExpressions = groupingAttributes,
-        aggregateExpressions = aggregateExpressions,
-        aggregateAttributes = aggregateAttributes,
-        initialInputBufferOffset = groupingAttributes.length,
-        resultExpressions = groupingAttributes ++
-          aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
-        child = partialMerged1Child)
-    }
-
     val (partialMerged2Distribution, partialMerged2Child) = if (sessionWindowAgg) {
       (sessionSpecAttribute,
         SessionWindowMergeExec(
           windowExpressions.head.asInstanceOf[NamedExpression],
           sessionSpecAttribute,
-          partialMerged1))
+          SessionWindowStateStoreRestoreExec(sessionSpecAttribute, None, partialAggregate)))
     } else {
+      val partialMerged1: SparkPlan = {
+        val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = PartialMerge))
+        val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)
+        createAggregate(
+          requiredChildDistributionExpressions =
+            Some(groupingAttributes),
+          groupingExpressions = groupingAttributes,
+          aggregateExpressions = aggregateExpressions,
+          aggregateAttributes = aggregateAttributes,
+          initialInputBufferOffset = groupingAttributes.length,
+          resultExpressions = groupingAttributes ++
+            aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
+          child = partialAggregate)
+      }
       (groupingAttributes,
         StateStoreRestoreExec(groupingAttributes, None, stateFormatVersion,
           partialMerged1))

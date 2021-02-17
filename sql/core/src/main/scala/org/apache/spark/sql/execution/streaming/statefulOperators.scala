@@ -495,13 +495,15 @@ case class SessionWindowStateStoreRestoreExec(
           // of preKey is a
           preKey = key.copy
         }
-        numOutputRows += 1
 
         if (savedState == null) {
+          numOutputRows += 1
           Seq(row)
         } else {
-          savedState.getArray(0)
+          val outputs = savedState.getArray(0)
             .toArray[UnsafeRow](childOutputSchema).toIterator.toSeq :+ row
+          numOutputRows += outputs.size
+          outputs
         }
       }
     }
