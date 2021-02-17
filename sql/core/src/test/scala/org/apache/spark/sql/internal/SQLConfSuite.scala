@@ -452,7 +452,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage contains "The interval value must be in the range of [-18, +18] hours")
   }
 
-  test("SPARK-34454: a config from the legacy namespace should be internal") {
+  test("SPARK-34454: configs from the legacy namespace should be internal") {
     val nonInternalLegacyConfigs = spark.sessionState.conf.getAllDefinedConfs
       .filter { case (key, _, _, _) => key.contains(".legacy.") }
     assert(nonInternalLegacyConfigs.isEmpty,
