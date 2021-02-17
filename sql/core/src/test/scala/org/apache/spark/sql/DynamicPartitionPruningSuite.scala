@@ -479,7 +479,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id AND s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkPartitionPruningPredicate(df, false, false)
       }
 
       Given("left outer with partition column on the left side")
@@ -504,7 +504,7 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON f.store_id = s.store_id WHERE s.country = 'NL'
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+        checkPartitionPruningPredicate(df, false, false)
       }
     }
   }
@@ -1391,74 +1391,54 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("Filtering side can not broadcast by join type but can broadcast by size") {
-    withSQLConf(
-      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
-      Given("LEFT SortMergeJoin and left side can broadcast by size")
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-        val df = sql(
-          """
-            |SELECT f.date_id, f.store_id FROM dim_store s
-            |LEFT JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
+  test("Filtering side can not broadcast by join type") {
+    withTable("t1", "t2") {
+      spark.range(1000).selectExpr("id", "id % 100 AS part")
+        .write
+        .partitionBy("part")
+        .saveAsTable("t1")
+      spark.range(5).selectExpr("id", "id as foo")
+        .write
+        .saveAsTable("t2")
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        Given("LEFT JOIN and left side can broadcast by size")
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+          val df = sql(
+            """
+              |SELECT t2.* FROM t2
+              |LEFT JOIN t1 ON t2.id = t1.id AND t2.id = t1.part WHERE t2.foo = 2
         """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+          checkPartitionPruningPredicate(df, true, false)
+          checkAnswer(df, Row(2, 2) :: Nil)
+        }
 
-        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
-      }
-
-      Given("LEFT SortMergeJoin and right side broadcast by hint")
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-        val df = sql(
-          """
-            |SELECT /*+ BROADCAST(f) */  f.date_id, f.store_id FROM dim_store s
-            |LEFT JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
-        """.stripMargin)
-
-        checkPartitionPruningPredicate(df, false, false)
-
-        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
-      }
-
-      Given("LEFT SortMergeJoin and left side can not broadcast by size")
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
-        val df = sql(
-          """
-            |SELECT f.date_id, f.store_id FROM dim_store s
-            |LEFT JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
-        """.stripMargin)
-
-        checkPartitionPruningPredicate(df, false, false)
-
-        checkAnswer(df, Row(1000, 1) :: Row(1010, 2) :: Row(1020, 2) :: Nil)
-      }
-
-      Given("LEFT SEMI JOIN and left side can broadcast by size")
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-        val df = sql(
-          """
-            |SELECT s.store_id, s.state_province FROM dim_store s
-            |LEFT SEMI JOIN fact_sk f ON f.store_id = s.store_id WHERE s.country = 'NL'
+        Given("LEFT SEMI JOIN and left side can broadcast by size")
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+          val df = sql(
+            """
+              |SELECT t2.* FROM t2
+              |LEFT SEMI JOIN t1 ON t2.id = t1.id AND t2.id = t1.part WHERE t2.foo = 2
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+          checkPartitionPruningPredicate(df, true, false)
+          checkAnswer(df, Row(2, 2) :: Nil)
+        }
 
-        checkAnswer(df, Row(1, "North-Holland") :: Row(2, "South-Holland") :: Nil)
-      }
-
-      Given("RIGHT SortMergeJoin and right side can broadcast by size")
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
-        val df = sql(
-          """
-            |SELECT s.store_id, s.country FROM fact_sk f
-            |RIGHT JOIN dim_store s ON f.store_id = s.store_id
-            |WHERE s.state_province = 'North-Holland'
+        Given("RIGHT JOIN and right side can broadcast by size")
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2000") {
+          val df = sql(
+            """
+              |SELECT t2.* FROM t1
+              |RIGHT JOIN t2 ON t2.id = t1.id AND t2.id = t1.part
+              |WHERE t2.foo = 2
           """.stripMargin)
 
-        checkPartitionPruningPredicate(df, true, false)
+          checkPartitionPruningPredicate(df, true, false)
 
-        checkAnswer(df, Row(1, "NL") :: Nil)
+          checkAnswer(df, Row(2, 2) :: Nil)
+        }
       }
     }
   }
