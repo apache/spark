@@ -45,7 +45,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
@@ -75,7 +74,6 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
@@ -110,11 +108,41 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
       decommissioningTest = false)
+  }
+
+  test("Test decommissioning timeouts", k8sTestTag) {
+    sparkAppConf
+      .set(config.DECOMMISSION_ENABLED.key, "true")
+      .set("spark.kubernetes.container.image", pyImage)
+      .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
+      // Ensure we have somewhere to migrate our data too
+      .set("spark.executor.instances", "3")
+      // Set super high so the timeout is triggered
+      .set("spark.storage.decommission.replicationReattemptInterval", "8640000")
+      // Set super low so the timeout is triggered
+      .set(config.EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT.key, "10")
+
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_DECOMISSIONING,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq(
+        "Finished waiting, stopping Spark",
+        "Decommission executors",
+        "failed to decommission in 10, killing",
+        "killed by driver."),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
+      isJVM = false,
+      pyFiles = None,
+      executorPatience = None,
+      decommissioningTest = true)
   }
 }
 

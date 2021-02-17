@@ -46,6 +46,8 @@ public final class FixedLengthRowBasedKeyValueBatch extends RowBasedKeyValueBatc
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     // if run out of max supported rows or page size, return null
+    assert(vlen == this.vlen);
+    assert(klen == this.klen);
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;
     }

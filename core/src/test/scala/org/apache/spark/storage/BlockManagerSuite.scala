@@ -103,8 +103,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       .set(PUSH_BASED_SHUFFLE_ENABLED, true)
   }
 
-  private def makeSortShuffleManager(): SortShuffleManager = {
-    val newMgr = new SortShuffleManager(new SparkConf(false))
+  private def makeSortShuffleManager(conf: Option[SparkConf] = None): SortShuffleManager = {
+    val newMgr = new SortShuffleManager(conf.getOrElse(new SparkConf(false)))
     sortShuffleManagers += newMgr
     newMgr
   }
@@ -1932,22 +1932,29 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(master.getLocations(blockIdLarge) === Seq(store1.blockManagerId))
   }
 
-  test("test migration of shuffle blocks during decommissioning") {
-    val shuffleManager1 = makeSortShuffleManager()
+  private def testShuffleBlockDecommissioning(maxShuffleSize: Option[Int], willReject: Boolean) = {
+    maxShuffleSize.foreach{ size =>
+      conf.set(STORAGE_DECOMMISSION_SHUFFLE_MAX_DISK_SIZE.key, s"${size}b")
+    }
+    val shuffleManager1 = makeSortShuffleManager(Some(conf))
     val bm1 = makeBlockManager(3500, "exec1", shuffleManager = shuffleManager1)
     shuffleManager1.shuffleBlockResolver._blockManager = bm1
 
-    val shuffleManager2 = makeSortShuffleManager()
+    val shuffleManager2 = makeSortShuffleManager(Some(conf))
     val bm2 = makeBlockManager(3500, "exec2", shuffleManager = shuffleManager2)
     shuffleManager2.shuffleBlockResolver._blockManager = bm2
 
     val blockSize = 5
     val shuffleDataBlockContent = Array[Byte](0, 1, 2, 3, 4)
     val shuffleData = ShuffleDataBlockId(0, 0, 0)
+    val shuffleData2 = ShuffleDataBlockId(1, 0, 0)
     Files.write(bm1.diskBlockManager.getFile(shuffleData).toPath(), shuffleDataBlockContent)
+    Files.write(bm2.diskBlockManager.getFile(shuffleData2).toPath(), shuffleDataBlockContent)
     val shuffleIndexBlockContent = Array[Byte](5, 6, 7, 8, 9)
     val shuffleIndex = ShuffleIndexBlockId(0, 0, 0)
+    val shuffleIndex2 = ShuffleIndexBlockId(1, 0, 0)
     Files.write(bm1.diskBlockManager.getFile(shuffleIndex).toPath(), shuffleIndexBlockContent)
+    Files.write(bm2.diskBlockManager.getFile(shuffleIndex2).toPath(), shuffleIndexBlockContent)
 
     mapOutputTracker.registerShuffle(0, 1)
     val decomManager = new BlockManagerDecommissioner(conf, bm1)
@@ -1961,18 +1968,35 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
       decomManager.refreshOffloadingShuffleBlocks()
 
-      eventually(timeout(1.second), interval(10.milliseconds)) {
-        assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
+      if (willReject) {
+        eventually(timeout(1.second), interval(10.milliseconds)) {
+          assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm2.blockManagerId)
+        }
+        assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleData).toPath())
+          === shuffleDataBlockContent)
+        assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleIndex).toPath())
+          === shuffleIndexBlockContent)
+      } else {
+        Thread.sleep(1000)
+        assert(mapOutputTracker.shuffleStatuses(0).mapStatuses(0).location === bm1.blockManagerId)
       }
-      assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleData).toPath())
-        === shuffleDataBlockContent)
-      assert(Files.readAllBytes(bm2.diskBlockManager.getFile(shuffleIndex).toPath())
-        === shuffleIndexBlockContent)
     } finally {
       mapOutputTracker.unregisterShuffle(0)
       // Avoid thread leak
       decomManager.stopOffloadingShuffleBlocks()
     }
+  }
+
+  test("test migration of shuffle blocks during decommissioning - no limit") {
+    testShuffleBlockDecommissioning(None, true)
+  }
+
+  test("test migration of shuffle blocks during decommissioning - larger limit") {
+    testShuffleBlockDecommissioning(Some(10000), true)
+  }
+
+  test("[SPARK-34363]test migration of shuffle blocks during decommissioning - small limit") {
+    testShuffleBlockDecommissioning(Some(1), false)
   }
 
   test("SPARK-32919: Shuffle push merger locations should be bounded with in" +

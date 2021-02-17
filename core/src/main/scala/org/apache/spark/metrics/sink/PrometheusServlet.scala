@@ -102,7 +102,7 @@ private[spark] class PrometheusServlet(
       val snapshot = timer.getSnapshot
       sb.append(s"${prefix}Count$timersLabels ${timer.getCount}\n")
       sb.append(s"${prefix}Max$timersLabels ${snapshot.getMax}\n")
-      sb.append(s"${prefix}Mean$timersLabels ${snapshot.getMax}\n")
+      sb.append(s"${prefix}Mean$timersLabels ${snapshot.getMean}\n")
       sb.append(s"${prefix}Min$timersLabels ${snapshot.getMin}\n")
       sb.append(s"${prefix}50thPercentile$timersLabels ${snapshot.getMedian}\n")
       sb.append(s"${prefix}75thPercentile$timersLabels ${snapshot.get75thPercentile}\n")
