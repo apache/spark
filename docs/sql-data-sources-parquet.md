@@ -275,7 +275,7 @@ Data source options of Parquet can be set via:
   </tr>
   <tr>
     <td><code>int96RebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.legacy.parquet</code> <code>.int96RebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>The SQL config <code>spark.sql.parquet</code> <code>.int96RebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
     <td>The <code>int96RebaseMode</code> option allows to specify the rebasing mode for INT96 timestamps from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
