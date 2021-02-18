@@ -932,9 +932,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupTempView(
         identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView && !isReferredTempViewName(identifier)) {
-        return None
-      }
+      if (isResolvingView && !isReferredTempViewName(identifier)) return None
 
       val tmpView = expandRelationName(identifier) match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
