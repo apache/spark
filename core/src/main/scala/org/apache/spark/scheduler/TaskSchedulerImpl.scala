@@ -670,9 +670,6 @@ private[spark] class TaskSchedulerImpl(
           val barrierPendingLaunchTasks = taskSet.barrierPendingLaunchTasks.values.toArray
           // Check whether the barrier tasks are partially launched.
           if (barrierPendingLaunchTasks.length != taskSet.numTasks) {
-            val msg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
-              s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
-              s"of ${taskSet.numTasks} tasks got resource offers."
             if (legacyLocalityWaitReset) {
               // Legacy delay scheduling always reset the timer when there's a task that is able
               // to be scheduled. Thus, whenever there's a timer reset could happen during a single
@@ -680,9 +677,11 @@ private[spark] class TaskSchedulerImpl(
               // always reject the offered resources. As a result, the barrier taskset can't get
               // launched. And if we retry the resourceOffer, we'd go through the same path again
               // and get into the endless loop in the end.
-              val errorMsg = s"$msg We highly recommend you to use the non-legacy" +
-                s" delay scheduling by setting ${LEGACY_LOCALITY_WAIT_RESET.key} " +
-                s"to false to get rid of this error."
+              val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
+                s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
+                s"of ${taskSet.numTasks} tasks got resource offers. We highly recommend " +
+                s"you to use the non-legacy delay scheduling by setting " +
+                s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
               throw new SparkException(errorMsg)
@@ -690,7 +689,8 @@ private[spark] class TaskSchedulerImpl(
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
                 TaskSetManager.BARRIER_LOGGING_INTERVAL) {
-                logInfo(s"$msg Waiting for later round resource offers.")
+                logInfo(s"Releasing the assigned resource offers since only partial tasks can " +
+                  s"be launched. Waiting for later round resource offers.")
                 taskSet.lastResourceOfferFailLogTime = curTime
               }
               barrierPendingLaunchTasks.foreach { task =>
