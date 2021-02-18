@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
 /**
  * Physical plan node for adding partitions of table.
  */
-case class AlterTableAddPartitionExec(
+case class AddPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfExists: Boolean,

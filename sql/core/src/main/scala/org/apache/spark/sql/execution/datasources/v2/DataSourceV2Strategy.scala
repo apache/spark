@@ -354,7 +354,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableAddPartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
-      AlterTableAddPartitionExec(
+      AddPartitionExec(
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfExists,
