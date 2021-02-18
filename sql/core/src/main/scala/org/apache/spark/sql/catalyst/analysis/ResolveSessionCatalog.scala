@@ -484,9 +484,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         replace,
         viewType)
 
-    case ShowViews(resolved: ResolvedNamespace, pattern) =>
+    case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {
-        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern)
+        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
