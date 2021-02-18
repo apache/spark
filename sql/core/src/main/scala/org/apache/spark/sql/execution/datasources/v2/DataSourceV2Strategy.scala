@@ -354,7 +354,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableAddPartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
-      AlterTableAddPartitionExec(
+      AddPartitionExec(
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfExists,
@@ -365,7 +365,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         parts,
         ignoreIfNotExists,
         purge) =>
-      AlterTableDropPartitionExec(
+      DropPartitionExec(
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfNotExists,
@@ -374,7 +374,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableRenamePartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
-      AlterTableRenamePartitionExec(
+      RenamePartitionExec(
         table,
         Seq(from).asResolvedPartitionSpecs.head,
         Seq(to).asResolvedPartitionSpecs.head,
