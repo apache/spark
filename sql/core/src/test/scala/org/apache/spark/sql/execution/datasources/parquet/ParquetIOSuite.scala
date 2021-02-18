@@ -877,29 +877,25 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             494131059, 92536396, 426847157, -999999999, 204486094)
             .zip(first10Df).forall(d =>
             d._2.isNullAt(0) && d._1 == null ||
-              d._1.equals(d._2.getDecimal(0).unscaledValue().intValue())
+              d._1 == d._2.getDecimal(0).unscaledValue().intValue()
           ))
     }
     // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
     // has 2048 rows of Decimal(3, 1) written as LongDecimal instead of an IntDecimal
-    readParquetFile(testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
+    readParquetFile(
+      testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
       df =>
-        readParquetFile(
-          testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
-          df =>
-            assert(2048 == df.collect().length)
-            val first10Df = df.head(10)
-            assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
-              .zip(first10Df).forall(d =>
-              d._2.isNullAt(0) && d._1 == null ||
-                d._1.equals(d._2.getDecimal(0).unscaledValue().intValue())
-            ))
+        assert(2048 == df.collect().length)
+        val first10Df = df.head(10)
+        assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
+          .zip(first10Df).forall(d =>
+          d._2.isNullAt(0) && d._1 == null ||
+            d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
 
-            val last10Df = df.tail(10)
-            assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
-              .zip(last10Df).forall(d =>
-              d._1.equals(d._2.getDecimal(0).unscaledValue().intValue())))
-        }
+        val last10Df = df.tail(10)
+        assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
+          .zip(last10Df).forall(d =>
+          d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
     }
   }
 
@@ -915,8 +911,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
             494131059, 92536396, 426847157, -999999999, 204486094)
             .zip(first10Df).forall(d =>
             d._2.isNullAt(0) && d._1 == null ||
-              d._1.equals(d._2.getDecimal(0).unscaledValue().intValue())
-          ))
+              d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
     }
 
     // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
@@ -924,22 +919,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     readParquetFile(testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
       df =>
         assert(2048 == df.collect().length)
-        readParquetFile(
-          testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), false) {
-          df =>
-            val first10Df = df.head(10)
-            assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
-              .zip(first10Df).forall(d =>
-              d._2.isNullAt(0) && d._1 == null ||
-                d._1.equals(d._2.getDecimal(0).unscaledValue().intValue())
-            ))
+        val first10Df = df.head(10)
+        assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
+          .zip(first10Df).forall(d =>
+          d._2.isNullAt(0) && d._1 == null ||
+            d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
 
-            val last10Df = df.tail(10)
-            assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
-              .zip(last10Df).forall(d =>
-              d._1.equals(d._2.getDecimal(0).unscaledValue().intValue())))
-            assert(2048 == df.collect().length)
-        }
+        val last10Df = df.tail(10)
+        assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
+          .zip(last10Df).forall(d =>
+          d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
     }
   }
 }
