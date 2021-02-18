@@ -33,7 +33,8 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
  * resolved.
  */
-class UnresolvedException(message: String) extends AnalysisException(message)
+class UnresolvedException(function: String)
+  extends AnalysisException(s"Invalid call to $function on unresolved object")
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
