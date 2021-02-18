@@ -504,13 +504,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
 
-    case ShowFunctions(None, userScope, systemScope, pattern) =>
-      ShowFunctionsCommand(None, pattern, userScope, systemScope)
+    case ShowFunctions(None, userScope, systemScope, pattern, output) =>
+      ShowFunctionsCommand(None, pattern, userScope, systemScope, output)
 
-    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _) =>
+    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _, output) =>
       val funcIdentifier = identifier.asFunctionIdentifier
       ShowFunctionsCommand(
-        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope)
+        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope, output)
 
     case DropFunction(ResolvedFunc(identifier), ifExists, isTemp) =>
       val funcIdentifier = identifier.asFunctionIdentifier

@@ -211,12 +211,8 @@ case class ShowFunctionsCommand(
     db: Option[String],
     pattern: Option[String],
     showUserFunctions: Boolean,
-    showSystemFunctions: Boolean) extends RunnableCommand {
-
-  override val output: Seq[Attribute] = {
-    val schema = StructType(StructField("function", StringType, nullable = false) :: Nil)
-    schema.toAttributes
-  }
+    showSystemFunctions: Boolean,
+    override val output: Seq[Attribute]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
