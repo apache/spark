@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
 import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
@@ -752,9 +752,5 @@ private[spark] object QueryCompilationErrors {
 
   def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
     new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
-  }
-
-  def invalidCallFunctionOnUnresolvedObjectError(function: String): Throwable = {
-    new UnresolvedException(s"Invalid call to $function on unresolved object")
   }
 }

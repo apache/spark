@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -272,10 +272,8 @@ case class UnresolvedWindowExpression(
     child: Expression,
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {
 
-  override def dataType: DataType =
-    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("dataType")
-  override def nullable: Boolean =
-    throw QueryCompilationErrors.invalidCallFunctionOnUnresolvedObjectError("nullable")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
 }
 
