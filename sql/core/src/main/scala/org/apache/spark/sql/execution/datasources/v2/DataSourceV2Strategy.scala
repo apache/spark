@@ -365,7 +365,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         parts,
         ignoreIfNotExists,
         purge) =>
-      AlterTableDropPartitionExec(
+      DropPartitionExec(
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfNotExists,

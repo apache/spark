@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement
 /**
  * Physical plan node for dropping partitions of table.
  */
-case class AlterTableDropPartitionExec(
+case class DropPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
     ignoreIfNotExists: Boolean,
