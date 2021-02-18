@@ -779,7 +779,7 @@ private[deploy] class Worker(
           executorStateSyncFailureAttempts.remove(fullId)
         } catch {
           case t: Throwable =>
-            val failures = executorStateSyncFailureAttempts.getOrElseUpdate(fullId, 0) + 1
+            val failures = executorStateSyncFailureAttempts.getOrElse(fullId, 0) + 1
             if (failures < 10) {
               logError(s"Failed to send $newState to Master $masterRef, " +
                 s"will retry ($failures/10).", t)
