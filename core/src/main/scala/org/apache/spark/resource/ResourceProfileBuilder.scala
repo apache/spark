@@ -17,13 +17,12 @@
 
 package org.apache.spark.resource
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Evolving, Since}
-import org.apache.spark.util.Utils
 
 
 /**
@@ -42,12 +41,27 @@ class ResourceProfileBuilder() {
   // Executor resource requests that specified by users, mapped from resource name to the request.
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
+  def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
+  def executorResources: Map[String, ExecutorResourceRequest] = _executorResources.asScala.toMap
+
+  /**
+   * (Java-specific) gets a Java Map of resources to TaskResourceRequest
+   */
+  def taskResourcesJMap: JMap[String, TaskResourceRequest] = _taskResources.asScala.asJava
+
+  /**
+   * (Java-specific) gets a Java Map of resources to ExecutorResourceRequest
+   */
+  def executorResourcesJMap: JMap[String, ExecutorResourceRequest] = {
+    _executorResources.asScala.asJava
+  }
+
   /**
    * Add executor resource requests
    * @param requests The detailed executor resource requests, see [[ExecutorResourceRequests]]
    * @return this.type
    */
-  def executorRequire(requests: ExecutorResourceRequests): this.type = {
+  def require(requests: ExecutorResourceRequests): this.type = {
     _executorResources.putAll(requests.requests.asJava)
     this
   }
@@ -57,8 +71,18 @@ class ResourceProfileBuilder() {
    * @param requests The detailed task resource requests, see [[TaskResourceRequest]]
    * @return this.type
    */
-  def taskRequire(requests: TaskResourceRequests): this.type = {
+  def require(requests: TaskResourceRequests): this.type = {
     _taskResources.putAll(requests.requests.asJava)
+    this
+  }
+
+  def clearExecutorResourceRequests(): this.type = {
+    _executorResources.clear()
+    this
+  }
+
+  def clearTaskResourceRequests(): this.type = {
+    _taskResources.clear()
     this
   }
 
@@ -69,15 +93,7 @@ class ResourceProfileBuilder() {
   }
 
   def build(): ResourceProfile = {
-    if (!Utils.isTesting) {
-      if (_taskResources.isEmpty) {
-        throw new SparkException("Empty task resource request.")
-      }
-      if (_executorResources.isEmpty) {
-        throw new SparkException("Empty executor resource request.")
-      }
-    }
-    new ResourceProfile(_executorResources.asScala.toMap, _taskResources.asScala.toMap)
+    new ResourceProfile(executorResources, taskResources)
   }
 }
 

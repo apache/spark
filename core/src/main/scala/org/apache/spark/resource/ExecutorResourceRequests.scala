@@ -144,14 +144,6 @@ class ExecutorResourceRequests() extends Serializable {
     this
   }
 
-  /**
-   * Add a certain [[ExecutorResourceRequest]] to the request set.
-   */
-  def addRequest(treq: ExecutorResourceRequest): this.type = {
-    _executorResources.put(treq.resourceName, treq)
-    this
-  }
-
   override def toString: String = {
     s"Executor resource requests: ${_executorResources}"
   }

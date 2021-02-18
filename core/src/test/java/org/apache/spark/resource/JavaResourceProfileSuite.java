@@ -36,14 +36,13 @@ public class JavaResourceProfileSuite {
       new ExecutorResourceRequests().resource(FPGAResource, 3, "myfpgascript", "nvidia");
 
     ResourceProfileBuilder rprof = new ResourceProfileBuilder();
-    rprof.executorRequire(execReqGpu);
-    rprof.executorRequire(execReqFpga);
+    rprof.require(execReqGpu);
+    rprof.require(execReqFpga);
     TaskResourceRequests taskReq1 = new TaskResourceRequests().resource(GpuResource, 1);
-    rprof.taskRequire(taskReq1);
-    ResourceProfile rp = rprof.build();
+    rprof.require(taskReq1);
 
-    assertEquals(rp.executorResources().size(), 2);
-    Map<String, ExecutorResourceRequest> eresources = rp.executorResourcesJMap();
+    assertEquals(rprof.executorResources().size(), 2);
+    Map<String, ExecutorResourceRequest> eresources = rprof.executorResourcesJMap();
     assert(eresources.containsKey(GpuResource));
     ExecutorResourceRequest gpuReq = eresources.get(GpuResource);
     assertEquals(gpuReq.amount(), 2);
@@ -56,8 +55,8 @@ public class JavaResourceProfileSuite {
     assertEquals(fpgaReq.discoveryScript(), "myfpgascript");
     assertEquals(fpgaReq.vendor(), "nvidia");
 
-    assertEquals(rp.taskResources().size(), 1);
-    Map<String, TaskResourceRequest> tresources = rp.taskResourcesJMap();
+    assertEquals(rprof.taskResources().size(), 1);
+    Map<String, TaskResourceRequest> tresources = rprof.taskResourcesJMap();
     assert(tresources.containsKey(GpuResource));
     TaskResourceRequest taskReq = tresources.get(GpuResource);
     assertEquals(taskReq.amount(), 1.0, 0);

@@ -283,8 +283,8 @@ object ResourceProfile extends Logging {
    */
   val allSupportedExecutorResources = Array(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM, OFFHEAP_MEM)
 
-  private[spark] val UNKNOWN_RESOURCE_PROFILE_ID = -1
-  private[spark] val DEFAULT_RESOURCE_PROFILE_ID = 0
+  val UNKNOWN_RESOURCE_PROFILE_ID = -1
+  val DEFAULT_RESOURCE_PROFILE_ID = 0
 
   private[spark] val MEMORY_OVERHEAD_MIN_MIB = 384L
 
