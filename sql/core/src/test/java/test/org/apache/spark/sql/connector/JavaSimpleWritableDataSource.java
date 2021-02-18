@@ -17,11 +17,19 @@
 
 package test.org.apache.spark.sql.connector;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.Iterator;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
+
 import org.apache.spark.deploy.SparkHadoopUtil;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
+import org.apache.spark.sql.connector.SimpleCounter;
 import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.SessionConfigSupport;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
@@ -35,166 +43,19 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.SerializableConfiguration;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.Arrays;
-import java.util.Iterator;
-
+/**
+ * A HDFS based transactional writable data source which is implemented by java.
+ * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
+ * Each job moves files from `target/_temporary/uniqueId/` to `target`.
+ */
 public class JavaSimpleWritableDataSource implements TestingV2Source, SessionConfigSupport {
+
 
   private final StructType tableSchema = new StructType().add("i", "long").add("j", "long");
 
   @Override
   public String keyPrefix() {
     return "javaSimpleWritableDataSource";
-  }
-
-  @Override
-  public Table getTable(CaseInsensitiveStringMap options) {
-    return new MyTable(options);
-  }
-
-  static class JavaCSVInputPartitionReader implements InputPartition {
-    private String path;
-
-    JavaCSVInputPartitionReader(String path) {
-      this.path = path;
-    }
-
-    public String getPath() {
-      return path;
-    }
-
-    public void setPath(String path) {
-      this.path = path;
-    }
-  }
-
-  static class JavaCSVReaderFactory implements PartitionReaderFactory {
-
-    private final SerializableConfiguration conf;
-
-    JavaCSVReaderFactory(SerializableConfiguration conf) {
-      this.conf = conf;
-    }
-
-    @Override
-    public PartitionReader<InternalRow> createReader(InputPartition partition) {
-      String path = ((JavaCSVInputPartitionReader) partition).getPath();
-      Path filePath = new Path(path);
-      try {
-        FileSystem fs = filePath.getFileSystem(conf.value());
-        return new PartitionReader<InternalRow>() {
-          private final FSDataInputStream inputStream = fs.open(filePath);
-          private final Iterator<String> lines =
-              new BufferedReader(new InputStreamReader(inputStream)).lines().iterator();
-          private String currentLine = "";
-
-          @Override
-          public boolean next() {
-            if (lines.hasNext()) {
-              currentLine = lines.next();
-              return true;
-            } else {
-              return false;
-            }
-          }
-
-          @Override
-          public InternalRow get() {
-            Object[] objects =
-                Arrays.stream(currentLine.split(","))
-                    .map(String::trim)
-                    .map(Long::parseLong)
-                    .toArray();
-            return new GenericInternalRow(objects);
-          }
-
-          @Override
-          public void close() throws IOException {
-            inputStream.close();
-          }
-        };
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
-  static class JavaSimpleCounter {
-    private static Integer count = 0;
-
-    public static void increaseCounter() {
-      count += 1;
-    }
-
-    public static int getCounter() {
-      return count;
-    }
-
-    public static void resetCounter() {
-      count = 0;
-    }
-  }
-
-  static class JavaCSVDataWriterFactory implements DataWriterFactory {
-    private final String path;
-    private final String jobId;
-    private final SerializableConfiguration conf;
-
-    JavaCSVDataWriterFactory(String path, String jobId, SerializableConfiguration conf) {
-      this.path = path;
-      this.jobId = jobId;
-      this.conf = conf;
-    }
-
-    @Override
-    public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
-      try {
-        Path jobPath = new Path(new Path(path, "_temporary"), jobId);
-        Path filePath = new Path(jobPath, String.format("%s-%d-%d", jobId, partitionId, taskId));
-        FileSystem fs = filePath.getFileSystem(conf.value());
-        return new JavaCSVDataWriter(fs, filePath);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
-  static class JavaCSVDataWriter implements DataWriter<InternalRow> {
-    private final FileSystem fs;
-    private final Path file;
-    private final FSDataOutputStream out;
-
-    JavaCSVDataWriter(FileSystem fs, Path file) throws IOException {
-      this.fs = fs;
-      this.file = file;
-      out = fs.create(file);
-    }
-
-    @Override
-    public void write(InternalRow record) throws IOException {
-      out.writeBytes(String.format("%d,%d\n", record.getLong(0), record.getLong(1)));
-    }
-
-    @Override
-    public WriterCommitMessage commit() throws IOException {
-      out.close();
-      return null;
-    }
-
-    @Override
-    public void abort() throws IOException {
-      try {
-        out.close();
-      } finally {
-        fs.delete(file, false);
-      }
-    }
-
-    @Override
-    public void close() {}
   }
 
   class MyScanBuilder extends JavaSimpleScanBuilder {
@@ -213,17 +74,17 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
         FileSystem fs = dataPath.getFileSystem(conf);
         if (fs.exists(dataPath)) {
           return Arrays.stream(fs.listStatus(dataPath))
-              .filter(
-                  status -> {
-                    String name = status.getPath().getName();
-                    return !name.startsWith("_") && !name.startsWith(".");
-                  })
-              .map(f -> new JavaCSVInputPartitionReader(f.getPath().toUri().toString()))
-              .toArray(InputPartition[]::new);
+                  .filter(
+                          status -> {
+                            String name = status.getPath().getName();
+                            return !name.startsWith("_") && !name.startsWith(".");
+                          })
+                  .map(f -> new JavaCSVInputPartitionReader(f.getPath().toUri().toString()))
+                  .toArray(InputPartition[]::new);
         } else {
           return new InputPartition[0];
         }
-      } catch (Exception e) {
+      } catch (IOException e) {
         throw new RuntimeException(e);
       }
     }
@@ -304,13 +165,13 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
 
     @Override
     public DataWriterFactory createBatchWriterFactory(PhysicalWriteInfo info) {
-      JavaSimpleCounter.resetCounter();
+      SimpleCounter.resetCounter();
       return new JavaCSVDataWriterFactory(path, queryId, new SerializableConfiguration(conf));
     }
 
     @Override
     public void onDataWriterCommit(WriterCommitMessage message) {
-      JavaSimpleCounter.increaseCounter();
+      SimpleCounter.increaseCounter();
     }
 
     @Override
@@ -370,5 +231,141 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
     public StructType schema() {
       return tableSchema;
     }
+  }
+
+  @Override
+  public Table getTable(CaseInsensitiveStringMap options) {
+    return new MyTable(options);
+  }
+
+  @Override
+  public StructType inferSchema(CaseInsensitiveStringMap options) {
+    return tableSchema;
+  }
+
+  static class JavaCSVInputPartitionReader implements InputPartition {
+    private String path;
+
+    JavaCSVInputPartitionReader(String path) {
+      this.path = path;
+    }
+
+    public String getPath() {
+      return path;
+    }
+
+    public void setPath(String path) {
+      this.path = path;
+    }
+  }
+
+  static class JavaCSVReaderFactory implements PartitionReaderFactory {
+
+    private final SerializableConfiguration conf;
+
+    JavaCSVReaderFactory(SerializableConfiguration conf) {
+      this.conf = conf;
+    }
+
+    @Override
+    public PartitionReader<InternalRow> createReader(InputPartition partition) {
+      String path = ((JavaCSVInputPartitionReader) partition).getPath();
+      Path filePath = new Path(path);
+      try {
+        FileSystem fs = filePath.getFileSystem(conf.value());
+        return new PartitionReader<InternalRow>() {
+          private final FSDataInputStream inputStream = fs.open(filePath);
+          private final Iterator<String> lines =
+              new BufferedReader(new InputStreamReader(inputStream)).lines().iterator();
+          private String currentLine = "";
+
+          @Override
+          public boolean next() {
+            if (lines.hasNext()) {
+              currentLine = lines.next();
+              return true;
+            } else {
+              return false;
+            }
+          }
+
+          @Override
+          public InternalRow get() {
+            Object[] objects =
+                Arrays.stream(currentLine.split(","))
+                    .map(String::trim)
+                    .map(Long::parseLong)
+                    .toArray();
+            return new GenericInternalRow(objects);
+          }
+
+          @Override
+          public void close() throws IOException {
+            inputStream.close();
+          }
+        };
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  static class JavaCSVDataWriterFactory implements DataWriterFactory {
+    private final String path;
+    private final String jobId;
+    private final SerializableConfiguration conf;
+
+    JavaCSVDataWriterFactory(String path, String jobId, SerializableConfiguration conf) {
+      this.path = path;
+      this.jobId = jobId;
+      this.conf = conf;
+    }
+
+    @Override
+    public DataWriter<InternalRow> createWriter(int partitionId, long taskId) {
+      try {
+        Path jobPath = new Path(new Path(path, "_temporary"), jobId);
+        Path filePath = new Path(jobPath, String.format("%s-%d-%d", jobId, partitionId, taskId));
+        FileSystem fs = filePath.getFileSystem(conf.value());
+        return new JavaCSVDataWriter(fs, filePath);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  static class JavaCSVDataWriter implements DataWriter<InternalRow> {
+    private final FileSystem fs;
+    private final Path file;
+    private final FSDataOutputStream out;
+
+    JavaCSVDataWriter(FileSystem fs, Path file) throws IOException {
+      this.fs = fs;
+      this.file = file;
+      out = fs.create(file);
+    }
+
+    @Override
+    public void write(InternalRow record) throws IOException {
+      out.writeBytes(String.format("%d,%d\n", record.getLong(0), record.getLong(1)));
+    }
+
+    @Override
+    public WriterCommitMessage commit() throws IOException {
+      out.close();
+      return null;
+    }
+
+    @Override
+    public void abort() throws IOException {
+      try {
+        out.close();
+      } finally {
+        fs.delete(file, false);
+      }
+    }
+
+    @Override
+    public void close() {}
   }
 }
