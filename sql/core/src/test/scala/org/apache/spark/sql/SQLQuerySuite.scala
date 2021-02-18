@@ -3944,40 +3944,81 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-34421: Resolve temporary functions and views in views with CTEs") {
-    val tempViewName = "temp_view"
+  test("SPARK-34421: Resolve temporary objects in temporary views with CTEs") {
+    val tempFuncName = "temp_func"
+    withUserDefinedFunction(tempFuncName -> true) {
+      spark.udf.register(tempFuncName, identity[Int](_))
 
-    withTempView(tempViewName) {
-      spark.udf.register("temp_func", identity[Int](_))
+      val tempViewName = "temp_view"
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 1")
 
-      sql(
-        s"""
-           |CREATE TEMPORARY VIEW $tempViewName AS
-           |WITH cte AS (
-           |  SELECT temp_func(0)
-           |)
-           |SELECT * FROM cte
-           |""".stripMargin)
-      checkAnswer(sql(s"SELECT * FROM $tempViewName"), Row(0))
-    }
+        val testViewName = "test_view"
 
-    withTempView(tempViewName) {
-      sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 0")
+        withTempView(testViewName) {
+          sql(
+            s"""
+              |CREATE TEMPORARY VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT $tempFuncName(0)
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(0))
+        }
 
-      val viewName = "view_on_temp_view"
-
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-            |CREATE VIEW $viewName AS
-            |WITH cte AS (
-            |  SELECT * FROM $tempViewName
-            |)
-            |SELECT * FROM cte
-            |""".stripMargin)
+        withTempView(testViewName) {
+          sql(
+            s"""
+              |CREATE TEMPORARY VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT * FROM $tempViewName
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(1))
+        }
       }
-      assert(e.message.contains(s"Not allowed to create a permanent view `default`.`$viewName` " +
-        s"by referencing a temporary view $tempViewName."))
+    }
+  }
+
+  test("SPARK-34421: Resolve temporary objects in permanent views with CTEs") {
+    val tempFuncName = "temp_func"
+    withUserDefinedFunction((tempFuncName, true)) {
+      spark.udf.register(tempFuncName, identity[Int](_))
+
+      val tempViewName = "temp_view"
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 1")
+
+        val testViewName = "test_view"
+
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT * FROM $tempViewName
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+        }
+        assert(e.message.contains("Not allowed to create a permanent view " +
+          s"`default`.`$testViewName` by referencing a temporary view $tempViewName"))
+
+        val e2 = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT $tempFuncName(0)
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+        }
+        assert(e2.message.contains("Not allowed to create a permanent view " +
+          s"`default`.`$testViewName` by referencing a temporary function `$tempFuncName`"))
+      }
     }
   }
 }
