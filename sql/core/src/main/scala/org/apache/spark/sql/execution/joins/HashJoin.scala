@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
-import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
 
 /**
@@ -47,13 +47,6 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val opId = ExplainUtils.getOpId(this)
     s"$nodeName $joinType ${buildSide} ($opId)".trim
   }
-
-  /**
-   * When overriding metrics be sure to include numOutputRows & numMatchedRows
-   */
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numMatchedRows" -> SQLMetrics.createMetric(sparkContext, "number of matched rows"))
 
   override def output: Seq[Attribute] = {
     joinType match {
@@ -144,7 +137,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
 
-  private val numMatchedRows = longMetric("numMatchedRows")
+  private lazy val numMatchedRows = longMetric("numMatchedRows")
 
   @transient protected[this] lazy val boundCondition: InternalRow => Boolean =
     if (condition.isDefined) {
