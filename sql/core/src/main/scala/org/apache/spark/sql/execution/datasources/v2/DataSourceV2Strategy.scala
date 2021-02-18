@@ -374,7 +374,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableRenamePartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
-      AlterTableRenamePartitionExec(
+      RenamePartitionExec(
         table,
         Seq(from).asResolvedPartitionSpecs.head,
         Seq(to).asResolvedPartitionSpecs.head,
