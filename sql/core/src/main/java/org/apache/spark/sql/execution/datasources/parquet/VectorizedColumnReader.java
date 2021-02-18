@@ -150,24 +150,7 @@ public class VectorizedColumnReader {
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
     if (dictionaryPage != null) {
       try {
-        PrimitiveType primitiveType = descriptor.getPrimitiveType();
-        if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
-            primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-            primitiveType.getPrimitiveTypeName() == INT64) {
-          // We need to make sure that we initialize the right type for the dictionary otherwise
-          // Encoding#initDictionary will initialize it to PrimitiveTypeName.INT64 and
-          // WritableColumnVector will throw an exception when trying to decode to an Int when the
-          // dictionary is in fact initialized as Long
-          PrimitiveType adjustedType = new PrimitiveType(primitiveType.getRepetition(),
-              INT32, primitiveType.getTypeLength(),
-              primitiveType.getName(), primitiveType.getOriginalType(),
-              primitiveType.getDecimalMetadata(), primitiveType.getId());
-          ColumnDescriptor desc = new ColumnDescriptor(descriptor.getPath(),
-              adjustedType, descriptor.getMaxRepetitionLevel(), descriptor.getMaxDefinitionLevel());
-          this.dictionary = dictionaryPage.getEncoding().initDictionary(desc, dictionaryPage);
-        } else {
-          this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
-        }
+        this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
         this.isCurrentPageDictionaryEncoded = true;
       } catch (IOException e) {
         throw new IOException("could not decode the dictionary for " + descriptor, e);
@@ -295,7 +278,17 @@ public class VectorizedColumnReader {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
           // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
           // non-dictionary encoded values have already been added).
-          column.setDictionary(new ParquetDictionary(dictionary));
+          PrimitiveType primitiveType = descriptor.getPrimitiveType();
+          if (primitiveType.getOriginalType() == OriginalType.DECIMAL &&
+              primitiveType.getDecimalMetadata().getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+              primitiveType.getPrimitiveTypeName() == INT64) {
+            // We need to make sure that we initialize the right type for the dictionary otherwise
+            // WritableColumnVector will throw an exception when trying to decode to an Int when the
+            // dictionary is in fact initialized as Long
+            column.setDictionary(new ParquetDictionary(dictionary, true));
+          } else {
+            column.setDictionary(new ParquetDictionary(dictionary, false));
+          }
         } else {
           decodeDictionaryIds(rowId, num, column, dictionaryIds);
         }
