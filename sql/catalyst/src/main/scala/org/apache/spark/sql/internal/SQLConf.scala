@@ -3145,7 +3145,9 @@ object SQLConf {
       DeprecatedConfig(AVRO_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
         s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),
       DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead.")
+        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
+        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
