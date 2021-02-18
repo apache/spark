@@ -70,13 +70,12 @@ public interface SupportsDelete extends TruncatableTable {
    */
   void deleteWhere(Filter[] filters);
 
-  Filter[] ALWAYS_TRUE_FILTER = new Filter[] { new AlwaysTrue() };
-
   @Override
   default boolean truncateTable() {
-    boolean canDelete = canDeleteWhere(ALWAYS_TRUE_FILTER);
+    Filter[] filters = new Filter[] { new AlwaysTrue() };
+    boolean canDelete = canDeleteWhere(filters);
     if (canDelete) {
-      deleteWhere(ALWAYS_TRUE_FILTER);
+      deleteWhere(filters);
     }
     return canDelete;
   }
