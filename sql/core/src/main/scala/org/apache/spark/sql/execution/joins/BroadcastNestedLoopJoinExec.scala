@@ -90,7 +90,7 @@ case class BroadcastNestedLoopJoinExec(
     }
   }
 
-  private lazy val numMatchedRows = longMetric("numMatchedRows")
+  private val numMatchedRows = longMetric("numMatchedRows")
 
   @transient private lazy val boundCondition: InternalRow => Boolean =
     if (condition.isDefined) {

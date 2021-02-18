@@ -537,7 +537,8 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
          |if ($matched != null) {
          |  $numMatched.add(1);
          |}
-       """.stripMargin + s"final boolean $conditionPassed = true;"
+         |final boolean $conditionPassed = true;
+       """.stripMargin
     }
 
     val resultVars = buildSide match {
