@@ -50,7 +50,6 @@ import org.apache.spark.util.SerializableConfiguration;
  */
 public class JavaSimpleWritableDataSource implements TestingV2Source, SessionConfigSupport {
 
-
   private final StructType tableSchema = new StructType().add("i", "long").add("j", "long");
 
   @Override
