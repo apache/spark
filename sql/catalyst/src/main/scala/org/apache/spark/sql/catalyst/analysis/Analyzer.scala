@@ -116,8 +116,7 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
-    referredTempFunctionNames: Seq[String] = Seq.empty,
-    isTempView: Boolean = false)
+    referredTempFunctionNames: Seq[String] = Seq.empty)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -129,7 +128,7 @@ object AnalysisContext {
 
   private def set(context: AnalysisContext): Unit = value.set(context)
 
-  def withAnalysisContext[A](viewDesc: CatalogTable, isTempView: Boolean)(f: => A): A = {
+  def withAnalysisContext[A](viewDesc: CatalogTable)(f: => A): A = {
     val originContext = value.get()
     val maxNestedViewDepth = if (originContext.maxNestedViewDepth == -1) {
       // Here we start to resolve views, get `maxNestedViewDepth` from configs.
@@ -143,8 +142,7 @@ object AnalysisContext {
       maxNestedViewDepth,
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
-      viewDesc.viewReferredTempFunctionNames,
-      isTempView)
+      viewDesc.viewReferredTempFunctionNames)
     set(context)
     try f finally { set(originContext) }
   }
@@ -863,7 +861,6 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
-  private def isResolvingTempView: Boolean = AnalysisContext.get.isTempView
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
     AnalysisContext.get.referredTempViewNames.exists { n =>
       (n.length == nameParts.length) && n.zip(nameParts).forall {
@@ -935,7 +932,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def lookupTempView(
         identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
-      if (isResolvingView && !isResolvingTempView && !isReferredTempViewName(identifier)) {
+      if (isResolvingView && !isReferredTempViewName(identifier)) {
         return None
       }
 
@@ -1118,7 +1115,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // operator.
       case view @ View(Some(desc), isTempView, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
-        val newChild = AnalysisContext.withAnalysisContext(desc, isTempView) {
+        val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
           val maxNestedViewDepth = AnalysisContext.get.maxNestedViewDepth
           if (nestedViewDepth > maxNestedViewDepth) {
