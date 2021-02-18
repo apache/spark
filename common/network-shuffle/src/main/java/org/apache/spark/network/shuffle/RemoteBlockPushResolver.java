@@ -941,7 +941,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           Map<Integer, AppShufflePartitionInfo> shufflePartitions =
             mergeManager.partitions.get(partitionInfo.appShuffleId);
           if (shufflePartitions != null && shufflePartitions.containsKey(partitionInfo.reduceId)) {
-            logger.debug("{} shuffleId {} reduceId {} encountered failure",
+            logger.info("{} shuffleId {} reduceId {} encountered failure",
               partitionInfo.appShuffleId.appId, partitionInfo.appShuffleId.shuffleId,
               partitionInfo.reduceId);
             partitionInfo.setCurrentMapIndex(-1);
