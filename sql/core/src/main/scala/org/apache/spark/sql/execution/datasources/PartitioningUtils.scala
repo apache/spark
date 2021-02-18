@@ -197,10 +197,11 @@ object PartitioningUtils {
             try {
               castPartValueToDesiredType(typedValue.dataType, typedValue.value, zoneId)
             } catch {
-              case NonFatal(_) if validatePartitionColumns =>
-                throw new RuntimeException(s"Failed to cast value `${typedValue.value}` to " +
-                  s"`${typedValue.dataType}` for partition column `$columnName`")
-              case _ : Throwable => null
+              case NonFatal(_) =>
+                if (validatePartitionColumns) {
+                  throw new RuntimeException(s"Failed to cast value `${typedValue.value}` to " +
+                    s"`${typedValue.dataType}` for partition column `$columnName`")
+                } else null
             }
           }
           PartitionPath(InternalRow.fromSeq(rowValues), path)
