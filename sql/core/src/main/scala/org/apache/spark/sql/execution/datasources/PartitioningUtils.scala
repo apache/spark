@@ -488,7 +488,7 @@ object PartitioningUtils {
       TimestampType
     }
 
-    val dataType = if (typeInference) {
+    if (typeInference) {
       // First tries integral types
       Try({ Integer.parseInt(raw); IntegerType })
         .orElse(Try { JLong.parseLong(raw); LongType })
@@ -505,7 +505,6 @@ object PartitioningUtils {
     } else {
       if (raw == DEFAULT_PARTITION_NAME) NullType else StringType
     }
-    dataType
   }
 
   def castPartValueToDesiredType(
