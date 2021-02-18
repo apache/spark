@@ -86,21 +86,12 @@ object SubqueryExpression {
   }
 
   /**
-   * Returns true when an expression contains a scalar subquery
-   */
-  def hasScalarSubquery(e: Expression): Boolean = {
-    e.find {
-      case _: ScalarSubquery => true
-      case _ => false
-    }.isDefined
-  }
-
-  /**
    * Returns true when an expression contains a non-scalar subquery
    */
   def hasNonScalarSubquery(e: Expression): Boolean = {
     e.find {
-      case s: SubqueryExpression if !hasScalarSubquery(s) => true
+      case _: ScalarSubquery => false
+      case _: SubqueryExpression => true
       case _ => false
     }.isDefined
   }

@@ -507,6 +507,10 @@ Functions [1]: [max(key#x)]
 Aggregate Attributes [1]: [max(key#x)#x]
 Results [1]: [max(key#x)#x AS max(key)#x]
 
+Subquery:3 Hosting operator id = 4 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
+
 
 -- !query
 EXPLAIN FORMATTED
@@ -634,6 +638,10 @@ Keys: []
 Functions [1]: [avg(key#x)]
 Aggregate Attributes [1]: [avg(key#x)#x]
 Results [1]: [avg(key#x)#x AS avg(key)#x]
+
+Subquery:3 Hosting operator id = 1 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
+
+Subquery:4 Hosting operator id = 1 Hosting Expression = ReusedSubquery Subquery scalar-subquery#x, [id=#x]
 
 
 -- !query

@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy.translateFilter
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.SQLConf
@@ -338,15 +337,16 @@ case class FileSourceScanExec(
 
   @transient
   private lazy val runtimePushedDownFilters = {
+    val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     dataFilters.flatMap {
       case e: Expression if ExecSubqueryExpression.hasScalarSubquery(e) =>
         val updatedValue = e.transform {
           case s: ScalarSubquery => s.value
         }
-        Some(updatedValue)
+        DataSourceStrategy.translateFilter(updatedValue, supportNestedPredicatePushdown)
       case _ =>
         Nil
-    }.flatMap(translateFilter(_, DataSourceUtils.supportNestedPredicatePushdown(relation)))
+    }
   }
 
   override lazy val metadata: Map[String, String] = {

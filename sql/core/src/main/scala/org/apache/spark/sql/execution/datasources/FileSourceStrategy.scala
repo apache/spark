@@ -169,8 +169,7 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
       val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
-        // subquery expressions are filtered out because they can't be used to prune buckets
-        // or pushed down as data filters, yet they would be executed
+        // subquery expressions are filtered out because they can't be used to prune buckets.
         genBucketSet(normalizedFilters.filterNot(hasSubquery), bucketSpec.get)
       } else {
         None
@@ -182,8 +181,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // Partition keys are not available in the statistics of the files.
       // `dataColumns` might have partition columns, we need to filter them out.
       val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionColumns.contains)
-      // Non-scalar subquery expressions are filtered out because they can't be used to prune
-      // buckets or pushed down as data filters, yet they would be executed
+      // Non-scalar subquery expressions are filtered out because they can't be used
+      // pushed down as data filters, yet they would be executed.
       val dataFilters = normalizedFilters.filterNot(hasNonScalarSubquery).flatMap { f =>
         if (f.references.intersect(partitionSet).nonEmpty) {
           extractPredicatesWithinOutputSet(f, AttributeSet(dataColumnsWithoutPartitionCols))

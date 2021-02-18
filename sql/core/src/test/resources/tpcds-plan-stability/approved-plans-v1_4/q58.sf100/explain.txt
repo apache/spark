@@ -467,14 +467,20 @@ Input [2]: [d_date#5, d_week_seq#6]
 
 (82) Filter [codegen id : 1]
 Input [2]: [d_date#5, d_week_seq#6]
-Condition : (isnotnull(d_date#5) AND (d_date#5 = 10959))
+Condition : (isnotnull(d_date#5) AND (d_date#5 = 2000-01-03))
 
 (83) Project [codegen id : 1]
 Output [1]: [d_week_seq#6]
 Input [2]: [d_date#5, d_week_seq#6]
 
-Subquery:2 Hosting operator id = 35 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+Subquery:2 Hosting operator id = 7 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
 
-Subquery:3 Hosting operator id = 61 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+Subquery:3 Hosting operator id = 35 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+
+Subquery:4 Hosting operator id = 33 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+
+Subquery:5 Hosting operator id = 61 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
+
+Subquery:6 Hosting operator id = 59 Hosting Expression = ReusedSubquery Subquery scalar-subquery#7, [id=#8]
 
 

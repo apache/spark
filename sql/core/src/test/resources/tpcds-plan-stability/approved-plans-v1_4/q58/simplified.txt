@@ -49,6 +49,7 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.date_dim [d_date,d_week_seq]
+                                                      ReusedSubquery [d_week_seq] #1
             InputAdapter
               BroadcastExchange #5
                 WholeStageCodegen (9)
@@ -86,6 +87,7 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                                       ColumnarToRow
                                                         InputAdapter
                                                           Scan parquet default.date_dim [d_date,d_week_seq]
+                                                            ReusedSubquery [d_week_seq] #1
         InputAdapter
           BroadcastExchange #9
             WholeStageCodegen (14)
@@ -123,3 +125,4 @@ TakeOrderedAndProject [item_id,ss_item_rev,ss_dev,cs_item_rev,cs_dev,ws_item_rev
                                                   ColumnarToRow
                                                     InputAdapter
                                                       Scan parquet default.date_dim [d_date,d_week_seq]
+                                                        ReusedSubquery [d_week_seq] #1
