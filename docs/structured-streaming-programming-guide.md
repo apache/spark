@@ -1098,7 +1098,7 @@ likely is the engine going to process it.
 Structured Streaming supports joining a streaming Dataset/DataFrame with a static Dataset/DataFrame
 as well as another streaming Dataset/DataFrame. The result of the streaming join is generated
 incrementally, similar to the results of streaming aggregations in the previous section. In this
-section we will explore what type of joins (i.e. inner, outer, etc.) are supported in the above
+section we will explore what type of joins (i.e. inner, outer, semi, etc.) are supported in the above
 cases. Note that in all the supported join types, the result of the join with a streaming
 Dataset/DataFrame will be the exactly the same as if it was with a static Dataset/DataFrame
 containing the same data in the stream.
@@ -1318,8 +1318,8 @@ A watermark delay of "2 hours" guarantees that the engine will never drop any da
  2 hours delayed. But data delayed by more than 2 hours may or may not get processed.
 
 ##### Outer Joins with Watermarking
-While the watermark + event-time constraints is optional for inner joins, for left and right outer
-joins they must be specified. This is because for generating the NULL results in outer join, the
+While the watermark + event-time constraints is optional for inner joins, for outer joins
+they must be specified. This is because for generating the NULL results in outer join, the
 engine must know when an input row is not going to match with anything in future. Hence, the
 watermark + event-time constraints must be specified for generating correct results. Therefore,
 a query with outer-join will look quite like the ad-monetization example earlier, except that
@@ -1337,7 +1337,7 @@ impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter"
+  joinType = "leftOuter"      // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
  )
 
 {% endhighlight %}
@@ -1352,7 +1352,7 @@ impressionsWithWatermark.join(
     "clickAdId = impressionAdId AND " +
     "clickTime >= impressionTime AND " +
     "clickTime <= impressionTime + interval 1 hour "),
-  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter"
+  "leftOuter"                 // can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
 );
 
 {% endhighlight %}
@@ -1369,7 +1369,7 @@ impressionsWithWatermark.join(
     clickTime >= impressionTime AND
     clickTime <= impressionTime + interval 1 hour
     """),
-  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter"
+  "leftOuter"                 # can be "inner", "leftOuter", "rightOuter", "fullOuter", "leftSemi"
 )
 
 {% endhighlight %}
@@ -1386,7 +1386,7 @@ joined <- join(
       "clickAdId = impressionAdId AND",
       "clickTime >= impressionTime AND",
       "clickTime <= impressionTime + interval 1 hour"),
-  "left_outer"                 # can be "inner", "left_outer", "right_outer"
+  "left_outer"                 # can be "inner", "left_outer", "right_outer", "full_outer", "left_semi"
 ))
 
 {% endhighlight %}
@@ -1415,6 +1415,18 @@ generation of the outer result may get delayed if there no new data being receiv
 *In short, if any of the two input streams being joined does not receive data for a while, the
 outer (both cases, left or right) output may get delayed.*
 
+##### Semi Joins with Watermarking
+A semi join returns values from the left side of the relation that has a match with the right.
+It is also referred to as a left semi join. Similar to outer joins, watermark + event-time
+constraints must be specified for semi join. This is to evict unmatched input rows on left side,
+the engine must know when an input row on left side is not going to match with anything on right
+side in future.
+
+###### Semantic Guarantees of Stream-stream Semi Joins with Watermarking
+{:.no_toc}
+Semi joins have the same guarantees as [inner joins](#semantic-guarantees-of-stream-stream-inner-joins-with-watermarking)
+regarding watermark delays and whether data will be dropped or not.
+
 ##### Support matrix for joins in streaming queries
 
 <table class ="table">
@@ -1434,8 +1446,8 @@ outer (both cases, left or right) output may get delayed.*
       </td>
   </tr>
   <tr>
-    <td rowspan="4" style="vertical-align: middle;">Stream</td>
-    <td rowspan="4" style="vertical-align: middle;">Static</td>
+    <td rowspan="5" style="vertical-align: middle;">Stream</td>
+    <td rowspan="5" style="vertical-align: middle;">Static</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
@@ -1452,8 +1464,12 @@ outer (both cases, left or right) output may get delayed.*
     <td style="vertical-align: middle;">Not supported</td>
   </tr>
   <tr>
-    <td rowspan="4" style="vertical-align: middle;">Static</td>
-    <td rowspan="4" style="vertical-align: middle;">Stream</td>
+    <td style="vertical-align: middle;">Left Semi</td>
+    <td style="vertical-align: middle;">Supported, not stateful</td>
+  </tr>
+  <tr>
+    <td rowspan="5" style="vertical-align: middle;">Static</td>
+    <td rowspan="5" style="vertical-align: middle;">Stream</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">Supported, not stateful</td>
   </tr>
@@ -1470,8 +1486,12 @@ outer (both cases, left or right) output may get delayed.*
     <td style="vertical-align: middle;">Not supported</td>
   </tr>
   <tr>
-    <td rowspan="4" style="vertical-align: middle;">Stream</td>
-    <td rowspan="4" style="vertical-align: middle;">Stream</td>
+    <td style="vertical-align: middle;">Left Semi</td>
+    <td style="vertical-align: middle;">Not supported</td>
+  </tr>
+  <tr>
+    <td rowspan="5" style="vertical-align: middle;">Stream</td>
+    <td rowspan="5" style="vertical-align: middle;">Stream</td>
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
@@ -1494,9 +1514,19 @@ outer (both cases, left or right) output may get delayed.*
   </tr>
   <tr>
     <td style="vertical-align: middle;">Full Outer</td>
-    <td style="vertical-align: middle;">Not supported</td>
+    <td style="vertical-align: middle;">
+      Conditionally supported, must specify watermark on one side + time constraints for correct
+      results, optionally specify watermark on the other side for all state cleanup
+    </td>
   </tr>
- <tr>
+  <tr>
+    <td style="vertical-align: middle;">Left Semi</td>
+    <td style="vertical-align: middle;">
+      Conditionally supported, must specify watermark on right + time constraints for correct
+      results, optionally specify watermark on left for all state cleanup
+    </td>
+  </tr>
+  <tr>
     <td></td>
     <td></td>
     <td></td>
