@@ -384,7 +384,7 @@ class UISuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-34449: Jetty 9.4.35.v20201120 and later no longer returns status code 302 " +
+  test("SPARK-34449: Jetty 9.4.35.v20201120 and later no longer return status code 302 " +
        " and handle internally when request URL ends with a context path without trailing '/'") {
     val proxyRoot = "https://proxy.example.com:443/prefix"
     val (conf, securityMgr, sslOptions) = sslDisabledConf()
