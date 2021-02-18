@@ -680,7 +680,7 @@ private[spark] class TaskSchedulerImpl(
               val errorMsg = s"Fail resource offers for barrier stage ${taskSet.stageId} " +
                 s"because only ${barrierPendingLaunchTasks.length} out of a total number " +
                 s"of ${taskSet.numTasks} tasks got resource offers. We highly recommend " +
-                s"you to use the non-legacy delay scheduling by setting " +
+                "you to use the non-legacy delay scheduling by setting " +
                 s"${LEGACY_LOCALITY_WAIT_RESET.key} to false to get rid of this error."
               logWarning(errorMsg)
               taskSet.abort(errorMsg)
@@ -689,8 +689,8 @@ private[spark] class TaskSchedulerImpl(
               val curTime = clock.getTimeMillis()
               if (curTime - taskSet.lastResourceOfferFailLogTime >
                 TaskSetManager.BARRIER_LOGGING_INTERVAL) {
-                logInfo(s"Releasing the assigned resource offers since only partial tasks can " +
-                  s"be launched. Waiting for later round resource offers.")
+                logInfo("Releasing the assigned resource offers since only partial tasks can " +
+                  "be launched. Waiting for later round resource offers.")
                 taskSet.lastResourceOfferFailLogTime = curTime
               }
               barrierPendingLaunchTasks.foreach { task =>
