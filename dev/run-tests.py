@@ -247,7 +247,7 @@ def build_spark_documentation():
     bundle_bin = which("bundle")
 
     if not bundle_bin:
-        print("[error] Cannot find a version of `bunlde` on the system; please",
+        print("[error] Cannot find a version of `bundle` on the system; please",
               " install one with `gem install bundler` and retry to build documentation.")
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
