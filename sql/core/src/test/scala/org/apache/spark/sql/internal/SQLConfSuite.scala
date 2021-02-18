@@ -454,7 +454,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34454: configs from the legacy namespace should be internal") {
     val nonInternalLegacyConfigs = spark.sessionState.conf.getAllDefinedConfs
-      .filter { case (key, _, _, _) => key.contains(".legacy.") }
+      .filter { case (key, _, _, _) => key.contains("spark.sql.legacy.") }
     assert(nonInternalLegacyConfigs.isEmpty,
       s"""
          |Non internal legacy SQL configs:
