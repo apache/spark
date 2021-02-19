@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunc
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, SetTableLocation, SetTableProperties, AlterTableUnsetProperties, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, SetTableLocation, SetTableProperties, UnsetTableProperties, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
@@ -786,14 +786,14 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed2 match {
-            case AlterTableUnsetProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+            case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
               assert(propertyKeys == Seq("comment", "test"))
               assert(!ifExists)
             case _ => fail("expect AlterTableUnsetProperties")
           }
 
           parsed3 match {
-            case AlterTableUnsetProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+            case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
               assert(propertyKeys == Seq("comment", "test"))
               assert(ifExists)
             case _ => fail("expect AlterTableUnsetProperties")
@@ -812,7 +812,7 @@ class PlanResolutionSuite extends AnalysisTest {
       case _ => fail("Expect AlterTableSetProperties, but got:\n" + parsed4.treeString)
     }
     parsed5 match {
-      case AlterTableUnsetProperties(_: UnresolvedTable, _, _) => // OK
+      case UnsetTableProperties(_: UnresolvedTable, _, _) => // OK
       case _ => fail("Expect AlterTableUnsetProperties, but got:\n" + parsed5.treeString)
     }
   }

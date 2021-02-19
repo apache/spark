@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableUnsetProperties, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{UnsetTableProperties, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.TableCatalog
  */
 object ResolveTableProperties extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case a @ AlterTableUnsetProperties(r: ResolvedTable, props, ifExists) if !ifExists =>
+    case a @ UnsetTableProperties(r: ResolvedTable, props, ifExists) if !ifExists =>
       val tblProperties = r.table.properties.asScala
       props.foreach { p =>
         if (!tblProperties.contains(p) && p != TableCatalog.PROP_COMMENT) {

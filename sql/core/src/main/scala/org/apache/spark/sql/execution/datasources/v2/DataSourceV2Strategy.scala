@@ -434,7 +434,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toSeq
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
-    case AlterTableUnsetProperties(table: ResolvedTable, keys, _) =>
+    case UnsetTableProperties(table: ResolvedTable, keys, _) =>
       val changes = keys.map(key => TableChange.removeProperty(key))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 

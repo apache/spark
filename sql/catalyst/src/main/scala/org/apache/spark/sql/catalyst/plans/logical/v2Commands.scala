@@ -895,7 +895,7 @@ case class SetTableProperties(
 /**
  * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
  */
-case class AlterTableUnsetProperties(
+case class UnsetTableProperties(
     table: LogicalPlan,
     propertyKeys: Seq[String],
     ifExists: Boolean) extends Command {

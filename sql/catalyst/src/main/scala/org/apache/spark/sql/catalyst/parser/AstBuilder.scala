@@ -3508,7 +3508,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[UnsetViewProperties]] or [[AlterTableUnsetProperties]] commands.
+   * Parse [[UnsetViewProperties]] or [[UnsetTableProperties]] commands.
    *
    * For example:
    * {{{
@@ -3532,7 +3532,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         cleanedProperties,
         ifExists)
     } else {
-      AlterTableUnsetProperties(
+      UnsetTableProperties(
         createUnresolvedTable(
           ctx.multipartIdentifier,
           "ALTER TABLE ... UNSET TBLPROPERTIES",
