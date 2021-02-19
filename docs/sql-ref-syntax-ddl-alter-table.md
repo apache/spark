@@ -25,7 +25,7 @@ license: |
 
 ### RENAME 
 
-`ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database.
+`ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database. The table rename command cannot be used to move a table between databases, only to rename a table within the same database.
 
 #### Syntax
 
