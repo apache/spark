@@ -7,8 +7,10 @@ CREATE TABLE test_show_partitions(a String, b Int, c String, d String) USING par
 ALTER TABLE test_show_partitions ADD PARTITION (c='Us', d=1);
 ALTER TABLE test_show_partitions ADD PARTITION (c='Us', d=2);
 ALTER TABLE test_show_partitions ADD PARTITION (c='Cn', d=1);
--- CREATE TEMPORARY VIEW test_show_views(e int) USING parquet;
--- CREATE GLOBAL TEMP VIEW test_global_show_views AS SELECT 1 as col1;
+CREATE VIEW view_1 AS SELECT * FROM test_show_tables;
+CREATE VIEW view_2 AS SELECT * FROM test_show_tables WHERE c=1;
+CREATE TEMPORARY VIEW test_show_views(e int) USING parquet;
+CREATE GLOBAL TEMP VIEW test_global_show_views AS SELECT 1 as col1;
 
 -- SHOW NAMESPACES
 SHOW NAMESPACES;
@@ -35,6 +37,15 @@ SHOW COLUMNS in test_show_tables;
 SELECT * FROM command('SHOW COLUMNS in test_show_tables');
 SELECT * FROM command('SHOW COLUMNS in test_show_tables') WHERE col_name = 'a';
 
+-- SHOW VIEWS
+SHOW VIEWS;
+SELECT * FROM command('SHOW VIEWS');
+SELECT * FROM command('SHOW VIEWS') WHERE viewName = 'test_show_views';
+
+-- SHOW FUNCTIONS
+SELECT * FROM command('SHOW FUNCTIONS') LIMIT 3;
+SELECT * FROM command('SHOW FUNCTIONS') WHERE function LIKE 'an%';
+
 -- Unsupported DDL
 SHOW CREATE TABLE test_show_tables;
 SELECT * FROM command('SHOW CREATE TABLE test_show_tables');
@@ -43,6 +54,8 @@ SELECT * FROM command('SHOW CREATE TABLE test_show_tables');
 SELECT * FROM command('SHOW CREATE TABLE');
 
 -- Clean Up
+DROP VIEW global_temp.test_global_show_views;
+DROP VIEW test_show_views;
 DROP TABLE test_show_partitions;
 DROP TABLE test_show_table_properties;
 DROP TABLE test_show_tables;

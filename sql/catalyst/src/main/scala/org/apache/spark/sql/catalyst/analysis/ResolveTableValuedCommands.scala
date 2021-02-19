@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ShowColumns, ShowNamespaces, ShowPartitions, ShowTableProperties, ShowTables}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -33,8 +33,8 @@ object ResolveTableValuedCommands extends Rule[LogicalPlan] {
     case ShowTableProperties(_, _, _) => true
     case ShowPartitions(_, _, _) => true
     case ShowColumns(_, _, _) => true
-    // TODO   case ShowViews(_, _, _) => true
-    // TODO   case ShowFunctions(_, _, _) => true
+    case ShowViews(_, _, _) => true
+    case ShowFunctions(_, _, _, _, _) => true
     case _ => false
   }
 
