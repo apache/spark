@@ -345,10 +345,14 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // Common factor elimination for conjunction
       case and @ (left And right) =>
         // 1. Split left and right to get the disjunctive predicates,
-        //   i.e. lhs = (a, b), rhs = (a, c)
+        //    i.e. lhs = (a, b), rhs = (a, c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
+        // 4. If common is non-empty, apply the formula to get the optimized predicate:
+        //    common || (ldiff && rdiff)
+        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+        //    for example lhs = (a && b), rhs = (a && c) => all = (a, b, a, c), distinct = (a, b, c)
+        //    optimized predicate: (a && b && c)
         val lhs = splitDisjunctivePredicates(left)
         val rhs = splitDisjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
@@ -366,11 +370,12 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           // No common factors from disjunctive predicates, reduce common factor from conjunction
           val all = splitConjunctivePredicates(left) ++ splitConjunctivePredicates(right)
-          val distinct = all.distinct
-          if (all.length == distinct.length) {
+          val distinct = ExpressionSet(all)
+          if (all.size == distinct.size) {
             // No common factors, return the original predicate
             and
           } else {
+            // (((a && b) && a && (a && c))) => a && b && c
             distinct.reduce(And)
           }
         }
@@ -378,10 +383,14 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // Common factor elimination for disjunction
       case or @ (left Or right) =>
         // 1. Split left and right to get the conjunctive predicates,
-        //   i.e.  lhs = (a, b), rhs = (a, c)
+        //    i.e.  lhs = (a, b), rhs = (a, c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
-        // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
+        // 4. If common is non-empty, apply the formula to get the optimized predicate:
+        //    common && (ldiff || rdiff)
+        // 5. Else if common is empty, split left and right to get the conjunctive predicates.
+        // for example lhs = (a || b), rhs = (a || c) => all = (a, b, a, c), distinct = (a, b, c)
+        // optimized predicate: (a || b || c)
         val lhs = splitConjunctivePredicates(left)
         val rhs = splitConjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
@@ -399,11 +408,12 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           // No common factors in conjunctive predicates, reduce common factor from disjunction
           val all = splitDisjunctivePredicates(left) ++ splitDisjunctivePredicates(right)
-          val distinct = all.distinct
+          val distinct = ExpressionSet(all)
           if (all.size == distinct.size) {
             // No common factors, return the original predicate
             or
           } else {
+            // (a || b) || a || (a || c))) => a || b || c
             distinct.reduce(Or)
           }
         }
