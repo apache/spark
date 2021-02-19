@@ -58,7 +58,14 @@ class RemoveNoopOperatorsSuite extends PlanTest {
   test("Remove redundant Union under Distinct") {
     val union = Union(testRelation :: testRelation :: Nil)
     val distinct = Distinct(union)
-    val unionOptimized = Optimize.execute(distinct)
-    comparePlans(unionOptimized, Distinct(testRelation))
+    val optimized = Optimize.execute(distinct)
+    comparePlans(optimized, Distinct(testRelation))
+  }
+
+  test("Remove redundant Union under Deduplicate") {
+    val union = Union(testRelation :: testRelation :: Nil)
+    val deduplicate = Deduplicate(testRelation.output, union)
+    val optimized = Optimize.execute(deduplicate)
+    comparePlans(optimized, Deduplicate(testRelation.output, testRelation))
   }
 }

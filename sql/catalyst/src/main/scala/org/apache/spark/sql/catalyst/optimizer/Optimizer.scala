@@ -492,6 +492,20 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
+  private def removeAliasOnlyProject(plan: LogicalPlan): LogicalPlan = plan match {
+    case p @ Project(projectList, child) =>
+      val originalOutputs = projectList.map {
+        case Alias(a: Attribute, _) => a
+        case a: Attribute => a
+      }
+      if (child.outputSet == AttributeSet(originalOutputs)) {
+        child
+      } else {
+        p
+      }
+    case _ => plan
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Eliminate no-op Projects
     case p @ Project(_, child) if child.sameOutput(p) => child
@@ -499,8 +513,22 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
 
-    case Distinct(Union(children, _, _)) if children.tail.forall(children.head.sameResult(_)) =>
-      Distinct(children.head)
+    // Eliminate no-op Union
+    case d @ Distinct(u: Union) =>
+      val unionChildren = u.children.map(c => removeAliasOnlyProject(c))
+      if (unionChildren.tail.forall(unionChildren.head.sameResult(_))) {
+        d.withNewChildren(Seq(u.children.head))
+      } else {
+        d
+      }
+
+    case d @ Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
+      val unionChildren = u.children.map(c => removeAliasOnlyProject(c))
+      if (unionChildren.tail.forall(unionChildren.head.sameResult(_))) {
+        d.withNewChildren(Seq(u.children.head))
+      } else {
+        d
+      }
   }
 }
 
