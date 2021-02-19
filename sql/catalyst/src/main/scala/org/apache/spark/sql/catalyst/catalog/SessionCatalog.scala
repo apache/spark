@@ -846,6 +846,13 @@ class SessionCatalog(
     }
   }
 
+  def getTempViewSchema(plan: LogicalPlan): StructType = {
+    plan match {
+      case viewInfo: TemporaryViewRelation => viewInfo.tableMeta.schema
+      case v => v.schema
+    }
+  }
+
   private def fromCatalogTable(metadata: CatalogTable, isTempView: Boolean): View = {
     val viewText = metadata.viewText.getOrElse {
       throw new IllegalStateException("Invalid view without text.")
