@@ -395,9 +395,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   }
 
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
-    val resolved = mutable.Map[String, Any]()
     // Error handling
-    values.foreach { case (colName, replaceValue) =>
+    val resolved = values.map { case (colName, replaceValue) =>
       // Check column name exists
       val resolvedColumn = df.resolve(colName)
 
@@ -414,7 +413,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       // in a dataframe having columns ("ColWith.Dot", "Col").
       // If resolved name is not used, while filling null values "`ColWith.Dot`" will
       // not match "ColWith.Dot".
-      resolved += (resolvedColumn.name -> replaceValue)
+      (resolvedColumn.name -> replaceValue)
     }
 
     val columnEquals = df.sparkSession.sessionState.analyzer.resolver
