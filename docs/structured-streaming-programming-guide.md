@@ -712,7 +712,7 @@ csvDF <- read.stream("csv", path = "/path/to/directory", schema = schema, sep = 
 
 These examples generate streaming DataFrames that are untyped, meaning that the schema of the DataFrame is not checked at compile time, only checked at runtime when the query is submitted. Some operations like `map`, `flatMap`, etc. need the type to be known at compile time. To do those, you can convert these untyped streaming DataFrames to typed streaming Datasets using the same methods as static DataFrame. See the [SQL Programming Guide](sql-programming-guide.html) for more details. Additionally, more details on the supported streaming sources are discussed later in the document.
 
-Alternatively, since Spark 3.1, you can create streaming DataFrames with `DataStreamReader.table()`. See [Streaming Table APIs](#streaming-table-apis) for more details.
+Since Spark 3.1, you can also create streaming DataFrames with `DataStreamReader.table()`. See [Streaming Table APIs](#streaming-table-apis) for more details.
 
 ### Schema inference and partition of streaming DataFrames/Datasets
 
@@ -2467,7 +2467,7 @@ spark.readStream \
     .format("parquet") \
     .toTable("newTable")
 
-// Check the new table result
+# Check the new table result
 spark.read.table("newTable").show()
 {% endhighlight %}
 
@@ -2477,6 +2477,8 @@ spark.read.table("newTable").show()
 Not available in R.
 </div>
 </div>
+
+For more details, please check the Scala/Java docs for DataStreamReader ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamReader.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamReader) docs) and DataStreamWriter ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/pyspark.sql.html#pyspark.sql.streaming.DataStreamWriter) docs).
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether
