@@ -741,7 +741,7 @@ class DDLParserSuite extends AnalysisTest {
     val hint = Some("Please use ALTER TABLE instead.")
 
     comparePlans(parsePlan(sql1_view),
-      AlterViewSetProperties(
+      SetViewProperties(
         UnresolvedView(Seq("table_name"), "ALTER VIEW ... SET TBLPROPERTIES", false, hint),
         Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(parsePlan(sql2_view),

@@ -3477,7 +3477,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewSetProperties]] or [[AlterTableSetProperties]] commands.
+   * Parse [[SetViewProperties]] or [[AlterTableSetProperties]] commands.
    *
    * For example:
    * {{{
@@ -3490,7 +3490,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
-      AlterViewSetProperties(
+      SetViewProperties(
         createUnresolvedView(
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",

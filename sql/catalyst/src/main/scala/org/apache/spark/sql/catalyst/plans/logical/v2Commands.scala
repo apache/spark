@@ -819,7 +819,7 @@ case class AlterViewAs(
 /**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
-case class AlterViewSetProperties(
+case class SetViewProperties(
     child: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil

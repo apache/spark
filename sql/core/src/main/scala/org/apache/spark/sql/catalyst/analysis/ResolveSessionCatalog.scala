@@ -173,7 +173,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case AlterTableUnsetProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
 
-    case AlterViewSetProperties(ResolvedView(ident, _), props) =>
+    case SetViewProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
     case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
