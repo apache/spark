@@ -203,27 +203,26 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             invalidateCache) :: Nil
       }
 
-    case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), query, writeOptions,
+    case AppendData(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), query, _,
         _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
-          AppendDataExecV1(v1, writeOptions.asOptions, query, refreshCache(r), v1Write) :: Nil
+          AppendDataExecV1(v1, query, refreshCache(r), v1Write) :: Nil
         case v2Write =>
           throw new AnalysisException(
             s"Table ${v1.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
             s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
       }
 
-    case AppendData(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), query, writeOptions,
+    case AppendData(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), query, _,
         _, Some(write)) =>
-      AppendDataExec(v2, writeOptions.asOptions, planLater(query), refreshCache(r), write) :: Nil
+      AppendDataExec(v2, planLater(query), refreshCache(r), write) :: Nil
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, query,
-        writeOptions, _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+        _, _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
-          OverwriteByExpressionExecV1(
-            v1, writeOptions.asOptions, query, refreshCache(r), v1Write) :: Nil
+          OverwriteByExpressionExecV1(v1, query, refreshCache(r), v1Write) :: Nil
         case v2Write =>
           throw new AnalysisException(
             s"Table ${v1.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
@@ -231,14 +230,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), _, query,
-        writeOptions, _, Some(write)) =>
-      OverwriteByExpressionExec(
-        v2, writeOptions.asOptions, planLater(query), refreshCache(r), write) :: Nil
+        _, _, Some(write)) =>
+      OverwriteByExpressionExec(v2, planLater(query), refreshCache(r), write) :: Nil
 
     case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _, Some(write)) =>
-      OverwritePartitionsDynamicExec(
-        r.table.asWritable, writeOptions.asOptions, planLater(query),
-        refreshCache(r), write) :: Nil
+      val writable = r.table.asWritable
+      OverwritePartitionsDynamicExec(writable, planLater(query), refreshCache(r), write) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -357,7 +354,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableAddPartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), parts, ignoreIfExists) =>
-      AlterTableAddPartitionExec(
+      AddPartitionExec(
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfExists,
@@ -368,7 +365,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         parts,
         ignoreIfNotExists,
         purge) =>
-      AlterTableDropPartitionExec(
+      DropPartitionExec(
         table,
         parts.asResolvedPartitionSpecs,
         ignoreIfNotExists,
@@ -377,7 +374,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AlterTableRenamePartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
-      AlterTableRenamePartitionExec(
+      RenamePartitionExec(
         table,
         Seq(from).asResolvedPartitionSpecs.head,
         Seq(to).asResolvedPartitionSpecs.head,
@@ -437,7 +434,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }.toSeq
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
     case AlterTableUnsetProperties(table: ResolvedTable, keys, _) =>
       val changes = keys.map(key => TableChange.removeProperty(key))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
