@@ -741,4 +741,8 @@ private[spark] object QueryCompilationErrors {
     new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
       "Use sparkSession.udf.register(...) instead.")
   }
+
+  def unsupportedCommandForTableValuedError(command: String): Throwable = {
+    new AnalysisException(s"Table valued command does not support command $command")
+  }
 }

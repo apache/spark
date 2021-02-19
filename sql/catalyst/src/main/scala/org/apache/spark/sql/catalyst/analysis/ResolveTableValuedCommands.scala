@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * Rule that resolves table-valued command references.
@@ -44,7 +44,7 @@ object ResolveTableValuedCommands extends Rule[LogicalPlan] {
       if (isSupportedCommand(parsedPlan)) {
         parsedPlan
       } else {
-        throw new AnalysisException(s"Table valued command does not support command ${u.command}")
+        throw QueryCompilationErrors.unsupportedCommandForTableValuedError(u.command)
       }
     case u => u
   }
