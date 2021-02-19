@@ -305,7 +305,7 @@ case class DescribeNamespace(
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
  * command.
  */
-case class AlterNamespaceSetProperties(
+case class SetNamespaceProperties(
     namespace: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)

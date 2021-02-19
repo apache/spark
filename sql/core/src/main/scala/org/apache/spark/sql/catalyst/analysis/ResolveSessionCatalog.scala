@@ -182,7 +182,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
       DescribeDatabaseCommand(db, d.extended)
 
-    case AlterNamespaceSetProperties(DatabaseInSessionCatalog(db), properties) =>
+    case SetNamespaceProperties(DatabaseInSessionCatalog(db), properties) =>
       AlterDatabasePropertiesCommand(db, properties)
 
     case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
