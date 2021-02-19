@@ -36,9 +36,9 @@ import org.apache.spark.annotation.{Evolving, Since}
 @Since("3.1.0")
 class ResourceProfileBuilder() {
 
-  // Task resource requests that specified by users, mapped from resource name to the request.
+  // Task resource requests specified by users, mapped from resource name to the request.
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
-  // Executor resource requests that specified by users, mapped from resource name to the request.
+  // Executor resource requests specified by users, mapped from resource name to the request.
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
@@ -59,7 +59,7 @@ class ResourceProfileBuilder() {
   /**
    * Add executor resource requests
    * @param requests The detailed executor resource requests, see [[ExecutorResourceRequests]]
-   * @return this.type
+   * @return This ResourceProfileBuilder
    */
   def require(requests: ExecutorResourceRequests): this.type = {
     _executorResources.putAll(requests.requests.asJava)
@@ -69,7 +69,7 @@ class ResourceProfileBuilder() {
   /**
    * Add task resource requests
    * @param requests The detailed task resource requests, see [[TaskResourceRequest]]
-   * @return this.type
+   * @return This ResourceProfileBuilder
    */
   def require(requests: TaskResourceRequests): this.type = {
     _taskResources.putAll(requests.requests.asJava)

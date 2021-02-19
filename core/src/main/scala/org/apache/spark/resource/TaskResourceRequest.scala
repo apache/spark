@@ -27,8 +27,10 @@ import org.apache.spark.annotation.{Evolving, Since}
  * Use [[TaskResourceRequests]] class as a convenience API.
  *
  * @param resourceName Resource name
- * @param amount Expected amount of the resource, must be either less than or equal to 0.5
- *               or a whole number
+ * @param amount Amount requesting as a Double to support fractional resource requests.
+ *               Valid values are less than or equal to 0.5 or whole numbers. This essentially
+ *               lets you configure X number of tasks to run on a single resource,
+ *               ie amount equals 0.5 translates into 2 tasks per resource address.
  */
 @Evolving
 @Since("3.1.0")
