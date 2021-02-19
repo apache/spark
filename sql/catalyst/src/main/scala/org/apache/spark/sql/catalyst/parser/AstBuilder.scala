@@ -2785,7 +2785,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterNamespaceSetLocation]] logical plan.
+   * Create an [[SetNamespaceLocation]] logical plan.
    *
    * For example:
    * {{{
@@ -2794,7 +2794,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetLocation(
+      SetNamespaceLocation(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         visitLocationSpec(ctx.locationSpec))
     }

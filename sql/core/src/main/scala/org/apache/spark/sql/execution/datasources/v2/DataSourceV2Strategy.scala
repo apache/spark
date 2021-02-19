@@ -309,7 +309,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case SetNamespaceProperties(ResolvedNamespace(catalog, ns), properties) =>
       AlterNamespaceSetPropertiesExec(catalog.asNamespaceCatalog, ns, properties) :: Nil
 
-    case AlterNamespaceSetLocation(ResolvedNamespace(catalog, ns), location) =>
+    case SetNamespaceLocation(ResolvedNamespace(catalog, ns), location) =>
       AlterNamespaceSetPropertiesExec(
         catalog.asNamespaceCatalog,
         ns,

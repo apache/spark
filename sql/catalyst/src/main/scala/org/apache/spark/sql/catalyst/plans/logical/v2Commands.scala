@@ -314,7 +314,7 @@ case class SetNamespaceProperties(
 /**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command.
  */
-case class AlterNamespaceSetLocation(
+case class SetNamespaceLocation(
     namespace: LogicalPlan,
     location: String) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
