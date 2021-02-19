@@ -372,7 +372,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         purge,
         recacheTable(r)) :: Nil
 
-    case AlterTableRenamePartition(
+    case RenamePartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
       RenamePartitionExec(
         table,
@@ -380,7 +380,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Seq(to).asResolvedPartitionSpecs.head,
         recacheTable(r)) :: Nil
 
-    case AlterTableRecoverPartitions(_: ResolvedTable) =>
+    case RecoverPartitions(_: ResolvedTable) =>
       throw new AnalysisException(
         "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables.")
 

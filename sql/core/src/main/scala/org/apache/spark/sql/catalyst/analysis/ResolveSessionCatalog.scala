@@ -417,7 +417,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       ShowColumnsCommand(db, v1TableName, output)
 
-    case AlterTableRecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
+    case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
       AlterTableRecoverPartitionsCommand(
         ident.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
@@ -428,7 +428,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableRenamePartition(
+    case RenamePartition(
         ResolvedV1TableIdentifier(ident),
         UnresolvedPartitionSpec(from, _),
         UnresolvedPartitionSpec(to, _)) =>

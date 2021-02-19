@@ -712,7 +712,7 @@ case class DropPartition(
 /**
  * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
  */
-case class AlterTableRenamePartition(
+case class RenamePartition(
     child: LogicalPlan,
     from: PartitionSpec,
     to: PartitionSpec) extends Command {
@@ -727,7 +727,7 @@ case class AlterTableRenamePartition(
 /**
  * The logical plan of the ALTER TABLE ... RECOVER PARTITIONS command.
  */
-case class AlterTableRecoverPartitions(child: LogicalPlan) extends Command {
+case class RecoverPartitions(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 

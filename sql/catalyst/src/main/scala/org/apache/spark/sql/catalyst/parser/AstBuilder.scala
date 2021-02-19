@@ -3810,7 +3810,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableRecoverPartitions]]
+   * Create an [[RecoverPartitions]]
    *
    * For example:
    * {{{
@@ -3819,7 +3819,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRecoverPartitions(
+    RecoverPartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... RECOVER PARTITIONS",
@@ -3859,7 +3859,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableRenamePartition]]
+   * Create an [[RenamePartition]]
    *
    * For example:
    * {{{
@@ -3868,7 +3868,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartition(
+    RenamePartition(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... RENAME TO PARTITION",
