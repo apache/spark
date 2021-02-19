@@ -712,6 +712,8 @@ csvDF <- read.stream("csv", path = "/path/to/directory", schema = schema, sep = 
 
 These examples generate streaming DataFrames that are untyped, meaning that the schema of the DataFrame is not checked at compile time, only checked at runtime when the query is submitted. Some operations like `map`, `flatMap`, etc. need the type to be known at compile time. To do those, you can convert these untyped streaming DataFrames to typed streaming Datasets using the same methods as static DataFrame. See the [SQL Programming Guide](sql-programming-guide.html) for more details. Additionally, more details on the supported streaming sources are discussed later in the document.
 
+Alternatively, since Spark 3.1, you can create streaming DataFrames with `DataStreamReader.table()`. See [Streaming Table APIs](#streaming-table-apis) for more details.
+
 ### Schema inference and partition of streaming DataFrames/Datasets
 
 By default, Structured Streaming from file based sources requires you to specify the schema, rather than rely on Spark to infer it automatically. This restriction ensures a consistent schema will be used for the streaming query, even in the case of failures. For ad-hoc use cases, you can reenable schema inference by setting `spark.sql.streaming.schemaInference` to `true`.
@@ -2364,6 +2366,117 @@ When the streaming query is started, Spark calls the function or the object’s 
   partitions for some reasons, Spark optimization changes number of partitions, etc.
   See [SPARK-28650](https://issues.apache.org/jira/browse/SPARK-28650) for more details.
   If you need deduplication on output, try out `foreachBatch` instead.
+
+#### Streaming Table APIs
+Since Spark 3.1, you can also use `DataStreamReader.table()` and `DataStreamWriter.toTable()` to read and write streaming DataFrames as tables:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+val spark: SparkSession = ...
+
+// Create a streaming DataFrame
+val df = spark.readStream
+  .format("rate")
+  .option("rowsPerSecond", 10)
+  .load()
+
+// Write the streaming DataFrame to a table
+df.writeStream
+  .option("checkpointLocation", "path/to/checkpoint/dir")
+  .toTable("myTable")
+
+// Check the table result
+spark.read.table("myTable").show()
+
+// Transform the source dataset and write to a new table
+spark.readStream
+  .table("myTable")
+  .select("value")
+  .writeStream
+  .option("checkpointLocation", "path/to/checkpoint/dir")
+  .format("parquet")
+  .toTable("newTable")
+
+// Check the new table result
+spark.read.table("newTable").show()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+SparkSession spark = ...
+
+// Create a streaming DataFrame
+Dataset<Row> df = spark.readStream()
+  .format("rate")
+  .option("rowsPerSecond", 10)
+  .load();
+
+// Write the streaming DataFrame to a table
+df.writeStream()
+  .option("checkpointLocation", "path/to/checkpoint/dir")
+  .toTable("myTable");
+
+// Check the table result
+spark.read().table("myTable").show();
+
+// Transform the source dataset and write to a new table
+spark.readStream()
+  .table("myTable")
+  .select("value")
+  .writeStream()
+  .option("checkpointLocation", "path/to/checkpoint/dir")
+  .format("parquet")
+  .toTable("newTable");
+
+// Check the new table result
+spark.read().table("newTable").show();
+{% endhighlight %}
+
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+spark = ...  # spark session
+
+# Create a streaming DataFrame
+df = spark.readStream \
+    .format("rate") \
+    .option("rowsPerSecond", 10) \
+    .load()
+
+# Write the streaming DataFrame to a table
+df.writeStream \
+    .option("checkpointLocation", "path/to/checkpoint/dir") \
+    .toTable("myTable")
+
+# Check the table result
+spark.read.table("myTable").show()
+
+# Transform the source dataset and write to a new table
+spark.readStream \
+    .table("myTable") \
+    .select("value") \
+    .writeStream \
+    .option("checkpointLocation", "path/to/checkpoint/dir") \
+    .format("parquet") \
+    .toTable("newTable")
+
+// Check the new table result
+spark.read.table("newTable").show()
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+Not available in R.
+</div>
+</div>
 
 #### Triggers
 The trigger settings of a streaming query define the timing of streaming data processing, whether
