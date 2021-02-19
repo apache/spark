@@ -249,6 +249,15 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34260: replace existing view using CREATE OR REPLACE") {
+    val viewName = createView("testView", "SELECT * FROM (SELECT 1)")
+    withView(viewName) {
+      checkViewOutput(viewName, Seq(Row(1)))
+      createView("testView", "SELECT * FROM (SELECT 2)", replace = true)
+      checkViewOutput(viewName, Seq(Row(2)))
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {

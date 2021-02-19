@@ -335,7 +335,7 @@ private[sql] trait SQLTestUtilsBase
   // Blocking uncache table for tests
   protected def uncacheTable(tableName: String): Unit = {
     val tableIdent = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
-    val cascade = !spark.sessionState.catalog.isTemporaryTable(tableIdent)
+    val cascade = !spark.sessionState.catalog.isTempView(tableIdent)
     spark.sharedState.cacheManager.uncacheQuery(
       spark,
       spark.table(tableName).logicalPlan,

@@ -325,9 +325,20 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
       defaultProfile)
     val podConfigured = step.configurePod(baseDriverPod)
-    SecretVolumeUtils.containerHasVolume(podConfigured.container,
-      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL)
-    SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC)
+    assert(SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
+  }
+
+  test("SPARK-34316 Disable configmap volume on executor pod's container") {
+    baseConf.set(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP, true)
+    val baseDriverPod = SparkPod.initialPod()
+    val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured = step.configurePod(baseDriverPod)
+    assert(!SecretVolumeUtils.containerHasVolume(podConfigured.container,
+      SPARK_CONF_VOLUME_EXEC, SPARK_CONF_DIR_INTERNAL))
+    assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

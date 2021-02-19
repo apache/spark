@@ -100,11 +100,13 @@ package object client {
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    // Since HIVE-14496, Hive materialized view need calcite-core.
+    // Since HIVE-23980, calcite-core included in Hive package jar.
     // For spark, only VersionsSuite currently creates a hive materialized view for testing.
-    case object v2_3 extends HiveVersion("2.3.7",
-      exclusions = Seq("org.apache.calcite:calcite-druid",
+    case object v2_3 extends HiveVersion("2.3.8",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
+        "com.fasterxml.jackson.core:*",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
@@ -114,7 +116,6 @@ package object client {
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
-        "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
@@ -124,7 +125,6 @@ package object client {
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
-        "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 

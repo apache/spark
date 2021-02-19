@@ -529,7 +529,10 @@ object CatalogTable {
     table.copy(
       createTime = 0L,
       lastAccessTime = 0L,
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
+      properties = table.properties
+        .filterKeys(!nondeterministicProps.contains(_))
+        .map(identity)
+        .toMap,
       stats = None,
       ignoredProperties = Map.empty
     )

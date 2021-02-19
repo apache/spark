@@ -26,12 +26,12 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.codec.binary.{Base64 => CommonsBase64}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
@@ -50,11 +50,13 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
+  usage = "_FUNC_(sep[, str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
   examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
+      > SELECT _FUNC_('s');
+
   """,
   since = "1.5.0",
   group = "string_funcs")
@@ -289,8 +291,7 @@ case class Elt(
       val index = indexObj.asInstanceOf[Int]
       if (index <= 0 || index > inputExprs.length) {
         if (failOnError) {
-          throw new ArrayIndexOutOfBoundsException(
-            s"Invalid index: $index, numElements: ${inputExprs.length}")
+          throw QueryExecutionErrors.invalidArrayIndexError(index, inputExprs.length)
         } else {
           null
         }
@@ -344,8 +345,7 @@ case class Elt(
     val indexOutOfBoundBranch = if (failOnError) {
       s"""
          |if (!$indexMatched) {
-         |  throw new ArrayIndexOutOfBoundsException(
-         |    "Invalid index: " + ${index.value} + ", numElements: " + ${inputExprs.length});
+         |  throw QueryExecutionErrors.invalidArrayIndexError(${index.value}, ${inputExprs.length});
          |}
        """.stripMargin
     } else {
@@ -633,17 +633,29 @@ case class Overlay(input: Expression, replace: Expression, pos: Expression, len:
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
-    : JMap[Character, Character] = {
+    : JMap[String, String] = {
     val matching = matchingString.toString()
     val replace = replaceString.toString()
-    val dict = new HashMap[Character, Character]()
+    val dict = new HashMap[String, String]()
     var i = 0
-    while (i < matching.length()) {
-      val rep = if (i < replace.length()) replace.charAt(i) else '\u0000'
-      if (null == dict.get(matching.charAt(i))) {
-        dict.put(matching.charAt(i), rep)
+    var j = 0
+
+    while (i < matching.length) {
+      val rep = if (j < replace.length) {
+        val repCharCount = Character.charCount(replace.codePointAt(j))
+        val repStr = replace.substring(j, j + repCharCount)
+        j += repCharCount
+        repStr
+      } else {
+        "\u0000"
       }
-      i += 1
+
+      val matchCharCount = Character.charCount(matching.codePointAt(i))
+      val matchStr = matching.substring(i, i + matchCharCount)
+      if (null == dict.get(matchStr)) {
+        dict.put(matchStr, rep)
+      }
+      i += matchCharCount
     }
     dict
   }
@@ -671,7 +683,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
 
   @transient private var lastMatching: UTF8String = _
   @transient private var lastReplace: UTF8String = _
-  @transient private var dict: JMap[Character, Character] = _
+  @transient private var dict: JMap[String, String] = _
 
   override def nullSafeEval(srcEval: Any, matchingEval: Any, replaceEval: Any): Any = {
     if (matchingEval != lastMatching || replaceEval != lastReplace) {
@@ -906,6 +918,54 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
     srcString.trim(trimString)
 
   override val trimMethod: String = "trim"
+}
+
+/**
+ * A function that takes a character string, removes the leading and trailing characters matching
+ * with any character in the trim string, returns the new string.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
+ * the function searches for each character in the source string, removes the characters from the
+ * source string until it encounters the first non-match character.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+
+    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * trimStr - the trim string characters to trim, the default value is a single space
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
+      > SELECT _FUNC_('SSparkSQLS', 'SL');
+       parkSQ
+      > SELECT _FUNC_(encode('SSparkSQLS', 'utf-8'), encode('SL', 'utf-8'));
+       parkSQ
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(srcStr: Expression, trimStr: Expression) = {
+    this(srcStr, Option(trimStr), StringTrim(srcStr, trimStr))
+  }
+
+  def this(srcStr: Expression) = {
+    this(srcStr, None, StringTrim(srcStr))
+  }
+
+  override def exprsReplaced: Seq[Expression] = srcStr +: trimStr.toSeq
+  override def flatArguments: Iterator[Any] = Iterator(srcStr, trimStr)
+
+  override def prettyName: String = "btrim"
 }
 
 object StringTrimLeft {
@@ -1350,7 +1410,7 @@ case class ParseUrl(children: Seq[Expression], failOnError: Boolean = SQLConf.ge
       new URI(url.toString)
     } catch {
       case e: URISyntaxException if failOnError =>
-        throw new IllegalArgumentException(s"Find an invaild url string ${url.toString}", e)
+        throw QueryExecutionErrors.invalidUrlError(url, e)
       case _: URISyntaxException => null
     }
   }
@@ -2046,8 +2106,7 @@ object Decode {
   def createExpr(params: Seq[Expression]): Expression = {
     params.length match {
       case 0 | 1 =>
-        throw new AnalysisException("Invalid number of arguments for function decode. " +
-          s"Expected: 2; Found: ${params.length}")
+        throw QueryCompilationErrors.invalidFunctionArgumentsError("decode", "2", params.length)
       case 2 => StringDecode(params.head, params.last)
       case _ =>
         val input = params.head

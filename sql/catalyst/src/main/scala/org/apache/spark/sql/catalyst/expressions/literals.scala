@@ -39,11 +39,11 @@ import scala.util.Try
 
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
@@ -87,7 +87,7 @@ object Literal {
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
-      throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+      throw QueryExecutionErrors.literalTypeUnsupportedError(v)
   }
 
   /**
@@ -130,7 +130,7 @@ object Literal {
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
-    case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
+    case _ => throw QueryCompilationErrors.arrayComponentTypeUnsupportedError(clz)
   }
 
   /**
@@ -176,7 +176,7 @@ object Literal {
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
-      throw new RuntimeException(s"no default for type $dataType")
+      throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
   }
 
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
@@ -298,11 +298,21 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
+  private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
   override def toString: String = value match {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
     case d: ArrayBasedMapData => s"map(${d.toString})"
-    case other => other.toString
+    case other =>
+      dataType match {
+        case DateType =>
+          DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
+        case TimestampType =>
+          TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case _ =>
+          other.toString
+      }
   }
 
   override def hashCode(): Int = {
@@ -334,8 +344,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
-      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
-      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (i: Int, DateType) => JString(toString)
+      case (l: Long, TimestampType) => JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -414,12 +424,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
     case (v: Int, DateType) =>
-      val formatter = DateFormatter(DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"DATE '${formatter.format(v)}'"
+      s"DATE '$toString'"
     case (v: Long, TimestampType) =>
-      val formatter = TimestampFormatter.getFractionFormatter(
-        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
-      s"TIMESTAMP '${formatter.format(v)}'"
+      s"TIMESTAMP '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"

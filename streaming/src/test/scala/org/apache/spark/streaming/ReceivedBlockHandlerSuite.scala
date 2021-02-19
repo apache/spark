@@ -75,7 +75,7 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
   val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
   val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
-  var serializerManager = new SerializerManager(serializer, conf, encryptionKey)
+  val serializerManager = new SerializerManager(serializer, conf, encryptionKey)
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
   val blockManagerBuffer = new ArrayBuffer[BlockManager]()

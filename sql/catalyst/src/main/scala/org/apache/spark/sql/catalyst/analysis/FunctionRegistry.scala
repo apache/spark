@@ -375,6 +375,7 @@ object FunctionRegistry {
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
+    expression[StringTrimBoth]("btrim"),
     expression[Upper]("ucase", true),
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),
@@ -550,6 +551,8 @@ object FunctionRegistry {
     expression[BitAndAgg]("bit_and"),
     expression[BitOrAgg]("bit_or"),
     expression[BitXorAgg]("bit_xor"),
+    expression[BitwiseGet]("bit_get"),
+    expression[BitwiseGet]("getbit", true),
 
     // json
     expression[StructsToJson]("to_json"),
