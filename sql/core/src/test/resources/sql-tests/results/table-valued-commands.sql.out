@@ -299,7 +299,7 @@ SELECT * FROM command('SHOW CREATE TABLE test_show_tables')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Table valued command does not support command SHOW CREATE TABLE test_show_tables
+Table valued command does not support command 'SHOW CREATE TABLE test_show_tables'
 
 
 -- !query

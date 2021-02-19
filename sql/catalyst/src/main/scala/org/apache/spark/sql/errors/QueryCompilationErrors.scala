@@ -743,6 +743,6 @@ private[spark] object QueryCompilationErrors {
   }
 
   def unsupportedCommandForTableValuedError(command: String): Throwable = {
-    new AnalysisException(s"Table valued command does not support command $command")
+    new AnalysisException(s"Table valued command does not support command '$command'")
   }
 }
