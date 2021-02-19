@@ -21,7 +21,6 @@ import java.{lang => jl}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions._
