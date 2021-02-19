@@ -61,8 +61,6 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected int portNum;
   protected InetAddress serverIPAddress;
   protected String hiveHost;
-  protected TServer server;
-  protected org.eclipse.jetty.server.Server httpServer;
   private Thread serverThread = null;
 
   private boolean isStarted = false;
@@ -185,6 +183,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     }
   }
 
+  protected abstract void stopServer();
+
   @Override
   public synchronized void stop() {
     if (isStarted && !isEmbedded) {
@@ -192,18 +192,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
         serverThread.interrupt();
         serverThread = null;
       }
-      if(server != null) {
-        server.stop();
-        LOG.info("Thrift server has stopped");
-      }
-      if((httpServer != null) && httpServer.isStarted()) {
-        try {
-          httpServer.stop();
-          LOG.info("Http server has stopped");
-        } catch (Exception e) {
-          LOG.error("Error stopping Http server: ", e);
-        }
-      }
+      stopServer();
       isStarted = false;
     }
     super.stop();

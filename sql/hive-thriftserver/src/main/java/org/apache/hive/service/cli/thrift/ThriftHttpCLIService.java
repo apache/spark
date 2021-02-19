@@ -51,6 +51,8 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 
 public class ThriftHttpCLIService extends ThriftCLIService {
 
+  protected org.eclipse.jetty.server.Server httpServer;
+
   public ThriftHttpCLIService(CLIService cliService) {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
   }
@@ -149,6 +151,19 @@ public class ThriftHttpCLIService extends ThriftCLIService {
       LOG.info(msg);
     } catch (Exception t) {
       throw new ServiceException("Error initializing " + getName(), t);
+    }
+  }
+
+  @Override
+  protected void stopServer() {
+    if ((httpServer != null) && httpServer.isStarted()) {
+      try {
+        httpServer.stop();
+        httpServer = null;
+        LOG.info("Thrift HTTP server has been stopped");
+      } catch (Exception e) {
+        LOG.error("Error stopping HTTP server: ", e);
+      }
     }
   }
 
