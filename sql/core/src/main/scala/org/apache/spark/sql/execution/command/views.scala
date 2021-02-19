@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View, With}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
@@ -180,6 +180,7 @@ case class CreateViewCommand(
             throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
               s"referencing a temporary view ${nameParts.quoted}. " +
               "Please create a temp view instead by CREATE TEMP VIEW")
+          case w: With if !w.resolved => w.innerChildren.foreach(verify)
           case other if !other.resolved => other.expressions.flatMap(_.collect {
             // Traverse subquery plan for any unresolved relations.
             case e: SubqueryExpression => verify(e.plan)
