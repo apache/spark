@@ -709,6 +709,13 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     // scalastyle:on
     checkAnswer(union, row1 :: row2 :: Nil)
   }
+
+  test("Distinct of Union of same relations") {
+    val unionDF = testData.union(testData).distinct()
+    unionDF.explain(true)
+    testData.distinct().explain()
+    checkAnswer(unionDF, testData.distinct())
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)

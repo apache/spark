@@ -498,6 +498,9 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
+
+    case Distinct(Union(children, _, _)) if children.tail.forall(children.head.sameResult(_)) =>
+      Distinct(children.head)
   }
 }
 
