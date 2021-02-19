@@ -494,7 +494,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 object RemoveNoopOperators extends Rule[LogicalPlan] {
   private def removeAliasOnlyProject(plan: LogicalPlan): LogicalPlan = plan match {
     case p @ Project(projectList, child) =>
-      val originalOutputs = projectList.map {
+      val originalOutputs = projectList.collect {
         case Alias(a: Attribute, _) => a
         case a: Attribute => a
       }
