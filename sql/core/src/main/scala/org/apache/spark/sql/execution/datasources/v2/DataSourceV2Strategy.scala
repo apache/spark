@@ -360,7 +360,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ignoreIfExists,
         recacheTable(r)) :: Nil
 
-    case AlterTableDropPartition(
+    case DropPartition(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _),
         parts,
         ignoreIfNotExists,

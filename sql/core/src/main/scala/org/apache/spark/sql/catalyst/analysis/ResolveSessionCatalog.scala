@@ -434,7 +434,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         UnresolvedPartitionSpec(to, _)) =>
       AlterTableRenamePartitionCommand(ident.asTableIdentifier, from, to)
 
-    case AlterTableDropPartition(
+    case DropPartition(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident.asTableIdentifier,

@@ -3878,7 +3878,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableDropPartition]]
+   * Create an [[DropPartition]]
    *
    * For example:
    * {{{
@@ -3897,7 +3897,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
-    AlterTableDropPartition(
+    DropPartition(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... DROP PARTITION ...",
