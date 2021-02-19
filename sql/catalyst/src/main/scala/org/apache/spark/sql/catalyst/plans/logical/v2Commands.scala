@@ -876,7 +876,7 @@ case class UncacheTable(
 /**
  * The logical plan of the ALTER TABLE ... SET LOCATION command.
  */
-case class AlterTableSetLocation(
+case class SetTableLocation(
     table: LogicalPlan,
     partitionSpec: Option[TablePartitionSpec],
     location: String) extends Command {

@@ -3543,7 +3543,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableSetLocation]] command.
+   * Create an [[SetTableLocation]] command.
    *
    * For example:
    * {{{
@@ -3551,7 +3551,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocation(
+    SetTableLocation(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... SET LOCATION ...",

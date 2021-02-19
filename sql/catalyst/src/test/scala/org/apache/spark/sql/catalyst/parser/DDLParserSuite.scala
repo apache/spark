@@ -876,14 +876,14 @@ class DDLParserSuite extends AnalysisTest {
     val hint = Some("Please use ALTER VIEW instead.")
     comparePlans(
       parsePlan("ALTER TABLE a.b.c SET LOCATION 'new location'"),
-      AlterTableSetLocation(
+      SetTableLocation(
         UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", hint),
         None,
         "new location"))
 
     comparePlans(
       parsePlan("ALTER TABLE a.b.c PARTITION(ds='2017-06-10') SET LOCATION 'new location'"),
-      AlterTableSetLocation(
+      SetTableLocation(
         UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET LOCATION ...", hint),
         Some(Map("ds" -> "2017-06-10")),
         "new location"))

@@ -421,7 +421,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case r: UncacheTable =>
       UncacheTableExec(r.table, cascade = !r.isTempView) :: Nil
 
-    case AlterTableSetLocation(table: ResolvedTable, partitionSpec, location) =>
+    case SetTableLocation(table: ResolvedTable, partitionSpec, location) =>
       if (partitionSpec.nonEmpty) {
         throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError
       }
