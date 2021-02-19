@@ -315,6 +315,22 @@ SHOW CREATE TABLE
 
 
 -- !query
+DROP VIEW global_temp.test_global_show_views
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW test_show_views
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TABLE test_show_partitions
 -- !query schema
 struct<>
