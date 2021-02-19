@@ -177,10 +177,14 @@ public class ThriftHttpCLIService extends ThriftCLIService {
     try {
       httpServer.join();
     } catch (Throwable t) {
-      LOG.error(
-          "Error starting HiveServer2: could not start "
-              + ThriftHttpCLIService.class.getSimpleName(), t);
-      System.exit(-1);
+      if (t instanceof InterruptedException) {
+        // This is likely a shutdown
+        LOG.info("Caught " + t.getClass().getSimpleName() + ". Shutting down thrift server.");
+      } else {
+        LOG.error("Error starting HiveServer2: could not start "
+            + ThriftHttpCLIService.class.getSimpleName(), t);
+        System.exit(-1);
+      }
     }
   }
 
