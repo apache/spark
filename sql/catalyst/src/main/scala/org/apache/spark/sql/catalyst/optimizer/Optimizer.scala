@@ -146,8 +146,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
-      GetCurrentDatabaseAndCatalog(catalogManager),
-      ReplaceDeduplicateWithAggregate) ::
+      GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -184,7 +183,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate) ::
+      ReplaceDistinctWithAggregate,
+      ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
@@ -1007,6 +1007,9 @@ object CombineUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case u: Union => flattenUnion(u, false)
     case Distinct(u: Union) => Distinct(flattenUnion(u, true))
+    // Only handle distinct-like 'Deduplicate', where the keys == output
+    case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
+      Deduplicate(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
@@ -1024,6 +1027,11 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Distinct(Union(children, byName, allowMissingCol))
             if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+        // Only handle distinct-like 'Deduplicate', where the keys == output
+        case Deduplicate(keys: Seq[Attribute], u: Union)
+            if flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+          stack.pushAll(u.children.reverse)
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
