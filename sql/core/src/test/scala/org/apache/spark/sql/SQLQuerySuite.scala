@@ -47,8 +47,10 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ResetSystemProperties
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+    with ResetSystemProperties {
   import testImplicits._
 
   setupTestData()
@@ -3835,7 +3837,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
     withTempDir { dir =>
-      System.setProperty("ivy.home", dir.getAbsolutePath)
+      System.setProperty("ivy.default.ivy.user.dir", dir.getAbsolutePath)
       val sourceJar = new File(Thread.currentThread().getContextClassLoader
         .getResource("SPARK-33084.jar").getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
@@ -3860,7 +3862,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
         }
       }
-      System.clearProperty("ivy.home")
     }
   }
 
