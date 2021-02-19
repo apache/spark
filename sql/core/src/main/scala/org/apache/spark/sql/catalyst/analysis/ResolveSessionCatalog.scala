@@ -176,7 +176,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case SetViewProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
-    case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
+    case UnsetViewProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>

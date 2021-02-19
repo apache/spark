@@ -3508,7 +3508,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewUnsetProperties]] or [[AlterTableUnsetProperties]] commands.
+   * Parse [[UnsetViewProperties]] or [[AlterTableUnsetProperties]] commands.
    *
    * For example:
    * {{{
@@ -3523,7 +3523,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
-      AlterViewUnsetProperties(
+      UnsetViewProperties(
         createUnresolvedView(
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",

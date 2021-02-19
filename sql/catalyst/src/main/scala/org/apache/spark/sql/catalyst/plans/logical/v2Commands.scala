@@ -828,7 +828,7 @@ case class SetViewProperties(
 /**
  * The logical plan of the ALTER VIEW ... UNSET TBLPROPERTIES command.
  */
-case class AlterViewUnsetProperties(
+case class UnsetViewProperties(
     child: LogicalPlan,
     propertyKeys: Seq[String],
     ifExists: Boolean) extends Command {
