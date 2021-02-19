@@ -886,7 +886,7 @@ case class SetTableLocation(
 /**
  * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
  */
-case class AlterTableSetProperties(
+case class SetTableProperties(
     table: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil

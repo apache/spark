@@ -167,7 +167,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    case AlterTableSetProperties(ResolvedV1TableIdentifier(ident), props) =>
+    case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
 
     case AlterTableUnsetProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>

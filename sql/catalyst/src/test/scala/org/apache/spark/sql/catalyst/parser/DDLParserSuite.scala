@@ -767,7 +767,7 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1_table),
-      AlterTableSetProperties(
+      SetTableProperties(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET TBLPROPERTIES", hint),
         Map("test" -> "test", "comment" -> "new_comment")))
     comparePlans(

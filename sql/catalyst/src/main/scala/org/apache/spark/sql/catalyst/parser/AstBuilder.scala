@@ -3477,7 +3477,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[SetViewProperties]] or [[AlterTableSetProperties]] commands.
+   * Parse [[SetViewProperties]] or [[SetTableProperties]] commands.
    *
    * For example:
    * {{{
@@ -3498,7 +3498,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           relationTypeMismatchHint = alterViewTypeMismatchHint),
         cleanedTableProperties)
     } else {
-      AlterTableSetProperties(
+      SetTableProperties(
         createUnresolvedTable(
           ctx.multipartIdentifier,
           "ALTER TABLE ... SET TBLPROPERTIES",

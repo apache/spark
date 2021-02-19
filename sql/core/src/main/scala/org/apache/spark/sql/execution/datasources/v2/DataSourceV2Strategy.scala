@@ -428,7 +428,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, location))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
-    case AlterTableSetProperties(table: ResolvedTable, props) =>
+    case SetTableProperties(table: ResolvedTable, props) =>
       val changes = props.map { case (key, value) =>
         TableChange.setProperty(key, value)
       }.toSeq
