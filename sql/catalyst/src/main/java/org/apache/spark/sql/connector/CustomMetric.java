@@ -47,6 +47,11 @@ public interface CustomMetric {
     String description();
 
     /**
+     * Returns the long value of custom metric.
+     */
+    long value();
+
+    /**
      * Supported metric type. The metric types must be supported by Spark SQL internal metrics.
      * SUM: Spark sums up metrics from partitions as the final result.
      */
