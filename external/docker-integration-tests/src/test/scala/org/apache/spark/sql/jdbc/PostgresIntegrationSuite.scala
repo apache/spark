@@ -133,6 +133,11 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO char_array_types VALUES " +
       """('{"a", "bcd"}', '{"ef", "gh"}', '{"i", "j", "kl"}', '{"mnop"}', '{"q", "r"}')"""
     ).executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE money_types (" +
+      "c0 money)").executeUpdate()
+    conn.prepareStatement("INSERT INTO money_types VALUES " +
+      "('$1,000.00')").executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -365,5 +370,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(row(0).getSeq[String](2) === Seq("i", "j", "kl"))
     assert(row(0).getSeq[String](3) === Seq("mnop"))
     assert(row(0).getSeq[String](4) === Seq("q", "r"))
+  }
+
+  test("SPARK-34333: money type tests") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "money_types", new Properties)
+    val row = df.collect()
+    assert(row.length === 1)
+    assert(row(0).length === 1)
+    assert(row(0).getString(0) === "$1,000.00")
   }
 }

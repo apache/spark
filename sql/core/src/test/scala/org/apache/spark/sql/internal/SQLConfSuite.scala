@@ -451,4 +451,14 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val e2 = intercept[ParseException](sql("set time zone interval 19 hours"))
     assert(e2.getMessage contains "The interval value must be in the range of [-18, +18] hours")
   }
+
+  test("SPARK-34454: configs from the legacy namespace should be internal") {
+    val nonInternalLegacyConfigs = spark.sessionState.conf.getAllDefinedConfs
+      .filter { case (key, _, _, _) => key.contains("spark.sql.legacy.") }
+    assert(nonInternalLegacyConfigs.isEmpty,
+      s"""
+         |Non internal legacy SQL configs:
+         |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
+         |""".stripMargin)
+  }
 }

@@ -283,6 +283,19 @@ Data source options of Avro can be set via:
     </td>
     <td>function <code>from_avro</code></td>
   </tr>
+  <tr>
+    <td><code>datetimeRebaseMode</code></td>
+    <td>The SQL config <code>spark.sql.avro</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
+      Currently supported modes are:
+      <ul>
+        <li><code>EXCEPTION</code>: fails in reads of ancient dates/timestamps that are ambiguous between the two calendars.</li>
+        <li><code>CORRECTED</code>: loads dates/timestamps without rebasing.</li>
+        <li><code>LEGACY</code>: performs rebasing of ancient dates/timestamps from the Julian to Proleptic Gregorian calendar.</li>
+      </ul>
+    </td>
+    <td>read and function <code>from_avro</code></td>
+  </tr>
 </table>
 
 ## Configuration
@@ -295,6 +308,7 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
     <td>
       If it is set to true, the data source provider <code>com.databricks.spark.avro</code> is mapped
       to the built-in but external Avro data source module for backward compatibility.
+      <br><b>Note:</b> the SQL config has been deprecated in Spark 3.2 and might be removed in the future.
     </td>
     <td>2.4.0</td>
   </tr>
@@ -316,6 +330,31 @@ Configuration of Avro can be done using the `setConf` method on SparkSession or 
       in the current implementation.
     </td>
     <td>2.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.datetimeRebaseModeInRead</td>
+    <td><code>EXCEPTION</code></td>
+    <td>The rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar:<br>
+      <ul>
+        <li><code>EXCEPTION</code>: Spark will fail the reading if it sees ancient dates/timestamps that are ambiguous between the two calendars.</li>
+        <li><code>CORRECTED</code>: Spark will not do rebase and read the dates/timestamps as it is.</li>
+        <li><code>LEGACY</code>: Spark will rebase dates/timestamps from the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files.</li>
+      </ul>
+      This config is only effective if the writer info (like Spark, Hive) of the Avro files is unknown.
+    </td>
+    <td>3.0.0</td>
+  </tr>
+  <tr>
+    <td>spark.sql.avro.datetimeRebaseModeInWrite</td>
+    <td><code>EXCEPTION</code></td>
+    <td>The rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Proleptic Gregorian to Julian calendar:<br>
+      <ul>
+        <li><code>EXCEPTION</code>: Spark will fail the writing if it sees ancient dates/timestamps that are ambiguous between the two calendars.</li>
+        <li><code>CORRECTED</code>: Spark will not do rebase and write the dates/timestamps as it is.</li>
+        <li><code>LEGACY</code>: Spark will rebase dates/timestamps from Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files.</li>
+      </ul>
+    </td>
+    <td>3.0.0</td>
   </tr>
 </table>
 
