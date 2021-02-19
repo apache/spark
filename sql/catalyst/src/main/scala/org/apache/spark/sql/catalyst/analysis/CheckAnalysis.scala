@@ -565,7 +565,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // no validation needed for set and remove property
             }
 
-          case AlterTableAddPartition(r: ResolvedTable, parts, _) =>
+          case AddPartition(r: ResolvedTable, parts, _) =>
             checkAlterTablePartition(r.table, parts)
 
           case AlterTableDropPartition(r: ResolvedTable, parts, _, _) =>
