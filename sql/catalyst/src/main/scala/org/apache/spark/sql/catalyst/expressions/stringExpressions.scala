@@ -920,6 +920,54 @@ case class StringTrim(srcStr: Expression, trimStr: Option[Expression] = None)
   override val trimMethod: String = "trim"
 }
 
+/**
+ * A function that takes a character string, removes the leading and trailing characters matching
+ * with any character in the trim string, returns the new string.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
+ * the function searches for each character in the source string, removes the characters from the
+ * source string until it encounters the first non-match character.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str) - Removes the leading and trailing space characters from `str`.
+
+    _FUNC_(str, trimStr) - Remove the leading and trailing `trimStr` characters from `str`.
+  """,
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * trimStr - the trim string characters to trim, the default value is a single space
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('    SparkSQL   ');
+       SparkSQL
+      > SELECT _FUNC_(encode('    SparkSQL   ', 'utf-8'));
+       SparkSQL
+      > SELECT _FUNC_('SSparkSQLS', 'SL');
+       parkSQ
+      > SELECT _FUNC_(encode('SSparkSQLS', 'utf-8'), encode('SL', 'utf-8'));
+       parkSQ
+  """,
+  since = "3.2.0",
+  group = "string_funcs")
+case class StringTrimBoth(srcStr: Expression, trimStr: Option[Expression], child: Expression)
+  extends RuntimeReplaceable {
+
+  def this(srcStr: Expression, trimStr: Expression) = {
+    this(srcStr, Option(trimStr), StringTrim(srcStr, trimStr))
+  }
+
+  def this(srcStr: Expression) = {
+    this(srcStr, None, StringTrim(srcStr))
+  }
+
+  override def exprsReplaced: Seq[Expression] = srcStr +: trimStr.toSeq
+  override def flatArguments: Iterator[Any] = Iterator(srcStr, trimStr)
+
+  override def prettyName: String = "btrim"
+}
+
 object StringTrimLeft {
   def apply(str: Expression, trimStr: Expression): StringTrimLeft =
     StringTrimLeft(str, Some(trimStr))

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View, With}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -544,24 +544,29 @@ object ViewHelper {
   private def collectTemporaryObjects(
       catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
-      child.collect {
+      child.flatMap {
         case s @ SubqueryAlias(_, view: View) if view.isTempView =>
           Seq(s.identifier.qualifier :+ s.identifier.name)
-        case plan => plan.expressions.flatMap(_.collect {
+        case w: With => w.innerChildren.flatMap(collectTempViews)
+        case plan => plan.expressions.flatMap(_.flatMap {
           case e: SubqueryExpression => collectTempViews(e.plan)
-        }).flatten
-      }.flatten.distinct
+          case _ => Seq.empty
+        })
+      }.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
-      child.collect {
-        case plan => plan.expressions.flatMap(_.collect {
-          case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: UserDefinedExpression
-              if catalog.isTemporaryFunction(FunctionIdentifier(e.name)) =>
-            Seq(e.name)
-        }).flatten
-      }.flatten.distinct
+      child.flatMap {
+        case w: With => w.innerChildren.flatMap(collectTempFunctions)
+        case plan =>
+          plan.expressions.flatMap(_.flatMap {
+            case e: SubqueryExpression => collectTempFunctions(e.plan)
+            case e: UserDefinedExpression
+                if catalog.isTemporaryFunction(FunctionIdentifier(e.name)) =>
+              Seq(e.name)
+            case _ => Seq.empty
+          })
+      }.distinct
     }
     (collectTempViews(child), collectTempFunctions(child))
   }

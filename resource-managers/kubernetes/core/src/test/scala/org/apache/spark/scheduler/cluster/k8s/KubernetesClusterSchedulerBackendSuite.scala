@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, LiveListenerBus, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RemoveExecutor, StopDriver}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor, StopDriver}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils.TEST_SPARK_APP_ID
 
@@ -198,5 +198,12 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
     // Verify the last operation of `schedulerBackendUnderTest.stop`.
     verify(kubernetesClient).close()
+  }
+
+  test("SPARK-34469: Ignore RegisterExecutor when SparkContext is stopped") {
+    when(sc.isStopped).thenReturn(true)
+    val endpoint = schedulerBackendUnderTest.createDriverEndpoint()
+    endpoint.receiveAndReply(null).apply(
+      RegisterExecutor("1", null, "host1", 1, Map.empty, Map.empty, Map.empty, 0))
   }
 }
