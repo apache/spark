@@ -898,13 +898,10 @@ class Analyzer(override val catalogManager: CatalogManager)
       case write: V2WriteCommand =>
         write.table match {
           case UnresolvedRelation(ident, _, false) =>
-            lookupTempView(ident)
-              .map(getTempViewRawPlan)
-              .map {
-                case r: DataSourceV2Relation => write.withNewTable(r)
-                case _ =>
-                  throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
-              }.getOrElse(write)
+            lookupTempView(ident).map(getTempViewRawPlan).map {
+              case r: DataSourceV2Relation => write.withNewTable(r)
+              case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
+            }.getOrElse(write)
           case _ => write
         }
       case u @ UnresolvedTable(ident, cmd, _) =>
