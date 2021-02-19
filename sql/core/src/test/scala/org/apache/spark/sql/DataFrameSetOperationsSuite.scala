@@ -371,7 +371,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     // Before optimizer, Union should be combined.
     assert(unionDF.queryExecution.analyzed.collect {
-      case j: Union if j.children.size == 5 => j }.size === 1)
+      case u: Union if u.children.size == 5 => u }.size === 1)
 
     checkAnswer(
       unionDF.agg(avg("key"), max("key"), min("key"), sum("key")),
@@ -383,6 +383,105 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       .unionAll(testData).unionAll(testData)
 
     checkAnswer(unionDF, unionAllDF)
+  }
+
+  test("SPARK-34283: SQL-style union using Dataset, " +
+    "remove unnecessary deduplicate in multiple unions") {
+    val unionDF = testData.union(testData).distinct().union(testData).distinct()
+      .union(testData).distinct().union(testData).distinct()
+
+    // Before optimizer, there are three 'union.deduplicate' operations should be combined.
+    assert(unionDF.queryExecution.analyzed.collect {
+      case u: Union if u.children.size == 4 => u
+    }.size === 1)
+
+    // After optimizer, four 'union.deduplicate' operations should be combined.
+    assert(unionDF.queryExecution.optimizedPlan.collect {
+      case u: Union if u.children.size == 5 => u
+    }.size === 1)
+
+    checkAnswer(
+      unionDF.agg(avg("key"), max("key"), min("key"),
+        sum("key")), Row(50.5, 100, 1, 5050) :: Nil
+    )
+
+    // The result of SQL-style union
+    val unionSQLResult = sql(
+      """
+        | select key, value from testData
+        | union
+        | select key, value from testData
+        | union
+        | select key, value from testData
+        | union
+        | select key, value from testData
+        | union
+        | select key, value from testData
+        |""".stripMargin)
+    checkAnswer(unionDF, unionSQLResult)
+  }
+
+  test("SPARK-34283: SQL-style union using Dataset, " +
+    "keep necessary deduplicate in multiple unions") {
+    val df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    var df2 = Seq((6, 2, 5)).toDF("a", "b", "c")
+    var df3 = Seq((2, 4, 3)).toDF("c", "a", "b")
+    var df4 = Seq((1, 4, 5)).toDF("b", "a", "c")
+
+    val unionDF = df1.unionByName(df2).dropDuplicates(Seq("a"))
+      .unionByName(df3).dropDuplicates("c").unionByName(df4)
+      .dropDuplicates("b")
+
+    // In this case, there is no 'union.deduplicate' operation will be combined.
+    assert(unionDF.queryExecution.analyzed.collect {
+      case u: Union if u.children.size == 2 => u
+    }.size === 3)
+
+    assert(unionDF.queryExecution.optimizedPlan.collect {
+      case u: Union if u.children.size == 2 => u
+    }.size === 3)
+
+    checkAnswer(
+      unionDF,
+      Row(4, 3, 2) :: Row(4, 1, 5) :: Row(1, 2, 3) :: Nil
+    )
+
+    val unionDF1 = df1.unionByName(df2).dropDuplicates(Seq("B", "A", "c"))
+      .unionByName(df3).dropDuplicates().unionByName(df4)
+      .dropDuplicates("A")
+
+    // In this case, there are two 'union.deduplicate' operations will be combined.
+    assert(unionDF1.queryExecution.analyzed.collect {
+      case u: Union if u.children.size == 2 => u
+    }.size === 1)
+    assert(unionDF1.queryExecution.analyzed.collect {
+      case u: Union if u.children.size == 3 => u
+    }.size === 1)
+
+    assert(unionDF1.queryExecution.optimizedPlan.collect {
+      case u: Union if u.children.size == 2 => u
+    }.size === 1)
+    assert(unionDF1.queryExecution.optimizedPlan.collect {
+      case u: Union if u.children.size == 3 => u
+    }.size === 1)
+
+    checkAnswer(
+      unionDF1,
+      Row(4, 3, 2) :: Row(6, 2, 5) :: Row(1, 2, 3) :: Nil
+    )
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      df2 = Seq((6, 2, 5)).toDF("a", "B", "C")
+      df3 = Seq((2, 1, 3)).toDF("b", "a", "c")
+      df4 = Seq((1, 4, 5)).toDF("b", "a", "c")
+
+      val unionDF2 = df1.unionByName(df2, true).distinct()
+        .unionByName(df3, true).dropDuplicates(Seq("a")).unionByName(df4, true).distinct()
+
+      checkAnswer(unionDF2,
+        Row(4, 1, 5, null, null) :: Row(1, 2, 3, null, null) :: Row(6, null, null, 2, 5) :: Nil)
+      assert(unionDF2.schema.fieldNames === Array("a", "b", "c", "B", "C"))
+    }
   }
 
   test("union should union DataFrames with UDTs (SPARK-13410)") {
