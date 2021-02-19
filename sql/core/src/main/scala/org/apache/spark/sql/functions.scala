@@ -3340,7 +3340,7 @@ object functions {
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
-   *   df.groupBy(window($"time", "1 minute", "10 seconds", "5 seconds"), $"stockId")
+   *   df.groupBy(window($"timestamp", "1 minute", "10 seconds", "5 seconds"), $"stockId")
    *     .agg(mean("price"))
    * }}}
    *
@@ -3396,7 +3396,7 @@ object functions {
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
-   *   df.groupBy(window($"time", "1 minute", "10 seconds"), $"stockId")
+   *   df.groupBy(window($"timestamp", "1 minute", "10 seconds"), $"stockId")
    *     .agg(mean("price"))
    * }}}
    *
@@ -3441,7 +3441,7 @@ object functions {
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
-   *   df.groupBy(window($"time", "1 minute"), $"stockId")
+   *   df.groupBy(window($"timestamp", "1 minute"), $"stockId")
    *     .agg(mean("price"))
    * }}}
    *
