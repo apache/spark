@@ -300,6 +300,15 @@ private[spark] class SparkSubmit extends Logging {
     val isKubernetesClusterModeDriver = isKubernetesClient &&
       sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
 
+    // When running in cluster mode, add ivySettings file to files so that the driver can use
+    // it to resolve ivy packages
+    if (deployMode == CLUSTER && args.ivySettingsPath.isDefined) {
+      val ivySettingsFile = new File(args.ivySettingsPath.get)
+      require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+      require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a normal file")
+      args.files = mergeFileLists(args.files, ivySettingsFile.getAbsolutePath)
+    }
+
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
@@ -1089,7 +1098,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils extends Logging {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -1278,11 +1287,22 @@ private[spark] object SparkSubmitUtils {
       remoteRepos: Option[String],
       ivyPath: Option[String]): IvySettings = {
     val file = new File(settingsFile)
-    require(file.exists(), s"Ivy settings file $file does not exist")
-    require(file.isFile(), s"Ivy settings file $file is not a normal file")
+    // When running driver in cluster mode, the settingsFile is localized and so needs to be
+    // accessed using just the file name and not the full file path
+    val localizedFile = new File(file.getName)
+    val resolvedFile = if (file.exists()) {
+      Some(file)
+    } else if (localizedFile.exists()) {
+      Some(localizedFile)
+    } else {
+      None
+    }
+    require(resolvedFile.isDefined, s"Ivy settings file $file does not exist")
+    require(resolvedFile.get.isFile, s"Ivy settings file $file is not a normal file")
+
     val ivySettings: IvySettings = new IvySettings
     try {
-      ivySettings.load(file)
+      ivySettings.load(resolvedFile.get)
     } catch {
       case e @ (_: IOException | _: ParseException) =>
         throw new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)

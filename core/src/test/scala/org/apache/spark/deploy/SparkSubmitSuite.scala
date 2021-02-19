@@ -1525,6 +1525,21 @@ class SparkSubmitSuite
       conf.get(k) should be (v)
     }
   }
+
+  test("SPARK-34472: ship ivySettings file to the driver in cluster mode") {
+    val args = Seq(
+      "--class", "Foo",
+      "--master", "yarn",
+      "--deploy-mode", "cluster",
+      "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath}",
+      "app.jar"
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val (_, _, conf, _) = submit.prepareSubmitEnvironment(appArgs)
+
+    conf.get("spark.yarn.dist.files") should be(s"file://${emptyIvySettings.getAbsolutePath}")
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
