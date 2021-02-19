@@ -1039,6 +1039,21 @@ abstract class ParquetPartitionDiscoverySuite
       checkAnswer(input, data)
     }
   }
+
+  test("SPARK-34314: preserve partition values of the string type") {
+    import testImplicits._
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+      val df = Seq((0, "AA"), (1, "-0")).toDF("id", "part")
+      df.write
+        .partitionBy("part")
+        .format("parquet")
+        .save(path)
+      val readback = spark.read.parquet(path)
+      assert(readback.schema("part").dataType === StringType)
+      checkAnswer(readback, Row(0, "AA") :: Row(1, "-0") :: Nil)
+    }
+  }
 }
 
 class ParquetV1PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
