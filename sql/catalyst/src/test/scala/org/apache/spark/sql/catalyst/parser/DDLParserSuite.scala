@@ -2070,7 +2070,7 @@ class DDLParserSuite extends AnalysisTest {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val hint = Some("Please use ALTER VIEW instead.")
     val parsed1 = parsePlan(sql1)
-    val expected1 = AlterTableSerDeProperties(
+    val expected1 = SetTableSerDeProperties(
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       Some("org.apache.class"),
       None,
@@ -2083,7 +2083,7 @@ class DDLParserSuite extends AnalysisTest {
         |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed2 = parsePlan(sql2)
-    val expected2 = AlterTableSerDeProperties(
+    val expected2 = SetTableSerDeProperties(
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
@@ -2096,7 +2096,7 @@ class DDLParserSuite extends AnalysisTest {
         |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed3 = parsePlan(sql3)
-    val expected3 = AlterTableSerDeProperties(
+    val expected3 = SetTableSerDeProperties(
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
@@ -2110,7 +2110,7 @@ class DDLParserSuite extends AnalysisTest {
         |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed4 = parsePlan(sql4)
-    val expected4 = AlterTableSerDeProperties(
+    val expected4 = SetTableSerDeProperties(
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
@@ -2123,7 +2123,7 @@ class DDLParserSuite extends AnalysisTest {
         |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed5 = parsePlan(sql5)
-    val expected5 = AlterTableSerDeProperties(
+    val expected5 = SetTableSerDeProperties(
       UnresolvedTable(Seq("table_name"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
@@ -2136,7 +2136,7 @@ class DDLParserSuite extends AnalysisTest {
         |WITH SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed6 = parsePlan(sql6)
-    val expected6 = AlterTableSerDeProperties(
+    val expected6 = SetTableSerDeProperties(
       UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
@@ -2149,7 +2149,7 @@ class DDLParserSuite extends AnalysisTest {
         |SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed7 = parsePlan(sql7)
-    val expected7 = AlterTableSerDeProperties(
+    val expected7 = SetTableSerDeProperties(
       UnresolvedTable(Seq("a", "b", "c"), "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]", hint),
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),

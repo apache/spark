@@ -838,7 +838,7 @@ case class UnsetViewProperties(
 /**
  * The logical plan of the ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] command.
  */
-case class AlterTableSerDeProperties(
+case class SetTableSerDeProperties(
     child: LogicalPlan,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],

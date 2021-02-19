@@ -443,7 +443,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         purge,
         retainData = false)
 
-    case AlterTableSerDeProperties(
+    case SetTableSerDeProperties(
         ResolvedV1TableIdentifier(ident),
         serdeClassName,
         serdeProperties,
