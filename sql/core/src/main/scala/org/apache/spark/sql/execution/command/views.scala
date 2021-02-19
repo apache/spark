@@ -111,7 +111,7 @@ case class CreateViewCommand(
 
     // When creating a permanent view, not allowed to reference temporary objects.
     // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
-    verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
+    verifyTemporaryObjectsNotExists(catalog, isTemporary, name, analyzedPlan)
 
     if (viewType == LocalTempView) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
@@ -131,8 +131,7 @@ case class CreateViewCommand(
             aliasedPlan.schema,
             originalText))
       } else {
-        assert(isTemporary)
-        View(None, isTemporary, aliasedPlan)
+        aliasedPlan
       }
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
@@ -154,8 +153,7 @@ case class CreateViewCommand(
             aliasedPlan.schema,
             originalText))
       } else {
-        assert(isTemporary)
-        View(None, isTemporary, aliasedPlan)
+        aliasedPlan
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -541,13 +539,7 @@ object ViewHelper {
   }
 
   /**
-   * Collect all temporary views and functions and return the identifiers separately
-   * This func traverses the unresolved plan `child`. Below are the reasons:
-   * 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
-   * logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
-   * added/generated from a temporary view.
-   * 2) The temp functions are represented by multiple classes. Most are inaccessible from this
-   * package (e.g., HiveGenericUDF).
+   * Collect all temporary views and functions and return the identifiers separately.
    */
   private def collectTemporaryObjects(
       catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {

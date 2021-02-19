@@ -840,14 +840,9 @@ class SessionCatalog(
     plan match {
       case viewInfo: TemporaryViewRelation =>
         fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-      case v => v
-    }
-  }
-
-  def getTempViewSchema(plan: LogicalPlan): StructType = {
-    plan match {
-      case viewInfo: TemporaryViewRelation => viewInfo.tableMeta.schema
-      case v => v.schema
+      case v =>
+        // This must be a temporary view created from dataframe.
+        View(None, isTempView = true, v)
     }
   }
 

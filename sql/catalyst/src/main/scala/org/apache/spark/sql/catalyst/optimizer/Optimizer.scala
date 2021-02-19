@@ -143,7 +143,6 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateResolvedHint,
       EliminateSubqueryAliases,
       EliminateView,
-      EliminateDataFrameTempViews,
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,

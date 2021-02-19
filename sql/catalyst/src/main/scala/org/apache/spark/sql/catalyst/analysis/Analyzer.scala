@@ -865,9 +865,13 @@ class Analyzer(override val catalogManager: CatalogManager)
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
     AnalysisContext.get.referredTempViewNames.exists { n =>
       (n.length == nameParts.length) && n.zip(nameParts).forall {
-        case (a, b) => conf.resolver(a, b)
+        case (a, b) => resolver(a, b)
       }
     }
+  }
+
+  private def getTempViewRawPlan(plan: LogicalPlan): LogicalPlan = {
+    EliminateDataFrameTempViews(EliminateSubqueryAliases(plan))
   }
 
   /**
@@ -895,8 +899,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         write.table match {
           case UnresolvedRelation(ident, _, false) =>
             lookupTempView(ident)
-              .map(EliminateSubqueryAliases(_))
-              .map(EliminateDataFrameTempViews(_))
+              .map(getTempViewRawPlan)
               .map {
                 case r: DataSourceV2Relation => write.withNewTable(r)
                 case _ =>
@@ -935,7 +938,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // Permanent View can't refer to temp views, no need to lookup at all.
       if (isResolvingView && !isReferredTempViewName(identifier)) return None
 
-      val tmpView = expandRelationName(identifier) match {
+      val tmpView = identifier match {
         case Seq(part1) => v1SessionCatalog.lookupTempView(part1)
         case Seq(part1, part2) => v1SessionCatalog.lookupGlobalTempView(part1, part2)
         case _ => None
@@ -1141,8 +1144,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
-        // Thus, apply EliminateDataFrameTempViews rule to remove any dataframe temp views.
-        EliminateDataFrameTempViews(EliminateSubqueryAliases(relation)) match {
+        // Thus, we need to look at the raw plan of a temporary view.
+        getTempViewRawPlan(relation) match {
           case v: View if v.desc.isDefined =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.get.identifier, table)
           case other => i.copy(table = other)
