@@ -210,15 +210,12 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-AdaptiveSparkPlan (9)
-+- HashAggregate (8)
-   +- Exchange (7)
-      +- HashAggregate (6)
-         +- Union (5)
-            :- Filter (2)
-            :  +- Scan parquet default.explain_temp1 (1)
-            +- Filter (4)
-               +- Scan parquet default.explain_temp1 (3)
+AdaptiveSparkPlan (6)
++- HashAggregate (5)
+   +- Exchange (4)
+      +- HashAggregate (3)
+         +- Filter (2)
+            +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -232,38 +229,25 @@ ReadSchema: struct<key:int,val:int>
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
-(3) Scan parquet default.explain_temp1
-Output [2]: [key#x, val#x]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/explain_temp1]
-PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
-ReadSchema: struct<key:int,val:int>
-
-(4) Filter
-Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
-
-(5) Union
-
-(6) HashAggregate
+(3) HashAggregate
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
 Functions: []
 Aggregate Attributes: []
 Results [2]: [key#x, val#x]
 
-(7) Exchange
+(4) Exchange
 Input [2]: [key#x, val#x]
 Arguments: hashpartitioning(key#x, val#x, 4), ENSURE_REQUIREMENTS, [id=#x]
 
-(8) HashAggregate
+(5) HashAggregate
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
 Functions: []
 Aggregate Attributes: []
 Results [2]: [key#x, val#x]
 
-(9) AdaptiveSparkPlan
+(6) AdaptiveSparkPlan
 Output [2]: [key#x, val#x]
 Arguments: isFinalPlan=false
 

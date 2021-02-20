@@ -208,16 +208,12 @@ EXPLAIN FORMATTED
 struct<plan:string>
 -- !query output
 == Physical Plan ==
-* HashAggregate (10)
-+- Exchange (9)
-   +- * HashAggregate (8)
-      +- Union (7)
-         :- * Filter (3)
-         :  +- * ColumnarToRow (2)
-         :     +- Scan parquet default.explain_temp1 (1)
-         +- * Filter (6)
-            +- * ColumnarToRow (5)
-               +- Scan parquet default.explain_temp1 (4)
+* HashAggregate (6)
++- Exchange (5)
+   +- * HashAggregate (4)
+      +- * Filter (3)
+         +- * ColumnarToRow (2)
+            +- Scan parquet default.explain_temp1 (1)
 
 
 (1) Scan parquet default.explain_temp1
@@ -234,34 +230,18 @@ Input [2]: [key#x, val#x]
 Input [2]: [key#x, val#x]
 Condition : (isnotnull(key#x) AND (key#x > 0))
 
-(4) Scan parquet default.explain_temp1
-Output [2]: [key#x, val#x]
-Batched: true
-Location [not included in comparison]/{warehouse_dir}/explain_temp1]
-PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
-ReadSchema: struct<key:int,val:int>
-
-(5) ColumnarToRow [codegen id : 2]
-Input [2]: [key#x, val#x]
-
-(6) Filter [codegen id : 2]
-Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
-
-(7) Union
-
-(8) HashAggregate [codegen id : 3]
+(4) HashAggregate [codegen id : 1]
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
 Functions: []
 Aggregate Attributes: []
 Results [2]: [key#x, val#x]
 
-(9) Exchange
+(5) Exchange
 Input [2]: [key#x, val#x]
 Arguments: hashpartitioning(key#x, val#x, 4), ENSURE_REQUIREMENTS, [id=#x]
 
-(10) HashAggregate [codegen id : 4]
+(6) HashAggregate [codegen id : 2]
 Input [2]: [key#x, val#x]
 Keys [2]: [key#x, val#x]
 Functions: []

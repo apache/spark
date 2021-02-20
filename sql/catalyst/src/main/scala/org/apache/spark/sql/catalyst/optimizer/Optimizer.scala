@@ -498,7 +498,7 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
         case Alias(a: Attribute, _) => a
         case a: Attribute => a
       }
-      if (child.outputSet == AttributeSet(originalOutputs)) {
+      if (child.outputSet.nonEmpty && child.outputSet == AttributeSet(originalOutputs)) {
         child
       } else {
         p
