@@ -19,10 +19,9 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{InterruptibleIterator, Partitioner, RangePartitioner, TaskContext}
+import org.apache.spark.{Partitioner, RangePartitioner, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
 /**
@@ -77,17 +76,9 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = self.withScope {
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(iter => {
-        val context = TaskContext.get
-        val sorter = new ExternalSorter[K, V, V](context, None, None, Some(ordering))
+        val sorter = new ExternalSorter[K, V, V](TaskContext.get, None, None, Some(ordering))
         sorter.insertAll(iter)
-        context.taskMetrics.incMemoryBytesSpilled(sorter.memoryBytesSpilled)
-        context.taskMetrics.incDiskBytesSpilled(sorter.diskBytesSpilled)
-        context.taskMetrics.incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
-        // Use completion callback to stop sorter if task was finished/cancelled.
-        context.addTaskCompletionListener[Unit](_ => sorter.stop)
-        val outputIter = new InterruptibleIterator(context,
-          sorter.iterator.asInstanceOf[Iterator[(K, V)]])
-        CompletionIterator[(K, V), Iterator[(K, V)]](outputIter, sorter.stop)
+        sorter.interruptibleCompletionIterator.asInstanceOf[Iterator[(K, V)]]
       }, preservesPartitioning = true)
     } else {
       new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
