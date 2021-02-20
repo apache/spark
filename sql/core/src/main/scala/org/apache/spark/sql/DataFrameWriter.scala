@@ -427,7 +427,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         DataSourceUtils.encodePartitioningColumns(columns))
     }
 
-    val optionsWithPath = getOptionsWithPaths(path)
+    val optionsWithPath = getOptionsWithPath(path)
 
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
