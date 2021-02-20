@@ -383,11 +383,11 @@ class VectorsSuite extends SparkMLFunSuite {
     assert(v.slice(Array(2, 0, 3, 4)) === new SparseVector(4, Array(0, 3), Array(2.2, 4.4)))
   }
 
-  test("SparseVector.sliceSorted") {
+  test("SparseVector.slice with sorted indices") {
     val v = new SparseVector(5, Array(1, 2, 4), Array(1.1, 2.2, 4.4))
-    assert(v.slice(Array(0, 2)) === v.sliceSorted(Array(0, 2)))
-    assert(v.slice(Array(0, 2, 4)) === v.sliceSorted(Array(0, 2, 4)))
-    assert(v.slice(Array(1, 3)) === v.sliceSorted(Array(1, 3)))
+    assert(v.slice(Array(0, 2), true) === v.slice(Array(0, 2), false))
+    assert(v.slice(Array(0, 2, 4), true) === v.slice(Array(0, 2, 4), false))
+    assert(v.slice(Array(1, 3), true) === v.slice(Array(1, 3), false))
   }
 
   test("sparse vector only support non-negative length") {

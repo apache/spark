@@ -754,59 +754,49 @@ class SparseVector @Since("2.0.0") (
    * Create a slice of this vector based on the given indices.
    * @param selectedIndices Unsorted list of indices into the vector.
    *                        This does NOT do bound checking.
+   * @param sorted Whether the input indices are already sorted.
+   *               This does NOT do ordering checking.
    * @return  New SparseVector with values in the order specified by the given indices.
    *
    * NOTE: The API needs to be discussed before making this public.
    */
-  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
+  private[spark] def slice(selectedIndices: Array[Int], sorted: Boolean = false): SparseVector = {
     val localIndices = indices
     val localValues = values
     val ns = selectedIndices.length
-
     val indexBuff = mutable.ArrayBuilder.make[Int]
     val valueBuff = mutable.ArrayBuilder.make[Double]
-    var s = 0
-    while (s < ns) {
-      val j = java.util.Arrays.binarySearch(localIndices, selectedIndices(s))
-      if (j >= 0 && localValues(j) != 0) {
-        indexBuff += s
-        valueBuff += localValues(j)
-      }
-      s += 1
-    }
-    new SparseVector(ns, indexBuff.result, valueBuff.result)
-  }
 
-  /**
-   * Create a slice of this vector based on the given sorted indices.
-   * @param sortedIndices Sorted list of indices into the vector.
-   *                      This does NOT do rank checking.
-   * @return  New SparseVector with values in the order specified by the given indices.
-   *
-   * NOTE: The API needs to be discussed before making this public.
-   */
-  private[spark] def sliceSorted(sortedIndices: Array[Int]): SparseVector = {
-    val localIndices = indices
-    val localValues = values
-    val nk = localIndices.length
-    val ns = sortedIndices.length
-
-    val indexBuff = mutable.ArrayBuilder.make[Int]
-    val valueBuff = mutable.ArrayBuilder.make[Double]
-    var k = 0
-    var s = 0
-    while (k < nk && s < ns) {
-      val i = localIndices(k)
-      val v = localValues(k)
-      if (v != 0) {
-        while (s < ns && sortedIndices(s) < i) { s += 1 }
-        if (s < ns && sortedIndices(s) == i) {
-          indexBuff += s
-          valueBuff += v
-          s += 1
+    if (sorted) {
+      val nk = localIndices.length
+      var k = 0
+      var s = 0
+      while (k < nk && s < ns) {
+        val i = localIndices(k)
+        val v = localValues(k)
+        if (v != 0) {
+          while (s < ns && selectedIndices(s) < i) { s += 1 }
+          if (s < ns && selectedIndices(s) == i) {
+            indexBuff += s
+            valueBuff += v
+            s += 1
+          }
         }
+        k += 1
       }
-      k += 1
+    } else {
+      var s = 0
+      while (s < ns) {
+        val j = java.util.Arrays.binarySearch(localIndices, selectedIndices(s))
+        if (j >= 0) {
+          val v = localValues(j)
+          if (v != 0) {
+            indexBuff += s
+            valueBuff += v
+          }
+        }
+        s += 1
+      }
     }
     new SparseVector(ns, indexBuff.result, valueBuff.result)
   }

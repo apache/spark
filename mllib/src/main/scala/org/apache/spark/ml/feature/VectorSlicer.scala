@@ -117,17 +117,11 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
       case None => new AttributeGroup($(outputCol), selectedIndices.length)
     }
 
-    val isSorted = selectedIndices.length > 1 &&
-      selectedIndices.sliding(2).forall(t => t(1) > t(0))
-    val sparseSliceFunc = if (isSorted) {
-      (features: SparseVector) => features.sliceSorted(selectedIndices)
-    } else {
-      (features: SparseVector) => features.slice(selectedIndices)
-    }
+    val sorted = selectedIndices.length > 1 && selectedIndices.sliding(2).forall(t => t(1) > t(0))
     val slicer = udf { vec: Vector =>
       vec match {
-        case features: DenseVector => Vectors.dense(selectedIndices.map(features.apply))
-        case features: SparseVector => sparseSliceFunc(features)
+        case dv: DenseVector => Vectors.dense(selectedIndices.map(dv.apply))
+        case sv: SparseVector => sv.slice(selectedIndices, sorted)
       }
     }
 
