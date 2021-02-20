@@ -63,6 +63,8 @@ license: |
  
   - In Spark 3.2, the output schema of `SHOW TBLPROPERTIES` becomes `key: string, value: string` whether you specify the table property key or not. In Spark 3.1 and earlier, the output schema of `SHOW TBLPROPERTIES` is `value: string` when you specify the table property key. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
+  - In Spark 3.2, we support using corresponding typed literal of partition column value type as partition column value in SQL, such as if we have a partition table with partition column of date type, we can use typed date literal `date '2020-01-01'` as partition spec `PARTITION (dt = date '2020-01-01')`, it will be treated as partition column value `2020-01-01`. In Spark 3.1 and earlier, the partition value will be treated as string value `date '2020-01-01'` and it's a illegal date type string value and will been converted to `__HIVE_DEFAULT_PARTITION__`.
+
 ## Upgrading from Spark SQL 3.0 to 3.1
 
   - In Spark 3.1, statistical aggregation function includes `std`, `stddev`, `stddev_samp`, `variance`, `var_samp`, `skewness`, `kurtosis`, `covar_samp`, `corr` will return `NULL` instead of `Double.NaN` when `DivideByZero` occurs during expression evaluation, for example, when `stddev_samp` applied on a single element set. In Spark version 3.0 and earlier, it will return `Double.NaN` in such case. To restore the behavior before Spark 3.1, you can set `spark.sql.legacy.statisticalAggregate` to `true`.
@@ -100,8 +102,6 @@ license: |
   - In Spark 3.1, temporary view created via `CACHE TABLE ... AS SELECT` will also have the same behavior with permanent view. In particular, when the temporary view is dropped, Spark will invalidate all its cache dependents, as well as the cache for the temporary view itself. This is different from Spark 3.0 and below, which only does the latter. To restore the previous behavior, you can set `spark.sql.legacy.storeAnalyzedPlanForView` to `true`.
 
   - Since Spark 3.1, CHAR/CHARACTER and VARCHAR types are supported in the table schema. Table scan/insertion will respect the char/varchar semantic. If char/varchar is used in places other than table schema, an exception will be thrown (CAST is an exception that simply treats char/varchar as string like before). To restore the behavior before Spark 3.1, which treats them as STRING types and ignores a length parameter, e.g. `CHAR(4)`, you can set `spark.sql.legacy.charVarcharAsString` to `true`.
-
-  - In Spark 3.1, we support using corresponding typed literal of partition column value type as partition column value in SQL, such as if we have a partition table with partition column of date type, we can use typed date literal `date '2020-01-01'` as partition spec `PARTITION (dt = date '2020-01-01')`, it will be treated as partition column value `2020-01-01`. In Spark 3.0 the partition value will be treated as string value `date '2020-01-01'` and it's a illegal date type string value and will been converted to `__HIVE_DEFAULT_PARTITION__`.
 
   - In Spark 3.1, `AnalysisException` is replaced by its sub-classes that are thrown for tables from Hive external catalog in the following situations:
     * `ALTER TABLE .. ADD PARTITION` throws `PartitionsAlreadyExistException` if new partition exists already
