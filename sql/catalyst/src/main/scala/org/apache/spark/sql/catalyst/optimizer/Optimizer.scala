@@ -522,7 +522,7 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
         d
       }
 
-    case d @ Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
+    case d @ Deduplicate(_, u: Union) =>
       val unionChildren = u.children.map(c => removeAliasOnlyProject(c))
       if (unionChildren.tail.forall(unionChildren.head.sameResult(_))) {
         d.withNewChildren(Seq(u.children.head))

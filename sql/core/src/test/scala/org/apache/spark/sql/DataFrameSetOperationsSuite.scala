@@ -820,13 +820,17 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         val distinctUnionDF1 = testData.union(testData).distinct()
         checkAnswer(distinctUnionDF1, testData.distinct())
 
-        val distinctUnionDF2 = sql(
+
+        val distinctUnionDF2 = testData.union(testData).dropDuplicates(Seq("key"))
+        checkAnswer(distinctUnionDF2, testData.dropDuplicates(Seq("key")))
+
+        val distinctUnionDF3 = sql(
           """
             | select key, value from testData
             | union
             | select key, value from testData
             |""".stripMargin)
-        checkAnswer(distinctUnionDF2, testData.distinct())
+        checkAnswer(distinctUnionDF3, testData.distinct())
       }
     }
   }
