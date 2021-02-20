@@ -18,7 +18,7 @@
 package org.apache.spark.resource
 
 import java.util
-import java.util.{List => JList, Map => JMap}
+import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
