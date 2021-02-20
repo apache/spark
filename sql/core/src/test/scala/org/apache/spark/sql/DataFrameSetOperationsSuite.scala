@@ -814,7 +814,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(union, row1 :: row2 :: Nil)
   }
 
-  test("Distinct of Union of same relations") {
+  test("SPARK-34474: Remove unnecessary Union under Distinct") {
     val distinctUnionDF1 = testData.union(testData).distinct()
     checkAnswer(distinctUnionDF1, testData.distinct())
 
