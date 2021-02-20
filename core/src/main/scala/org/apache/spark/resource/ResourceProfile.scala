@@ -17,7 +17,6 @@
 
 package org.apache.spark.resource
 
-import java.util
 import java.util.{Map => JMap}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
@@ -279,21 +278,12 @@ object ResourceProfile extends Logging {
    */
   val PYSPARK_MEM = "pyspark.memory"
 
-  private val _allSupportedExecutorResources =
-    Seq(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM, OFFHEAP_MEM)
-
   /**
    * Return all supported Spark built-in executor resources, custom resources like GPUs/FPGAs
    * are excluded.
    */
-  def allSupportedExecutorResources: Seq[String] = _allSupportedExecutorResources
-
-  /**
-   * (Java-specific) Return all supported Spark built-in executor resources, custom resources
-   * like GPUs/FPGAs are excluded.
-   */
-  def allSupportedExecutorResourcesJList: util.List[String] =
-    util.Collections.unmodifiableList(_allSupportedExecutorResources.asJava)
+  def allSupportedExecutorResources: Array[String] =
+    Array(CORES, MEMORY, OVERHEAD_MEM, PYSPARK_MEM, OFFHEAP_MEM)
 
   val UNKNOWN_RESOURCE_PROFILE_ID = -1
   val DEFAULT_RESOURCE_PROFILE_ID = 0
