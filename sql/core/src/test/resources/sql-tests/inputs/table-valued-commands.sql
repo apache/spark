@@ -56,6 +56,8 @@ SELECT * FROM command('SHOW CREATE TABLE');
 -- Clean Up
 DROP VIEW global_temp.test_global_show_views;
 DROP VIEW test_show_views;
+DROP VIEW view_2;
+DROP VIEW view_1;
 DROP TABLE test_show_partitions;
 DROP TABLE test_show_table_properties;
 DROP TABLE test_show_tables;
