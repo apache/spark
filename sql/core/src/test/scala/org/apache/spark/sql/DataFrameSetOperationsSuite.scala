@@ -815,16 +815,20 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34474: Remove unnecessary Union under Distinct") {
-    val distinctUnionDF1 = testData.union(testData).distinct()
-    checkAnswer(distinctUnionDF1, testData.distinct())
+    Seq(RemoveNoopOperators.ruleName, "").map { ruleName =>
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
+        val distinctUnionDF1 = testData.union(testData).distinct()
+        checkAnswer(distinctUnionDF1, testData.distinct())
 
-    val distinctUnionDF2 = sql(
-      """
-        | select key, value from testData
-        | union
-        | select key, value from testData
-        |""".stripMargin)
-    checkAnswer(distinctUnionDF2, testData.distinct())
+        val distinctUnionDF2 = sql(
+          """
+            | select key, value from testData
+            | union
+            | select key, value from testData
+            |""".stripMargin)
+        checkAnswer(distinctUnionDF2, testData.distinct())
+      }
+    }
   }
 }
 
