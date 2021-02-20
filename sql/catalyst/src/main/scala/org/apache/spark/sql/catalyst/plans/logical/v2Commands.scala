@@ -698,7 +698,7 @@ case class AddPartitions(
  *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
-case class DropPartition(
+case class DropPartitions(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,

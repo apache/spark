@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddPartitions, DropPartition, LogicalPlan, RenamePartition, ShowPartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{AddPartitions, DropPartitions, LogicalPlan, RenamePartition, ShowPartitions}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
@@ -42,7 +42,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
         partitionSchema,
         requireExactMatchedPartitionSpec(table.name, _, partitionSchema.fieldNames)))
 
-    case r @ DropPartition(
+    case r @ DropPartitions(
         ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs, _, _) =>
       val partitionSchema = table.partitionSchema()
       r.copy(parts = resolvePartitionSpecs(
