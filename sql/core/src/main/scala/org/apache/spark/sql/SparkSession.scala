@@ -30,6 +30,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
+import org.apache.spark.launcher.SparkLauncher._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
@@ -815,7 +816,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
+      checkAndSetConfig(key, value)
       this
     }
 
@@ -826,7 +827,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: Long): Builder = synchronized {
-      options += key -> value.toString
+      checkAndSetConfig(key, value.toString)
       this
     }
 
@@ -837,7 +838,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: Double): Builder = synchronized {
-      options += key -> value.toString
+      checkAndSetConfig(key, value.toString)
       this
     }
 
@@ -848,7 +849,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: Boolean): Builder = synchronized {
-      options += key -> value.toString
+      checkAndSetConfig(key, value.toString)
       this
     }
 
@@ -858,7 +859,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(conf: SparkConf): Builder = synchronized {
-      conf.getAll.foreach { case (k, v) => options += k -> v }
+      conf.getAll.foreach { case (k, v) => checkAndSetConfig(k, v) }
       this
     }
 
@@ -895,6 +896,36 @@ object SparkSession extends Logging {
     def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
       f(extensions)
       this
+    }
+
+    // These submit configuration only effect when config before submit app.
+    private val SUBMIT_LAUNCHER_CONFIG =
+      Seq(SPARK_MASTER, DEPLOY_MODE, DRIVER_MEMORY, DRIVER_EXTRA_CLASSPATH,
+        DRIVER_DEFAULT_JAVA_OPTIONS, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_LIBRARY_PATH,
+        PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON, SPARKR_R_SHELL, CHILD_PROCESS_LOGGER_NAME,
+        CHILD_CONNECTION_TIMEOUT)
+
+    // These configuration can effect when SparkContext is not started.
+    private val EXECUTOR_LAUNCHER_CONFIG =
+      Seq(EXECUTOR_MEMORY, EXECUTOR_EXTRA_CLASSPATH, EXECUTOR_DEFAULT_JAVA_OPTIONS,
+        EXECUTOR_EXTRA_JAVA_OPTIONS, EXECUTOR_EXTRA_LIBRARY_PATH, EXECUTOR_CORES)
+
+    def checkAndSetConfig(key: String, value: String): Unit = {
+      if (SparkContext.getActive.isEmpty) {
+        if (SUBMIT_LAUNCHER_CONFIG.contains(key)) {
+          logWarning(s"Since spark has been started, configuration ${key} won't work" +
+            s" when set it here")
+        } else {
+          options += key -> value
+        }
+      } else {
+        if ((SUBMIT_LAUNCHER_CONFIG ++ EXECUTOR_LAUNCHER_CONFIG).contains(key)) {
+          logWarning(s"Since spark has been started, configuration ${key} won't work" +
+            s" when set it here")
+        } else {
+          options += key -> value
+        }
+      }
     }
 
     /**
