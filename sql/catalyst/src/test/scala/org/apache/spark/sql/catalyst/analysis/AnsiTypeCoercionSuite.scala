@@ -91,6 +91,12 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
       s"Failed to cast String literal to $to")
   }
 
+  private def shouldNotCastStringLiteral(to: AbstractDataType): Unit = {
+    val input = Literal("123")
+    val castResult = AnsiTypeCoercion.implicitCast(input, to)
+    assert(castResult.isEmpty, s"Should not be able to cast String literal to $to")
+  }
+
   private def shouldNotCastStringInput(to: AbstractDataType): Unit = {
     val input = AttributeReference("s", StringType)()
     val castResult = AnsiTypeCoercion.implicitCast(input, to)
@@ -219,8 +225,7 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
   }
 
   test("implicit type cast - unfoldable StringType") {
-    val nonCastableTypes =
-      complexTypes ++ Seq(BooleanType, NullType, CalendarIntervalType)
+    val nonCastableTypes = allTypes.filterNot(_ == StringType)
     nonCastableTypes.foreach { dt =>
       shouldNotCastStringInput(dt)
     }
@@ -230,9 +235,12 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
 
   test("implicit type cast - foldable StringType") {
     val castableTypes =
-      numericTypes ++ datetimeTypes ++ Seq(BinaryType)
+      numericTypes ++ datetimeTypes ++ Seq(BinaryType, StringType)
     castableTypes.foreach { dt =>
       shouldCastStringLiteral(dt, dt)
+    }
+    allTypes.filterNot(castableTypes.contains).foreach { dt =>
+      shouldNotCastStringLiteral(dt)
     }
     shouldCastStringLiteral(DecimalType, DecimalType.defaultConcreteType)
     shouldCastStringLiteral(NumericType, DoubleType)
