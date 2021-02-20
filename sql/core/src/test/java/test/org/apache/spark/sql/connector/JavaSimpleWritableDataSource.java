@@ -70,13 +70,13 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
         FileSystem fs = dataPath.getFileSystem(conf);
         if (fs.exists(dataPath)) {
           return Arrays.stream(fs.listStatus(dataPath))
-                  .filter(
-                          status -> {
-                            String name = status.getPath().getName();
-                            return !name.startsWith("_") && !name.startsWith(".");
-                          })
-                  .map(f -> new JavaCSVInputPartitionReader(f.getPath().toUri().toString()))
-                  .toArray(InputPartition[]::new);
+              .filter(
+                  status -> {
+                    String name = status.getPath().getName();
+                    return !name.startsWith("_") && !name.startsWith(".");
+                  })
+              .map(f -> new JavaCSVInputPartitionReader(f.getPath().toUri().toString()))
+              .toArray(InputPartition[]::new);
         } else {
           return new InputPartition[0];
         }
@@ -271,9 +271,9 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
           @Override
           public InternalRow get() {
             Object[] objects =
-                    Arrays.stream(currentLine.split(","))
-                            .map(String::trim)
-                            .map(Integer::parseInt)
+                Arrays.stream(currentLine.split(","))
+                    .map(String::trim)
+                    .map(Integer::parseInt)
                     .toArray();
             return new GenericInternalRow(objects);
           }
