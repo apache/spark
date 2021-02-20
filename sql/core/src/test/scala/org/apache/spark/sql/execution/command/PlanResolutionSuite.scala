@@ -782,21 +782,21 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed1 match {
             case SetTableProperties(_: ResolvedTable, properties) =>
               assert(properties == Map(("test", "test"), ("comment", "new_comment")))
-            case _ => fail("expect AlterTableSetProperties")
+            case _ => fail(s"expect ${SetTableProperties.getClass.getName}")
           }
 
           parsed2 match {
             case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
               assert(propertyKeys == Seq("comment", "test"))
               assert(!ifExists)
-            case _ => fail("expect AlterTableUnsetProperties")
+            case _ => fail(s"expect ${UnsetTableProperties.getClass.getName}")
           }
 
           parsed3 match {
             case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
               assert(propertyKeys == Seq("comment", "test"))
               assert(ifExists)
-            case _ => fail("expect AlterTableUnsetProperties")
+            case _ => fail(s"expect ${UnsetTableProperties.getClass.getName}")
           }
         }
     }
@@ -809,11 +809,13 @@ class PlanResolutionSuite extends AnalysisTest {
     // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
     parsed4 match {
       case SetTableProperties(_: UnresolvedTable, _) => // OK
-      case _ => fail("Expect AlterTableSetProperties, but got:\n" + parsed4.treeString)
+      case _ =>
+        fail(s"Expect ${SetTableProperties.getClass.getName}, but got:\n" + parsed4.treeString)
     }
     parsed5 match {
       case UnsetTableProperties(_: UnresolvedTable, _, _) => // OK
-      case _ => fail("Expect AlterTableUnsetProperties, but got:\n" + parsed5.treeString)
+      case _ =>
+        fail(s"Expect ${UnsetTableProperties.getClass.getName}, but got:\n" + parsed5.treeString)
     }
   }
 
@@ -858,7 +860,8 @@ class PlanResolutionSuite extends AnalysisTest {
           parsed match {
             case SetTableLocation(_: ResolvedTable, _, location) =>
               assert(location === "new location")
-            case _ => fail("Expect AlterTableSetLocation, but got:\n" + parsed.treeString)
+            case _ =>
+              fail(s"Expect ${SetTableLocation.getClass.getName}, but got:\n" + parsed.treeString)
           }
         }
     }
