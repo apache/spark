@@ -951,10 +951,10 @@ object SparkSession extends Logging {
 
       if (SparkContext.getActive.isDefined) {
         logWarning(
-          s"""Since spark has been started and SparkContext has been initialized, such
-             | configuration `${scAlreadySetConfigurations.mkString(", ")}` may not be affected when
-             | setting programmatically through SparkConf in runtime, or the behavior is
-             | depending on which cluster manager and deploy mode you choose, so it would
+          s"""Since spark has been started and SparkContext has been initialized, SparkSession
+             | will use an existing SparkContext, such configuration
+             | `${scAlreadySetConfigurations.mkString(", ")}` may not be affected when
+             | setting programmatically through SparkConf in runtime, so it would
              | be suggested to set through configuration file or spark-submit command line options.
              |""".stripMargin)
         normalConfigs.foreach { case (k, v) => sparkConf.set(k, v) }
