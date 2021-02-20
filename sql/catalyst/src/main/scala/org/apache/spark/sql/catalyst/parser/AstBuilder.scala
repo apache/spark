@@ -508,8 +508,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     expression(ctx) match {
       case l: Literal if l.value == null & !legacyNullAsString => null
       case l: Literal =>
-        Cast(l, StringType, Some(SQLConf.get.sessionLocalTimeZone))
-          .eval(InternalRow.apply(l.value)).toString
+        Cast(l, StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
       case _ =>
         throw new IllegalArgumentException("Only support convert Literal to string when visit" +
           " partition spec value")
