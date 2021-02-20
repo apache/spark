@@ -132,6 +132,9 @@ struct<namespace:string,tableName:string,isTemporary:boolean>
 test_show_partitions
 test_show_table_properties
 test_show_tables
+test_show_views
+view_1
+view_2
 
 
 -- !query
@@ -142,6 +145,9 @@ struct<namespace:string,tableName:string,isTemporary:boolean>
 test_show_partitions
 test_show_table_properties
 test_show_tables
+test_show_views
+view_1
+view_2
 
 
 -- !query
