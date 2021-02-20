@@ -622,8 +622,7 @@ class SessionCatalog(
   }
 
   /**
-   * Generate a [[View]] operator from the view description if the view stores sql text,
-   * otherwise, it is same to `getRawTempView`
+   * Generate a [[View]] operator from the temporary view stored.
    */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
     getRawTempView(name).map(getTempViewPlan)
@@ -840,9 +839,7 @@ class SessionCatalog(
     plan match {
       case viewInfo: TemporaryViewRelation =>
         fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-      case v =>
-        // This must be a temporary view created from dataframe.
-        View(None, isTempView = true, v)
+      case v => View(None, isTempView = true, v)
     }
   }
 

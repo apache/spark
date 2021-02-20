@@ -30,40 +30,45 @@ import org.apache.spark.sql.types.IntegerType
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  val testTempView = View(None, isTempView = true, testRelation)
+  val testTempView2 = View(None, isTempView = true, testRelation2)
+  val testTempView4 = View(None, isTempView = true, testRelation4)
+  val testTempView5 = View(None, isTempView = true, testRelation5)
+
   test("invalid hints should be ignored") {
     checkAnalysis(
       UnresolvedHint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
-      testRelation,
+      testTempView,
       caseSensitive = false)
   }
 
   test("case-sensitive or insensitive parameters") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
-      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = true)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
-      testRelation,
+      testTempView,
       caseSensitive = true)
   }
 
   test("multiple broadcast hint aliases") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
-      Join(ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
-        ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
+      Join(ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
+        ResolvedHint(testTempView2, HintInfo(strategy = Some(BROADCAST))),
         Inner, None, JoinHint.NONE),
       caseSensitive = false)
   }
@@ -72,32 +77,32 @@ class ResolveHintsSuite extends AnalysisTest {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"),
         ResolvedHint(table("table").where('a > 1), HintInfo(strategy = Some(BROADCAST)))),
-      ResolvedHint(testRelation.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
+      ResolvedHint(testTempView.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
       caseSensitive = false)
   }
 
   test("should work for subqueries") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
-      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
-      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
     // Negative case: if the alias doesn't match, don't match the original table name.
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
-      testRelation,
+      testTempView,
       caseSensitive = false)
   }
 
   test("do not traverse past subquery alias") {
     checkAnalysis(
       UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
-      testRelation.where('a > 1).analyze,
+      testTempView.where('a > 1).analyze,
       caseSensitive = false)
   }
 
@@ -109,7 +114,7 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
+      ResolvedHint(testTempView.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
         .select('a).analyze,
       caseSensitive = false)
   }
@@ -122,23 +127,23 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
         """.stripMargin
       ),
-      testRelation.where('a > 1).select('a).select('a).analyze,
+      testTempView.where('a > 1).select('a).select('a).analyze,
       caseSensitive = false)
   }
 
   test("coalesce and repartition hint") {
     checkAnalysis(
       UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
-      Repartition(numPartitions = 10, shuffle = false, child = testRelation))
+      Repartition(numPartitions = 10, shuffle = false, child = testTempView))
     checkAnalysis(
       UnresolvedHint("coalesce", Seq(Literal(20)), table("TaBlE")),
-      Repartition(numPartitions = 20, shuffle = false, child = testRelation))
+      Repartition(numPartitions = 20, shuffle = false, child = testTempView))
     checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
-      Repartition(numPartitions = 100, shuffle = true, child = testRelation))
+      Repartition(numPartitions = 100, shuffle = true, child = testTempView))
     checkAnalysis(
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
-      Repartition(numPartitions = 200, shuffle = true, child = testRelation))
+      Repartition(numPartitions = 200, shuffle = true, child = testTempView))
 
     val errMsg = "COALESCE Hint expects a partition number as a parameter"
 
@@ -154,16 +159,16 @@ class ResolveHintsSuite extends AnalysisTest {
 
     checkAnalysis(
       UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testTempView, 10))
 
     checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testTempView, 10))
 
     checkAnalysis(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
-        Seq(AttributeReference("a", IntegerType)()), testRelation, None))
+        Seq(AttributeReference("a", IntegerType)()), testTempView, None))
 
     val e = intercept[IllegalArgumentException] {
       checkAnalysis(
@@ -171,7 +176,7 @@ class ResolveHintsSuite extends AnalysisTest {
           Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
           table("TaBlE")),
         RepartitionByExpression(
-          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10)
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testTempView, 10)
       )
     }
     e.getMessage.contains("For range partitioning use REPARTITION_BY_RANGE instead")
@@ -180,14 +185,14 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint(
         "REPARTITION_BY_RANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
-        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testTempView, 10))
 
     checkAnalysis(
       UnresolvedHint(
         "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
-        testRelation, None))
+        testTempView, None))
 
     val errMsg2 = "REPARTITION Hint parameter should include columns, but"
 
@@ -227,7 +232,7 @@ class ResolveHintsSuite extends AnalysisTest {
     withLogAppender(logAppender) {
       checkAnalysis(
         UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE")),
-        testRelation,
+        testTempView,
         caseSensitive = false)
     }
     assert(logAppender.loggingEvents.exists(
@@ -238,7 +243,7 @@ class ResolveHintsSuite extends AnalysisTest {
   test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
     checkAnalysis(
       Project(testRelation.output, UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE"))),
-      Project(testRelation.output, testRelation),
+      Project(testTempView.output, testTempView),
       caseSensitive = false)
   }
 
@@ -252,8 +257,8 @@ class ResolveHintsSuite extends AnalysisTest {
         UnresolvedHint(hintName, Seq("table", "table2"),
           table("TaBlE").join(table("TaBlE2"))),
         Join(
-          ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
-          ResolvedHint(testRelation2, HintInfo(strategy = Some(st))),
+          ResolvedHint(testTempView, HintInfo(strategy = Some(st))),
+          ResolvedHint(testTempView2, HintInfo(strategy = Some(st))),
           Inner,
           None,
           JoinHint.NONE),
@@ -263,8 +268,8 @@ class ResolveHintsSuite extends AnalysisTest {
         UnresolvedHint(hintName, Seq("TaBlE", "table2"),
           table("TaBlE").join(table("TaBlE2"))),
         Join(
-          ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
-          testRelation2,
+          ResolvedHint(testTempView, HintInfo(strategy = Some(st))),
+          testTempView2,
           Inner,
           None,
           JoinHint.NONE),
@@ -275,8 +280,8 @@ class ResolveHintsSuite extends AnalysisTest {
         UnresolvedHint(hintName, Seq("GlOBal_TeMP.table4", "table5"),
           table("global_temp", "table4").join(table("global_temp", "table5"))),
         Join(
-          ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
-          ResolvedHint(testRelation5, HintInfo(strategy = Some(st))),
+          ResolvedHint(testTempView4, HintInfo(strategy = Some(st))),
+          ResolvedHint(testTempView5, HintInfo(strategy = Some(st))),
           Inner,
           None,
           JoinHint.NONE),
@@ -286,8 +291,8 @@ class ResolveHintsSuite extends AnalysisTest {
         UnresolvedHint(hintName, Seq("global_temp.TaBlE4", "table5"),
           table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
         Join(
-          ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
-          testRelation5,
+          ResolvedHint(testTempView4, HintInfo(strategy = Some(st))),
+          testTempView5,
           Inner,
           None,
           JoinHint.NONE),

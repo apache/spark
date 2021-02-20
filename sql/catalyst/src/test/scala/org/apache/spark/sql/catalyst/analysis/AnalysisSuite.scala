@@ -91,6 +91,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("analyze project") {
+    val testTempView = View(None, isTempView = true, testRelation)
+
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("a")), testRelation),
       Project(testRelation.output, testRelation))
@@ -98,7 +100,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Project(testRelation.output, testRelation))
+      Project(testTempView.output, testTempView))
 
     assertAnalysisError(
       Project(Seq(UnresolvedAttribute("tBl.a")),
@@ -108,13 +110,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Project(testRelation.output, testRelation),
+      Project(testTempView.output, testTempView),
       caseSensitive = false)
 
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Project(testRelation.output, testRelation),
+      Project(testTempView.output, testTempView),
       caseSensitive = false)
   }
 
@@ -202,12 +204,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("resolve relations") {
+    val testTempView = View(None, isTempView = true, testRelation)
+
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
+    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testTempView)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("tAbLe")), testTempView, caseSensitive = false)
     checkAnalysis(
-      UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
+      UnresolvedRelation(TableIdentifier("TaBlE")), testTempView, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
