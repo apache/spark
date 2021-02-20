@@ -422,7 +422,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ident.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
+    case AddPartitions(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
         ident.asTableIdentifier,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),

@@ -3827,7 +3827,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AddPartition]].
+   * Create an [[AddPartitions]].
    *
    * For example:
    * {{{
@@ -3849,7 +3849,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val location = Option(splCtx.locationSpec).map(visitLocationSpec)
       UnresolvedPartitionSpec(spec, location)
     }
-    AddPartition(
+    AddPartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... ADD PARTITION ...",

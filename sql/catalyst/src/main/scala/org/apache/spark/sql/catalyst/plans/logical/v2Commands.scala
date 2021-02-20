@@ -676,7 +676,7 @@ case class AnalyzeColumn(
  *                 PARTITION spec1 [LOCATION 'loc1'][, PARTITION spec2 [LOCATION 'loc2'], ...];
  * }}}
  */
-case class AddPartition(
+case class AddPartitions(
     child: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifNotExists: Boolean) extends Command {
