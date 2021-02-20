@@ -39,7 +39,6 @@ import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
 import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.*;
-import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 import org.apache.spark.util.SerializableConfiguration;
 
@@ -50,15 +49,12 @@ import org.apache.spark.util.SerializableConfiguration;
  */
 public class JavaSimpleWritableDataSource implements TestingV2Source, SessionConfigSupport {
 
-
-  private final StructType tableSchema = new StructType().add("i", "long").add("j", "long");
-
   @Override
   public String keyPrefix() {
     return "javaSimpleWritableDataSource";
   }
 
-  class MyScanBuilder extends JavaSimpleScanBuilder {
+  static class MyScanBuilder extends JavaSimpleScanBuilder {
     private final String path;
     private final Configuration conf;
 
@@ -87,11 +83,6 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
-    }
-
-    @Override
-    public StructType readSchema() {
-      return tableSchema;
     }
 
     @Override
@@ -152,7 +143,6 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class MyBatchWrite implements BatchWrite {
-
     private final String queryId;
     private final String path;
     private final Configuration conf;
@@ -209,7 +199,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
     }
   }
 
-  class MyTable extends JavaSimpleBatchTable implements SupportsWrite {
+  static class MyTable extends JavaSimpleBatchTable implements SupportsWrite {
     private final String path;
     private final Configuration conf = SparkHadoopUtil.get().conf();
 
@@ -226,21 +216,11 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
       return new MyWriteBuilder(path, info);
     }
-
-    @Override
-    public StructType schema() {
-      return tableSchema;
-    }
   }
 
   @Override
   public Table getTable(CaseInsensitiveStringMap options) {
     return new MyTable(options);
-  }
-
-  @Override
-  public StructType inferSchema(CaseInsensitiveStringMap options) {
-    return tableSchema;
   }
 
   static class JavaCSVInputPartitionReader implements InputPartition {
@@ -260,7 +240,6 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class JavaCSVReaderFactory implements PartitionReaderFactory {
-
     private final SerializableConfiguration conf;
 
     JavaCSVReaderFactory(SerializableConfiguration conf) {
@@ -292,9 +271,9 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
           @Override
           public InternalRow get() {
             Object[] objects =
-                Arrays.stream(currentLine.split(","))
-                    .map(String::trim)
-                    .map(Long::parseLong)
+                    Arrays.stream(currentLine.split(","))
+                            .map(String::trim)
+                            .map(Integer::parseInt)
                     .toArray();
             return new GenericInternalRow(objects);
           }
@@ -347,7 +326,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
 
     @Override
     public void write(InternalRow record) throws IOException {
-      out.writeBytes(String.format("%d,%d\n", record.getLong(0), record.getLong(1)));
+      out.writeBytes(String.format("%d,%d\n", record.getInt(0), record.getInt(1)));
     }
 
     @Override
