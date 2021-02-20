@@ -2368,7 +2368,7 @@ When the streaming query is started, Spark calls the function or the object’s 
   If you need deduplication on output, try out `foreachBatch` instead.
 
 #### Streaming Table APIs
-Since Spark 3.1, you can also use `DataStreamReader.table()` and `DataStreamWriter.toTable()` to read and write streaming DataFrames as tables:
+Since Spark 3.1, you can also use `DataStreamReader.table()` to read tables as streaming DataFrames and use `DataStreamWriter.toTable()` to write streaming DataFrames as tables:
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -3383,5 +3383,4 @@ See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections f
   - Deep Dive into Stateful Stream Processing in Structured Streaming - [slides/video](https://databricks.com/session/deep-dive-into-stateful-stream-processing-in-structured-streaming)
 - Spark Summit 2016
   - A Deep Dive into Structured Streaming - [slides/video](https://spark-summit.org/2016/events/a-deep-dive-into-structured-streaming/)
-
 
