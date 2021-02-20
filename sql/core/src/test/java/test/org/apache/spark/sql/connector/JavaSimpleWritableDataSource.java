@@ -21,7 +21,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
@@ -34,6 +36,7 @@ import org.apache.spark.sql.connector.TestingV2Source;
 import org.apache.spark.sql.connector.catalog.SessionConfigSupport;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.Table;
+import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.read.InputPartition;
 import org.apache.spark.sql.connector.read.PartitionReader;
 import org.apache.spark.sql.connector.read.PartitionReaderFactory;
@@ -215,6 +218,14 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
     @Override
     public WriteBuilder newWriteBuilder(LogicalWriteInfo info) {
       return new MyWriteBuilder(path, info);
+    }
+
+    @Override
+    public Set<TableCapability> capabilities() {
+      return new HashSet<>(Arrays.asList(
+              TableCapability.BATCH_READ,
+              TableCapability.BATCH_WRITE,
+              TableCapability.TRUNCATE));
     }
   }
 
