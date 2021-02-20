@@ -506,7 +506,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: ConstantContext,
       legacyNullAsString: Boolean): String = withOrigin(ctx) {
     expression(ctx) match {
-      case l: Literal if l.value == null & !legacyNullAsString => null
+      case Literal(null, _) if !legacyNullAsString => null
+      case l @ Literal(null, _) => l.toString
       case l: Literal =>
         Cast(l, StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
       case _ =>
