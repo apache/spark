@@ -898,8 +898,8 @@ object SparkSession extends Logging {
       this
     }
 
-    // These configurations related to driver when deploy like “spark.master”,
-    // “spark.driver.memory”, this kind of properties may not be affected when
+    // These configurations related to driver when deploy like `spark.master`,
+    // `spark.driver.memory`, this kind of properties may not be affected when
     // setting programmatically through SparkConf in runtime, or the behavior is
     // depending on which cluster manager and deploy mode you choose, so it would
     // be suggested to set through configuration file or spark-submit command line options.
@@ -908,8 +908,8 @@ object SparkSession extends Logging {
       PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON, SPARKR_R_SHELL, CHILD_PROCESS_LOGGER_NAME,
       CHILD_CONNECTION_TIMEOUT)
 
-    // These configurations related to executor when deploy like “spark.executor.memory”,
-    // “spark.executor.cores”, this kind of properties may not be affected when setting
+    // These configurations related to executor when deploy like `spark.executor.memory`,
+    // `spark.executor.cores`, this kind of properties may not be affected when setting
     // programmatically after SparkContext is started, so it would
     // be suggested to set through configuration file or spark-submit command line options.
     private val EXECUTOR_LAUNCHER_CONFIG = Seq(SPARK_MASTER, DEPLOY_MODE, EXECUTOR_MEMORY,
