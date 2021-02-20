@@ -53,7 +53,7 @@ under the `docs <https://github.com/apache/spark/tree/master/docs>`_ directory:
 
 .. code-block:: bash
 
-    SKIP_SCALADOC=1 SKIP_RDOC=1 SKIP_SQLDOC=1 jekyll serve --watch
+    SKIP_SCALADOC=1 SKIP_RDOC=1 SKIP_SQLDOC=1 bundle exec jekyll serve --watch
 
 PySpark uses Sphinx to generate its release PySpark documentation. Therefore, if you want to build only PySpark documentation alone,
 you can build under `python/docs <https://github.com/apache/spark/tree/master/python>`_ directory by:

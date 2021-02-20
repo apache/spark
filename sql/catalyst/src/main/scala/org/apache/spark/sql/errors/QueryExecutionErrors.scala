@@ -29,7 +29,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.UTF8String
@@ -45,18 +44,9 @@ object QueryExecutionErrors {
     new UnsupportedOperationException("Please add an implementation for a column change here")
   }
 
-  def unexpectedPlanReturnError(plan: LogicalPlan, methodName: String): Throwable = {
-    new IllegalStateException(s"[BUG] unexpected plan returned by `$methodName`: $plan")
-  }
-
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new IllegalStateException(
       "Internal error: logical hint operator should have been removed during analysis")
-  }
-
-  def logicalPlanHaveOutputOfCharOrVarcharError(leaf: LeafNode): Throwable = {
-    new IllegalStateException(
-      s"[BUG] logical plan should not have output of char/varchar type: $leaf")
   }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
@@ -108,6 +98,10 @@ object QueryExecutionErrors {
 
   def dataTypeUnsupportedError(dt: DataType): Throwable = {
     new SparkException(s"Unsupported data type $dt")
+  }
+
+  def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
+    new IllegalArgumentException(s"Unsupported dataType: $dataType, $failure")
   }
 
   def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,

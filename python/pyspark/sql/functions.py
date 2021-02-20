@@ -52,7 +52,7 @@ def _get_get_jvm_function(name, sc):
 def _invoke_function(name, *args):
     """
     Invokes JVM function identified by name with args
-    and wraps the result with :class:`Column`.
+    and wraps the result with :class:`~pyspark.sql.Column`.
     """
     jf = _get_get_jvm_function(name, SparkContext._active_spark_context)
     return Column(jf(*args))
@@ -61,7 +61,7 @@ def _invoke_function(name, *args):
 def _invoke_function_over_column(name, col):
     """
     Invokes unary JVM function identified by name
-    and wraps the result with :class:`Column`.
+    and wraps the result with :class:`~pyspark.sql.Column`.
     """
     return _invoke_function(name, _to_java_column(col))
 
@@ -69,7 +69,7 @@ def _invoke_function_over_column(name, col):
 def _invoke_binary_math_function(name, col1, col2):
     """
     Invokes binary JVM math function identified by name
-    and wraps the result with :class:`Column`.
+    and wraps the result with :class:`~pyspark.sql.Column`.
     """
     return _invoke_function(
         name,
@@ -88,7 +88,7 @@ def _options_to_str(options=None):
 
 def lit(col):
     """
-    Creates a :class:`Column` of literal value.
+    Creates a :class:`~pyspark.sql.Column` of literal value.
 
     .. versionadded:: 1.3.0
 
@@ -103,7 +103,7 @@ def lit(col):
 @since(1.3)
 def col(col):
     """
-    Returns a :class:`Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
     """
     return _invoke_function("col", col)
 
@@ -111,7 +111,7 @@ def col(col):
 @since(1.3)
 def column(col):
     """
-    Returns a :class:`Column` based on the given column name.'
+    Returns a :class:`~pyspark.sql.Column` based on the given column name.'
     """
     return col(col)
 
@@ -206,8 +206,20 @@ def mean(col):
 def sumDistinct(col):
     """
     Aggregate function: returns the sum of distinct values in the expression.
+
+    .. deprecated:: 3.2.0
+        Use :func:`sum_distinct` instead.
     """
-    return _invoke_function_over_column("sumDistinct", col)
+    warnings.warn("Deprecated in 3.2, use sum_distinct instead.", FutureWarning)
+    return sum_distinct(col)
+
+
+@since(3.2)
+def sum_distinct(col):
+    """
+    Aggregate function: returns the sum of distinct values in the expression.
+    """
+    return _invoke_function_over_column("sum_distinct", col)
 
 
 def product(col, scale=1.0):
@@ -255,7 +267,7 @@ def acos(col):
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         inverse cosine of `col`, as if computed by `java.lang.Math.acos()`
     """
     return _invoke_function_over_column("acos", col)
@@ -269,7 +281,7 @@ def acosh(col):
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
     """
     return _invoke_function_over_column("acosh", col)
 
@@ -281,7 +293,7 @@ def asin(col):
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         inverse sine of `col`, as if computed by `java.lang.Math.asin()`
     """
     return _invoke_function_over_column("asin", col)
@@ -295,7 +307,7 @@ def asinh(col):
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
     """
     return _invoke_function_over_column("asinh", col)
 
@@ -306,7 +318,7 @@ def atan(col):
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         inverse tangent of `col`, as if computed by `java.lang.Math.atan()`
     """
     return _invoke_function_over_column("atan", col)
@@ -320,7 +332,7 @@ def atanh(col):
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
     """
     return _invoke_function_over_column("atanh", col)
 
@@ -347,12 +359,12 @@ def cos(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         angle in radians
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         cosine of the angle, as if computed by `java.lang.Math.cos()`.
     """
     return _invoke_function_over_column("cos", col)
@@ -364,12 +376,12 @@ def cosh(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         hyperbolic angle
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         hyperbolic cosine of the angle, as if computed by `java.lang.Math.cosh()`
     """
     return _invoke_function_over_column("cosh", col)
@@ -446,11 +458,11 @@ def sin(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         sine of the angle, as if computed by `java.lang.Math.sin()`
     """
     return _invoke_function_over_column("sin", col)
@@ -462,12 +474,12 @@ def sinh(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         hyperbolic angle
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         hyperbolic sine of the given value,
         as if computed by `java.lang.Math.sinh()`
     """
@@ -480,12 +492,12 @@ def tan(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         angle in radians
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         tangent of the given value, as if computed by `java.lang.Math.tan()`
     """
     return _invoke_function_over_column("tan", col)
@@ -497,12 +509,12 @@ def tanh(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         hyperbolic angle
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         hyperbolic tangent of the given value
         as if computed by `java.lang.Math.tanh()`
     """
@@ -533,8 +545,20 @@ def toRadians(col):
 def bitwiseNOT(col):
     """
     Computes bitwise not.
+
+    .. deprecated:: 3.2.0
+        Use :func:`bitwise_not` instead.
     """
-    return _invoke_function_over_column("bitwiseNOT", col)
+    warnings.warn("Deprecated in 3.2, use bitwise_not instead.", FutureWarning)
+    return bitwise_not(col)
+
+
+@since(3.2)
+def bitwise_not(col):
+    """
+    Computes bitwise not.
+    """
+    return _invoke_function_over_column("bitwise_not", col)
 
 
 @since(2.4)
@@ -701,12 +725,12 @@ def degrees(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         angle in radians
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         angle in degrees, as if computed by `java.lang.Math.toDegrees()`
     """
     return _invoke_function_over_column("degrees", col)
@@ -721,12 +745,12 @@ def radians(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         angle in degrees
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         angle in radians, as if computed by `java.lang.Math.toRadians()`
     """
     return _invoke_function_over_column("radians", col)
@@ -738,14 +762,14 @@ def atan2(col1, col2):
 
     Parameters
     ----------
-    col1 : str, :class:`Column` or float
+    col1 : str, :class:`~pyspark.sql.Column` or float
         coordinate on y-axis
-    col2 : str, :class:`Column` or float
+    col2 : str, :class:`~pyspark.sql.Column` or float
         coordinate on x-axis
 
     Returns
     -------
-    :class:`Column`
+    :class:`~pyspark.sql.Column`
         the `theta` component of the point
         (`r`, `theta`)
         in polar coordinates that corresponds to the point
@@ -839,17 +863,17 @@ def approxCountDistinct(col, rsd=None):
 
 
 def approx_count_distinct(col, rsd=None):
-    """Aggregate function: returns a new :class:`Column` for approximate distinct count of
-    column `col`.
+    """Aggregate function: returns a new :class:`~pyspark.sql.Column` for approximate distinct count
+    of column `col`.
 
     .. versionadded:: 2.1.0
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
     rsd : float, optional
         maximum relative standard deviation allowed (default = 0.05).
-        For rsd < 0.01, it is more efficient to use :func:`countDistinct`
+        For rsd < 0.01, it is more efficient to use :func:`count_distinct`
 
     Examples
     --------
@@ -913,8 +937,8 @@ def coalesce(*cols):
 
 
 def corr(col1, col2):
-    """Returns a new :class:`Column` for the Pearson Correlation Coefficient for ``col1``
-    and ``col2``.
+    """Returns a new :class:`~pyspark.sql.Column` for the Pearson Correlation Coefficient for
+    ``col1`` and ``col2``.
 
     .. versionadded:: 1.6.0
 
@@ -931,7 +955,8 @@ def corr(col1, col2):
 
 
 def covar_pop(col1, col2):
-    """Returns a new :class:`Column` for the population covariance of ``col1`` and ``col2``.
+    """Returns a new :class:`~pyspark.sql.Column` for the population covariance of ``col1`` and
+    ``col2``.
 
     .. versionadded:: 2.0.0
 
@@ -948,7 +973,8 @@ def covar_pop(col1, col2):
 
 
 def covar_samp(col1, col2):
-    """Returns a new :class:`Column` for the sample covariance of ``col1`` and ``col2``.
+    """Returns a new :class:`~pyspark.sql.Column` for the sample covariance of ``col1`` and
+    ``col2``.
 
     .. versionadded:: 2.0.0
 
@@ -965,20 +991,31 @@ def covar_samp(col1, col2):
 
 
 def countDistinct(col, *cols):
-    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+    """Returns a new :class:`~pyspark.sql.Column` for distinct count of ``col`` or ``cols``.
+
+    An alias of :func:`count_distinct`, and it is encouraged to use :func:`count_distinct`
+    directly.
 
     .. versionadded:: 1.3.0
+    """
+    return count_distinct(col, *cols)
+
+
+def count_distinct(col, *cols):
+    """Returns a new :class:`Column` for distinct count of ``col`` or ``cols``.
+
+    .. versionadded:: 3.2.0
 
     Examples
     --------
-    >>> df.agg(countDistinct(df.age, df.name).alias('c')).collect()
+    >>> df.agg(count_distinct(df.age, df.name).alias('c')).collect()
     [Row(c=2)]
 
-    >>> df.agg(countDistinct("age", "name").alias('c')).collect()
+    >>> df.agg(count_distinct("age", "name").alias('c')).collect()
     [Row(c=2)]
     """
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.countDistinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
+    jc = sc._jvm.functions.count_distinct(_to_java_column(col), _to_seq(sc, cols, _to_java_column))
     return Column(jc)
 
 
@@ -1294,13 +1331,25 @@ def shiftLeft(col, numBits):
 
     .. versionadded:: 1.5.0
 
+    .. deprecated:: 3.2.0
+        Use :func:`shiftleft` instead.
+    """
+    warnings.warn("Deprecated in 3.2, use shiftleft instead.", FutureWarning)
+    return shiftleft(col, numBits)
+
+
+def shiftleft(col, numBits):
+    """Shift the given value numBits left.
+
+    .. versionadded:: 3.2.0
+
     Examples
     --------
-    >>> spark.createDataFrame([(21,)], ['a']).select(shiftLeft('a', 1).alias('r')).collect()
+    >>> spark.createDataFrame([(21,)], ['a']).select(shiftleft('a', 1).alias('r')).collect()
     [Row(r=42)]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.shiftLeft(_to_java_column(col), numBits))
+    return Column(sc._jvm.functions.shiftleft(_to_java_column(col), numBits))
 
 
 def shiftRight(col, numBits):
@@ -1308,9 +1357,21 @@ def shiftRight(col, numBits):
 
     .. versionadded:: 1.5.0
 
+    .. deprecated:: 3.2.0
+        Use :func:`shiftright` instead.
+    """
+    warnings.warn("Deprecated in 3.2, use shiftright instead.", FutureWarning)
+    return shiftright(col, numBits)
+
+
+def shiftright(col, numBits):
+    """(Signed) shift the given value numBits right.
+
+    .. versionadded:: 3.2.0
+
     Examples
     --------
-    >>> spark.createDataFrame([(42,)], ['a']).select(shiftRight('a', 1).alias('r')).collect()
+    >>> spark.createDataFrame([(42,)], ['a']).select(shiftright('a', 1).alias('r')).collect()
     [Row(r=21)]
     """
     sc = SparkContext._active_spark_context
@@ -1323,10 +1384,22 @@ def shiftRightUnsigned(col, numBits):
 
     .. versionadded:: 1.5.0
 
+    .. deprecated:: 3.2.0
+        Use :func:`shiftrightunsigned` instead.
+    """
+    warnings.warn("Deprecated in 3.2, use shiftrightunsigned instead.", FutureWarning)
+    return shiftrightunsigned(col, numBits)
+
+
+def shiftrightunsigned(col, numBits):
+    """Unsigned shift the given value numBits right.
+
+    .. versionadded:: 3.2.0
+
     Examples
     --------
     >>> df = spark.createDataFrame([(-42,)], ['a'])
-    >>> df.select(shiftRightUnsigned('a', 1).alias('r')).collect()
+    >>> df.select(shiftrightunsigned('a', 1).alias('r')).collect()
     [Row(r=9223372036854775787)]
     """
     sc = SparkContext._active_spark_context
@@ -1373,8 +1446,8 @@ def struct(*cols):
 
     Parameters
     ----------
-    cols : list, set, str or :class:`Column`
-        column names or :class:`Column`\\s to contain in the output struct.
+    cols : list, set, str or :class:`~pyspark.sql.Column`
+        column names or :class:`~pyspark.sql.Column`\\s to contain in the output struct.
 
     Examples
     --------
@@ -1430,16 +1503,17 @@ def least(*cols):
 
 def when(condition, value):
     """Evaluates a list of conditions and returns one of multiple possible result expressions.
-    If :func:`Column.otherwise` is not invoked, None is returned for unmatched conditions.
+    If :func:`pyspark.sql.Column.otherwise` is not invoked, None is returned for unmatched
+    conditions.
 
     .. versionadded:: 1.4.0
 
     Parameters
     ----------
-    condition : :class:`Column`
-        a boolean :class:`Column` expression.
+    condition : :class:`~pyspark.sql.Column`
+        a boolean :class:`~pyspark.sql.Column` expression.
     value :
-        a literal value, or a :class:`Column` expression.
+        a literal value, or a :class:`~pyspark.sql.Column` expression.
 
     >>> df.select(when(df['age'] == 2, 3).otherwise(4).alias("age")).collect()
     [Row(age=3), Row(age=4)]
@@ -1529,7 +1603,7 @@ def factorial(col):
 def lag(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows before the current row, and
-    `defaultValue` if there is less than `offset` rows before the current row. For example,
+    `default` if there is less than `offset` rows before the current row. For example,
     an `offset` of one will return the previous row at any given point in the window partition.
 
     This is equivalent to the LAG function in SQL.
@@ -1538,7 +1612,7 @@ def lag(col, offset=1, default=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     offset : int, optional
         number of row to extend
@@ -1552,7 +1626,7 @@ def lag(col, offset=1, default=None):
 def lead(col, offset=1, default=None):
     """
     Window function: returns the value that is `offset` rows after the current row, and
-    `defaultValue` if there is less than `offset` rows after the current row. For example,
+    `default` if there is less than `offset` rows after the current row. For example,
     an `offset` of one will return the next row at any given point in the window partition.
 
     This is equivalent to the LEAD function in SQL.
@@ -1561,7 +1635,7 @@ def lead(col, offset=1, default=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     offset : int, optional
         number of row to extend
@@ -1586,7 +1660,7 @@ def nth_value(col, offset, ignoreNulls=False):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     offset : int, optional
         number of row to use as the value
@@ -1913,7 +1987,7 @@ def months_between(date1, date2, roundOff=True):
 
 
 def to_date(col, format=None):
-    """Converts a :class:`Column` into :class:`pyspark.sql.types.DateType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.DateType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.DateType` if the format
     is omitted. Equivalent to ``col.cast("date")``.
@@ -1941,7 +2015,7 @@ def to_date(col, format=None):
 
 
 def to_timestamp(col, format=None):
-    """Converts a :class:`Column` into :class:`pyspark.sql.types.TimestampType`
+    """Converts a :class:`~pyspark.sql.Column` into :class:`pyspark.sql.types.TimestampType`
     using the optionally specified format. Specify formats according to `datetime pattern`_.
     By default, it follows casting rules to :class:`pyspark.sql.types.TimestampType` if the format
     is omitted. Equivalent to ``col.cast("timestamp")``.
@@ -1976,7 +2050,7 @@ def trunc(date, format):
 
     Parameters
     ----------
-    date : :class:`Column` or str
+    date : :class:`~pyspark.sql.Column` or str
     format : str
         'year', 'yyyy', 'yy' or 'month', 'mon', 'mm'
 
@@ -2003,7 +2077,7 @@ def date_trunc(format, timestamp):
     format : str
         'year', 'yyyy', 'yy', 'month', 'mon', 'mm',
         'day', 'dd', 'hour', 'minute', 'second', 'week', 'quarter'
-    timestamp : :class:`Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or str
 
     Examples
     --------
@@ -2115,9 +2189,9 @@ def from_utc_timestamp(timestamp, tz):
 
     Parameters
     ----------
-    timestamp : :class:`Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or str
         the column that contains timestamps
-    tz : :class:`Column` or str
+    tz : :class:`~pyspark.sql.Column` or str
         A string detailing the time zone ID that the input should be adjusted to. It should
         be in the format of either region-based zone IDs or zone offsets. Region IDs must
         have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
@@ -2126,7 +2200,7 @@ def from_utc_timestamp(timestamp, tz):
         because they can be ambiguous.
 
         .. versionchanged:: 2.4
-           `tz` can take a :class:`Column` containing timezone ID strings.
+           `tz` can take a :class:`~pyspark.sql.Column` containing timezone ID strings.
 
     Examples
     --------
@@ -2161,9 +2235,9 @@ def to_utc_timestamp(timestamp, tz):
 
     Parameters
     ----------
-    timestamp : :class:`Column` or str
+    timestamp : :class:`~pyspark.sql.Column` or str
         the column that contains timestamps
-    tz : :class:`Column` or str
+    tz : :class:`~pyspark.sql.Column` or str
         A string detailing the time zone ID that the input should be adjusted to. It should
         be in the format of either region-based zone IDs or zone offsets. Region IDs must
         have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in
@@ -2172,7 +2246,7 @@ def to_utc_timestamp(timestamp, tz):
         because they can be ambiguous.
 
         .. versionchanged:: 2.4.0
-           `tz` can take a :class:`Column` containing timezone ID strings.
+           `tz` can take a :class:`~pyspark.sql.Column` containing timezone ID strings.
 
     Examples
     --------
@@ -2526,7 +2600,7 @@ def format_number(col, d):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         the column name of the numeric value to be formatted
     d : int
         the N decimal places
@@ -2548,8 +2622,8 @@ def format_string(format, *cols):
     ----------
     format : str
         string that can contain embedded format tags and used as result column's value
-    cols : :class:`Column` or str
-        column names or :class:`Column`\\s to be used in formatting
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
 
     Examples
     --------
@@ -2687,7 +2761,7 @@ def locate(substr, str, pos=1):
     ----------
     substr : str
         a string
-    str : :class:`Column` or str
+    str : :class:`~pyspark.sql.Column` or str
         a Column of :class:`pyspark.sql.types.StringType`
     pos : int, optional
         start position (zero based)
@@ -2763,7 +2837,7 @@ def split(str, pattern, limit=-1):
 
     Parameters
     ----------
-    str : :class:`Column` or str
+    str : :class:`~pyspark.sql.Column` or str
         a string expression to split
     pattern : str
         a string representing a regular expression. The regex string should be
@@ -2951,8 +3025,8 @@ def create_map(*cols):
 
     Parameters
     ----------
-    cols : :class:`Column` or str
-        column names or :class:`Column`\\s that are
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s that are
         grouped as key-value pairs, e.g. (key1, value1, key2, value2, ...).
 
     Examples
@@ -2976,9 +3050,9 @@ def map_from_arrays(col1, col2):
 
     Parameters
     ----------
-    col1 : :class:`Column` or str
+    col1 : :class:`~pyspark.sql.Column` or str
         name of column containing a set of keys. All elements should not be null
-    col2 : :class:`Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
         name of column containing a set of values
 
     Examples
@@ -3002,8 +3076,8 @@ def array(*cols):
 
     Parameters
     ----------
-    cols : :class:`Column` or str
-        column names or :class:`Column`\\s that have
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s that have
         the same data type.
 
     Examples
@@ -3029,7 +3103,7 @@ def array_contains(col, value):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing array
     value :
         value or column to check for in array
@@ -3074,11 +3148,11 @@ def slice(x, start, length):
 
     Parameters
     ----------
-    x : :class:`Column` or str
+    x : :class:`~pyspark.sql.Column` or str
         the array to be sliced
-    start : :class:`Column` or int
+    start : :class:`~pyspark.sql.Column` or int
         the starting index
-    length : :class:`Column` or int
+    length : :class:`~pyspark.sql.Column` or int
         the length of the slice
 
     Examples
@@ -3170,7 +3244,7 @@ def element_at(col, extraction):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing array or map
     extraction :
         index to check for in array or key to check for in map
@@ -3202,7 +3276,7 @@ def array_remove(col, element):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing array
     element :
         element to be removed from the array
@@ -3225,7 +3299,7 @@ def array_distinct(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3247,9 +3321,9 @@ def array_intersect(col1, col2):
 
     Parameters
     ----------
-    col1 : :class:`Column` or str
+    col1 : :class:`~pyspark.sql.Column` or str
         name of column containing array
-    col2 : :class:`Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
         name of column containing array
 
     Examples
@@ -3272,9 +3346,9 @@ def array_union(col1, col2):
 
     Parameters
     ----------
-    col1 : :class:`Column` or str
+    col1 : :class:`~pyspark.sql.Column` or str
         name of column containing array
-    col2 : :class:`Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
         name of column containing array
 
     Examples
@@ -3297,9 +3371,9 @@ def array_except(col1, col2):
 
     Parameters
     ----------
-    col1 : :class:`Column` or str
+    col1 : :class:`~pyspark.sql.Column` or str
         name of column containing array
-    col2 : :class:`Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
         name of column containing array
 
     Examples
@@ -3453,7 +3527,7 @@ def get_json_object(col, path):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         string column in json format
     path : str
         path to the json object to extract
@@ -3478,7 +3552,7 @@ def json_tuple(col, *fields):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         string column in json format
     fields : str
         fields to extract
@@ -3505,7 +3579,7 @@ def from_json(col, schema, options=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         string column in json format
     schema : :class:`DataType` or str
         a StructType or ArrayType of StructType to use when parsing the json column.
@@ -3560,7 +3634,7 @@ def to_json(col, options=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing a struct, an array or a map.
     options : dict, optional
         options to control converting. accepts the same options as the JSON datasource.
@@ -3606,7 +3680,7 @@ def schema_of_json(json, options=None):
 
     Parameters
     ----------
-    json : :class:`Column` or str
+    json : :class:`~pyspark.sql.Column` or str
         a JSON string or a foldable string column containing a JSON string.
     options : dict, optional
         options to control parsing. accepts the same options as the JSON datasource
@@ -3643,7 +3717,7 @@ def schema_of_csv(csv, options=None):
 
     Parameters
     ----------
-    csv : :class:`Column` or str
+    csv : :class:`~pyspark.sql.Column` or str
         a CSV string or a foldable string column containing a CSV string.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource
@@ -3677,7 +3751,7 @@ def to_csv(col, options=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column containing a struct.
     options: dict, optional
         options to control converting. accepts the same options as the CSV datasource.
@@ -3704,7 +3778,7 @@ def size(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3725,7 +3799,7 @@ def array_min(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3746,7 +3820,7 @@ def array_max(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3770,7 +3844,7 @@ def sort_array(col, asc=True):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     asc : bool, optional
 
@@ -3795,7 +3869,7 @@ def array_sort(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3816,7 +3890,7 @@ def shuffle(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Notes
@@ -3841,7 +3915,7 @@ def reverse(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3867,7 +3941,7 @@ def flatten(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3888,7 +3962,7 @@ def map_keys(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3914,7 +3988,7 @@ def map_values(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3940,7 +4014,7 @@ def map_entries(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -3966,7 +4040,7 @@ def map_from_entries(col):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
 
     Examples
@@ -4012,7 +4086,7 @@ def arrays_zip(*cols):
 
     Parameters
     ----------
-    cols : :class:`Column` or str
+    cols : :class:`~pyspark.sql.Column` or str
         columns of arrays to be merged.
 
     Examples
@@ -4033,8 +4107,8 @@ def map_concat(*cols):
 
     Parameters
     ----------
-    cols : :class:`Column` or str
-        column names or :class:`Column`\\s
+    cols : :class:`~pyspark.sql.Column` or str
+        column names or :class:`~pyspark.sql.Column`\\s
 
     Examples
     --------
@@ -4088,9 +4162,9 @@ def from_csv(col, schema, options=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         string column in CSV format
-    schema :class:`Column` or str
+    schema :class:`~pyspark.sql.Column` or str
         a string with schema in DDL format to use when parsing the CSV column.
     options : dict, optional
         options to control parsing. accepts the same options as the CSV datasource
@@ -4235,7 +4309,7 @@ def transform(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         a function that is applied to each element of the input array.
@@ -4245,14 +4319,14 @@ def transform(col, f):
         - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
             a 0-based index of the element.
 
-        and can use methods of :class:`pyspark.sql.Column`, functions defined in
+        and can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4284,15 +4358,15 @@ def exists(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         ``(x: Column) -> Column: ...``  returning the Boolean expression.
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
-    :return: a :class:`pyspark.sql.Column`
+    :return: a :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4316,18 +4390,18 @@ def forall(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         ``(x: Column) -> Column: ...``  returning the Boolean expression.
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4355,7 +4429,7 @@ def filter(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         A function that returns the Boolean expression.
@@ -4365,14 +4439,14 @@ def filter(col, f):
         - Binary ``(x: Column, i: Column) -> Column...``, where the second argument is
             a 0-based index of the element.
 
-        and can use methods of :class:`pyspark.sql.Column`, functions defined in
+        and can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4400,7 +4474,7 @@ def aggregate(col, initialValue, merge, finish=None):
     and reduces this to a single state. The final state is converted into the final result
     by applying a finish function.
 
-    Both functions can use methods of :class:`pyspark.sql.Column`, functions defined in
+    Both functions can use methods of :class:`~pyspark.sql.Column`, functions defined in
     :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
     Python ``UserDefinedFunctions`` are not supported
     (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
@@ -4409,9 +4483,9 @@ def aggregate(col, initialValue, merge, finish=None):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
-    initialValue : :class:`Column` or str
+    initialValue : :class:`~pyspark.sql.Column` or str
         initial value. Name of column or expression
     merge : function
         a binary function ``(acc: Column, x: Column) -> Column...`` returning expression
@@ -4422,7 +4496,7 @@ def aggregate(col, initialValue, merge, finish=None):
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4477,20 +4551,20 @@ def zip_with(left, right, f):
 
     Parameters
     ----------
-    left : :class:`Column` or str
+    left : :class:`~pyspark.sql.Column` or str
         name of the first column or expression
-    right : :class:`Column` or str
+    right : :class:`~pyspark.sql.Column` or str
         name of the second column or expression
     f : function
         a binary function ``(x1: Column, x2: Column) -> Column...``
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4522,18 +4596,18 @@ def transform_keys(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         a binary function ``(k: Column, v: Column) -> Column...``
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4559,18 +4633,18 @@ def transform_values(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         a binary function ``(k: Column, v: Column) -> Column...``
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4595,18 +4669,18 @@ def map_filter(col, f):
 
     Parameters
     ----------
-    col : :class:`Column` or str
+    col : :class:`~pyspark.sql.Column` or str
         name of column or expression
     f : function
         a binary function ``(k: Column, v: Column) -> Column...``
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------
@@ -4631,20 +4705,20 @@ def map_zip_with(col1, col2, f):
 
     Parameters
     ----------
-    col1 : :class:`Column` or str
+    col1 : :class:`~pyspark.sql.Column` or str
         name of the first column or expression
-    col2 : :class:`Column` or str
+    col2 : :class:`~pyspark.sql.Column` or str
         name of the second column or expression
     f : function
         a ternary function ``(k: Column, v1: Column, v2: Column) -> Column...``
-        Can use methods of :class:`pyspark.sql.Column`, functions defined in
+        Can use methods of :class:`~pyspark.sql.Column`, functions defined in
         :py:mod:`pyspark.sql.functions` and Scala ``UserDefinedFunctions``.
         Python ``UserDefinedFunctions`` are not supported
         (`SPARK-27052 <https://issues.apache.org/jira/browse/SPARK-27052>`__).
 
     Returns
     -------
-    :class:`pyspark.sql.Column`
+    :class:`~pyspark.sql.Column`
 
     Examples
     --------

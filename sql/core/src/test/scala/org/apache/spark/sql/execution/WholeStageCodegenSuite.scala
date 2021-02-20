@@ -445,7 +445,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             "GROUP BY k").foreach { query =>
           val e = intercept[Exception] {
             sql(query).collect
-          }.getCause
+          }
           assert(e.isInstanceOf[IllegalStateException])
           assert(e.getMessage.contains(expectedErrMsg))
         }

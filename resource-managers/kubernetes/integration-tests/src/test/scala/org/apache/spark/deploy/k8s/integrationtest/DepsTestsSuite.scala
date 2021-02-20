@@ -246,7 +246,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         appArgs = Array("python3"),
         driverPodChecker = doBasicDriverPyPodCheck,
         executorPodChecker = doBasicExecutorPyPodCheck,
-        appLocator = appLocator,
         isJVM = false,
         pyFiles = depsFile,
         env = env)

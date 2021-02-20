@@ -29,18 +29,16 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.InMemoryTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -631,6 +629,48 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34319: analysis fails on self-join with FlatMapCoGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
+    val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
+      Seq(UnresolvedAttribute("a")),
+      Seq(UnresolvedAttribute("a")),
+      pythonUdf,
+      output,
+      project1,
+      project2)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-34319: analysis fails on self-join with MapInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInPandas = MapInPandas(
+      pythonUdf,
+      output,
+      project)
+    val left = SubqueryAlias("temp0", mapInPandas)
+    val right = SubqueryAlias("temp1", mapInPandas)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
@@ -653,28 +693,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         Alias(CurrentTimestamp(), toPrettySQL(CurrentTimestamp()))()), testRelation).analyze
       checkAnalysis(input, expected)
     }
-  }
-
-  test("SPARK-25691: AliasViewChild with different nullabilities") {
-    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("View", Once, EliminateView) :: Nil
-    }
-    val relation = LocalRelation(Symbol("a").int.notNull, Symbol("b").string)
-    val view = View(CatalogTable(
-        identifier = TableIdentifier("v1"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
-      isTempView = false,
-      output = Seq(Symbol("a").int, Symbol("b").string),
-      child = relation)
-    val tz = Option(conf.sessionLocalTimeZone)
-    val expected = Project(Seq(
-        Alias(Cast(Symbol("a").int.notNull, IntegerType, tz), "a")(),
-        Alias(Cast(Symbol("b").string, StringType, tz), "b")()),
-      relation)
-    val res = ViewAnalyzer.execute(view)
-    comparePlans(res, expected)
   }
 
   test("CTE with non-existing column alias") {
@@ -799,7 +817,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"a" / $"d" as "div4",
         $"e" / $"e" as "div5")
 
-      val message = intercept[TreeNodeException[LogicalPlan]] {
+      val message = intercept[RuntimeException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
@@ -961,7 +979,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         $"a" / $"d" as "div4",
         $"e" / $"e" as "div5")
 
-      val message1 = intercept[TreeNodeException[LogicalPlan]] {
+      val message1 = intercept[RuntimeException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
@@ -971,13 +989,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         try {
           testAnalyzer.execute(plan)
         } catch {
-          case ex: TreeNodeException[_]
+          case ex: AnalysisException
             if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
               fail("analyzer.execute should not reach max iterations.")
         }
       }
 
-      val message2 = intercept[TreeNodeException[LogicalPlan]] {
+      val message2 = intercept[RuntimeException] {
         testAnalyzer.execute(plan)
       }.getMessage
       assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +

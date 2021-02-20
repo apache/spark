@@ -26,15 +26,18 @@ import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{lit, struct, udf}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, SparkUserDefinedFunction, UserDefinedAggregateFunction}
+import org.apache.spark.sql.functions.{lit, struct, udaf, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
@@ -797,5 +800,48 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .toDF("col")
       .select(myUdf(Column("col"))),
       Row(ArrayBuffer(100)))
+  }
+
+  test("SPARK-34388: UDF name is propagated with registration for ScalaUDF") {
+    spark.udf.register("udf34388", udf((value: Int) => value > 2))
+    spark.sessionState.catalog.lookupFunction(
+      FunctionIdentifier("udf34388"), Seq(Literal(1))) match {
+      case udf: ScalaUDF => assert(udf.name === "udf34388")
+    }
+  }
+
+  test("SPARK-34388: UDF name is propagated with registration for ScalaAggregator") {
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: Long): Long = a + b
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+      override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+    }
+
+    spark.udf.register("agg34388", udaf(agg))
+    spark.sessionState.catalog.lookupFunction(
+      FunctionIdentifier("agg34388"), Seq(Literal(1))) match {
+      case agg: ScalaAggregator[_, _, _] => assert(agg.name === "agg34388")
+    }
+  }
+
+  test("SPARK-34388: UDF name is propagated with registration for ScalaUDAF") {
+    val udaf = new UserDefinedAggregateFunction {
+      def inputSchema: StructType = new StructType().add("a", LongType)
+      def bufferSchema: StructType = new StructType().add("product", LongType)
+      def dataType: DataType = LongType
+      def deterministic: Boolean = true
+      def initialize(buffer: MutableAggregationBuffer): Unit = {}
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {}
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {}
+      def evaluate(buffer: Row): Any = buffer.getLong(0)
+    }
+    spark.udf.register("udaf34388", udaf)
+    spark.sessionState.catalog.lookupFunction(
+      FunctionIdentifier("udaf34388"), Seq(Literal(1))) match {
+      case udaf: ScalaUDAF => assert(udaf.name === "udaf34388")
+    }
   }
 }

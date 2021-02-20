@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2Sess
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LocalRelation, LogicalPlan, OneRowRelation, Project}
@@ -53,7 +52,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
   test("check for invalid plan after execution of rule - unresolved attribute") {
     val analyzed = Project(Alias(Literal(10), "attr")() :: Nil, OneRowRelation()).analyze
     assert(analyzed.resolved)
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[RuntimeException] {
       Optimize.execute(analyzed)
     }.getMessage
     val ruleName = OptimizeRuleBreakSI.ruleName
@@ -68,7 +67,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
     assert(analyzed.resolved)
 
     // Should fail verification with the OptimizeRuleBreakSI rule
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[RuntimeException] {
       Optimize.execute(analyzed)
     }.getMessage
     val ruleName = OptimizeRuleBreakSI.ruleName
@@ -86,7 +85,7 @@ class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
     val invalidPlan = OptimizeRuleBreakSI.apply(analyzed)
 
     // Should fail verification right at the beginning
-    val message = intercept[TreeNodeException[LogicalPlan]] {
+    val message = intercept[RuntimeException] {
       Optimize.execute(invalidPlan)
     }.getMessage
     assert(message.contains("The structural integrity of the input plan is broken"))

@@ -342,8 +342,10 @@ jobs:
         python3.6 -m pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
         apt-get update -y
         apt-get install -y ruby ruby-dev
-        gem install jekyll jekyll-redirect-from rouge
         Rscript -e "install.packages(c('devtools', 'testthat', 'knitr', 'rmarkdown', 'roxygen2'), repos='https://cloud.r-project.org/')"
+        gem install bundler
+        cd docs
+        bundle install
     - name: Scala linter
       run: ./dev/lint-scala
     - name: Java linter
@@ -361,7 +363,7 @@ jobs:
         cd docs
         export LC_ALL=C.UTF-8
         export LANG=C.UTF-8
-        jekyll build
+        bundle exec jekyll build
 
   java-11:
     name: Java 11 build with Maven

@@ -352,7 +352,7 @@ Scalar functions are functions that return a single value per row, as opposed to
 
 ## Aggregate Functions
 
-Aggregate functions are functions that return a single value on a group of rows. The [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) provide common aggregations such as `count()`, `countDistinct()`, `avg()`, `max()`, `min()`, etc.
+Aggregate functions are functions that return a single value on a group of rows. The [Built-in Aggregation Functions](sql-ref-functions-builtin.html#aggregate-functions) provide common aggregations such as `count()`, `count_distinct()`, `avg()`, `max()`, `min()`, etc.
 Users are not limited to the predefined aggregate functions and can create their own. For more details
 about user defined aggregate functions, please refer to the documentation of
 [User Defined Aggregate Functions](sql-ref-functions-udf-aggregate.html).
