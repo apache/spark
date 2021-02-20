@@ -19,13 +19,24 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * This base suite contains unified tests for the `ALTER TABLE .. ADD PARTITION` command that
+ * check V1 and V2 table catalogs. The tests that cannot run for all supported catalogs are
+ * located in more specific test suites:
+ *
+ *   - V2 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v2.AlterTableAddPartitionSuite`
+ *   - V1 table catalog tests:
+ *     `org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuiteBase`
+ *     - V1 In-Memory catalog:
+ *       `org.apache.spark.sql.execution.command.v1.AlterTableAddPartitionSuite`
+ *     - V1 Hive External catalog:
+ *       `org.apache.spark.sql.hive.execution.command.AlterTableAddPartitionSuite`
+ */
 trait AlterTableAddPartitionSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "ALTER TABLE .. ADD PARTITION"
-
-  protected def checkLocation(t: String, spec: TablePartitionSpec, expected: String): Unit
 
   test("one partition") {
     withNamespaceAndTable("ns", "tbl") { t =>

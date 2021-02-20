@@ -319,7 +319,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Convert a constants list into a String sequence.
    */
   override def visitConstantList(ctx: ConstantListContext): Seq[String] = withOrigin(ctx) {
-    ctx.constant.asScala.map(visitConstantToString).toSeq
+    ctx.constant.asScala.map(v => visitStringConstant(v, legacyNullAsString = false)).toSeq
   }
 
   /**
@@ -505,7 +505,8 @@ class SparkSqlAstBuilder extends AstBuilder {
           } else {
             None
           }
-          (Seq.empty, Option(name), props.toSeq, recordHandler)
+          val finalProps = props ++ Seq("field.delim" -> props.getOrElse("field.delim", "\t"))
+          (Seq.empty, Option(name), finalProps.toSeq, recordHandler)
 
         case null =>
           // Use default (serde) format.

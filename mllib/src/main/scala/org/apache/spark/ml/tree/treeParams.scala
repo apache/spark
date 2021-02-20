@@ -60,8 +60,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    */
   final val maxDepth: IntParam =
     new IntParam(this, "maxDepth", "Maximum depth of the tree. (Nonnegative)" +
-      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.",
-      ParamValidators.gtEq(0))
+      " E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes." +
+      " Must be in range [0, 30].",
+      ParamValidators.inRange(0, 30))
 
   /**
    * Maximum number of bins used for discretizing continuous features and for choosing how to split

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
@@ -97,12 +97,52 @@ trait CharVarcharDDLTestBase extends QueryTest with SQLTestUtils {
       assert(v1 || v2)
     }
   }
+
+  def checkTableSchemaTypeStr(expected: Seq[Row]): Unit = {
+    checkAnswer(sql("desc t").selectExpr("data_type").where("data_type like '%char%'"), expected)
+  }
+
+  test("SPARK-33901: alter table add columns should not change original table's schema") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i CHAR(5), c VARCHAR(4)) USING $format")
+      sql("ALTER TABLE t ADD COLUMNS (d VARCHAR(5))")
+      checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)"), Row("varchar(5)")))
+    }
+  }
+
+  test("SPARK-33901: ctas should should not change table's schema") {
+    withTable("t", "tt") {
+      sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
+      sql(s"CREATE TABLE t USING $format AS SELECT * FROM tt")
+      checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)")))
+    }
+  }
 }
 
 class FileSourceCharVarcharDDLTestSuite extends CharVarcharDDLTestBase with SharedSparkSession {
   override def format: String = "parquet"
   override protected def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "parquet")
+  }
+
+  // TODO(SPARK-33902): MOVE TO SUPER CLASS AFTER THE TARGET TICKET RESOLVED
+  test("SPARK-33901: create table like should should not change table's schema") {
+    withTable("t", "tt") {
+      sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
+      sql("CREATE TABLE t LIKE tt")
+      checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)")))
+    }
+  }
+
+  // TODO(SPARK-33903): MOVE TO SUPER CLASS AFTER THE TARGET TICKET RESOLVED
+  test("SPARK-33901: cvas should should not change view's schema") {
+    withTable( "tt") {
+      sql(s"CREATE TABLE tt(i CHAR(5), c VARCHAR(4)) USING $format")
+      withView("t") {
+        sql("CREATE VIEW t AS SELECT * FROM tt")
+        checkTableSchemaTypeStr(Seq(Row("char(5)"), Row("varchar(4)")))
+      }
+    }
   }
 }
 

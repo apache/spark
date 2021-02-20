@@ -209,14 +209,41 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // 2 partitions and each partition contains 2 keys
     val df2 = testData2.groupBy('a).agg(collect_set('a))
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> (("ObjectHashAggregate", Map("number of output rows" -> 4L))),
+      2L -> (("ObjectHashAggregate", Map(
+        "number of output rows" -> 4L,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))),
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
         "local blocks read" -> 4L,
         "remote blocks read" -> 0L))),
-      0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
+      0L -> (("ObjectHashAggregate", Map(
+        "number of output rows" -> 3L,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))))
     )
+
+    // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
+    withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+      val df3 = testData2.groupBy('a).agg(collect_set('a))
+      testSparkPlanMetrics(df3, 1, Map(
+        2L -> (("ObjectHashAggregate", Map(
+          "number of output rows" -> 4L,
+          "number of tasks fall-backed to sort-based aggregation" -> 2L))),
+        0L -> (("ObjectHashAggregate", Map(
+          "number of output rows" -> 3L,
+          "number of tasks fall-backed to sort-based aggregation" -> 1L))))
+      )
+      testSparkPlanMetricsWithPredicates(df3, 1, Map(
+        2L -> (("ObjectHashAggregate", Map(
+          "spill size" -> {
+            _.toString.matches(sizeMetricPattern)
+          }))),
+        0L -> (("ObjectHashAggregate", Map(
+          "spill size" -> {
+            _.toString.matches(sizeMetricPattern)
+          }))))
+      )
+    }
   }
 
   test("Sort metrics") {

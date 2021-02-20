@@ -13,7 +13,7 @@ struct<>
 -- !query
 SELECT true = cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(true AS TINYINT) = CAST(1 AS TINYINT)):boolean>
+struct<(true = CAST(1 AS TINYINT)):boolean>
 -- !query output
 true
 
@@ -21,7 +21,7 @@ true
 -- !query
 SELECT true = cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(true AS SMALLINT) = CAST(1 AS SMALLINT)):boolean>
+struct<(true = CAST(1 AS SMALLINT)):boolean>
 -- !query output
 true
 
@@ -29,7 +29,7 @@ true
 -- !query
 SELECT true = cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(true AS INT) = CAST(1 AS INT)):boolean>
+struct<(true = CAST(1 AS INT)):boolean>
 -- !query output
 true
 
@@ -37,7 +37,7 @@ true
 -- !query
 SELECT true = cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(true AS BIGINT) = CAST(1 AS BIGINT)):boolean>
+struct<(true = CAST(1 AS BIGINT)):boolean>
 -- !query output
 true
 
@@ -45,7 +45,7 @@ true
 -- !query
 SELECT true = cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(true AS FLOAT) = CAST(1 AS FLOAT)):boolean>
+struct<(true = CAST(1 AS FLOAT)):boolean>
 -- !query output
 true
 
@@ -53,7 +53,7 @@ true
 -- !query
 SELECT true = cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(true AS DOUBLE) = CAST(1 AS DOUBLE)):boolean>
+struct<(true = CAST(1 AS DOUBLE)):boolean>
 -- !query output
 true
 
@@ -61,7 +61,7 @@ true
 -- !query
 SELECT true = cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(true AS DECIMAL(10,0)) = CAST(1 AS DECIMAL(10,0))):boolean>
+struct<(true = CAST(1 AS DECIMAL(10,0))):boolean>
 -- !query output
 true
 
@@ -69,7 +69,7 @@ true
 -- !query
 SELECT true = cast(1 as string) FROM t
 -- !query schema
-struct<(true = CAST(CAST(1 AS STRING) AS BOOLEAN)):boolean>
+struct<(true = CAST(1 AS STRING)):boolean>
 -- !query output
 true
 
@@ -112,7 +112,7 @@ cannot resolve '(true = CAST('2017-12-11 09:30:00' AS DATE))' due to data type m
 -- !query
 SELECT true <=> cast(1 as tinyint) FROM t
 -- !query schema
-struct<(CAST(true AS TINYINT) <=> CAST(1 AS TINYINT)):boolean>
+struct<(true <=> CAST(1 AS TINYINT)):boolean>
 -- !query output
 true
 
@@ -120,7 +120,7 @@ true
 -- !query
 SELECT true <=> cast(1 as smallint) FROM t
 -- !query schema
-struct<(CAST(true AS SMALLINT) <=> CAST(1 AS SMALLINT)):boolean>
+struct<(true <=> CAST(1 AS SMALLINT)):boolean>
 -- !query output
 true
 
@@ -128,7 +128,7 @@ true
 -- !query
 SELECT true <=> cast(1 as int) FROM t
 -- !query schema
-struct<(CAST(true AS INT) <=> CAST(1 AS INT)):boolean>
+struct<(true <=> CAST(1 AS INT)):boolean>
 -- !query output
 true
 
@@ -136,7 +136,7 @@ true
 -- !query
 SELECT true <=> cast(1 as bigint) FROM t
 -- !query schema
-struct<(CAST(true AS BIGINT) <=> CAST(1 AS BIGINT)):boolean>
+struct<(true <=> CAST(1 AS BIGINT)):boolean>
 -- !query output
 true
 
@@ -144,7 +144,7 @@ true
 -- !query
 SELECT true <=> cast(1 as float) FROM t
 -- !query schema
-struct<(CAST(true AS FLOAT) <=> CAST(1 AS FLOAT)):boolean>
+struct<(true <=> CAST(1 AS FLOAT)):boolean>
 -- !query output
 true
 
@@ -152,7 +152,7 @@ true
 -- !query
 SELECT true <=> cast(1 as double) FROM t
 -- !query schema
-struct<(CAST(true AS DOUBLE) <=> CAST(1 AS DOUBLE)):boolean>
+struct<(true <=> CAST(1 AS DOUBLE)):boolean>
 -- !query output
 true
 
@@ -160,7 +160,7 @@ true
 -- !query
 SELECT true <=> cast(1 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(true AS DECIMAL(10,0)) <=> CAST(1 AS DECIMAL(10,0))):boolean>
+struct<(true <=> CAST(1 AS DECIMAL(10,0))):boolean>
 -- !query output
 true
 
@@ -168,7 +168,7 @@ true
 -- !query
 SELECT true <=> cast(1 as string) FROM t
 -- !query schema
-struct<(true <=> CAST(CAST(1 AS STRING) AS BOOLEAN)):boolean>
+struct<(true <=> CAST(1 AS STRING)):boolean>
 -- !query output
 true
 
@@ -211,7 +211,7 @@ cannot resolve '(true <=> CAST('2017-12-11 09:30:00' AS DATE))' due to data type
 -- !query
 SELECT cast(1 as tinyint) = true FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) = CAST(true AS TINYINT)):boolean>
+struct<(CAST(1 AS TINYINT) = true):boolean>
 -- !query output
 true
 
@@ -219,7 +219,7 @@ true
 -- !query
 SELECT cast(1 as smallint) = true FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) = CAST(true AS SMALLINT)):boolean>
+struct<(CAST(1 AS SMALLINT) = true):boolean>
 -- !query output
 true
 
@@ -227,7 +227,7 @@ true
 -- !query
 SELECT cast(1 as int) = true FROM t
 -- !query schema
-struct<(CAST(1 AS INT) = CAST(true AS INT)):boolean>
+struct<(CAST(1 AS INT) = true):boolean>
 -- !query output
 true
 
@@ -235,7 +235,7 @@ true
 -- !query
 SELECT cast(1 as bigint) = true FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) = CAST(true AS BIGINT)):boolean>
+struct<(CAST(1 AS BIGINT) = true):boolean>
 -- !query output
 true
 
@@ -243,7 +243,7 @@ true
 -- !query
 SELECT cast(1 as float) = true FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) = CAST(true AS FLOAT)):boolean>
+struct<(CAST(1 AS FLOAT) = true):boolean>
 -- !query output
 true
 
@@ -251,7 +251,7 @@ true
 -- !query
 SELECT cast(1 as double) = true FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) = CAST(true AS DOUBLE)):boolean>
+struct<(CAST(1 AS DOUBLE) = true):boolean>
 -- !query output
 true
 
@@ -259,7 +259,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) = true FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) = CAST(true AS DECIMAL(10,0))):boolean>
+struct<(CAST(1 AS DECIMAL(10,0)) = true):boolean>
 -- !query output
 true
 
@@ -267,7 +267,7 @@ true
 -- !query
 SELECT cast(1 as string) = true FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS BOOLEAN) = true):boolean>
+struct<(CAST(1 AS STRING) = true):boolean>
 -- !query output
 true
 
@@ -310,7 +310,7 @@ cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) = true)' due to data type m
 -- !query
 SELECT cast(1 as tinyint) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS TINYINT) <=> CAST(true AS TINYINT)):boolean>
+struct<(CAST(1 AS TINYINT) <=> true):boolean>
 -- !query output
 true
 
@@ -318,7 +318,7 @@ true
 -- !query
 SELECT cast(1 as smallint) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS SMALLINT) <=> CAST(true AS SMALLINT)):boolean>
+struct<(CAST(1 AS SMALLINT) <=> true):boolean>
 -- !query output
 true
 
@@ -326,7 +326,7 @@ true
 -- !query
 SELECT cast(1 as int) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS INT) <=> CAST(true AS INT)):boolean>
+struct<(CAST(1 AS INT) <=> true):boolean>
 -- !query output
 true
 
@@ -334,7 +334,7 @@ true
 -- !query
 SELECT cast(1 as bigint) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS BIGINT) <=> CAST(true AS BIGINT)):boolean>
+struct<(CAST(1 AS BIGINT) <=> true):boolean>
 -- !query output
 true
 
@@ -342,7 +342,7 @@ true
 -- !query
 SELECT cast(1 as float) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS FLOAT) <=> CAST(true AS FLOAT)):boolean>
+struct<(CAST(1 AS FLOAT) <=> true):boolean>
 -- !query output
 true
 
@@ -350,7 +350,7 @@ true
 -- !query
 SELECT cast(1 as double) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS DOUBLE) <=> CAST(true AS DOUBLE)):boolean>
+struct<(CAST(1 AS DOUBLE) <=> true):boolean>
 -- !query output
 true
 
@@ -358,7 +358,7 @@ true
 -- !query
 SELECT cast(1 as decimal(10, 0)) <=> true FROM t
 -- !query schema
-struct<(CAST(1 AS DECIMAL(10,0)) <=> CAST(true AS DECIMAL(10,0))):boolean>
+struct<(CAST(1 AS DECIMAL(10,0)) <=> true):boolean>
 -- !query output
 true
 
@@ -366,7 +366,7 @@ true
 -- !query
 SELECT cast(1 as string) <=> true FROM t
 -- !query schema
-struct<(CAST(CAST(1 AS STRING) AS BOOLEAN) <=> true):boolean>
+struct<(CAST(1 AS STRING) <=> true):boolean>
 -- !query output
 true
 
@@ -409,7 +409,7 @@ cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) <=> true)' due to data type
 -- !query
 SELECT false = cast(0 as tinyint) FROM t
 -- !query schema
-struct<(CAST(false AS TINYINT) = CAST(0 AS TINYINT)):boolean>
+struct<(false = CAST(0 AS TINYINT)):boolean>
 -- !query output
 true
 
@@ -417,7 +417,7 @@ true
 -- !query
 SELECT false = cast(0 as smallint) FROM t
 -- !query schema
-struct<(CAST(false AS SMALLINT) = CAST(0 AS SMALLINT)):boolean>
+struct<(false = CAST(0 AS SMALLINT)):boolean>
 -- !query output
 true
 
@@ -425,7 +425,7 @@ true
 -- !query
 SELECT false = cast(0 as int) FROM t
 -- !query schema
-struct<(CAST(false AS INT) = CAST(0 AS INT)):boolean>
+struct<(false = CAST(0 AS INT)):boolean>
 -- !query output
 true
 
@@ -433,7 +433,7 @@ true
 -- !query
 SELECT false = cast(0 as bigint) FROM t
 -- !query schema
-struct<(CAST(false AS BIGINT) = CAST(0 AS BIGINT)):boolean>
+struct<(false = CAST(0 AS BIGINT)):boolean>
 -- !query output
 true
 
@@ -441,7 +441,7 @@ true
 -- !query
 SELECT false = cast(0 as float) FROM t
 -- !query schema
-struct<(CAST(false AS FLOAT) = CAST(0 AS FLOAT)):boolean>
+struct<(false = CAST(0 AS FLOAT)):boolean>
 -- !query output
 true
 
@@ -449,7 +449,7 @@ true
 -- !query
 SELECT false = cast(0 as double) FROM t
 -- !query schema
-struct<(CAST(false AS DOUBLE) = CAST(0 AS DOUBLE)):boolean>
+struct<(false = CAST(0 AS DOUBLE)):boolean>
 -- !query output
 true
 
@@ -457,7 +457,7 @@ true
 -- !query
 SELECT false = cast(0 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(false AS DECIMAL(10,0)) = CAST(0 AS DECIMAL(10,0))):boolean>
+struct<(false = CAST(0 AS DECIMAL(10,0))):boolean>
 -- !query output
 true
 
@@ -465,7 +465,7 @@ true
 -- !query
 SELECT false = cast(0 as string) FROM t
 -- !query schema
-struct<(false = CAST(CAST(0 AS STRING) AS BOOLEAN)):boolean>
+struct<(false = CAST(0 AS STRING)):boolean>
 -- !query output
 true
 
@@ -508,7 +508,7 @@ cannot resolve '(false = CAST('2017-12-11 09:30:00' AS DATE))' due to data type 
 -- !query
 SELECT false <=> cast(0 as tinyint) FROM t
 -- !query schema
-struct<(CAST(false AS TINYINT) <=> CAST(0 AS TINYINT)):boolean>
+struct<(false <=> CAST(0 AS TINYINT)):boolean>
 -- !query output
 true
 
@@ -516,7 +516,7 @@ true
 -- !query
 SELECT false <=> cast(0 as smallint) FROM t
 -- !query schema
-struct<(CAST(false AS SMALLINT) <=> CAST(0 AS SMALLINT)):boolean>
+struct<(false <=> CAST(0 AS SMALLINT)):boolean>
 -- !query output
 true
 
@@ -524,7 +524,7 @@ true
 -- !query
 SELECT false <=> cast(0 as int) FROM t
 -- !query schema
-struct<(CAST(false AS INT) <=> CAST(0 AS INT)):boolean>
+struct<(false <=> CAST(0 AS INT)):boolean>
 -- !query output
 true
 
@@ -532,7 +532,7 @@ true
 -- !query
 SELECT false <=> cast(0 as bigint) FROM t
 -- !query schema
-struct<(CAST(false AS BIGINT) <=> CAST(0 AS BIGINT)):boolean>
+struct<(false <=> CAST(0 AS BIGINT)):boolean>
 -- !query output
 true
 
@@ -540,7 +540,7 @@ true
 -- !query
 SELECT false <=> cast(0 as float) FROM t
 -- !query schema
-struct<(CAST(false AS FLOAT) <=> CAST(0 AS FLOAT)):boolean>
+struct<(false <=> CAST(0 AS FLOAT)):boolean>
 -- !query output
 true
 
@@ -548,7 +548,7 @@ true
 -- !query
 SELECT false <=> cast(0 as double) FROM t
 -- !query schema
-struct<(CAST(false AS DOUBLE) <=> CAST(0 AS DOUBLE)):boolean>
+struct<(false <=> CAST(0 AS DOUBLE)):boolean>
 -- !query output
 true
 
@@ -556,7 +556,7 @@ true
 -- !query
 SELECT false <=> cast(0 as decimal(10, 0)) FROM t
 -- !query schema
-struct<(CAST(false AS DECIMAL(10,0)) <=> CAST(0 AS DECIMAL(10,0))):boolean>
+struct<(false <=> CAST(0 AS DECIMAL(10,0))):boolean>
 -- !query output
 true
 
@@ -564,7 +564,7 @@ true
 -- !query
 SELECT false <=> cast(0 as string) FROM t
 -- !query schema
-struct<(false <=> CAST(CAST(0 AS STRING) AS BOOLEAN)):boolean>
+struct<(false <=> CAST(0 AS STRING)):boolean>
 -- !query output
 true
 
@@ -607,7 +607,7 @@ cannot resolve '(false <=> CAST('2017-12-11 09:30:00' AS DATE))' due to data typ
 -- !query
 SELECT cast(0 as tinyint) = false FROM t
 -- !query schema
-struct<(CAST(0 AS TINYINT) = CAST(false AS TINYINT)):boolean>
+struct<(CAST(0 AS TINYINT) = false):boolean>
 -- !query output
 true
 
@@ -615,7 +615,7 @@ true
 -- !query
 SELECT cast(0 as smallint) = false FROM t
 -- !query schema
-struct<(CAST(0 AS SMALLINT) = CAST(false AS SMALLINT)):boolean>
+struct<(CAST(0 AS SMALLINT) = false):boolean>
 -- !query output
 true
 
@@ -623,7 +623,7 @@ true
 -- !query
 SELECT cast(0 as int) = false FROM t
 -- !query schema
-struct<(CAST(0 AS INT) = CAST(false AS INT)):boolean>
+struct<(CAST(0 AS INT) = false):boolean>
 -- !query output
 true
 
@@ -631,7 +631,7 @@ true
 -- !query
 SELECT cast(0 as bigint) = false FROM t
 -- !query schema
-struct<(CAST(0 AS BIGINT) = CAST(false AS BIGINT)):boolean>
+struct<(CAST(0 AS BIGINT) = false):boolean>
 -- !query output
 true
 
@@ -639,7 +639,7 @@ true
 -- !query
 SELECT cast(0 as float) = false FROM t
 -- !query schema
-struct<(CAST(0 AS FLOAT) = CAST(false AS FLOAT)):boolean>
+struct<(CAST(0 AS FLOAT) = false):boolean>
 -- !query output
 true
 
@@ -647,7 +647,7 @@ true
 -- !query
 SELECT cast(0 as double) = false FROM t
 -- !query schema
-struct<(CAST(0 AS DOUBLE) = CAST(false AS DOUBLE)):boolean>
+struct<(CAST(0 AS DOUBLE) = false):boolean>
 -- !query output
 true
 
@@ -655,7 +655,7 @@ true
 -- !query
 SELECT cast(0 as decimal(10, 0)) = false FROM t
 -- !query schema
-struct<(CAST(0 AS DECIMAL(10,0)) = CAST(false AS DECIMAL(10,0))):boolean>
+struct<(CAST(0 AS DECIMAL(10,0)) = false):boolean>
 -- !query output
 true
 
@@ -663,7 +663,7 @@ true
 -- !query
 SELECT cast(0 as string) = false FROM t
 -- !query schema
-struct<(CAST(CAST(0 AS STRING) AS BOOLEAN) = false):boolean>
+struct<(CAST(0 AS STRING) = false):boolean>
 -- !query output
 true
 
@@ -706,7 +706,7 @@ cannot resolve '(CAST('2017-12-11 09:30:00' AS DATE) = false)' due to data type 
 -- !query
 SELECT cast(0 as tinyint) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS TINYINT) <=> CAST(false AS TINYINT)):boolean>
+struct<(CAST(0 AS TINYINT) <=> false):boolean>
 -- !query output
 true
 
@@ -714,7 +714,7 @@ true
 -- !query
 SELECT cast(0 as smallint) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS SMALLINT) <=> CAST(false AS SMALLINT)):boolean>
+struct<(CAST(0 AS SMALLINT) <=> false):boolean>
 -- !query output
 true
 
@@ -722,7 +722,7 @@ true
 -- !query
 SELECT cast(0 as int) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS INT) <=> CAST(false AS INT)):boolean>
+struct<(CAST(0 AS INT) <=> false):boolean>
 -- !query output
 true
 
@@ -730,7 +730,7 @@ true
 -- !query
 SELECT cast(0 as bigint) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS BIGINT) <=> CAST(false AS BIGINT)):boolean>
+struct<(CAST(0 AS BIGINT) <=> false):boolean>
 -- !query output
 true
 
@@ -738,7 +738,7 @@ true
 -- !query
 SELECT cast(0 as float) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS FLOAT) <=> CAST(false AS FLOAT)):boolean>
+struct<(CAST(0 AS FLOAT) <=> false):boolean>
 -- !query output
 true
 
@@ -746,7 +746,7 @@ true
 -- !query
 SELECT cast(0 as double) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS DOUBLE) <=> CAST(false AS DOUBLE)):boolean>
+struct<(CAST(0 AS DOUBLE) <=> false):boolean>
 -- !query output
 true
 
@@ -754,7 +754,7 @@ true
 -- !query
 SELECT cast(0 as decimal(10, 0)) <=> false FROM t
 -- !query schema
-struct<(CAST(0 AS DECIMAL(10,0)) <=> CAST(false AS DECIMAL(10,0))):boolean>
+struct<(CAST(0 AS DECIMAL(10,0)) <=> false):boolean>
 -- !query output
 true
 
@@ -762,7 +762,7 @@ true
 -- !query
 SELECT cast(0 as string) <=> false FROM t
 -- !query schema
-struct<(CAST(CAST(0 AS STRING) AS BOOLEAN) <=> false):boolean>
+struct<(CAST(0 AS STRING) <=> false):boolean>
 -- !query output
 true
 

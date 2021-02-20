@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
 
 /**
@@ -39,7 +40,8 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
  */
 case class UnresolvedTable(
     multipartIdentifier: Seq[String],
-    commandName: String) extends LeafNode {
+    commandName: String,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil
@@ -52,8 +54,8 @@ case class UnresolvedTable(
 case class UnresolvedView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTemp: Boolean = true,
-    relationTypeMismatchHint: Option[String] = None) extends LeafNode {
+    allowTemp: Boolean,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil
@@ -66,7 +68,7 @@ case class UnresolvedView(
 case class UnresolvedTableOrView(
     multipartIdentifier: Seq[String],
     commandName: String,
-    allowTempView: Boolean = true) extends LeafNode {
+    allowTempView: Boolean) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
 }
@@ -97,9 +99,26 @@ case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
 /**
  * A plan containing resolved table.
  */
-case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
+case class ResolvedTable(
+    catalog: TableCatalog,
+    identifier: Identifier,
+    table: Table,
+    outputAttributes: Seq[Attribute])
   extends LeafNode {
-  override def output: Seq[Attribute] = Nil
+  override def output: Seq[Attribute] = {
+    val qualifier = catalog.name +: identifier.namespace :+ identifier.name
+    outputAttributes.map(_.withQualifier(qualifier))
+  }
+}
+
+object ResolvedTable {
+  def create(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      table: Table): ResolvedTable = {
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+  }
 }
 
 case class ResolvedPartitionSpec(

@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, RowOrdering, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.util.CompletionIterator
@@ -39,7 +38,7 @@ case class ReferenceSort(
   override def requiredChildDistribution: Seq[Distribution] =
     if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "sort") {
+  protected override def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitions( { iterator =>
       val ordering = RowOrdering.create(sortOrder, child.output)
       val sorter = new ExternalSorter[InternalRow, Null, InternalRow](

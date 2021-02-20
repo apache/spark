@@ -3336,7 +3336,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val ereqs3 = new ExecutorResourceRequests().cores(3)
     val treqs3 = new TaskResourceRequests().cpus(2)
     val rp3 = new ResourceProfile(ereqs3.requests, treqs3.requests)
-    var mergedRp = scheduler.mergeResourceProfilesForStage(HashSet(rp1, rp2, rp3))
+    val mergedRp = scheduler.mergeResourceProfilesForStage(HashSet(rp1, rp2, rp3))
 
     assert(mergedRp.getTaskCpus.get == 2)
     assert(mergedRp.getExecutorCores.get == 4)

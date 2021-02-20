@@ -384,7 +384,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
   private def preprocess(
       insert: InsertIntoStatement,
       tblName: String,
-      partColNames: Seq[String],
+      partColNames: StructType,
       catalogTable: Option[CatalogTable]): InsertIntoStatement = {
 
     val normalizedPartSpec = normalizePartitionSpec(
@@ -406,7 +406,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       catalogTable.get.tracksPartitionsInCatalog
     if (partitionsTrackedByCatalog && normalizedPartSpec.nonEmpty) {
       // empty partition column value
-      if (normalizedPartSpec.filter(_._2.isDefined).exists(_._2.get.isEmpty)) {
+      if (normalizedPartSpec.values.flatten.exists(v => v != null && v.isEmpty)) {
         val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
         throw new AnalysisException(
           s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
@@ -429,7 +429,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      insert.copy(query = newQuery, partitionSpec = partColNames.map(_ -> None).toMap)
+      insert.copy(query = newQuery, partitionSpec = partColNames.map(_.name).map(_ -> None).toMap)
     }
   }
 
@@ -438,14 +438,14 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
-          preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames,
+          preprocess(i, metadata.identifier.quotedString, metadata.partitionSchema,
             Some(metadata))
         case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, h.partitionSchema.map(_.name), catalogTable)
+          preprocess(i, tblName, h.partitionSchema, catalogTable)
         case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
-          preprocess(i, tblName, Nil, catalogTable)
+          preprocess(i, tblName, new StructType(), catalogTable)
         case _ => i
       }
   }

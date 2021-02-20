@@ -21,6 +21,9 @@ Getting Started
 ===============
 
 This page summarizes the basic steps required to setup and get started with PySpark.
+There are more guides shared with other languages such as
+`Quick Start <http://spark.apache.org/docs/latest/quick-start.html>`_ in Programming Guides
+at `the Spark documentation <http://spark.apache.org/docs/latest/index.html#where-to-go-from-here>`_.
 
 .. toctree::
     :maxdepth: 2

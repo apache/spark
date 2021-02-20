@@ -53,9 +53,9 @@ case class ShowPartitionsExec(
       var i = 0
       while (i < len) {
         val dataType = schema(i).dataType
-        val partValue = row.get(i, dataType)
-        val partValueStr = Cast(Literal(partValue, dataType), StringType, Some(timeZoneId))
-          .eval().toString
+        val partValueUTF8String =
+          Cast(Literal(row.get(i, dataType), dataType), StringType, Some(timeZoneId)).eval()
+        val partValueStr = if (partValueUTF8String == null) "null" else partValueUTF8String.toString
         partitions(i) = escapePathName(schema(i).name) + "=" + escapePathName(partValueStr)
         i += 1
       }

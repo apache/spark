@@ -19,4 +19,16 @@ package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.sql.execution.command.v1
 
-class DropTableSuite extends v1.DropTableSuiteBase with CommandSuiteBase
+/**
+ * The class contains tests for the `DROP TABLE` command to check V1 Hive external table catalog.
+ */
+class DropTableSuite extends v1.DropTableSuiteBase with CommandSuiteBase {
+  test("hive client calls") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int) $defaultUsing")
+      checkHiveClientCalls(expected = 15) {
+        sql(s"DROP TABLE $t")
+      }
+    }
+  }
+}

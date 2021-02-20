@@ -113,7 +113,7 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following)
 -- !query schema
-struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS BIGINT) FOLLOWING AND CAST(1 AS BIGINT) FOLLOWING):bigint>
+struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING):bigint>
 -- !query output
 1	1
 11	11
@@ -183,7 +183,7 @@ SELECT x, (sum(x) over w)
 FROM cte
 WINDOW w AS (ORDER BY x range between 1 preceding and 1 following)
 -- !query schema
-struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN CAST((- 1) AS BIGINT) FOLLOWING AND CAST(1 AS BIGINT) FOLLOWING):bigint>
+struct<x:bigint,sum(x) OVER (ORDER BY x ASC NULLS FIRST RANGE BETWEEN (- 1) FOLLOWING AND 1 FOLLOWING):bigint>
 -- !query output
 1	3
 1	3

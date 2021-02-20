@@ -112,8 +112,8 @@ Refer to the [HashingTF Java docs](api/java/org/apache/spark/ml/feature/HashingT
 
 <div data-lang="python" markdown="1">
 
-Refer to the [HashingTF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.HashingTF) and
-the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for more details on the API.
+Refer to the [HashingTF Python docs](api/python/reference/api/pyspark.ml.feature.HashingTF.html) and
+the [IDF Python docs](api/python/reference/api/pyspark.ml.feature.IDF.html) for more details on the API.
 
 {% include_example python/ml/tf_idf_example.py %}
 </div>
@@ -151,7 +151,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Word2Vec Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Word2Vec)
+Refer to the [Word2Vec Python docs](api/python/reference/api/pyspark.ml.feature.Word2Vec.html)
 for more details on the API.
 
 {% include_example python/ml/word2vec_example.py %}
@@ -218,8 +218,8 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [CountVectorizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizer)
-and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizerModel)
+Refer to the [CountVectorizer Python docs](api/python/reference/api/pyspark.ml.feature.CountVectorizer.html)
+and the [CountVectorizerModel Python docs](api/python/reference/api/pyspark.ml.feature.CountVectorizerModel.html)
 for more details on the API.
 
 {% include_example python/ml/count_vectorizer_example.py %}
@@ -302,7 +302,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [FeatureHasher Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.FeatureHasher)
+Refer to the [FeatureHasher Python docs](api/python/reference/api/pyspark.ml.feature.FeatureHasher.html)
 for more details on the API.
 
 {% include_example python/ml/feature_hasher_example.py %}
@@ -344,8 +344,8 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Tokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Tokenizer) and
-the [RegexTokenizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RegexTokenizer)
+Refer to the [Tokenizer Python docs](api/python/reference/api/pyspark.ml.feature.Tokenizer.html) and
+the [RegexTokenizer Python docs](api/python/reference/api/pyspark.ml.feature.RegexTokenizer.html)
 for more details on the API.
 
 {% include_example python/ml/tokenizer_example.py %}
@@ -411,7 +411,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [StopWordsRemover Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StopWordsRemover)
+Refer to the [StopWordsRemover Python docs](api/python/reference/api/pyspark.ml.feature.StopWordsRemover.html)
 for more details on the API.
 
 {% include_example python/ml/stopwords_remover_example.py %}
@@ -446,7 +446,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [NGram Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.NGram)
+Refer to the [NGram Python docs](api/python/reference/api/pyspark.ml.feature.NGram.html)
 for more details on the API.
 
 {% include_example python/ml/n_gram_example.py %}
@@ -484,7 +484,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Binarizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Binarizer)
+Refer to the [Binarizer Python docs](api/python/reference/api/pyspark.ml.feature.Binarizer.html)
 for more details on the API.
 
 {% include_example python/ml/binarizer_example.py %}
@@ -516,7 +516,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [PCA Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.PCA)
+Refer to the [PCA Python docs](api/python/reference/api/pyspark.ml.feature.PCA.html)
 for more details on the API.
 
 {% include_example python/ml/pca_example.py %}
@@ -548,7 +548,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [PolynomialExpansion Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.PolynomialExpansion)
+Refer to the [PolynomialExpansion Python docs](api/python/reference/api/pyspark.ml.feature.PolynomialExpansion.html)
 for more details on the API.
 
 {% include_example python/ml/polynomial_expansion_example.py %}
@@ -590,7 +590,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [DCT Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.DCT)
+Refer to the [DCT Python docs](api/python/reference/api/pyspark.ml.feature.DCT.html)
 for more details on the API.
 
 {% include_example python/ml/dct_example.py %}
@@ -720,7 +720,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [StringIndexer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StringIndexer)
+Refer to the [StringIndexer Python docs](api/python/reference/api/pyspark.ml.feature.StringIndexer.html)
 for more details on the API.
 
 {% include_example python/ml/string_indexer_example.py %}
@@ -788,7 +788,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [IndexToString Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IndexToString)
+Refer to the [IndexToString Python docs](api/python/reference/api/pyspark.ml.feature.IndexToString.html)
 for more details on the API.
 
 {% include_example python/ml/index_to_string_example.py %}
@@ -824,7 +824,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoder) for more details on the API.
+Refer to the [OneHotEncoder Python docs](api/python/reference/api/pyspark.ml.feature.OneHotEncoder.html) for more details on the API.
 
 {% include_example python/ml/onehot_encoder_example.py %}
 </div>
@@ -865,7 +865,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [VectorIndexer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorIndexer)
+Refer to the [VectorIndexer Python docs](api/python/reference/api/pyspark.ml.feature.VectorIndexer.html)
 for more details on the API.
 
 {% include_example python/ml/vector_indexer_example.py %}
@@ -926,7 +926,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Interaction Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Interaction)
+Refer to the [Interaction Python docs](api/python/reference/api/pyspark.ml.feature.Interaction.html)
 for more details on the API.
 
 {% include_example python/ml/interaction_example.py %}
@@ -960,7 +960,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Normalizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Normalizer)
+Refer to the [Normalizer Python docs](api/python/reference/api/pyspark.ml.feature.Normalizer.html)
 for more details on the API.
 
 {% include_example python/ml/normalizer_example.py %}
@@ -1002,7 +1002,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [StandardScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.StandardScaler)
+Refer to the [StandardScaler Python docs](api/python/reference/api/pyspark.ml.feature.StandardScaler.html)
 for more details on the API.
 
 {% include_example python/ml/standard_scaler_example.py %}
@@ -1046,7 +1046,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [RobustScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RobustScaler)
+Refer to the [RobustScaler Python docs](api/python/reference/api/pyspark.ml.feature.RobustScaler.html)
 for more details on the API.
 
 {% include_example python/ml/robust_scaler_example.py %}
@@ -1096,8 +1096,8 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [MinMaxScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScaler)
-and the [MinMaxScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScalerModel)
+Refer to the [MinMaxScaler Python docs](api/python/reference/api/pyspark.ml.feature.MinMaxScaler.html)
+and the [MinMaxScalerModel Python docs](api/python/reference/api/pyspark.ml.feature.MinMaxScalerModel.html)
 for more details on the API.
 
 {% include_example python/ml/min_max_scaler_example.py %}
@@ -1139,8 +1139,8 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [MaxAbsScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScaler)
-and the [MaxAbsScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScalerModel)
+Refer to the [MaxAbsScaler Python docs](api/python/reference/api/pyspark.ml.feature.MaxAbsScaler.html)
+and the [MaxAbsScalerModel Python docs](api/python/reference/api/pyspark.ml.feature.MaxAbsScalerModel.html)
 for more details on the API.
 
 {% include_example python/ml/max_abs_scaler_example.py %}
@@ -1182,7 +1182,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Bucketizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Bucketizer)
+Refer to the [Bucketizer Python docs](api/python/reference/api/pyspark.ml.feature.Bucketizer.html)
 for more details on the API.
 
 {% include_example python/ml/bucketizer_example.py %}
@@ -1232,7 +1232,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [ElementwiseProduct Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ElementwiseProduct)
+Refer to the [ElementwiseProduct Python docs](api/python/reference/api/pyspark.ml.feature.ElementwiseProduct.html)
 for more details on the API.
 
 {% include_example python/ml/elementwise_product_example.py %}
@@ -1292,7 +1292,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [SQLTransformer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.SQLTransformer) for more details on the API.
+Refer to the [SQLTransformer Python docs](api/python/reference/api/pyspark.ml.feature.SQLTransformer.html) for more details on the API.
 
 {% include_example python/ml/sql_transformer.py %}
 </div>
@@ -1352,7 +1352,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [VectorAssembler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorAssembler)
+Refer to the [VectorAssembler Python docs](api/python/reference/api/pyspark.ml.feature.VectorAssembler.html)
 for more details on the API.
 
 {% include_example python/ml/vector_assembler_example.py %}
@@ -1403,7 +1403,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [VectorSizeHint Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSizeHint)
+Refer to the [VectorSizeHint Python docs](api/python/reference/api/pyspark.ml.feature.VectorSizeHint.html)
 for more details on the API.
 
 {% include_example python/ml/vector_size_hint_example.py %}
@@ -1486,7 +1486,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [QuantileDiscretizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.QuantileDiscretizer)
+Refer to the [QuantileDiscretizer Python docs](api/python/reference/api/pyspark.ml.feature.QuantileDiscretizer.html)
 for more details on the API.
 
 {% include_example python/ml/quantile_discretizer_example.py %}
@@ -1555,7 +1555,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Imputer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Imputer)
+Refer to the [Imputer Python docs](api/python/reference/api/pyspark.ml.feature.Imputer.html)
 for more details on the API.
 
 {% include_example python/ml/imputer_example.py %}
@@ -1636,7 +1636,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [VectorSlicer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer)
+Refer to the [VectorSlicer Python docs](api/python/reference/api/pyspark.ml.feature.VectorSlicer.html)
 for more details on the API.
 
 {% include_example python/ml/vector_slicer_example.py %}
@@ -1722,7 +1722,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [RFormula Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.RFormula)
+Refer to the [RFormula Python docs](api/python/reference/api/pyspark.ml.feature.RFormula.html)
 for more details on the API.
 
 {% include_example python/ml/rformula_example.py %}
@@ -1786,26 +1786,35 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [ChiSqSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector)
+Refer to the [ChiSqSelector Python docs](api/python/reference/api/pyspark.ml.feature.ChiSqSelector.html)
 for more details on the API.
 
 {% include_example python/ml/chisq_selector_example.py %}
 </div>
 </div>
 
-## ANOVASelector
+## UnivariateFeatureSelector
 
-`ANOVASelector` operates on categorical labels with continuous features. It uses the
-[one-way ANOVA F-test](https://en.wikipedia.org/wiki/F-test#Multiple-comparison_ANOVA_problems) to decide which
-features to choose.
-It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
-* `numTopFeatures` chooses a fixed number of top features according to ANOVA F-test.
+`UnivariateFeatureSelector` operates on categorical/continuous labels with categorical/continuous features. 
+User can set `featureType` and `labelType`, and Spark will pick the score function to use based on the specified 
+`featureType` and `labelType`. 
+
+~~~
+featureType |  labelType |score function
+------------|------------|--------------
+categorical |categorical | chi-squared (chi2)
+continuous  |categorical | ANOVATest (f_classif)
+continuous  |continuous  | F-value (f_regression)
+~~~
+
+It supports five selection modes: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
+* `numTopFeatures` chooses a fixed number of top features.
 * `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
 * `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
 * `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
 * `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
-By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
-The user can choose a selection method using `setSelectorType`.
+
+By default, the selection mode is `numTopFeatures`, with the default selectionThreshold sets to 50.
 
 **Examples**
 
@@ -1823,7 +1832,7 @@ id | features                       | label
  6 | [7.9, 8.5, 9.2, 4.0, 9.4, 2.1] | 4.0
 ~~~
 
-If we use `ANOVASelector` with `numTopFeatures = 1`, the
+If we set `featureType` to `continuous` and `labelType` to `categorical` with `numTopFeatures = 1`, the
 last column in our `features` is chosen as the most useful feature:
 
 ~~~
@@ -1840,96 +1849,26 @@ id | features                       | label   | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [ANOVASelector Scala docs](api/scala/org/apache/spark/ml/feature/ANOVASelector.html)
+Refer to the [UnivariateFeatureSelector Scala docs](api/scala/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/ANOVASelectorExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/UnivariateFeatureSelectorExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [ANOVASelector Java docs](api/java/org/apache/spark/ml/feature/ANOVASelector.html)
+Refer to the [UnivariateFeatureSelector Java docs](api/java/org/apache/spark/ml/feature/UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaANOVASelectorExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaUnivariateFeatureSelectorExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-Refer to the [ANOVASelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ANOVASelector)
+Refer to the [UnivariateFeatureSelector Python docs](api/python/reference/api/pyspark.ml.feature.UnivariateFeatureSelector.html)
 for more details on the API.
 
-{% include_example python/ml/anova_selector_example.py %}
-</div>
-</div>
-
-## FValueSelector
-
-`FValueSelector` operates on categorical labels with continuous features. It uses the
-[F-test for regression](https://en.wikipedia.org/wiki/F-test#Regression_problems) to decide which
-features to choose.
-It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
-* `numTopFeatures` chooses a fixed number of top features according to a F-test for regression.
-* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
-* `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
-* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
-* `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
-By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
-The user can choose a selection method using `setSelectorType`.
-
-**Examples**
-
-Assume that we have a DataFrame with the columns `id`, `features`, and `label`, which is used as
-our target to be predicted:
-
-~~~
-id | features                       | label
----|--------------------------------|---------
- 1 | [6.0, 7.0, 0.0, 7.0, 6.0, 0.0] | 4.6
- 2 | [0.0, 9.0, 6.0, 0.0, 5.0, 9.0] | 6.6
- 3 | [0.0, 9.0, 3.0, 0.0, 5.0, 5.0] | 5.1
- 4 | [0.0, 9.0, 8.0, 5.0, 6.0, 4.0] | 7.6
- 5 | [8.0, 9.0, 6.0, 5.0, 4.0, 4.0] | 9.0
- 6 | [8.0, 9.0, 6.0, 4.0, 0.0, 0.0] | 9.0
-~~~
-
-If we use `FValueSelector` with `numTopFeatures = 1`, the
-3rd column in our `features` is chosen as the most useful feature:
-
-~~~
-id | features                       | label   | selectedFeatures
----|--------------------------------|---------|------------------
- 1 | [6.0, 7.0, 0.0, 7.0, 6.0, 0.0] | 4.6     | [0.0]
- 2 | [0.0, 9.0, 6.0, 0.0, 5.0, 9.0] | 6.6     | [6.0]
- 3 | [0.0, 9.0, 3.0, 0.0, 5.0, 5.0] | 5.1     | [3.0]
- 4 | [0.0, 9.0, 8.0, 5.0, 6.0, 4.0] | 7.6     | [8.0]
- 5 | [8.0, 9.0, 6.0, 5.0, 4.0, 4.0] | 9.0     | [6.0]
- 6 | [8.0, 9.0, 6.0, 4.0, 0.0, 0.0] | 9.0     | [6.0]
-~~~
-
-<div class="codetabs">
-<div data-lang="scala" markdown="1">
-
-Refer to the [FValueSelector Scala docs](api/scala/org/apache/spark/ml/feature/FValueSelector.html)
-for more details on the API.
-
-{% include_example scala/org/apache/spark/examples/ml/FValueSelectorExample.scala %}
-</div>
-
-<div data-lang="java" markdown="1">
-
-Refer to the [FValueSelector Java docs](api/java/org/apache/spark/ml/feature/FValueSelector.html)
-for more details on the API.
-
-{% include_example java/org/apache/spark/examples/ml/JavaFValueSelectorExample.java %}
-</div>
-
-<div data-lang="python" markdown="1">
-
-Refer to the [FValueSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.FValueSelector)
-for more details on the API.
-
-{% include_example python/ml/anova_selector_example.py %}
+{% include_example python/ml/univariate_feature_selector_example.py %}
 </div>
 </div>
 
@@ -1974,7 +1913,7 @@ id | features                       | selectedFeatures
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VarianceThresholdSelector Scala docs]((api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector))
+Refer to the [VarianceThresholdSelector Scala docs](api/scala/org/apache/spark/ml/feature/VarianceThresholdSelector.html)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VarianceThresholdSelectorExample.scala %}
@@ -1990,7 +1929,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [VarianceThresholdSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VarianceThresholdSelector)
+Refer to the [VarianceThresholdSelector Python docs](api/python/reference/api/pyspark.ml.feature.VarianceThresholdSelector.html)
 for more details on the API.
 
 {% include_example python/ml/variance_threshold_selector_example.py %}
@@ -2076,7 +2015,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [BucketedRandomProjectionLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.BucketedRandomProjectionLSH)
+Refer to the [BucketedRandomProjectionLSH Python docs](api/python/reference/api/pyspark.ml.feature.BucketedRandomProjectionLSH.html)
 for more details on the API.
 
 {% include_example python/ml/bucketed_random_projection_lsh_example.py %}
@@ -2117,7 +2056,7 @@ for more details on the API.
 
 <div data-lang="python" markdown="1">
 
-Refer to the [MinHashLSH Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinHashLSH)
+Refer to the [MinHashLSH Python docs](api/python/reference/api/pyspark.ml.feature.MinHashLSH.html)
 for more details on the API.
 
 {% include_example python/ml/min_hash_lsh_example.py %}

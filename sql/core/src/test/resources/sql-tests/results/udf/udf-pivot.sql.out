@@ -47,7 +47,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<CAST(udf(cast(year as string)) AS INT):int,dotNET:bigint,Java:bigint>
+struct<udf(year):int,dotNET:bigint,Java:bigint>
 -- !query output
 2012	15000	20000
 2013	48000	30000
@@ -75,7 +75,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(avg(cast(earnings as bigint)) as string)) AS DOUBLE):double,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(avg(cast(earnings as bigint)) as string)) AS DOUBLE):double>
+struct<year:int,dotNET_udf(sum(earnings)):bigint,dotNET_udf(avg(earnings)):double,Java_udf(sum(earnings)):bigint,Java_udf(avg(earnings)):double>
 -- !query output
 2012	15000	7500.0	20000	20000.0
 2013	48000	48000.0	30000	30000.0
@@ -104,7 +104,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<dotNET_CAST(udf(cast(sum(cast(cast(udf(cast(earnings as string)) as int) as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(year) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(cast(udf(cast(earnings as string)) as int) as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(year) as string)) AS INT):int>
+struct<dotNET_udf(sum(udf(earnings))):bigint,dotNET_udf(min(year)):int,Java_udf(sum(udf(earnings))):bigint,Java_udf(min(year)):int>
 -- !query output
 63000	2012	50000	2012
 
@@ -139,7 +139,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,dotNET_CAST(udf(cast(min(s) as string)) AS INT):int,Java_CAST(udf(cast(sum(cast(earnings as bigint)) as string)) AS BIGINT):bigint,Java_CAST(udf(cast(min(s) as string)) AS INT):int>
+struct<year:int,dotNET_udf(sum(earnings)):bigint,dotNET_udf(min(s)):int,Java_udf(sum(earnings)):bigint,Java_udf(min(s)):int>
 -- !query output
 2012	15000	1	20000	1
 2013	48000	2	30000	2
@@ -244,7 +244,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_CAST(udf(cast(CEIL(cast(udf(cast(sum(cast(earnings as bigint)) as string)) as bigint)) as string)) AS BIGINT):bigint,dotNET_a1:double,Java_CAST(udf(cast(CEIL(cast(udf(cast(sum(cast(earnings as bigint)) as string)) as bigint)) as string)) AS BIGINT):bigint,Java_a1:double>
+struct<year:int,dotNET_udf(CEIL(udf(sum(earnings)))):bigint,dotNET_a1:double,Java_udf(CEIL(udf(sum(earnings)))):bigint,Java_a1:double>
 -- !query output
 2012	15000	7501.0	20000	20001.0
 2013	48000	48001.0	30000	30001.0

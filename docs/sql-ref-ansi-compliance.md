@@ -62,26 +62,26 @@ Spark SQL has three kinds of type conversions: explicit casting, type coercion, 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 On the other hand, `INSERT INTO` syntax throws an analysis exception when the ANSI mode enabled via `spark.sql.storeAssignmentPolicy=ANSI`.
 
-The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)"](https://www.iso.org/standard/53682.html), except it specially allows the following
+The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)](https://www.iso.org/standard/53682.html), except it specially allows the following
  straightforward type conversions which are disallowed as per the ANSI standard:
 * NumericType <=> BooleanType
 * StringType <=> BinaryType
 
  The valid combinations of target data type and source data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
-    
-| From\To   | NumericType | StringType | DateType | TimestampType | IntervalType | BooleanType | BinaryType | ArrayType | MapType | StructType |
+
+| Source\Target | Numeric | String | Date | Timestamp | Interval | Boolean | Binary | Array | Map | Struct |
 |-----------|---------|--------|------|-----------|----------|---------|--------|-------|-----|--------|
-| NumericType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| StringType    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
-| DateType      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| TimestampType | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
-| IntervalType  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
-| BooleanType   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
-| BinaryType    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
-| ArrayType     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
-| MapType       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
-| StructType    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
+| Numeric   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| String    | Y       | Y      | Y    | Y         | Y        | Y       | Y      | N     | N   | N      |
+| Date      | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Timestamp | N       | Y      | Y    | Y         | N        | N       | N      | N     | N   | N      |
+| Interval  | N       | Y      | N    | N         | Y        | N       | N      | N     | N   | N      |
+| Boolean   | Y       | Y      | N    | N         | N        | Y       | N      | N     | N   | N      |
+| Binary    | Y       | N      | N    | N         | N        | N       | Y      | N     | N   | N      |
+| Array     | N       | N      | N    | N         | N        | N       | N      | Y     | N   | N      |
+| Map       | N       | N      | N    | N         | N        | N       | N      | N     | Y   | N      |
+| Struct    | N       | N      | N    | N         | N        | N       | N      | N     | N   | Y      |
 
 Currently, the ANSI mode affects explicit casting and assignment casting only.
 In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
@@ -156,6 +156,7 @@ The behavior of some SQL functions can be different under ANSI mode (`spark.sql.
   - `make_date`: This function should fail with an exception if the result date is invalid.
   - `make_timestamp`: This function should fail with an exception if the result timestamp is invalid.
   - `make_interval`:  This function should fail with an exception if the result interval is invalid.
+  - `next_day`: This function throws `IllegalArgumentException` if input is not a valid day of week.
 
 ### SQL Operators
 
@@ -363,6 +364,7 @@ Below is a list of all the keywords in Spark SQL.
 |REPAIR|non-reserved|non-reserved|non-reserved|
 |REPLACE|non-reserved|non-reserved|non-reserved|
 |RESET|non-reserved|non-reserved|non-reserved|
+|RESPECT|non-reserved|non-reserved|non-reserved|
 |RESTRICT|non-reserved|non-reserved|non-reserved|
 |REVOKE|non-reserved|non-reserved|reserved|
 |RIGHT|reserved|strict-non-reserved|reserved|

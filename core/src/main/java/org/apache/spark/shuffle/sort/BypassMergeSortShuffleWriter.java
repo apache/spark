@@ -31,7 +31,6 @@ import scala.Product2;
 import scala.Tuple2;
 import scala.collection.Iterator;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -178,8 +177,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     }
   }
 
-  @VisibleForTesting
-  long[] getPartitionLengths() {
+  @Override
+  public long[] getPartitionLengths() {
     return partitionLengths;
   }
 
