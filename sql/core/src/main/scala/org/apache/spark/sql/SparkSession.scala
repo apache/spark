@@ -816,7 +816,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: String): Builder = synchronized {
-      checkAndSetConfig(key, value)
+      options += key -> value
       this
     }
 
@@ -827,7 +827,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: Long): Builder = synchronized {
-      checkAndSetConfig(key, value.toString)
+      options += key -> value.toString
       this
     }
 
@@ -838,7 +838,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: Double): Builder = synchronized {
-      checkAndSetConfig(key, value.toString)
+      options += key -> value.toString
       this
     }
 
@@ -849,7 +849,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(key: String, value: Boolean): Builder = synchronized {
-      checkAndSetConfig(key, value.toString)
+      options += key -> value.toString
       this
     }
 
@@ -859,7 +859,7 @@ object SparkSession extends Logging {
      * @since 2.0.0
      */
     def config(conf: SparkConf): Builder = synchronized {
-      conf.getAll.foreach { case (k, v) => checkAndSetConfig(k, v) }
+      conf.getAll.foreach { case (k, v) => options += k -> v }
       this
     }
 
@@ -898,35 +898,23 @@ object SparkSession extends Logging {
       this
     }
 
-    // These submit configuration only effect when config before submit app.
-    private val SUBMIT_LAUNCHER_CONFIG =
-      Seq(SPARK_MASTER, DEPLOY_MODE, DRIVER_MEMORY, DRIVER_EXTRA_CLASSPATH,
-        DRIVER_DEFAULT_JAVA_OPTIONS, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_LIBRARY_PATH,
-        PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON, SPARKR_R_SHELL, CHILD_PROCESS_LOGGER_NAME,
-        CHILD_CONNECTION_TIMEOUT)
+    // These configurations related to driver when deploy like “spark.master”,
+    // “spark.driver.memory”, this kind of properties may not be affected when
+    // setting programmatically through SparkConf in runtime, or the behavior is
+    // depending on which cluster manager and deploy mode you choose, so it would
+    // be suggested to set through configuration file or spark-submit command line options.
+    private val DRIVER_RELATED_LAUNCHER_CONFIG = Seq(DRIVER_MEMORY, DRIVER_EXTRA_CLASSPATH,
+      DRIVER_DEFAULT_JAVA_OPTIONS, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_LIBRARY_PATH,
+      PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON, SPARKR_R_SHELL, CHILD_PROCESS_LOGGER_NAME,
+      CHILD_CONNECTION_TIMEOUT)
 
-    // These configuration can effect when SparkContext is not started.
-    private val EXECUTOR_LAUNCHER_CONFIG =
-      Seq(EXECUTOR_MEMORY, EXECUTOR_EXTRA_CLASSPATH, EXECUTOR_DEFAULT_JAVA_OPTIONS,
-        EXECUTOR_EXTRA_JAVA_OPTIONS, EXECUTOR_EXTRA_LIBRARY_PATH, EXECUTOR_CORES)
-
-    def checkAndSetConfig(key: String, value: String): Unit = {
-      if (SparkContext.getActive.isEmpty) {
-        if (SUBMIT_LAUNCHER_CONFIG.contains(key)) {
-          logWarning(s"Since spark has been started, configuration ${key} won't work" +
-            s" when set it here")
-        } else {
-          options += key -> value
-        }
-      } else {
-        if ((SUBMIT_LAUNCHER_CONFIG ++ EXECUTOR_LAUNCHER_CONFIG).contains(key)) {
-          logWarning(s"Since spark has been started, configuration ${key} won't work" +
-            s" when set it here")
-        } else {
-          options += key -> value
-        }
-      }
-    }
+    // These configurations related to executor when deploy like “spark.executor.memory”,
+    // “spark.executor.cores”, this kind of properties may not be affected when setting
+    // programmatically after SparkContext is started, so it would
+    // be suggested to set through configuration file or spark-submit command line options.
+    private val EXECUTOR_LAUNCHER_CONFIG = Seq(SPARK_MASTER, DEPLOY_MODE, EXECUTOR_MEMORY,
+      EXECUTOR_EXTRA_CLASSPATH, EXECUTOR_DEFAULT_JAVA_OPTIONS, EXECUTOR_EXTRA_JAVA_OPTIONS,
+      EXECUTOR_EXTRA_LIBRARY_PATH, EXECUTOR_CORES)
 
     /**
      * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
@@ -945,7 +933,34 @@ object SparkSession extends Logging {
      */
     def getOrCreate(): SparkSession = synchronized {
       val sparkConf = new SparkConf()
-      options.foreach { case (k, v) => sparkConf.set(k, v) }
+      val (nonEffectConfigurations, mayEffectConfigurations) =
+        options.partition((DRIVER_RELATED_LAUNCHER_CONFIG).contains)
+
+      if (nonEffectConfigurations.nonEmpty) {
+        logWarning(
+          s"""Since spark has been started, such configuration
+             | `${nonEffectConfigurations.mkString(", ")}` may not be affected when setting
+             |  programmatically through SparkConf in runtime, or the behavior is depending
+             | on which cluster manager and deploy mode you choose, so it would be suggested to
+             | set through configuration file or spark-submit command line options.
+             |""".stripMargin)
+      }
+
+      val (scAlreadySetConfigurations, normalConfigs) =
+        mayEffectConfigurations.partition(EXECUTOR_LAUNCHER_CONFIG.contains)
+
+      if (SparkContext.getActive.isDefined) {
+        logWarning(
+          s"""Since spark has been started and SparkContext has been initialized, such
+             | configuration `${scAlreadySetConfigurations.mkString(", ")}` may not be affected when
+             | setting programmatically through SparkConf in runtime, or the behavior is
+             | depending on which cluster manager and deploy mode you choose, so it would
+             | be suggested to set through configuration file or spark-submit command line options.
+             |""".stripMargin)
+        normalConfigs.foreach { case (k, v) => sparkConf.set(k, v) }
+      } else {
+        mayEffectConfigurations.foreach { case (k, v) => sparkConf.set(k, v) }
+      }
 
       if (!sparkConf.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
         assertOnDriver()
