@@ -142,7 +142,10 @@ package object dsl {
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
+    def as(alias: AttributeSymbol): NamedExpression = Alias(expr, alias.name)()
   }
+
+  class AttributeSymbol(val name: String)
 
   trait ExpressionConversions {
     implicit class DslExpression(e: Expression) extends ImplicitOperators {
@@ -244,6 +247,8 @@ package object dsl {
     def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
       WindowExpression(windowFunc, windowSpec)
 
+    def attr(s: String): AttributeSymbol = new AttributeSymbol(s)
+
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
@@ -253,6 +258,10 @@ package object dsl {
     implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
       def s: String = attr.name
     }
+    implicit class DslAttributeSymbol(sym: AttributeSymbol) extends ImplicitAttribute {
+      def s: String = sym.name
+    }
+    implicit def attrSymToUnresolvedAttr(sym: AttributeSymbol): UnresolvedAttribute = sym.expr
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
