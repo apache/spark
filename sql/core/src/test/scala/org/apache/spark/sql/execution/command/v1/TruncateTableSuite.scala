@@ -208,24 +208,6 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
     }
   }
 
-  test("case sensitivity in resolving partition specs") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
-      sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
-      }
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        checkAnswer(sql(s"SELECT id, data FROM $t"), Row(0, "abc"))
-      }
-    }
-  }
-
   test("change stats after truncate command") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT, value INT) $defaultUsing")

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 and V2
@@ -73,6 +74,24 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
         Map("width" -> "0", "length" -> "0"),
         Map("width" -> "1", "length" -> "1"),
         Map("width" -> "1", "length" -> "2"))
+    }
+  }
+
+  test("case sensitivity in resolving partition specs") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
+      sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
+      sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val errMsg = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
+        }.getMessage
+        assert(errMsg.contains("ID is not a valid partition column"))
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
+        QueryTest.checkAnswer(sql(s"SELECT id, data FROM $t"), Row(0, "abc") :: Nil)
+      }
     }
   }
 }
