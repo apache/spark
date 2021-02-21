@@ -94,4 +94,49 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
     }
   }
+
+  test("SPARK-34215: keep table cached after truncation") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c0 int) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0")
+      sql(s"CACHE TABLE $t")
+      assert(spark.catalog.isCached(t))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Row(0) :: Nil)
+      sql(s"TRUNCATE TABLE $t")
+      assert(spark.catalog.isCached(t))
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
+    }
+  }
+
+  test("truncation of views is not allowed") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
+      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
+
+      withView("v0") {
+        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
+        val errMsg = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE v0")
+        }.getMessage
+        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+      }
+
+      withTempView("v1") {
+        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
+        val errMsg = intercept[AnalysisException] {
+          sql("TRUNCATE TABLE v1")
+        }.getMessage
+        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+      }
+
+      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
+      withGlobalTempView("v2") {
+        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
+        val errMsg = intercept[AnalysisException] {
+          sql(s"TRUNCATE TABLE $v2")
+        }.getMessage
+        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
+      }
+    }
+  }
 }
