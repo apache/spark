@@ -325,7 +325,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     ereq.cores(4).memory("2g")
     treq.cpus(2)
     rpb.require(ereq).require(treq)
-    val rp = rpb.build
+    val rp = rpb.build()
 
     // Target 1 executor for default profile, 2 for other profile,
     // make sure it's requested, even with an empty initial snapshot.
