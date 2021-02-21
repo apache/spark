@@ -38,18 +38,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 
-  test("truncate partition in non-partitioned table") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
-      sql(s"INSERT INTO $t SELECT 0, 1")
-
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (width=1)")
-      }.getMessage
-      assert(errMsg.contains(
-        "TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned"))
-    }
-  }
+  override val invalidPartColumnError =
+    "TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned"
 
   test("SPARK-30312: truncate table - keep acl/permission") {
     Seq(true, false).foreach { ignore =>

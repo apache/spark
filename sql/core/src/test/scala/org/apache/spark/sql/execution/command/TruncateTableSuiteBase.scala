@@ -106,6 +106,20 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
+  protected def invalidPartColumnError: String
+
+  test("truncate a partition of non partitioned table") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0")
+
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+      }.getMessage
+      assert(errMsg.contains(invalidPartColumnError))
+    }
+  }
+
   test("SPARK-34418: preserve partitions in truncated table") {
     withNamespaceAndTable("ns", "partTable") { t =>
       createPartTable(t)
