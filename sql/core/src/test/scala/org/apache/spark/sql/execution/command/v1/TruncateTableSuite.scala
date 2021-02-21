@@ -183,37 +183,6 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
       }
     }
   }
-
-  test("keep dependents as cached after table truncation") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createPartTable(t)
-      cacheRelation(t)
-      checkCachedRelation(t, Seq(Row(0, 0, 0), Row(1, 1, 1), Row(3, 1, 2)))
-
-      withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
-        cacheRelation("v0")
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 2)")
-        checkCachedRelation("v0", Seq(Row(0, 0, 0), Row(1, 1, 1)))
-      }
-
-      withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
-        cacheRelation("v1")
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 1)")
-        checkCachedRelation("v1", Seq(Row(0, 0, 0)))
-      }
-
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView("v2") {
-        sql(s"INSERT INTO $t PARTITION (width = 10, length = 10) SELECT 10")
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
-        cacheRelation(v2)
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 10, length = 10)")
-        checkCachedRelation(v2, Seq(Row(0, 0, 0)))
-      }
-    }
-  }
 }
 
 /**
