@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
 /**
  * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 and V2
@@ -48,6 +48,31 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       sql(s"TRUNCATE TABLE $t")
       QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
+    }
+  }
+
+  protected def createPartTable(t: String): Unit = {
+    sql(s"""
+      |CREATE TABLE $t (width INT, length INT, height INT)
+      |$defaultUsing
+      |PARTITIONED BY (width, length)""".stripMargin)
+    sql(s"INSERT INTO $t PARTITION (width = 0, length = 0) SELECT 0")
+    sql(s"INSERT INTO $t PARTITION (width = 1, length = 1) SELECT 1")
+    sql(s"INSERT INTO $t PARTITION (width = 1, length = 2) SELECT 3")
+  }
+
+  test("SPARK-34418: preserve partitions in truncated table") {
+    withNamespaceAndTable("ns", "partTable") { t =>
+      createPartTable(t)
+      checkAnswer(
+        sql(s"SELECT width, length, height FROM $t"),
+        Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
+      sql(s"TRUNCATE TABLE $t")
+      checkAnswer(sql(s"SELECT width, length, height FROM $t"), Nil)
+      checkPartitions(t,
+        Map("width" -> "0", "length" -> "0"),
+        Map("width" -> "1", "length" -> "1"),
+        Map("width" -> "1", "length" -> "2"))
     }
   }
 }
