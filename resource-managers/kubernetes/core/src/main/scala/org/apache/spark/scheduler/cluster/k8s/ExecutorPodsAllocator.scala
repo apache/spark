@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -84,7 +84,8 @@ private[spark] class ExecutorPodsAllocator(
 
   private val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
-  private val hasPendingPods = new AtomicBoolean()
+  // visible for tests
+  private[k8s] val numOutstandingPods = new AtomicInteger()
 
   private var lastSnapshot = ExecutorPodsSnapshot()
 
@@ -105,7 +106,7 @@ private[spark] class ExecutorPodsAllocator(
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)
     }
     logDebug(s"Set total expected execs to $totalExpectedExecutorsPerResourceProfileId")
-    if (!hasPendingPods.get()) {
+    if (numOutstandingPods.get() == 0) {
       snapshotsStore.notifySubscribers()
     }
   }
@@ -275,9 +276,9 @@ private[spark] class ExecutorPodsAllocator(
     }
     deletedExecutorIds = _deletedExecutorIds
 
-    // Update the flag that helps the setTotalExpectedExecutors() callback avoid triggering this
-    // update method when not needed.
-    hasPendingPods.set(totalPendingCount + newlyCreatedExecutors.size > 0)
+    // Update the numOutstandingPods that helps the setTotalExpectedExecutors() callback avoid 
+    // triggering this update method when not needed.
+    numOutstandingPods.set(totalPendingCount + newlyCreatedExecutors.size)
   }
 
   private def requestNewExecutors(
