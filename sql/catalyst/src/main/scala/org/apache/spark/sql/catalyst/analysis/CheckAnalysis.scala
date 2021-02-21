@@ -1024,10 +1024,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   private def checkTruncateTable(truncateTable: TruncateTable): Unit = truncateTable match {
     case TruncateTable(rt: ResolvedTable, None) if !rt.table.isInstanceOf[TruncatableTable] =>
-      failAnalysis("...")
+      failAnalysis(s"The table ${rt.table.name()} does not support truncation")
     case TruncateTable(rt: ResolvedTable, Some(_))
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
       failAnalysis("TRUNCATE TABLE cannot run for a table which does not support partitioning")
+    case TruncateTable(
+        ResolvedTable(_, _, _: SupportsPartitionManagement, _),
+        Some(_: UnresolvedPartitionSpec)) =>
+      failAnalysis("Partition spec is not resolved")
+    case TruncateTable(
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _),
+        Some(spec: ResolvedPartitionSpec))
+      if spec.names.length < table.partitionSchema.length &&
+        !table.isInstanceOf[SupportsAtomicPartitionManagement] =>
+      failAnalysis(s"The table ${table.name()} does not support truncation of multiple partitions")
     case _ =>
   }
 }
