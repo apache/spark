@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
+import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table, TruncatableTable}
 
 /**
  * Physical plan node for table truncation.
@@ -34,6 +34,8 @@ case class TruncateTableExec(
 
   override protected def run(): Seq[InternalRow] = {
     val isTableAltered = (table, partSpecs) match {
+      case (truncatableTable: TruncatableTable, None) =>
+        truncatableTable.truncateTable()
       case (partTable: SupportsPartitionManagement, Some(resolvedPartSpec))
         if partTable.partitionSchema.length == resolvedPartSpec.names.length =>
         partTable.truncatePartition(resolvedPartSpec.ident)
