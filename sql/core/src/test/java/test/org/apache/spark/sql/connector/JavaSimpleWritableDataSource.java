@@ -58,6 +58,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class MyScanBuilder extends JavaSimpleScanBuilder {
+
     private final String path;
     private final Configuration conf;
 
@@ -96,6 +97,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class MyWriteBuilder implements WriteBuilder, SupportsTruncate {
+
     private final String path;
     private final String queryId;
     private boolean needTruncate = false;
@@ -118,6 +120,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class MyWrite implements Write {
+
     private final String path;
     private final String queryId;
     private final boolean needTruncate;
@@ -146,6 +149,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class MyBatchWrite implements BatchWrite {
+
     private final String queryId;
     private final String path;
     private final Configuration conf;
@@ -203,6 +207,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class MyTable extends JavaSimpleBatchTable implements SupportsWrite {
+
     private final String path;
     private final Configuration conf = SparkHadoopUtil.get().conf();
 
@@ -235,6 +240,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class JavaCSVInputPartitionReader implements InputPartition {
+
     private String path;
 
     JavaCSVInputPartitionReader(String path) {
@@ -251,6 +257,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class JavaCSVReaderFactory implements PartitionReaderFactory {
+
     private final SerializableConfiguration conf;
 
     JavaCSVReaderFactory(SerializableConfiguration conf) {
@@ -301,6 +308,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class JavaCSVDataWriterFactory implements DataWriterFactory {
+
     private final String path;
     private final String jobId;
     private final SerializableConfiguration conf;
@@ -325,6 +333,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
   }
 
   static class JavaCSVDataWriter implements DataWriter<InternalRow> {
+
     private final FileSystem fs;
     private final Path file;
     private final FSDataOutputStream out;
@@ -356,6 +365,7 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
     }
 
     @Override
-    public void close() {}
+    public void close() {
+    }
   }
 }
