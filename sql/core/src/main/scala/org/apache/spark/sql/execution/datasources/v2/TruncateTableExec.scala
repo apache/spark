@@ -43,6 +43,8 @@ case class TruncateTableExec(
         val partitionIdentifiers = atomicPartTable.listPartitionIdentifiers(
           resolvedPartitionSpec.names.toArray, resolvedPartitionSpec.ident)
         atomicPartTable.truncatePartitions(partitionIdentifiers)
+      case _ => throw new IllegalArgumentException(
+        s"Truncation of ${table.getClass.getName} is not supported")
     }
     if (isTableAltered) refreshCache()
     Seq.empty
