@@ -223,9 +223,9 @@ public class JavaSimpleWritableDataSource implements TestingV2Source, SessionCon
     @Override
     public Set<TableCapability> capabilities() {
       return new HashSet<>(Arrays.asList(
-              TableCapability.BATCH_READ,
-              TableCapability.BATCH_WRITE,
-              TableCapability.TRUNCATE));
+          TableCapability.BATCH_READ,
+          TableCapability.BATCH_WRITE,
+          TableCapability.TRUNCATE));
     }
   }
 

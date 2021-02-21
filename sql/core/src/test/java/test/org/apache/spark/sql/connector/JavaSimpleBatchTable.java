@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType;
 
 abstract class JavaSimpleBatchTable implements Table, SupportsRead {
   private static final Set<TableCapability> CAPABILITIES =
-          new HashSet<>(Collections.singletonList(TableCapability.BATCH_READ));
+      new HashSet<>(Collections.singletonList(TableCapability.BATCH_READ));
   @Override
   public StructType schema() {
     return TestingV2Source.schema();
