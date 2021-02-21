@@ -40,4 +40,14 @@ trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(errMsg.contains("Table not found"))
     }
   }
+
+  test("truncate non-partitioned table") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0, 1")
+
+      sql(s"TRUNCATE TABLE $t")
+      QueryTest.checkAnswer(sql(s"SELECT * FROM $t"), Nil)
+    }
+  }
 }

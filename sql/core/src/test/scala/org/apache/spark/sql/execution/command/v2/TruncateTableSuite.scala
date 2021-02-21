@@ -17,9 +17,35 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
  * The class contains tests for the `TRUNCATE TABLE` command to check V2 table catalogs.
  */
-class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase
+class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase {
+  test("truncate a partition of a table which does not support partitions") {
+    withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
+      sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0")
+
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+      }.getMessage
+      assert(errMsg.contains(
+        "TRUNCATE TABLE cannot run for a table which does not support partitioning"))
+    }
+  }
+
+  test("truncate a partition of non-partitioned table") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0")
+
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+      }.getMessage
+      assert(errMsg.contains("c0 is not a valid partition column in table"))
+    }
+  }
+}
