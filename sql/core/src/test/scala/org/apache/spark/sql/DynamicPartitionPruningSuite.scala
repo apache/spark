@@ -1210,7 +1210,9 @@ abstract class DynamicPartitionPruningSuiteBase
 
   test("join key with multiple references on the filtering plan",
     DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true",
+      SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
       // when enable AQE, the reusedExchange is inserted when executed.
       withTable("fact", "dim") {
         spark.range(100).select(

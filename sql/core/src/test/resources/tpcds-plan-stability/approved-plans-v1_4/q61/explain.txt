@@ -244,7 +244,7 @@ Input [4]: [ss_item_sk#1, ss_ext_sales_price#5, c_current_addr_sk#21, ca_address
 Output [2]: [i_item_sk#26, i_category#27]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/item]
-PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Jewelry), IsNotNull(i_item_sk)]
+PushedFilters: [IsNotNull(i_category), EqualTo(i_category,Jewelry                                           ), IsNotNull(i_item_sk)]
 ReadSchema: struct<i_item_sk:int,i_category:string>
 
 (39) ColumnarToRow [codegen id : 6]
@@ -252,7 +252,7 @@ Input [2]: [i_item_sk#26, i_category#27]
 
 (40) Filter [codegen id : 6]
 Input [2]: [i_item_sk#26, i_category#27]
-Condition : ((isnotnull(i_category#27) AND (i_category#27 = Jewelry)) AND isnotnull(i_item_sk#26))
+Condition : ((isnotnull(i_category#27) AND (i_category#27 = Jewelry                                           )) AND isnotnull(i_item_sk#26))
 
 (41) Project [codegen id : 6]
 Output [1]: [i_item_sk#26]

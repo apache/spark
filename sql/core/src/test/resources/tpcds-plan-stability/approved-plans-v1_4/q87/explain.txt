@@ -205,11 +205,11 @@ Results [3]: [c_last_name#19, c_first_name#18, d_date#16]
 
 (32) BroadcastExchange
 Input [3]: [c_last_name#19, c_first_name#18, d_date#16]
-Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 0), isnull(input[2, date, true])),false), [id=#21]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 1970-01-01), isnull(input[2, date, true])),false), [id=#21]
 
 (33) BroadcastHashJoin [codegen id : 12]
-Left keys [6]: [coalesce(c_last_name#10, ), isnull(c_last_name#10), coalesce(c_first_name#9, ), isnull(c_first_name#9), coalesce(d_date#5, 0), isnull(d_date#5)]
-Right keys [6]: [coalesce(c_last_name#19, ), isnull(c_last_name#19), coalesce(c_first_name#18, ), isnull(c_first_name#18), coalesce(d_date#16, 0), isnull(d_date#16)]
+Left keys [6]: [coalesce(c_last_name#10, ), isnull(c_last_name#10), coalesce(c_first_name#9, ), isnull(c_first_name#9), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
+Right keys [6]: [coalesce(c_last_name#19, ), isnull(c_last_name#19), coalesce(c_first_name#18, ), isnull(c_first_name#18), coalesce(d_date#16, 1970-01-01), isnull(d_date#16)]
 Join condition: None
 
 (34) HashAggregate [codegen id : 12]
@@ -285,11 +285,11 @@ Results [3]: [c_last_name#28, c_first_name#27, d_date#25]
 
 (48) BroadcastExchange
 Input [3]: [c_last_name#28, c_first_name#27, d_date#25]
-Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 0), isnull(input[2, date, true])),false), [id=#30]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true]), coalesce(input[1, string, true], ), isnull(input[1, string, true]), coalesce(input[2, date, true], 1970-01-01), isnull(input[2, date, true])),false), [id=#30]
 
 (49) BroadcastHashJoin [codegen id : 12]
-Left keys [6]: [coalesce(c_last_name#10, ), isnull(c_last_name#10), coalesce(c_first_name#9, ), isnull(c_first_name#9), coalesce(d_date#5, 0), isnull(d_date#5)]
-Right keys [6]: [coalesce(c_last_name#28, ), isnull(c_last_name#28), coalesce(c_first_name#27, ), isnull(c_first_name#27), coalesce(d_date#25, 0), isnull(d_date#25)]
+Left keys [6]: [coalesce(c_last_name#10, ), isnull(c_last_name#10), coalesce(c_first_name#9, ), isnull(c_first_name#9), coalesce(d_date#5, 1970-01-01), isnull(d_date#5)]
+Right keys [6]: [coalesce(c_last_name#28, ), isnull(c_last_name#28), coalesce(c_first_name#27, ), isnull(c_first_name#27), coalesce(d_date#25, 1970-01-01), isnull(d_date#25)]
 Join condition: None
 
 (50) HashAggregate [codegen id : 12]

@@ -1312,7 +1312,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val subqueries = stripAQEPlan(plan.queryExecution.executedPlan).collect {
         case p => p.subqueries
       }.flatten
-      assert(subqueries.length == 1)
+      assert(subqueries.length == 2)
     }
   }
 
