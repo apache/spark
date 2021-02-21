@@ -39,15 +39,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 
-  test("table does not exist") {
-    withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
-    }
-  }
-
   test("truncate non-partitioned table") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")

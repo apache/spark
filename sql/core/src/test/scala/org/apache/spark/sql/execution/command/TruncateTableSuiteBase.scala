@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 
 /**
- * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2
+ * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 and V2
  * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *
@@ -31,4 +31,13 @@ import org.apache.spark.sql.QueryTest
  */
 trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "TRUNCATE TABLE"
+
+  test("table does not exist") {
+    withNamespaceAndTable("ns", "does_not_exist") { t =>
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t")
+      }.getMessage
+      assert(errMsg.contains("Table not found"))
+    }
+  }
 }

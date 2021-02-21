@@ -769,7 +769,7 @@ object ShowColumns {
  */
 case class TruncateTable(
     child: LogicalPlan,
-    partitionSpec: Option[TablePartitionSpec]) extends Command {
+    partitionSpec: Option[PartitionSpec]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
