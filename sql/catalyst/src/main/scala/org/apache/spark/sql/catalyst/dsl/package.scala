@@ -179,6 +179,10 @@ package object dsl {
       def $(args: Any*): analysis.UnresolvedAttribute = {
         analysis.UnresolvedAttribute(sc.s(args : _*))
       }
+
+      def attr(args: Any*): AttributeSymbol = {
+        new AttributeSymbol(sc.s(args : _*))
+      }
     }
 
     def rand(e: Long): Expression = Rand(e)
@@ -246,8 +250,6 @@ package object dsl {
 
     def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
       WindowExpression(windowFunc, windowSpec)
-
-    def attr(s: String): AttributeSymbol = new AttributeSymbol(s)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
