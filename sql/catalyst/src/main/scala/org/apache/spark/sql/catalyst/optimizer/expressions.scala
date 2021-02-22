@@ -345,7 +345,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // Common factor elimination for conjunction
       case and @ (left And right) =>
         // 1. Split left and right to get the disjunctive predicates,
-        //    i.e. lhs = (a, b), rhs = (a, c)
+        //    i.e. lhs = (a || b), rhs = (a || c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
         // 4. If common is non-empty, apply the formula to get the optimized predicate:
@@ -364,7 +364,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             common.reduce(Or)
           } else {
             // (a || b || c || ...) && (a || b || d || ...) =>
-            // ((c || ...) && (d || ...)) || a || b
+            // a || b || ((c || ...) && (d || ...))
             (common :+ And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
           }
         } else {
@@ -375,7 +375,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             // No common factors, return the original predicate
             and
           } else {
-            // (((a && b) && a && (a && c))) => a && b && c
+            // (a && b) && a && (a && c) => a && b && c
             distinct.reduce(And)
           }
         }
@@ -383,7 +383,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
       // Common factor elimination for disjunction
       case or @ (left Or right) =>
         // 1. Split left and right to get the conjunctive predicates,
-        //    i.e.  lhs = (a, b), rhs = (a, c)
+        //    i.e.  lhs = (a && b), rhs = (a && c)
         // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
         // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
         // 4. If common is non-empty, apply the formula to get the optimized predicate:
@@ -402,7 +402,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             common.reduce(And)
           } else {
             // (a && b && c && ...) || (a && b && d && ...) =>
-            // ((c && ...) || (d && ...)) && a && b
+            // a && b && ((c && ...) || (d && ...))
             (common :+ Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
           }
         } else {
@@ -413,7 +413,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             // No common factors, return the original predicate
             or
           } else {
-            // (a || b) || a || (a || c))) => a || b || c
+            // (a || b) || a || (a || c) => a || b || c
             distinct.reduce(Or)
           }
         }

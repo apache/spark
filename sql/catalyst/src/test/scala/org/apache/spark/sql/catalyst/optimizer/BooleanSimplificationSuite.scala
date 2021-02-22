@@ -126,52 +126,52 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       'a === 'b || 'b > 3 && 'a > 3 && 'a < 5)
   }
 
-  test("SPARK-34222: (((a && b) && a && (a && c))) => a && b && c") {
-    checkCondition((('a > 1 && 'b > 2) && 'a > 1 && ('a > 1 && 'c > 3)),
-      ('a > 1 && ('b > 2 && 'c > 3)))
+  test("SPARK-34222: (a && b) && a && (a && c) => a && b && c") {
+    checkCondition(('a > 1 && 'b > 2) && 'a > 1 && ('a > 1 && 'c > 3),
+      'a > 1 && ('b > 2 && 'c > 3))
 
-    checkCondition((('a > 1 && 'b >2) && ('a > 4 && 'b > 5) && ('a > 1 && 'c > 3)),
-      ('a > 1 && 'b > 2 && 'c > 3 && 'a > 4 && 'b > 5))
-
-    checkCondition(
-      ('a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && 'c >1))),
-      ('a > 1 && 'b > 3 && 'c >1))
+    checkCondition(('a > 1 && 'b >2) && ('a > 4 && 'b > 5) && ('a > 1 && 'c > 3),
+      'a > 1 && 'b > 2 && 'c > 3 && 'a > 4 && 'b > 5)
 
     checkCondition(
-      (('a > 1 || 'b > 3) && (('a > 1 || 'b > 3) && 'd > 0 && (('a > 1 || 'b > 3) && 'c >1))),
-      (('a > 1 || 'b > 3) && 'd > 0 && 'c >1))
+      'a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && 'c >1)),
+      'a > 1 && 'b > 3 && 'c >1)
 
     checkCondition(
-      ('a > 1 && 'b > 2 && 'a > 1 && 'c > 3),
-      ('a > 1 && 'b > 2 && 'c > 3))
+      ('a > 1 || 'b > 3) && (('a > 1 || 'b > 3) && 'd > 0 && (('a > 1 || 'b > 3) && 'c >1)),
+      ('a > 1 || 'b > 3) && 'd > 0 && 'c >1)
 
     checkCondition(
-      ('a > 1 &&  'b > 3 && 'a > 1 ) || ('a > 1 &&  'b > 3 && 'a > 1 && 'c > 1),
-      ('a > 1 && 'b > 3))
+      'a > 1 && 'b > 2 && 'a > 1 && 'c > 3,
+      'a > 1 && 'b > 2 && 'c > 3)
+
+    checkCondition(
+      ('a > 1 && 'b > 3 && 'a > 1 ) || ('a > 1 && 'b > 3 && 'a > 1 && 'c > 1),
+      'a > 1 && 'b > 3)
   }
 
-  test("SPARK-34222: (((a || b) || a || (a || c))) => a || b || c") {
-    checkCondition((('a > 1 || 'b > 2) || 'a > 1 ||('a > 1 || 'c > 3)),
-      ('a > 1 || 'b > 2 || 'c > 3))
+  test("SPARK-34222: (a || b) || a || (a || c) => a || b || c") {
+    checkCondition(('a > 1 || 'b > 2) || 'a > 1 || ('a > 1 || 'c > 3),
+      'a > 1 || 'b > 2 || 'c > 3)
 
-    checkCondition((('a > 1 || 'b >2) || 'a > 4 ||('a > 1 || 'c > 3)),
-      ('a > 1 || 'b > 2 || 'a > 4 || 'c > 3))
-
-    checkCondition(
-      ('a > 1 || 'b > 3 || ( 'a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || 'c > 1))),
-      ('a > 1 || 'b > 3 || 'c > 1))
+    checkCondition(('a > 1 || 'b >2) || 'a > 4 ||('a > 1 || 'c > 3),
+      'a > 1 || 'b > 2 || 'a > 4 || 'c > 3)
 
     checkCondition(
-      (('a > 1 && 'b > 3) || ( ('a > 1 && 'b > 3) || (('a > 1 && 'b > 3) || 'c > 1))),
-      (('a > 1 && 'b > 3) || 'c > 1))
+      'a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || 'c > 1)),
+      'a > 1 || 'b > 3 || 'c > 1)
 
     checkCondition(
-      ('a > 1 || 'b > 2 || 'a > 1 || 'c > 3),
-      ('a > 1 || 'b > 2 || 'c > 3))
+      ('a > 1 && 'b > 3) || (('a > 1 && 'b > 3) || (('a > 1 && 'b > 3) || 'c > 1)),
+      ('a > 1 && 'b > 3) || 'c > 1)
 
     checkCondition(
-      ('a > 1 ||  'b > 3 || 'a > 1 ) && ('a > 1 ||  'b > 3 || 'a > 1 || 'c > 1 ),
-      ('a > 1 || 'b > 3))
+      'a > 1 || 'b > 2 || 'a > 1 || 'c > 3,
+      'a > 1 || 'b > 2 || 'c > 3)
+
+    checkCondition(
+      ('a > 1 || 'b > 3 || 'a > 1 ) && ('a > 1 || 'b > 3 || 'a > 1 || 'c > 1 ),
+      'a > 1 || 'b > 3)
   }
 
   test("e && (!e || f) - not nullable") {
