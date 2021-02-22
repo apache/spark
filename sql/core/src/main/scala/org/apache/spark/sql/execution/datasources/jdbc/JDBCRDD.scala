@@ -135,43 +135,49 @@ object JDBCRDD extends Logging {
     })
   }
 
+  private def containsArithmeticOp(col: String): Boolean =
+    col.contains("+") || col.contains("-") || col.contains("*") || col.contains("/")
+
   def compileAggregates(
       aggregates: Seq[AggregateFunc],
-      dialect: JdbcDialect): (Array[String]) = {
+      dialect: JdbcDialect): (Array[String], Array[DataType]) = {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
     val aggBuilder = ArrayBuilder.make[String]
+    val dataTypeBuilder = ArrayBuilder.make[DataType]
     aggregates.map {
-      case Min(column) =>
-        if (!column.contains("+") && !column.contains("-") && !column.contains("*")
-          && !column.contains("/")) {
+      case Min(column, dataType) =>
+        dataTypeBuilder += dataType
+        if (!containsArithmeticOp(column)) {
           aggBuilder += s"MIN(${quote(column)})"
         } else {
           aggBuilder += s"MIN(${quoteEachCols(column, dialect)})"
         }
-      case Max(column) =>
-        if (!column.contains("+") && !column.contains("-") && !column.contains("*")
-          && !column.contains("/")) {
+      case Max(column, dataType) =>
+        dataTypeBuilder += dataType
+        if (!containsArithmeticOp(column)) {
           aggBuilder += s"MAX(${quote(column)})"
         } else {
           aggBuilder += s"MAX(${quoteEachCols(column, dialect)})"
         }
-      case Sum(column) =>
-        if (!column.contains("+") && !column.contains("-") && !column.contains("*")
-          && !column.contains("/")) {
-          aggBuilder += s"SUM(${quote(column)})"
+      case Sum(column, dataType, isDistinct) =>
+        val distinct = if (isDistinct) "DISTINCT " else ""
+        dataTypeBuilder += dataType
+        if (!containsArithmeticOp(column)) {
+          aggBuilder += s"SUM(${distinct} ${quote(column)})"
         } else {
-          aggBuilder += s"SUM(${quoteEachCols(column, dialect)})"
+          aggBuilder += s"SUM(${distinct} ${quoteEachCols(column, dialect)})"
         }
-      case Avg(column) =>
-        if (!column.contains("+") && !column.contains("-") && !column.contains("*")
-          && !column.contains("/")) {
-          aggBuilder += s"AVG(${quote(column)})"
+      case Avg(column, dataType, isDistinct) =>
+        val distinct = if (isDistinct) "DISTINCT " else ""
+        dataTypeBuilder += dataType
+        if (!containsArithmeticOp(column)) {
+          aggBuilder += s"AVG(${distinct} ${quote(column)})"
         } else {
-          aggBuilder += s"AVG(${quoteEachCols(column, dialect)})"
+          aggBuilder += s"AVG(${distinct} ${quoteEachCols(column, dialect)})"
         }
       case _ =>
     }
-    aggBuilder.result
+    (aggBuilder.result, dataTypeBuilder.result)
   }
 
   private def quoteEachCols (column: String, dialect: JdbcDialect): String = {
@@ -206,7 +212,7 @@ object JDBCRDD extends Logging {
       filters: Array[Filter],
       parts: Array[Partition],
       options: JDBCOptions,
-      aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]))
+      aggregation: Aggregation = Aggregation.empty)
     : RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
@@ -238,7 +244,7 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    aggregation: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]))
+    aggregation: Aggregation = Aggregation.empty)
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -252,118 +258,34 @@ private[jdbc] class JDBCRDD(
    * `columns`, but as a String suitable for injection into a SQL query.
    */
   private val columnList: String = {
-    val compiledAgg = JDBCRDD.compileAggregates(aggregation.aggregateExpressions,
-      JdbcDialects.get(url))
+    val (compiledAgg, aggDataType) =
+      JDBCRDD.compileAggregates(aggregation.aggregateExpressions, JdbcDialects.get(url))
     val sb = new StringBuilder()
     if (compiledAgg.length == 0) {
       updatedSchema = schema
       columns.foreach(x => sb.append(",").append(x))
     } else {
-      getAggregateColumnsList(sb, compiledAgg)
+      getAggregateColumnsList(sb, compiledAgg, aggDataType)
     }
     if (sb.length == 0) "1" else sb.substring(1)
   }
 
-  private def getAggregateColumnsList(sb: StringBuilder, compiledAgg: Array[String]) = {
+  private def getAggregateColumnsList(
+      sb: StringBuilder,
+      compiledAgg: Array[String],
+      aggDataType: Array[DataType]): Unit = {
     val colDataTypeMap: Map[String, StructField] = columns.zip(schema.fields).toMap
     val newColsBuilder = ArrayBuilder.make[String]
-    for (col <- compiledAgg) {
+    for ((col, dataType) <- compiledAgg.zip(aggDataType)) {
       newColsBuilder += col
-
+      updatedSchema = updatedSchema.add(col, dataType)
     }
     for (groupBy <- aggregation.groupByExpressions) {
-      newColsBuilder += JdbcDialects.get(url).quoteIdentifier(groupBy)
+      val quotedGroupBy = JdbcDialects.get(url).quoteIdentifier(groupBy)
+      newColsBuilder += quotedGroupBy
+      updatedSchema = updatedSchema.add(colDataTypeMap.get(quotedGroupBy).get)
     }
-    val newColumns = newColsBuilder.result
-    sb.append(", ").append(newColumns.mkString(", "))
-
-    // build new schemas
-    for (c <- newColumns) {
-      val colName: Array[String] = if (!c.contains("+") && !c.contains("-") && !c.contains("*")
-        && !c.contains("/")) {
-        if (c.contains("MAX") || c.contains("MIN") || c.contains("SUM") || c.contains("AVG")) {
-          Array(c.substring(c.indexOf("(") + 1, c.indexOf(")")))
-        } else {
-          Array(c)
-        }
-      } else {
-        val colsBuilder = ArrayBuilder.make[String]
-        val st = new StringTokenizer(c.substring(c.indexOf("(") + 1, c.indexOf(")")), "+-*/", false)
-        while (st.hasMoreTokens) {
-          colsBuilder += st.nextToken.trim
-        }
-        colsBuilder.result
-      }
-
-      if (c.contains("MAX") || c.contains("MIN")) {
-        updatedSchema = updatedSchema
-          .add(getDataType(colName, colDataTypeMap))
-      } else if (c.contains("SUM")) {
-        // Same as Spark, promote to the largest types to prevent overflows.
-        // IntegralType: if not Long, promote to Long
-        // FractionalType: if not Double, promote to Double
-        // DecimalType.Fixed(precision, scale):
-        //   follow what is done in Sum.resultType, +10 to precision
-        val dataField = getDataType(colName, colDataTypeMap)
-        dataField.dataType match {
-          case DecimalType.Fixed(precision, scale) =>
-            updatedSchema = updatedSchema.add(
-              dataField.name, DecimalType.bounded(precision + 10, scale), dataField.nullable)
-          case _: IntegralType =>
-            updatedSchema = updatedSchema.add(dataField.name, LongType, dataField.nullable)
-          case _ =>
-            updatedSchema = updatedSchema.add(dataField.name, DoubleType, dataField.nullable)
-        }
-      } else if (c.contains("AVG")) { // AVG
-        // Same as Spark, promote to the largest types to prevent overflows.
-        // DecimalType.Fixed(precision, scale):
-        //   follow what is done in Average.resultType, +4 to precision and scale
-        // promote to Double for other data types
-        val dataField = getDataType(colName, colDataTypeMap)
-        dataField.dataType match {
-          case DecimalType.Fixed(p, s) => updatedSchema =
-            updatedSchema.add(
-              dataField.name, DecimalType.bounded(p + 4, s + 4), dataField.nullable)
-          case _ => updatedSchema =
-            updatedSchema.add(dataField.name, DoubleType, dataField.nullable)
-        }
-      } else {
-        updatedSchema = updatedSchema.add(colDataTypeMap.get(c).get)
-      }
-    }
-  }
-
-  private def getDataType(
-      cols: Array[String],
-      colDataTypeMap: Map[String, StructField]): StructField = {
-    if (cols.length == 1) {
-      colDataTypeMap.get(cols(0)).get
-    } else {
-      val map = new java.util.HashMap[Object, Integer]
-      map.put(ByteType, 0)
-      map.put(ShortType, 1)
-      map.put(IntegerType, 2)
-      map.put(LongType, 3)
-      map.put(FloatType, 4)
-      map.put(DecimalType, 5)
-      map.put(DoubleType, 6)
-      var colType = colDataTypeMap.get(cols(0)).get
-      for (i <- 1 until cols.length) {
-        val dType = colDataTypeMap.get(cols(i)).get
-        if (dType.dataType.isInstanceOf[DecimalType]
-          && colType.dataType.isInstanceOf[DecimalType]) {
-          if (dType.dataType.asInstanceOf[DecimalType].precision
-            > colType.dataType.asInstanceOf[DecimalType].precision) {
-            colType = dType
-          }
-        } else {
-          if (map.get(colType.dataType) < map.get(dType.dataType)) {
-            colType = dType
-          }
-        }
-      }
-      colType
-    }
+    sb.append(", ").append(newColsBuilder.result.mkString(", "))
   }
 
   /**

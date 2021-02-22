@@ -42,14 +42,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
           val (pushedFilters, postScanFilters) = pushDownFilter(scanBuilder, filters, relation)
           if (postScanFilters.nonEmpty) {
             Aggregate(groupingExpressions, resultExpressions, child)
-          } else {
+          } else { // only push down aggregate of all the filers can be push down
             val aliasMap = getAliasMap(project)
             var aggregates = resultExpressions.flatMap { expr =>
               expr.collect {
                 case agg: AggregateExpression =>
                   replaceAlias(agg, aliasMap).asInstanceOf[AggregateExpression]
               }
-            }.distinct
+            }
             aggregates = DataSourceStrategy.normalizeExprs(aggregates, relation.output)
               .asInstanceOf[Seq[AggregateExpression]]
 
@@ -57,7 +57,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
               expr.collect {
                 case a: AttributeReference => replaceAlias(a, aliasMap)
               }
-            }.distinct
+            }
             val normalizedgroupingExpressions =
               DataSourceStrategy.normalizeExprs(groupingExpressionsWithoutAlias, relation.output)
 
@@ -93,18 +93,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
                 aggOutputBuilder += AttributeReference(
                   aggregation.aggregateExpressions(i).toString, aggregates(i).dataType)()
               }
+              for (groupBy <- groupingExpressions) {
+                aggOutputBuilder += groupBy.asInstanceOf[AttributeReference]
+              }
               val aggOutput = aggOutputBuilder.result
 
-              val newOutputBuilder = ArrayBuilder.make[AttributeReference]
-              for (col <- aggOutput) {
-                newOutputBuilder += col
-              }
-              for (groupBy <- groupingExpressions) {
-                newOutputBuilder += groupBy.asInstanceOf[AttributeReference]
-              }
-              val newOutput = newOutputBuilder.result
-
-              val r = buildLogicalPlan(newOutput, relation, wrappedScan, newOutput,
+              val r = buildLogicalPlan(aggOutput, relation, wrappedScan, aggOutput,
                 normalizedProjects, postScanFilters)
               val plan = Aggregate(groupingExpressions, resultExpressions, r)
 
@@ -125,8 +119,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper {
                       agg.aggregateFunction
                     }
                   }
-                  // Aggregate filter is pushed to datasource
-                  agg.copy(aggregateFunction = aggFunction, filter = None)
+                  agg.copy(aggregateFunction = aggFunction)
               }
             }
           }

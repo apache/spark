@@ -75,6 +75,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
         .executeUpdate()
       conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (2, 'david', 10000, 1300)")
         .executeUpdate()
+      conn.prepareStatement("INSERT INTO \"test\".\"employee\" VALUES (6, 'jen', 12000, 1200)")
+        .executeUpdate()
     }
   }
 
@@ -127,23 +129,24 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       .agg(sum($"value").as("total"))
       .filter($"total" > 1000)
     // query1.explain(true)
-    checkAnswer(query1, Seq(Row(1, 19000.00), Row(2, 22000.00)))
+    checkAnswer(query1, Seq(Row(1, 19000.00), Row(2, 22000.00), Row(6, 12000)))
     val decrease = udf { (x: Double, y: Double) => x - y}
     var query2 = df1.select($"DEPT", decrease($"SALARY", $"BONUS").as("value"), $"SALARY", $"BONUS")
       .groupBy($"DEPT")
       .agg(sum($"value"), sum($"SALARY"), sum($"BONUS"))
     // query2.explain(true)
     checkAnswer(query2,
-      Seq(Row(1, 16800.00, 19000.00, 2200.00), Row(2, 19500.00, 22000.00, 2500.00)))
+      Seq(Row(1, 16800.00, 19000.00, 2200.00), Row(2, 19500.00, 22000.00, 2500.00),
+        Row(6, 10800, 12000, 1200)))
 
     val cols = Seq("a", "b", "c", "d")
     val df2 = sql("select * from h2.test.employee").toDF(cols: _*)
     val df3 = df2.groupBy().sum("c")
     // df3.explain(true)
-    checkAnswer(df3, Seq(Row(41000.00)))
+    checkAnswer(df3, Seq(Row(53000.00)))
 
     val df4 = df2.groupBy($"a").sum("c")
-    checkAnswer(df4, Seq(Row(1, 19000.00), Row(2, 22000.00)))
+    checkAnswer(df4, Seq(Row(1, 19000.00), Row(2, 22000.00), Row(6, 12000)))
   }
 
   test("scan with aggregate push-down") {
@@ -178,8 +181,9 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     // +-----------+----------+
     // |      10000|      1000|
     // |      12000|      1200|
+    // |      12000|      1200|
     // +-----------+----------+
-    checkAnswer(df1, Seq(Row(10000, 1000), Row(12000, 1200)))
+    checkAnswer(df1, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
 
     val df2 = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
     // df2.explain(true)
@@ -266,7 +270,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
     //    +- *(1) HashAggregate(keys=[], functions=[partial_count(1)], output=[count#90L])
     //       +- *(1) Scan org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScan$$anon$1@63262071 [] PushedAggregates: [], PushedFilters: [], PushedGroupby: [], ReadSchema: struct<>
     // scalastyle:on line.size.limit
-    checkAnswer(df5, Seq(Row(4)))
+    checkAnswer(df5, Seq(Row(5)))
 
     val df6 = sql("select MIN(SALARY), MIN(BONUS), MIN(SALARY) * MIN(BONUS) FROM h2.test.employee")
     // df6.explain(true)
@@ -274,12 +278,12 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
 
     val df7 = sql("select MIN(salary), MIN(bonus), SUM(SALARY * BONUS) FROM h2.test.employee")
     // df7.explain(true)
-    checkAnswer(df7, Seq(Row(9000, 1000, 48200000)))
+    checkAnswer(df7, Seq(Row(9000, 1000, 62600000)))
 
     val df8 = sql("select BONUS, SUM(SALARY+BONUS), SALARY FROM h2.test.employee" +
       " GROUP BY SALARY, BONUS")
     // df8.explain(true)
-    checkAnswer(df8, Seq(Row(1000, 11000, 10000), Row(1200, 13200, 12000),
+    checkAnswer(df8, Seq(Row(1000, 11000, 10000), Row(1200, 26400, 12000),
       Row(1200, 10200, 9000), Row(1300, 11300, 10000)))
 
     val df9 = spark.table("h2.test.employee")
@@ -291,6 +295,18 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       .agg(avg($"SALARY").as("avg_salary"))
     // df10.explain(true)
     checkAnswer(df10, Seq(Row(9666.666667)))
+
+    val df11 = sql("select SUM(SALARY+BONUS*SALARY+SALARY/BONUS), SALARY FROM h2.test.employee" +
+      " GROUP BY SALARY, BONUS")
+    checkAnswer(df11, Seq(Row(10010010.000000000, 10000.00), Row(28824020.000000000, 12000.00),
+      Row(10809007.500000000, 9000.00), Row(13010007.692307692, 10000.00)))
+  }
+
+  test("scan with aggregate distinct push-down") {
+    checkAnswer(sql("SELECT SUM(SALARY) FROM h2.test.employee"), Seq(Row(53000)))
+    checkAnswer(sql("SELECT SUM(DISTINCT SALARY) FROM h2.test.employee"), Seq(Row(31000)))
+    checkAnswer(sql("SELECT AVG(DEPT) FROM h2.test.employee"), Seq(Row(2)))
+    checkAnswer(sql("SELECT AVG(DISTINCT DEPT) FROM h2.test.employee"), Seq(Row(3)))
   }
 
   test("read/write with partition info") {

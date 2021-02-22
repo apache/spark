@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.sources.{AggregateFunc, Aggregation}
+import org.apache.spark.sql.sources.Aggregation
 import org.apache.spark.sql.types.StructType
 
 object PushDownUtils extends PredicateHelper {
@@ -81,36 +81,31 @@ object PushDownUtils extends PredicateHelper {
         scanBuilder: ScanBuilder,
         aggregates: Seq[AggregateExpression],
         groupby: Seq[Expression]): Aggregation = {
+
+      def columnAsString(e: Expression): String = e match {
+        case AttributeReference(name, _, _, _) => name
+        case _ => ""
+      }
+
       scanBuilder match {
         case r: SupportsPushDownAggregates =>
           val translatedAggregates = mutable.ArrayBuffer.empty[sources.AggregateFunc]
-          // Catalyst aggregate expression that can't be translated to data source aggregates.
-          val untranslatableExprs = mutable.ArrayBuffer.empty[AggregateExpression]
 
           for (aggregateExpr <- aggregates) {
             val translated = DataSourceStrategy.translateAggregate(aggregateExpr)
             if (translated.isEmpty) {
-              untranslatableExprs += aggregateExpr
+              return Aggregation.empty
             } else {
               translatedAggregates += translated.get
             }
           }
-
-          def columnAsString(e: Expression): String = e match {
-            case AttributeReference(name, _, _, _) => name
-            case _ => ""
+          val groupByCols = groupby.map(columnAsString(_))
+          if (!groupByCols.exists(_.isEmpty)) {
+            r.pushAggregation(Aggregation(translatedAggregates, groupByCols))
           }
-
-          if (untranslatableExprs.isEmpty) {
-            val groupByCols = groupby.map(columnAsString(_))
-            if (!groupByCols.exists(_.isEmpty)) {
-              r.pushAggregation(Aggregation(translatedAggregates, groupByCols))
-            }
-          }
-
           r.pushedAggregation
 
-        case _ => Aggregation(Seq.empty[AggregateFunc], Seq.empty[String])
+        case _ => Aggregation.empty
       }
     }
 

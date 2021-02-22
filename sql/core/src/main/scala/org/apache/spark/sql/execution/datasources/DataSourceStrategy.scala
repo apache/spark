@@ -359,7 +359,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
-        Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]),
+        Aggregation.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -433,7 +433,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]),
+        Aggregation.empty,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -456,7 +456,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
-        Aggregation(Seq.empty[AggregateFunc], Seq.empty[String]),
+        Aggregation.empty,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -704,99 +704,39 @@ object DataSourceStrategy
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
   }
 
-  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
-
-    def columnAsString(e: Expression): String = e match {
-      case AttributeReference(name, _, _, _) => name
-      case Cast(child, _, _) => child match {
-        case AttributeReference(name, _, _, _) => name
-        case Add(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "+")
-        case Subtract(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "-")
-        case Multiply(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "*")
-        case Divide(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "/")
-        case _ => ""
-      }
-      case Add(left, right, _) =>
-        arithmeticExpressionAsString(left, right, "+")
-      case Subtract(left, right, _) =>
-        arithmeticExpressionAsString(left, right, "-")
-      case Multiply(left, right, _) =>
-        arithmeticExpressionAsString(left, right, "*")
-      case Divide(left, right, _) =>
-        arithmeticExpressionAsString(left, right, "/")
-      case CheckOverflow(child, _, _) => child match {
-        case Add(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "+")
-        case Subtract(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "-")
-        case Multiply(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "*")
-        case Divide(left, right, _) =>
-          arithmeticExpressionAsString(left, right, "/")
-        case _ => ""
-      }
-      case _ => ""
-    }
-
-    aggregates.aggregateFunction match {
-      case aggregate.Min(child) =>
-        val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Min(columnName)) else None
-      case aggregate.Max(child) =>
-        val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Max(columnName)) else None
-      case aggregate.Average(child) =>
-        val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Avg(columnName)) else None
-      case aggregate.Sum(child) =>
-        val columnName = columnAsString(child)
-        if (!columnName.isEmpty) Some(Sum(columnName)) else None
-      case _ => None
-    }
+  private def columnAsString(e: Expression): String = e match {
+    case AttributeReference(name, _, _, _) => name
+    case Cast(child, _, _) => columnAsString (child)
+    case Add(left, right, _) =>
+      columnAsString(left) + " + " + columnAsString(right)
+    case Subtract(left, right, _) =>
+      columnAsString(left) + " - " + columnAsString(right)
+    case Multiply(left, right, _) =>
+      columnAsString(left) + " * " + columnAsString(right)
+    case Divide(left, right, _) =>
+      columnAsString(left) + " / " + columnAsString(right)
+    case CheckOverflow(child, _, _) => columnAsString (child)
+    case PromotePrecision(child) => columnAsString (child)
+    case _ => ""
   }
 
-  private def arithmeticExpressionAsString (
-      left: Expression,
-      right: Expression,
-      sign: String): String = {
+  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
 
-    val leftName = if (left.isInstanceOf[AttributeReference]) {
-      left.asInstanceOf[AttributeReference].name
-    } else if (left.isInstanceOf[Cast]) {
-      if (left.asInstanceOf[Cast].child.isInstanceOf[AttributeReference]) {
-        left.asInstanceOf[Cast].child.asInstanceOf[AttributeReference].name
-      }
-    } else if (left.isInstanceOf[PromotePrecision]) {
-      if (left.asInstanceOf[PromotePrecision].child.isInstanceOf[AttributeReference]) {
-        left.asInstanceOf[PromotePrecision].child.asInstanceOf[AttributeReference].name
-      } else if (left.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
-        if (left.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
-          left.asInstanceOf[PromotePrecision].child.asInstanceOf[Cast]
-            .child.asInstanceOf[AttributeReference].name
-        }
-      }
+    aggregates.aggregateFunction match {
+      case min: aggregate.Min =>
+        val colName = columnAsString(min.child)
+        if (colName.nonEmpty) Some(Min(colName, min.dataType)) else None
+      case max: aggregate.Max =>
+        val colName = columnAsString(max.child)
+        if (colName.nonEmpty) Some(Max(colName, max.dataType)) else None
+      case avg: aggregate.Average =>
+        val colName = columnAsString(avg.child)
+        if (colName.nonEmpty) Some(Avg(colName, avg.dataType, aggregates.isDistinct)) else None
+      case sum: aggregate.Sum =>
+        val colName = columnAsString(sum.child)
+        if (colName.nonEmpty) Some(Sum(colName, sum.dataType, aggregates.isDistinct)) else None
+      case _ => None
     }
-    val rightName = if (right.isInstanceOf[AttributeReference]) {
-      right.asInstanceOf[AttributeReference].name
-    } else if (right.isInstanceOf[Cast]) {
-      if (right.asInstanceOf[Cast].child.isInstanceOf[AttributeReference]) {
-        right.asInstanceOf[Cast].child.asInstanceOf[AttributeReference].name
-      }
-    } else if (right.isInstanceOf[PromotePrecision]) {
-      if (right.asInstanceOf[PromotePrecision].child.isInstanceOf[AttributeReference]) {
-        right.asInstanceOf[PromotePrecision].child.asInstanceOf[AttributeReference].name
-      } else if (right.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
-        if (right.asInstanceOf[PromotePrecision].child.isInstanceOf[Cast]) {
-          right.asInstanceOf[PromotePrecision].child.asInstanceOf[Cast]
-            .child.asInstanceOf[AttributeReference].name
-        }
-      }
-    }
-    s"$leftName $sign $rightName"
   }
 
   /**

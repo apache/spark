@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.types.DataType
+
 case class Aggregation(aggregateExpressions: Seq[AggregateFunc],
                        groupByExpressions: Seq[String])
 
@@ -24,7 +26,12 @@ abstract class AggregateFunc
 
 // Todo: add Count
 
-case class Avg(column: String) extends AggregateFunc
-case class Min(column: String) extends AggregateFunc
-case class Max(column: String) extends AggregateFunc
-case class Sum(column: String) extends AggregateFunc
+case class Avg(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
+case class Min(column: String, dataType: DataType) extends AggregateFunc
+case class Max(column: String, dataType: DataType) extends AggregateFunc
+case class Sum(column: String, dataType: DataType, isDistinct: Boolean) extends AggregateFunc
+
+object Aggregation {
+  // Returns an empty Aggregate
+  def empty: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[String])
+}

@@ -274,7 +274,6 @@ trait PrunedFilteredScan {
 }
 
 /**
- * TODO: add doc
  * @since 3.1.0
  */
 trait PrunedFilteredAggregateScan {
