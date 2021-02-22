@@ -19,9 +19,9 @@ package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.SecurityTest
+import org.apache.spark.tags.DedicatedJVMTest
 
-@SecurityTest
+@DedicatedJVMTest
 class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   import testImplicits._
 

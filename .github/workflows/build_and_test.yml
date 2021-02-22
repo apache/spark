@@ -65,8 +65,8 @@ jobs:
             java: 8
             hadoop: hadoop3.2
             hive: hive2.3
-            included-tags: org.apache.spark.tags.SecurityTest
-            comment: "- security tests"
+            included-tags: org.apache.spark.tags.DedicatedJVMTest
+            comment: "- dedicated JVM tests"
           - modules: sql
             java: 8
             hadoop: hadoop3.2
@@ -77,7 +77,7 @@ jobs:
             java: 8
             hadoop: hadoop3.2
             hive: hive2.3
-            excluded-tags: org.apache.spark.tags.SecurityTest,org.apache.spark.tags.ExtendedSQLTest
+            excluded-tags: org.apache.spark.tags.DedicatedJVMTest,org.apache.spark.tags.ExtendedSQLTest
             comment: "- other tests"
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
