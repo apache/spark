@@ -1117,11 +1117,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
         // inside a view maybe resolved incorrectly.
-        newChild.foreachUp {
-          case o if !o.resolved =>
-            failAnalysis(s"unresolved operator ${o.simpleString(SQLConf.get.maxToStringFields)}")
-          case _ =>
-        }
+        checkAnalysis(newChild)
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
@@ -1197,6 +1193,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>
         lookupTableOrView(identifier).getOrElse(u)
+
     }
 
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {

@@ -273,7 +273,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           val e = intercept[AnalysisException] {
             sql(s"SELECT * FROM $viewName").collect()
           }.getMessage
-          assert(e.contains("unresolved operator 'UnresolvedRelation [t]"))
+          assert(e.contains("Table or view not found: t"))
         }
       }
     }
