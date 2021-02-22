@@ -29,18 +29,6 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
 trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase {
-  test("omit namespace in the destination table") {
-    withNamespaceAndTable("ns", "dst_tbl") { dst =>
-      val src = dst.replace("dst", "src")
-      sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
-      sql(s"INSERT INTO $src SELECT 0")
-
-      sql(s"ALTER TABLE $src RENAME TO dst_tbl")
-      checkTables("ns", "dst_tbl")
-      checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
-    }
-  }
-
   test("destination database is different") {
     withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>
       withNamespace("src_ns") {
