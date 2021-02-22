@@ -571,7 +571,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case DropPartitions(r: ResolvedTable, parts, _, _) =>
             checkAlterTablePartition(r.table, parts)
 
-          case RenamePartition(r: ResolvedTable, from, _) =>
+          case RenamePartitions(r: ResolvedTable, from, _) =>
             checkAlterTablePartition(r.table, Seq(from))
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)

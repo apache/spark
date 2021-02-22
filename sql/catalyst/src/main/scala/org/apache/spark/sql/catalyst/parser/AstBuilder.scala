@@ -3859,7 +3859,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[RenamePartition]]
+   * Create an [[RenamePartitions]]
    *
    * For example:
    * {{{
@@ -3868,7 +3868,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    RenamePartition(
+    RenamePartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... RENAME TO PARTITION",

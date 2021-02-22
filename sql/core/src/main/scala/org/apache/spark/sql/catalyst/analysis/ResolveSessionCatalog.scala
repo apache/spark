@@ -428,7 +428,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case RenamePartition(
+    case RenamePartitions(
         ResolvedV1TableIdentifier(ident),
         UnresolvedPartitionSpec(from, _),
         UnresolvedPartitionSpec(to, _)) =>

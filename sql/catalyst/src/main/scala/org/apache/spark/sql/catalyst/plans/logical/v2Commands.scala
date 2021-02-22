@@ -712,7 +712,7 @@ case class DropPartitions(
 /**
  * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
  */
-case class RenamePartition(
+case class RenamePartitions(
     child: LogicalPlan,
     from: PartitionSpec,
     to: PartitionSpec) extends Command {

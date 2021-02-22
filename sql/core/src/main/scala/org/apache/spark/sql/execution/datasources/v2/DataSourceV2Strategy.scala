@@ -372,7 +372,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         purge,
         recacheTable(r)) :: Nil
 
-    case RenamePartition(
+    case RenamePartitions(
         r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _), from, to) =>
       RenamePartitionExec(
         table,
