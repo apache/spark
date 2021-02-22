@@ -1115,6 +1115,13 @@ class Analyzer(override val catalogManager: CatalogManager)
             executeSameContext(child)
           }
         }
+        // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
+        // inside a view maybe resolved incorrectly.
+        newChild.foreachUp {
+          case o if !o.resolved =>
+            failAnalysis(s"unresolved operator ${o.simpleString(SQLConf.get.maxToStringFields)}")
+          case _ =>
+        }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view))
