@@ -66,7 +66,7 @@ jobs:
             hadoop: hadoop3.2
             hive: hive2.3
             included-tags: org.apache.spark.tags.DedicatedJVMTest
-            comment: "- security tests"
+            comment: "- dedicated JVM tests"
           - modules: sql
             java: 8
             hadoop: hadoop3.2
