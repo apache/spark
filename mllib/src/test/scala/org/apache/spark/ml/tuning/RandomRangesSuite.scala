@@ -110,7 +110,8 @@ class RandomRangesSuite extends SparkFunSuite with ScalaCheckDrivenPropertyCheck
     }
   }
 
-  private def checkRange[T: Numeric: Generator: Choose: TypeTag: Arbitrary](rand: RandomFn[T]): Assertion =
+  private def checkRange[T: Numeric: Generator: Choose: TypeTag: Arbitrary]
+  (rand: RandomFn[T]): Assertion =
     forAll { (x: T, y: T) =>
       if (rand.appropriate(x, y)) {
         val ops: Numeric[T] = implicitly[Numeric[T]]
