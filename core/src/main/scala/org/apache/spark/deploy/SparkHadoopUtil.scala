@@ -450,7 +450,7 @@ private[spark] object SparkHadoopUtil extends Logging {
           hadoopConf.set("fs.s3a.session.token", sessionToken)
         }
       }
-      loadHiveConfFile(conf, hadoopConf)
+      appendHiveConfigs(hadoopConf)
       appendSparkHadoopConfigs(conf, hadoopConf)
       appendSparkHiveConfigs(conf, hadoopConf)
       val bufferSize = conf.get(BUFFER_SIZE).toString
@@ -458,11 +458,20 @@ private[spark] object SparkHadoopUtil extends Logging {
     }
   }
 
-  private def loadHiveConfFile(conf: SparkConf, hadoopConf: Configuration): Unit = {
+  private lazy val hiveConfKeys = {
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
-      logInfo(s"Loading hive config file: $configFile")
-      hadoopConf.addResource(configFile)
+      val conf = new Configuration(false)
+      conf.addResource(configFile)
+      conf.iterator().asScala.toSeq
+    } else {
+      Nil
+    }
+  }
+
+  private def appendHiveConfigs(hadoopConf: Configuration): Unit = {
+    hiveConfKeys.foreach { kv =>
+      hadoopConf.set(kv.getKey, kv.getValue)
     }
   }
 
