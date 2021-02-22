@@ -561,15 +561,6 @@ private[spark] class AppStatusStore(
       None
     } else {
       val values = summary.values.toIndexedSeq
-
-      def getQuantilesValue(
-        values: IndexedSeq[Double],
-        quantiles: Array[Double]): IndexedSeq[Double] = {
-        val count = values.size
-        val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
-        indices.map(i => values(i.toInt)).toIndexedSeq
-      }
-
       Some(new v1.ExecutorMetricsDistributions(
         quantiles = quantiles,
         taskTime = getQuantilesValue(values.map(_.taskTime.toDouble).sorted, quantiles),
@@ -595,6 +586,14 @@ private[spark] class AppStatusStore(
             values.flatMap(_.peakMemoryMetrics))
       ))
     }
+  }
+
+  def getQuantilesValue(
+    values: IndexedSeq[Double],
+    quantiles: Array[Double]): IndexedSeq[Double] = {
+    val count = values.size
+    val indices = quantiles.map { q => math.min((q * count).toLong, count - 1) }
+    indices.map(i => values(i.toInt)).toIndexedSeq
   }
 
   def rdd(rddId: Int): v1.RDDStorageInfo = {
