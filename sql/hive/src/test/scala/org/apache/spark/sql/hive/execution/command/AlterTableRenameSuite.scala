@@ -15,20 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.hive.execution.command
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.command.v1
 
 /**
- * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 and V2
- * table catalogs. The tests that cannot run for all supported catalogs are located in more
- * specific test suites:
- *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.TruncateTableSuite`
- *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.TruncateTableSuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.TruncateTableSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
+ * The class contains tests for the `ALTER TABLE .. RENAME` command to check
+ * V1 Hive external table catalog.
  */
-trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
-  override val command = "TRUNCATE TABLE"
-}
+class AlterTableRenameSuite extends v1.AlterTableRenameSuiteBase with CommandSuiteBase

@@ -15,20 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.command
+package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.execution.command
 
 /**
- * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 and V2
- * table catalogs. The tests that cannot run for all supported catalogs are located in more
- * specific test suites:
- *
- *   - V2 table catalog tests: `org.apache.spark.sql.execution.command.v2.TruncateTableSuite`
- *   - V1 table catalog tests: `org.apache.spark.sql.execution.command.v1.TruncateTableSuiteBase`
- *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.TruncateTableSuite`
- *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.TruncateTableSuite`
+ * The class contains tests for the `ALTER TABLE .. RENAME` command to check V2 table catalogs.
  */
-trait TruncateTableSuiteBase extends QueryTest with DDLCommandTestUtils {
-  override val command = "TRUNCATE TABLE"
+class AlterTableRenameSuite extends command.AlterTableRenameSuiteBase with CommandSuiteBase {
+  test("destination namespace is different") {
+    withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>
+      withNamespace("src_ns") {
+        sql(s"CREATE NAMESPACE $catalog.src_ns")
+        val src = dst.replace("dst", "src")
+        sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+        sql(s"ALTER TABLE $src RENAME TO dst_ns.dst_tbl")
+        checkTables("dst_ns", "dst_tbl")
+      }
+    }
+  }
 }
