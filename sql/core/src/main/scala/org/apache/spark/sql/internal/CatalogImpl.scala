@@ -552,7 +552,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
-    // this will clear the relation cache and caches of all its dependants.
+    // this will clear the relation cache and caches of all its dependents.
     relation match {
       case SubqueryAlias(_, relationPlan) =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)

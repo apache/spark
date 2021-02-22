@@ -525,12 +525,16 @@ object ShowTableExtended {
  */
 case class ShowViews(
     namespace: LogicalPlan,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowViews.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
+}
 
-  override val output: Seq[Attribute] = Seq(
+object ShowViews {
+  val OUTPUT = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("viewName", StringType, nullable = false)())
+    AttributeReference("viewName", StringType, nullable = false)(),
+    AttributeReference("isTemporary", BooleanType, nullable = false)())
 }
 
 /**
@@ -632,8 +636,13 @@ case class ShowFunctions(
     child: Option[LogicalPlan],
     userScope: Boolean,
     systemScope: Boolean,
-    pattern: Option[String]) extends Command {
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowFunctions.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
+}
+
+object ShowFunctions {
+  val OUTPUT = Seq(AttributeReference("function", StringType, nullable = false)())
 }
 
 /**

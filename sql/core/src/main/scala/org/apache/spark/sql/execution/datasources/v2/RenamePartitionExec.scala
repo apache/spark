@@ -25,7 +25,7 @@ import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 /**
  * Physical plan node for renaming a table partition.
  */
-case class AlterTableRenamePartitionExec(
+case class RenamePartitionExec(
     table: SupportsPartitionManagement,
     from: ResolvedPartitionSpec,
     to: ResolvedPartitionSpec,
