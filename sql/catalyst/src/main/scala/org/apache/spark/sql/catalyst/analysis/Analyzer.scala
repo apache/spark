@@ -1193,7 +1193,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u @ UnresolvedTableOrView(identifier, _, _) =>
         lookupTableOrView(identifier).getOrElse(u)
-
     }
 
     private def lookupTableOrView(identifier: Seq[String]): Option[LogicalPlan] = {
