@@ -109,4 +109,21 @@ trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
       }
     }
   }
+
+  test("rename without explicitly specifying database") {
+    try {
+      withNamespaceAndTable("ns", "dst_tbl") { dst =>
+        val src = dst.replace("dst", "src")
+        sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
+        sql(s"INSERT INTO $src SELECT 0")
+
+        sql(s"USE $catalog.ns")
+        sql(s"ALTER TABLE src_tbl RENAME TO dst_tbl")
+        checkTables("ns", "dst_tbl")
+        checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
+      }
+    } finally {
+      spark.sessionState.catalogManager.reset()
+    }
+  }
 }

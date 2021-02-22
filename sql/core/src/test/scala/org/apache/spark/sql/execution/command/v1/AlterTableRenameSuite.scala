@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
@@ -40,23 +40,6 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase {
         }.getMessage
         assert(errMsg.contains("source and destination databases do not match"))
       }
-    }
-  }
-
-  test("rename without explicitly specifying database") {
-    try {
-      withNamespaceAndTable("ns", "dst_tbl") { dst =>
-        val src = dst.replace("dst", "src")
-        sql(s"CREATE TABLE $src (c0 INT) $defaultUsing")
-        sql(s"INSERT INTO $src SELECT 0")
-
-        sql(s"USE $catalog.ns")
-        sql(s"ALTER TABLE src_tbl RENAME TO dst_tbl")
-        checkTables("ns", "dst_tbl")
-        checkAnswer(sql(s"SELECT c0 FROM $dst"), Seq(Row(0)))
-      }
-    } finally {
-      spark.sessionState.catalogManager.reset()
     }
   }
 
