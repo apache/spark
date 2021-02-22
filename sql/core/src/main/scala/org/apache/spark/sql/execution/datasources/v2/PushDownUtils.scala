@@ -101,7 +101,7 @@ object PushDownUtils extends PredicateHelper {
           }
           val groupByCols = groupby.map(columnAsString(_))
           if (!groupByCols.exists(_.isEmpty)) {
-            r.pushAggregation(Aggregation(translatedAggregates, groupByCols))
+            r.pushAggregation(Aggregation(translatedAggregates.toSeq, groupByCols))
           }
           r.pushedAggregation
 
