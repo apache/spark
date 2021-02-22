@@ -2585,6 +2585,20 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34468: rename table in place when the destination name has single part") {
+    val tbl = s"${catalogAndNamespace}src_tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      sql(s"INSERT INTO $tbl SELECT 0")
+      checkAnswer(sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"), Nil)
+      sql(s"ALTER TABLE $tbl RENAME TO new_tbl")
+      checkAnswer(
+        sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"),
+        Row("ns1.ns2", "new_tbl", false))
+      checkAnswer(sql(s"SELECT c0 FROM ${catalogAndNamespace}new_tbl"), Row(0))
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
