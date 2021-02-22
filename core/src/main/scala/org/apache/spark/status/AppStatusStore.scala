@@ -24,7 +24,6 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
 import org.apache.spark.status.api.v1
-import org.apache.spark.status.api.v1.{ExecutorMetricsDistributions, TaskData, TaskMetricDistributions}
 import org.apache.spark.storage.FallbackStorage.FALLBACK_BLOCK_MANAGER_ID
 import org.apache.spark.ui.scope._
 import org.apache.spark.util.Utils
@@ -472,7 +471,7 @@ private[spark] class AppStatusStore(
       stage
     } else {
       val quantiles = unsortedQuantiles.sorted
-      val tasks: Option[Map[Long, TaskData]] = if (withDetail) {
+      val tasks: Option[Map[Long, v1.TaskData]] = if (withDetail) {
         val tasks = taskList(stage.stageId, stage.attemptId, Int.MaxValue)
           .map { t => (t.taskId, t) }
           .toMap
@@ -485,16 +484,17 @@ private[spark] class AppStatusStore(
       } else {
         None
       }
-      val taskMetricsDistribution: Option[TaskMetricDistributions] = if (withSummaries) {
+      val taskMetricsDistribution: Option[v1.TaskMetricDistributions] = if (withSummaries) {
         taskSummary(stage.stageId, stage.attemptId, quantiles)
       } else {
         None
       }
-      val executorMetricsDistributions: Option[ExecutorMetricsDistributions] = if (withSummaries) {
-        stageExecutorSummary(stage.stageId, stage.attemptId, quantiles)
-      } else {
-        None
-      }
+      val executorMetricsDistributions: Option[v1.ExecutorMetricsDistributions] =
+        if (withSummaries) {
+          stageExecutorSummary(stage.stageId, stage.attemptId, quantiles)
+        } else {
+          None
+        }
 
       new v1.StageData(
         status = stage.status,
