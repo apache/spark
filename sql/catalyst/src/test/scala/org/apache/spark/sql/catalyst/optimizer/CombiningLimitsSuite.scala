@@ -42,15 +42,15 @@ class CombiningLimitsSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation.fromExternalRows(
-    Seq("a".attr.int, "b".attr.int, "c".attr.int),
+    Seq("a".int, "b".int, "c".int),
     1.to(10).map(_ => Row(1, 2, 3))
   )
   val testRelation2 = LocalRelation.fromExternalRows(
-    Seq("x".attr.int, "y".attr.int, "z".attr.int),
+    Seq("x".int, "y".int, "z".int),
     Seq(Row(1, 2, 3), Row(2, 3, 4))
   )
-  val testRelation3 = RelationWithoutMaxRows(Seq("i".attr.int))
-  val testRelation4 = LongMaxRelation(Seq("j".attr.int))
+  val testRelation3 = RelationWithoutMaxRows(Seq("i".int))
+  val testRelation4 = LongMaxRelation(Seq("j".int))
 
   test("limits: combines two limits") {
     val originalQuery =

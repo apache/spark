@@ -245,13 +245,9 @@ package object dsl {
       WindowExpression(windowFunc, windowSpec)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
-    // TODO more implicit class for literal?
-    implicit class DslString(val s: String) extends ImplicitOperators {
-      override def expr: Expression = Literal(s)
-      def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
-    }
-    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
-      def s: String = attr.name
+    implicit class DslString(str: String) extends ImplicitAttribute {
+      def s: String = str
+      def lit: Literal = Literal(str)
     }
 
     abstract class ImplicitAttribute extends ImplicitOperators {

@@ -40,10 +40,10 @@ class LimitPushdownSuite extends PlanTest {
   }
 
   private val testRelation = LocalRelation.fromExternalRows(
-    Seq("a".attr.int, "b".attr.int, "c".attr.int),
+    Seq("a".int, "b".int, "c".int),
     1.to(6).map(_ => Row(1, 2, 3)))
   private val testRelation2 = LocalRelation.fromExternalRows(
-    Seq("d".attr.int, "e".attr.int, "f".attr.int),
+    Seq("d".int, "e".int, "f".int),
     1.to(6).map(_ => Row(1, 2, 3)))
   private val x = testRelation.subquery('x)
   private val y = testRelation.subquery('y)

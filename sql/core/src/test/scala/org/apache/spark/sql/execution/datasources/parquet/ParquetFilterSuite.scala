@@ -520,9 +520,7 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("filter pushdown - date") {
-    implicit class StringToDate(s: String) {
-      def date: Date = Date.valueOf(s)
-    }
+    def date(s: String): Date = Date.valueOf(s)
 
     val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
     import testImplicits._
@@ -545,39 +543,39 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
             data.map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
+          checkFilterPredicate(dateAttr === date("2018-03-18"), classOf[Eq[_]],
             resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
+          checkFilterPredicate(dateAttr <=> date("2018-03-18"), classOf[Eq[_]],
             resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
+          checkFilterPredicate(dateAttr =!= date("2018-03-18"), classOf[NotEq[_]],
             Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
+          checkFilterPredicate(dateAttr < date("2018-03-19"), classOf[Lt[_]],
             resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
+          checkFilterPredicate(dateAttr > date("2018-03-20"), classOf[Gt[_]],
             resultFun("2018-03-21"))
-          checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
+          checkFilterPredicate(dateAttr <= date("2018-03-18"), classOf[LtEq[_]],
             resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
-
-          checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
+          checkFilterPredicate(dateAttr >= date("2018-03-21"), classOf[GtEq[_]],
             resultFun("2018-03-21"))
 
-          checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
+          checkFilterPredicate(Literal(date("2018-03-18")) === dateAttr, classOf[Eq[_]],
+            resultFun("2018-03-18"))
+          checkFilterPredicate(Literal(date("2018-03-18")) <=> dateAttr, classOf[Eq[_]],
+            resultFun("2018-03-18"))
+          checkFilterPredicate(Literal(date("2018-03-19")) > dateAttr, classOf[Lt[_]],
+            resultFun("2018-03-18"))
+          checkFilterPredicate(Literal(date("2018-03-20")) < dateAttr, classOf[Gt[_]],
+            resultFun("2018-03-21"))
+          checkFilterPredicate(Literal(date("2018-03-18")) >= dateAttr, classOf[LtEq[_]],
+            resultFun("2018-03-18"))
+          checkFilterPredicate(Literal(date("2018-03-21")) <= dateAttr, classOf[GtEq[_]],
+            resultFun("2018-03-21"))
+
+          checkFilterPredicate(!(dateAttr < date("2018-03-21")), classOf[GtEq[_]],
             resultFun("2018-03-21"))
           checkFilterPredicate(
-            dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
+            dateAttr < date("2018-03-19") || dateAttr > date("2018-03-20"),
             classOf[Operators.Or],
             Seq(Row(resultFun("2018-03-18")), Row(resultFun("2018-03-21"))))
         }

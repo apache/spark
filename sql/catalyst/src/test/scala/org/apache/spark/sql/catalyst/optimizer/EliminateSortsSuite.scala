@@ -50,11 +50,11 @@ class EliminateSortsSuite extends AnalysisTest {
   }
 
   val testRelation = LocalRelation.fromExternalRows(
-    Seq("a".attr.int, "b".attr.int, "c".attr.int),
+    Seq("a".int, "b".int, "c".int),
     1.to(12).map(_ => Row(1, 2, 3))
   )
   val testRelationB = LocalRelation.fromExternalRows(
-    Seq("d".attr.int),
+    Seq("d".int),
     1.to(12).map(_ => Row(1))
   )
 

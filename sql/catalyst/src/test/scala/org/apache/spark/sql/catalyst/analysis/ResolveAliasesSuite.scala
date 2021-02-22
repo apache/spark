@@ -29,8 +29,8 @@ import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StringType
 
 class ResolveAliasesSuite extends AnalysisTest {
 
-  private lazy val t1 = LocalRelation("a".attr.int)
-  private lazy val t2 = LocalRelation("b".attr.long)
+  private lazy val t1 = LocalRelation("a".int)
+  private lazy val t2 = LocalRelation("b".long)
 
   private def checkAliasName(plan: LogicalPlan, expected: String): Unit = {
     val analyzed = getAnalyzer.execute(plan)
