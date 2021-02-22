@@ -333,7 +333,13 @@ if [[ "$1" == "docs" ]]; then
   echo "Building Spark docs"
   cd docs
   # TODO: Make configurable to add this: PRODUCTION=1
-  PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
+  if [ ! -f "Gemfile" ]; then
+    cp "$SELF/Gemfile" .
+    cp "$SELF/Gemfile.lock" .
+    cp -r "$SELF/.bundle" .
+  fi
+  bundle install
+  PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
   cd ..
   cd ..
 

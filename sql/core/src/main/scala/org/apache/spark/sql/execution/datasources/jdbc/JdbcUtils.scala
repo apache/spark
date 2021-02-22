@@ -226,7 +226,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
       case java.sql.Types.REF_CURSOR    => null
-      case java.sql.Types.ROWID         => LongType
+      case java.sql.Types.ROWID         => StringType
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
@@ -310,11 +310,15 @@ object JdbcUtils extends Logging {
       val metadata = new MetadataBuilder()
       metadata.putLong("scale", fieldScale)
 
-      // SPARK-33888
-      // - include TIME type metadata
-      // - always build the metadata
-      if (dataType == java.sql.Types.TIME) {
-        metadata.putBoolean("logical_time_type", true)
+      dataType match {
+        case java.sql.Types.TIME =>
+          // SPARK-33888
+          // - include TIME type metadata
+          // - always build the metadata
+          metadata.putBoolean("logical_time_type", true)
+        case java.sql.Types.ROWID =>
+          metadata.putBoolean("rowid", true)
+        case _ =>
       }
 
       val columnType =
@@ -447,6 +451,10 @@ object JdbcUtils extends Logging {
     case ByteType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setByte(pos, rs.getByte(pos + 1))
+
+    case StringType if metadata.contains("rowid") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
 
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>

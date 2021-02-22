@@ -2033,6 +2033,17 @@ object SQLConf {
       .version("3.0.0")
       .fallbackConf(ARROW_EXECUTION_ENABLED)
 
+  val ARROW_PYSPARK_SELF_DESTRUCT_ENABLED =
+    buildConf("spark.sql.execution.arrow.pyspark.selfDestruct.enabled")
+      .doc("When true, make use of Apache Arrow's self-destruct and split-blocks options " +
+        "for columnar data transfers in PySpark, when converting from Arrow to Pandas. " +
+        "This reduces memory usage at the cost of some CPU time. " +
+        "This optimization applies to: pyspark.sql.DataFrame.toPandas " +
+        "when 'spark.sql.execution.arrow.pyspark.enabled' is set.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_JVM_STACKTRACE_ENABLED =
     buildConf("spark.sql.pyspark.jvmStacktrace.enabled")
       .doc("When true, it shows the JVM stacktrace in the user-facing PySpark exception " +
@@ -2839,6 +2850,7 @@ object SQLConf {
       .createWithDefault(100)
 
   val LEGACY_ALLOW_HASH_ON_MAPTYPE = buildConf("spark.sql.legacy.allowHashOnMapType")
+    .internal()
     .doc("When set to true, hash expressions can be applied on elements of MapType. Otherwise, " +
       "an analysis exception will be thrown.")
     .version("3.0.0")
@@ -2853,22 +2865,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+  val PARQUET_INT96_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.parquet.int96RebaseModeInWrite")
       .internal()
-      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
-        "Proleptic Gregorian calendar to the legacy hybrid (Julian + Gregorian) calendar when " +
-        "writing Parquet files. When CORRECTED, Spark will not do rebase and write the timestamps" +
-        " as it is. When EXCEPTION, Spark will fail the writing if it sees ancient timestamps " +
-        "that are ambiguous between the two calendars.")
+      .doc("When LEGACY, Spark will rebase INT96 timestamps from Proleptic Gregorian calendar to " +
+        "the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and write the timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the writing if it sees ancient " +
+        "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
+      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
+  val PARQUET_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.parquet.datetimeRebaseModeInWrite")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Parquet files. " +
@@ -2877,30 +2890,32 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. " +
         "This config influences on writes of the following parquet logical types: DATE, " +
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
-        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
+        s"${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.int96RebaseModeInRead")
+  val PARQUET_INT96_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.parquet.int96RebaseModeInRead")
       .internal()
-      .doc("When LEGACY, which is the default, Spark will rebase INT96 timestamps from " +
-        "the legacy hybrid (Julian + Gregorian) calendar to Proleptic Gregorian calendar when " +
-        "reading Parquet files. When CORRECTED, Spark will not do rebase and read the timestamps " +
-        "as it is. When EXCEPTION, Spark will fail the reading if it sees ancient timestamps " +
-        "that are ambiguous between the two calendars. This config is only effective if the " +
-        "writer info (like Spark, Hive) of the Parquet files is unknown.")
+      .doc("When LEGACY, Spark will rebase INT96 timestamps from the legacy hybrid (Julian + " +
+        "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
+        "When CORRECTED, Spark will not do rebase and read the timestamps as it is. " +
+        "When EXCEPTION, which is the default, Spark will fail the reading if it sees ancient " +
+        "timestamps that are ambiguous between the two calendars. This config is only effective " +
+        "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
+      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_PARQUET_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+  val PARQUET_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.parquet.datetimeRebaseModeInRead")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Parquet files. " +
@@ -2910,15 +2925,16 @@ object SQLConf {
         "only effective if the writer info (like Spark, Hive) of the Parquet files is unknown. " +
         "This config influences on reads of the following parquet logical types: DATE, " +
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
-        s"${LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
+        s"${PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_MODE_IN_WRITE =
-    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
+  val AVRO_REBASE_MODE_IN_WRITE =
+    buildConf("spark.sql.avro.datetimeRebaseModeInWrite")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from Proleptic Gregorian calendar " +
         "to the legacy hybrid (Julian + Gregorian) calendar when writing Avro files. " +
@@ -2926,13 +2942,14 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
       .createWithDefault(LegacyBehaviorPolicy.EXCEPTION.toString)
 
-  val LEGACY_AVRO_REBASE_MODE_IN_READ =
-    buildConf("spark.sql.legacy.avro.datetimeRebaseModeInRead")
+  val AVRO_REBASE_MODE_IN_READ =
+    buildConf("spark.sql.avro.datetimeRebaseModeInRead")
       .internal()
       .doc("When LEGACY, Spark will rebase dates/timestamps from the legacy hybrid (Julian + " +
         "Gregorian) calendar to Proleptic Gregorian calendar when reading Avro files. " +
@@ -2941,6 +2958,7 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
+      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInRead")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -3116,7 +3134,21 @@ object SQLConf {
       DeprecatedConfig(CONVERT_CTAS.key, "3.1",
         s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
       DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
-        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead.")
+        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead."),
+      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
+        s"Use '${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}' instead."),
+      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${PARQUET_INT96_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(PARQUET_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
+        s"Use '${PARQUET_REBASE_MODE_IN_WRITE.key}' instead."),
+      DeprecatedConfig(PARQUET_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(AVRO_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
+        s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),
+      DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
+        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
+      DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
+        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3608,6 +3640,8 @@ class SQLConf extends Serializable with Logging {
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
   def arrowPySparkEnabled: Boolean = getConf(ARROW_PYSPARK_EXECUTION_ENABLED)
+
+  def arrowPySparkSelfDestructEnabled: Boolean = getConf(ARROW_PYSPARK_SELF_DESTRUCT_ENABLED)
 
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 

@@ -401,10 +401,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
-        pattern @ (None | Some(UnresolvedPartitionSpec(_, _)))) =>
+        pattern @ (None | Some(UnresolvedPartitionSpec(_, _))), output) =>
       ShowPartitionsCommand(
         ident.asTableIdentifier,
-        s.output,
+        output,
         pattern.map(_.asInstanceOf[UnresolvedPartitionSpec].spec))
 
     case s @ ShowColumns(ResolvedV1TableOrViewIdentifier(ident), ns, output) =>
@@ -484,26 +484,33 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         replace,
         viewType)
 
-    case ShowViews(resolved: ResolvedNamespace, pattern) =>
+    case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {
-        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern)
+        case DatabaseInSessionCatalog(db) => ShowViewsCommand(db, pattern, output)
         case _ =>
           throw QueryCompilationErrors.externalCatalogNotSupportShowViewsError(resolved)
       }
 
-    case ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey) =>
-      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey)
+    case s @ ShowTableProperties(ResolvedV1TableOrViewIdentifier(ident), propertyKey, output) =>
+      val newOutput =
+        if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA) && propertyKey.isDefined) {
+          assert(output.length == 2)
+          output.tail
+        } else {
+          output
+        }
+      ShowTablePropertiesCommand(ident.asTableIdentifier, propertyKey, newOutput)
 
     case DescribeFunction(ResolvedFunc(identifier), extended) =>
       DescribeFunctionCommand(identifier.asFunctionIdentifier, extended)
 
-    case ShowFunctions(None, userScope, systemScope, pattern) =>
-      ShowFunctionsCommand(None, pattern, userScope, systemScope)
+    case ShowFunctions(None, userScope, systemScope, pattern, output) =>
+      ShowFunctionsCommand(None, pattern, userScope, systemScope, output)
 
-    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _) =>
+    case ShowFunctions(Some(ResolvedFunc(identifier)), userScope, systemScope, _, output) =>
       val funcIdentifier = identifier.asFunctionIdentifier
       ShowFunctionsCommand(
-        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope)
+        funcIdentifier.database, Some(funcIdentifier.funcName), userScope, systemScope, output)
 
     case DropFunction(ResolvedFunc(identifier), ifExists, isTemp) =>
       val funcIdentifier = identifier.asFunctionIdentifier
