@@ -34,7 +34,7 @@ class SimplifyCastsSuite extends PlanTest {
     val input = LocalRelation(attr"a".array(ArrayType(IntegerType, false)))
     val plan = input.select(attr"a".cast(ArrayType(IntegerType, true)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select(attr"a").as("casted").analyze
+    val expected = input.select(attr"a".as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
