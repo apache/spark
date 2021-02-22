@@ -40,7 +40,8 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
  */
 case class UnresolvedTable(
     multipartIdentifier: Seq[String],
-    commandName: String) extends LeafNode {
+    commandName: String,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil

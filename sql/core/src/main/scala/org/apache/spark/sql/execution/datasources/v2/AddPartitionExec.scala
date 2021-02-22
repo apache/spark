@@ -17,44 +17,51 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, ResolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.analysis.{PartitionsAlreadyExistException, ResolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 
 /**
- * Physical plan node for dropping partitions of table.
+ * Physical plan node for adding partitions of table.
  */
-case class AlterTableDropPartitionExec(
+case class AddPartitionExec(
     table: SupportsPartitionManagement,
     partSpecs: Seq[ResolvedPartitionSpec],
-    ignoreIfNotExists: Boolean,
-    purge: Boolean,
+    ignoreIfExists: Boolean,
     refreshCache: () => Unit) extends V2CommandExec {
   import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val (existsPartIdents, notExistsPartIdents) =
-      partSpecs.map(_.ident).partition(table.partitionExists)
+    val (existsParts, notExistsParts) =
+      partSpecs.partition(p => table.partitionExists(p.ident))
 
-    if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
-      throw new NoSuchPartitionsException(
-        table.name(), notExistsPartIdents, table.partitionSchema())
+    if (existsParts.nonEmpty && !ignoreIfExists) {
+      throw new PartitionsAlreadyExistException(
+        table.name(), existsParts.map(_.ident), table.partitionSchema())
     }
 
-    val isTableAltered = existsPartIdents match {
+    val isTableAltered = notExistsParts match {
       case Seq() => false // Nothing will be done
-      case Seq(partIdent) =>
-        if (purge) table.purgePartition(partIdent) else table.dropPartition(partIdent)
+      case Seq(partitionSpec) =>
+        val partProp = partitionSpec.location.map(loc => "location" -> loc).toMap
+        table.createPartition(partitionSpec.ident, partProp.asJava)
+        true
       case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
-        val idents = existsPartIdents.toArray
-        val atomicTable = table.asAtomicPartitionable
-        if (purge) atomicTable.purgePartitions(idents) else atomicTable.dropPartitions(idents)
+        val partIdents = notExistsParts.map(_.ident)
+        val partProps = notExistsParts.map(_.location.map(loc => "location" -> loc).toMap)
+        table.asAtomicPartitionable
+          .createPartitions(
+            partIdents.toArray,
+            partProps.map(_.asJava).toArray)
+        true
       case _ =>
         throw new UnsupportedOperationException(
-          s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")
+          s"Nonatomic partition table ${table.name()} can not add multiple partitions.")
     }
     if (isTableAltered) refreshCache()
     Seq.empty

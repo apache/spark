@@ -223,6 +223,13 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     assert(oldCols === newCols)
   }
 
+  test("SPARK-34356: OneVsRestModel.transform should avoid potential column conflict") {
+    val logReg = new LogisticRegression().setMaxIter(1)
+    val ovr = new OneVsRest().setClassifier(logReg)
+    val ovrm = ovr.fit(dataset)
+    assert(ovrm.transform(dataset.withColumn("probability", lit(0.0))).count() === dataset.count())
+  }
+
   test("OneVsRest.copy and OneVsRestModel.copy") {
     val lr = new LogisticRegression()
       .setMaxIter(1)

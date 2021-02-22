@@ -96,7 +96,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case leaf: LeafNode if leaf.output.map(_.dataType).exists(CharVarcharUtils.hasCharVarchar) =>
-        throw QueryExecutionErrors.logicalPlanHaveOutputOfCharOrVarcharError(leaf)
+        throw new IllegalStateException(
+          "[BUG] logical plan should not have output of char/varchar type: " + leaf)
 
       case u: UnresolvedNamespace =>
         u.failAnalysis(s"Namespace not found: ${u.multipartIdentifier.quoted}")
@@ -1009,10 +1010,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   // Make sure that the `SHOW PARTITIONS` command is allowed for the table
   private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
-    case ShowPartitions(rt: ResolvedTable, _)
+    case ShowPartitions(rt: ResolvedTable, _, _)
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
       failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
-    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _)
+    case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _, _)
         if partTable.partitionSchema().isEmpty =>
       failAnalysis(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")

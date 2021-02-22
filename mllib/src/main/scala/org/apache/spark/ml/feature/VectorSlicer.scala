@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
+import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -100,15 +100,18 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     // Validity checks
     transformSchema(dataset.schema)
     val inputAttr = AttributeGroup.fromStructField(dataset.schema($(inputCol)))
-    inputAttr.numAttributes.foreach { numFeatures =>
-      val maxIndex = $(indices).max
-      require(maxIndex < numFeatures,
-        s"Selected feature index $maxIndex invalid for only $numFeatures input features.")
+    if ($(indices).nonEmpty) {
+      val size = inputAttr.size
+      if (size >= 0) {
+        val maxIndex = $(indices).max
+        require(maxIndex < size,
+          s"Selected feature index $maxIndex invalid for only $size input features.")
+      }
     }
 
     // Prepare output attributes
     val inds = getSelectedFeatureIndices(dataset.schema)
-    val selectedAttrs: Option[Array[Attribute]] = inputAttr.attributes.map { attrs =>
+    val selectedAttrs = inputAttr.attributes.map { attrs =>
       inds.map(index => attrs(index))
     }
     val outputAttr = selectedAttrs match {
@@ -159,8 +162,13 @@ final class VectorSlicer @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
 
   @Since("3.0.0")
   override def toString: String = {
-    s"VectorSlicer: uid=$uid" +
-      get(indices).map(i => s", numSelectedFeatures=${i.length}").getOrElse("")
+    val numSelectedFeatures =
+      get(indices).map(_.length).getOrElse(0) + get(names).map(_.length).getOrElse(0)
+    if (numSelectedFeatures > 0) {
+      s"VectorSlicer: uid=$uid, numSelectedFeatures=$numSelectedFeatures"
+    } else {
+      s"VectorSlicer: uid=$uid"
+    }
   }
 }
 
