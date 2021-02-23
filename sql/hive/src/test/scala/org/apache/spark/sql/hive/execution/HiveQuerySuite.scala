@@ -1224,7 +1224,10 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     withTable("t") {
-      sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion")
+      // exclude org.pentaho:pentaho-aggdesigner-algorithm as this transitive dependency does
+      // not exist on mavencentral and hence cannot be found in the test environment
+      sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion" +
+        "?exclude=org.pentaho:pentaho-aggdesigner-algorithm")
       sql(
         """CREATE TABLE t(a string, b string)
           |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe'""".stripMargin)
