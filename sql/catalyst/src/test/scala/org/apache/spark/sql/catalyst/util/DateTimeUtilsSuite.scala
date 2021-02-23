@@ -496,6 +496,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         test("2011-12-25 18:00:00.123456", JST.getId, "2011-12-25 09:00:00.123456")
         test("2011-12-25 01:00:00.123456", LA.getId, "2011-12-25 09:00:00.123456")
         test("2011-12-25 17:00:00.123456", "Asia/Shanghai", "2011-12-25 09:00:00.123456")
+        test("2011-12-25 17:00:00.123456", "GMT+8:00", "2011-12-25 09:00:00.123456")
       }
     }
 
