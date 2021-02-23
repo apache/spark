@@ -21,15 +21,16 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
-import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
 
 /**
@@ -740,5 +741,227 @@ private[spark] object QueryCompilationErrors {
   def noHandlerForUDAFError(name: String): Throwable = {
     new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
       "Use sparkSession.udf.register(...) instead.")
+  }
+
+  def batchWriteCapabilityError(
+      table: Table, v2WriteClassName: String, v1WriteClassName: String): Throwable = {
+    new AnalysisException(
+      s"Table ${table.name} declares ${TableCapability.V1_BATCH_WRITE} capability but " +
+        s"$v2WriteClassName is not an instance of $v1WriteClassName")
+  }
+
+  def unsupportedDeleteByConditionWithSubqueryError(condition: Option[Expression]): Throwable = {
+    new AnalysisException(
+      s"Delete by condition with subquery is not supported: $condition")
+  }
+
+  def cannotTranslateExpressionToSourceFilterError(f: Expression): Throwable = {
+    new AnalysisException("Exec update failed:" +
+      s" cannot translate expression to source filter: $f")
+  }
+
+  def cannotDeleteTableWhereFiltersError(table: Table, filters: Array[Filter]): Throwable = {
+    new AnalysisException(
+      s"Cannot delete from table ${table.name} where ${filters.mkString("[", ", ", "]")}")
+  }
+
+  def deleteOnlySupportedWithV2TablesError(): Throwable = {
+    new AnalysisException("DELETE is only supported with v2 tables.")
+  }
+
+  def describeDoesNotSupportPartitionForV2TablesError(): Throwable = {
+    new AnalysisException("DESCRIBE does not support partition for v2 tables.")
+  }
+
+  def unsupportedUserSpecifiedSchemaError(): Throwable = {
+    new UnsupportedOperationException("user-specified schema")
+  }
+
+  def cannotReplaceMissingTableExceptionMessage(tableIdentifier: Identifier): String = {
+    s"Table $tableIdentifier cannot be replaced as it did not exist." +
+      s" Use CREATE OR REPLACE TABLE to create the table."
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier, cause: Option[Throwable] = None): Throwable = {
+    new CannotReplaceMissingTableException(
+      cannotReplaceMissingTableExceptionMessage(tableIdentifier),
+      cause
+    )
+  }
+
+  def tableDoesNotSupportError(table: Table, cmd: String): Throwable = {
+    new AnalysisException(s"Table ${table.name} does not support $cmd.")
+  }
+
+  def unsupportedBatchReadError(table: Table): Throwable = {
+    tableDoesNotSupportError(table, "batch scan")
+  }
+
+  def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
+    tableDoesNotSupportError(table, "either micro-batch or continuous scan")
+  }
+
+  def unsupportedAppendInBatchModeError(table: Table): Throwable = {
+    tableDoesNotSupportError(table, "append in batch mode")
+  }
+
+  def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
+    tableDoesNotSupportError(table, "dynamic overwrite in batch mode")
+  }
+
+  def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
+    tableDoesNotSupportError(table, "truncate in batch mode")
+  }
+
+  def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
+    tableDoesNotSupportError(table, "overwrite by filter in batch mode")
+  }
+
+  def streamingSourcesDoNotSupportCommonExecutionModeError(
+      microBatchSources: Seq[String],
+      continuousSources: Seq[String]): Throwable = {
+    new AnalysisException(
+      "The streaming sources in a query do not have a common supported execution mode.\n" +
+        "Sources support micro-batch: " + microBatchSources.mkString(", ") + "\n" +
+        "Sources support continuous: " + continuousSources.mkString(", "))
+  }
+
+  def noSuchTableExceptionMessage(ident: Identifier): String = {
+    s"Table ${ident.quoted} not found"
+  }
+
+  def noSuchTableError(ident: Identifier): Throwable = {
+    new NoSuchTableException(noSuchTableExceptionMessage(ident))
+  }
+
+  def noSuchNamespaceExceptionMessage(namespace: Array[String]): String = {
+    s"Namespace '${namespace.quoted}' not found"
+  }
+
+  def noSuchNamespaceError(namespace: Array[String]): Throwable = {
+    new NoSuchNamespaceException(noSuchNamespaceExceptionMessage(namespace))
+  }
+
+  def tableAlreadyExistsExceptionMessage(ident: Identifier): String = {
+    s"Table ${ident.quoted} already exists"
+  }
+
+  def tableAlreadyExistsError(ident: Identifier): Throwable = {
+    new TableAlreadyExistsException(tableAlreadyExistsExceptionMessage(ident))
+  }
+
+  def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
+    new NoSuchTableException(
+      s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
+  }
+
+  def namespaceAlreadyExistsExceptionMessage(namespace: Array[String]): String = {
+    s"Namespace '${namespace.quoted}' already exists"
+  }
+
+  def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
+    new NamespaceAlreadyExistsException(namespaceAlreadyExistsExceptionMessage(namespace))
+  }
+
+  private def notSupportedInJDBCCatalog(cmd: String): Throwable = {
+    new AnalysisException(s"$cmd is not supported in JDBC catalog.")
+  }
+
+  def cannotCreateJDBCTableUsingProviderError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE TABLE ... USING ...")
+  }
+
+  def cannotCreateJDBCTableUsingLocationError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE TABLE ... LOCATION ...")
+  }
+
+  def cannotCreateJDBCNamespaceUsingProviderError(): Throwable = {
+    notSupportedInJDBCCatalog("CREATE NAMESPACE ... LOCATION ...")
+  }
+
+  def cannotCreateJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"CREATE NAMESPACE with property $k")
+  }
+
+  def cannotSetJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"SET NAMESPACE with property $k")
+  }
+
+  def cannotUnsetJDBCNamespaceWithPropertyError(k: String): Throwable = {
+    notSupportedInJDBCCatalog(s"Remove NAMESPACE property $k")
+  }
+
+  def unsupportedJDBCNamespaceChangeInCatalogError(changes: Seq[NamespaceChange]): Throwable = {
+    new AnalysisException(s"Unsupported NamespaceChange $changes in JDBC catalog.")
+  }
+
+  private def tableDoesNotSupportError(cmd: String, table: Table): Throwable = {
+    new AnalysisException(s"Table does not support $cmd: ${table.name}")
+  }
+
+  def tableDoesNotSupportReadsError(table: Table): Throwable = {
+    tableDoesNotSupportError("reads", table)
+  }
+
+  def tableDoesNotSupportWritesError(table: Table): Throwable = {
+    tableDoesNotSupportError("writes", table)
+  }
+
+  def tableDoesNotSupportDeletesError(table: Table): Throwable = {
+    tableDoesNotSupportError("deletes", table)
+  }
+
+  def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
+    tableDoesNotSupportError("partition management", table)
+  }
+
+  def tableDoesNotSupportAtomicPartitionManagementError(table: Table): Throwable = {
+    tableDoesNotSupportError("atomic partition management", table)
+  }
+
+  def cannotRenameTableWithAlterViewError(): Throwable = {
+    new AnalysisException(
+      "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead.")
+  }
+
+  private def notSupportedForV2TablesError(cmd: String): Throwable = {
+    new AnalysisException(s"$cmd is not supported for v2 tables.")
+  }
+
+  def showTableExtendedNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW TABLE EXTENDED")
+  }
+
+  def analyzeTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ANALYZE TABLE")
+  }
+
+  def alterTableRecoverPartitionsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... RECOVER PARTITIONS")
+  }
+
+  def alterTableSerDePropertiesNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]")
+  }
+
+  def loadDataNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("LOAD DATA")
+  }
+
+  def showCreateTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW CREATE TABLE")
+  }
+
+  def truncateTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("TRUNCATE TABLE")
+  }
+
+  def showColumnsNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW COLUMNS")
+  }
+
+  def repairTableNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("MSCK REPAIR TABLE")
   }
 }

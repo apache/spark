@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 
 
@@ -35,7 +36,7 @@ class NoSuchDatabaseException(
 class NoSuchNamespaceException(message: String, cause: Option[Throwable] = None)
   extends AnalysisException(message, cause = cause) {
   def this(namespace: Array[String]) = {
-    this(s"Namespace '${namespace.quoted}' not found")
+    this(QueryCompilationErrors.noSuchNamespaceExceptionMessage(namespace))
   }
 }
 
@@ -46,7 +47,7 @@ class NoSuchTableException(message: String, cause: Option[Throwable] = None)
   }
 
   def this(tableIdent: Identifier) = {
-    this(s"Table ${tableIdent.quoted} not found")
+    this(QueryCompilationErrors.noSuchTableExceptionMessage(tableIdent))
   }
 }
 

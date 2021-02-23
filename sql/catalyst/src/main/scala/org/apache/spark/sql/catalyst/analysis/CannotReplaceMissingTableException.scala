@@ -20,10 +20,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 class CannotReplaceMissingTableException(
-    tableIdentifier: Identifier,
+    message: String,
     cause: Option[Throwable] = None)
-  extends AnalysisException(
-    s"Table $tableIdentifier cannot be replaced as it did not exist." +
-    s" Use CREATE OR REPLACE TABLE to create the table.", cause = cause)
+  extends AnalysisException(message, cause = cause) {
+
+  def this(tableIdentifier: Identifier, cause: Option[Throwable] = None) = {
+    this(QueryCompilationErrors.cannotReplaceMissingTableExceptionMessage(tableIdentifier), cause)
+  }
+}
