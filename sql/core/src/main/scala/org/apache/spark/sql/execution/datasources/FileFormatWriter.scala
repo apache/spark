@@ -321,9 +321,8 @@ object FileFormatWriter extends Logging {
       statsTrackers.map(_ => Seq.empty)
     }
 
-    statsTrackers.foreach(_.processCommitDuration(duration))
     statsTrackers.zip(statsPerTracker).foreach {
-      case (statsTracker, stats) => statsTracker.processStats(stats)
+      case (statsTracker, stats) => statsTracker.processStats(stats, duration)
     }
   }
 }
