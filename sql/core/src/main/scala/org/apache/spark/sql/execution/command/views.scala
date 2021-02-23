@@ -26,13 +26,13 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, UnresolvedFunction, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View, With}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -316,13 +316,8 @@ case class AlterViewAsCommand(
  */
 case class ShowViewsCommand(
     databaseName: String,
-    tableIdentifierPattern: Option[String]) extends RunnableCommand {
-
-  // The result of SHOW VIEWS has three basic columns: namespace, viewName and isTemporary.
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("namespace", StringType, nullable = false)(),
-    AttributeReference("viewName", StringType, nullable = false)(),
-    AttributeReference("isTemporary", BooleanType, nullable = false)())
+    tableIdentifierPattern: Option[String],
+    override val output: Seq[Attribute]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -557,23 +552,30 @@ object ViewHelper {
   private def collectTemporaryObjects(
       catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
-      child.collect {
+      child.flatMap {
         case UnresolvedRelation(nameParts, _, _) if catalog.isTempView(nameParts) =>
           Seq(nameParts)
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
+        case w: With if !w.resolved => w.innerChildren.flatMap(collectTempViews)
+        case plan if !plan.resolved => plan.expressions.flatMap(_.flatMap {
           case e: SubqueryExpression => collectTempViews(e.plan)
-        }).flatten
-      }.flatten.distinct
+          case _ => Seq.empty
+        })
+        case _ => Seq.empty
+      }.distinct
     }
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
-      child.collect {
-        case plan if !plan.resolved => plan.expressions.flatMap(_.collect {
-          case e: SubqueryExpression => collectTempFunctions(e.plan)
-          case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
-            Seq(e.name.funcName)
-        }).flatten
-      }.flatten.distinct
+      child.flatMap {
+        case w: With if !w.resolved => w.innerChildren.flatMap(collectTempFunctions)
+        case plan if !plan.resolved =>
+          plan.expressions.flatMap(_.flatMap {
+            case e: SubqueryExpression => collectTempFunctions(e.plan)
+            case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
+              Seq(e.name.funcName)
+            case _ => Seq.empty
+          })
+        case _ => Seq.empty
+      }.distinct
     }
     (collectTempViews(child), collectTempFunctions(child))
   }

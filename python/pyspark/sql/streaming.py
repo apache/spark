@@ -700,7 +700,7 @@ class DataStreamReader(OptionUtils):
                                to Proleptic Gregorian calendar.
 
             If None is set, the value of the SQL config
-            ``spark.sql.legacy.parquet.datetimeRebaseModeInRead`` is used by default.
+            ``spark.sql.parquet.datetimeRebaseModeInRead`` is used by default.
         int96RebaseMode : str, optional
             the rebasing mode for ``INT96`` timestamps from the Julian to
             Proleptic Gregorian calendar.
@@ -712,7 +712,7 @@ class DataStreamReader(OptionUtils):
                                to Proleptic Gregorian calendar.
 
             If None is set, the value of the SQL config
-            ``spark.sql.legacy.parquet.int96RebaseModeInRead`` is used by default.
+            ``spark.sql.parquet.int96RebaseModeInRead`` is used by default.
 
         Examples
         --------

@@ -884,16 +884,10 @@ case class ShowTablesCommand(
  *   SHOW TBLPROPERTIES table_name[('propertyKey')];
  * }}}
  */
-case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Option[String])
-  extends RunnableCommand {
-
-  override val output: Seq[Attribute] = {
-    val schema = AttributeReference("value", StringType, nullable = false)() :: Nil
-    propertyKey match {
-      case None => AttributeReference("key", StringType, nullable = false)() :: schema
-      case _ => schema
-    }
-  }
+case class ShowTablePropertiesCommand(
+    table: TableIdentifier,
+    propertyKey: Option[String],
+    override val output: Seq[Attribute]) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -906,7 +900,11 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
           val propValue = catalogTable
             .properties
             .getOrElse(p, s"Table ${catalogTable.qualifiedName} does not have property: $p")
-          Seq(Row(propValue))
+          if (output.length == 1) {
+            Seq(Row(propValue))
+          } else {
+            Seq(Row(p, propValue))
+          }
         case None =>
           catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
       }
