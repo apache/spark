@@ -208,7 +208,7 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    metrics(BasicWriteJobStatsTracker.DURATION_FILE_COMMIT).set(duration)
+    metrics(BasicWriteJobStatsTracker.DURATION_FILE_COMMIT).add(duration)
     metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
