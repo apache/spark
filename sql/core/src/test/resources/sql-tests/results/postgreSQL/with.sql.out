@@ -223,24 +223,21 @@ Table or view not found: outermost; line 4 pos 23
 
 
 -- !query
-CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i AS string) || ' v' AS v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i)
+CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i || ' v' AS string) v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i)
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+cannot resolve 'concat(__auto_generated_subquery_name.`i`, ' v')' due to data type mismatch: input to function concat should have been string, binary or array, but it's [int, string]; line 1 pos 56
 
 
 -- !query
 SELECT * FROM withz ORDER BY k
 -- !query schema
-struct<k:int,v:string>
+struct<>
 -- !query output
-1	1 v
-4	4 v
-7	7 v
-10	10 v
-13	13 v
-16	16 v
+org.apache.spark.sql.AnalysisException
+Table or view not found: withz; line 1 pos 14
 
 
 -- !query
@@ -248,7 +245,8 @@ DROP TABLE withz
 -- !query schema
 struct<>
 -- !query output
-
+org.apache.spark.sql.AnalysisException
+Table or view not found: withz; line 1 pos 11
 
 
 -- !query

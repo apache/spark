@@ -33,7 +33,7 @@ import org.apache.spark.sql.types._
  *   * Short: Short, Int, Long, Decimal, Float, Double
  *   * Int: Int, Long, Decimal, Float, Double
  *   * Long: Long, Decimal, Float, Double
- *   * Decimal: Any wider Numeric type
+ *   * Decimal: Float, Double, or any wider Numeric type
  *   * Float: Float, Double
  *   * Double: Double
  *   * String: String
@@ -43,7 +43,7 @@ import org.apache.spark.sql.types._
  *   * Boolean: Boolean
  *   * Interval: Interval
  * As for complex data types, Spark will determine the precedent list recursively based on their
- * sub-types.
+ * sub-types and nullability.
  *
  * With the definition of type precedent list, the general type coercion rules are as following:
  *   * Data type S is allowed to be implicitly cast as type T iff T is in the precedence list of S
@@ -67,8 +67,7 @@ import org.apache.spark.sql.types._
  *       * MapConcat
  *       * CreateMap
  *   * For complex types (struct, array, map), Spark recursively looks into the element type and
- *     applies the rules above. If the element nullability is converted from true to false, add
- *     runtime null check to the elements.
+ *     applies the rules above.
  *  Note: this new type coercion system will allow implicit converting String type literals as other
  *  primitive types, in case of breaking too many existing Spark SQL queries. This is a special
  *  rule and it is not from the ANSI SQL standard.
@@ -163,12 +162,14 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // This type coercion system will allow implicit converting String type literals as other
       // primitive types, in case of breaking too many existing Spark SQL queries.
-      case (StringType, a: AtomicType) if isInputFoldable && a != BooleanType && a != StringType =>
+      case (StringType, a: AtomicType) if isInputFoldable =>
         Some(a)
 
+      // If the target type is any Numeric type, convert the String type literal as Double type.
       case (StringType, NumericType) if isInputFoldable =>
         Some(DoubleType)
 
+      // If the target type is any Decimal type, convert the String type literal as Double type.
       case (StringType, DecimalType) if isInputFoldable =>
         Some(DecimalType.SYSTEM_DEFAULT)
 
@@ -242,25 +243,11 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right)
-        if right.dataType != CalendarIntervalType && left.foldable =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType())
-        if left.dataType != CalendarIntervalType && right.foldable =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
+      case b @ BinaryOperator(left @ StringType(), right @ AtomicType()) if left.foldable =>
+        b.makeCopy(Array(castExpr(left, right.dataType), right))
 
-      // For equality between string and timestamp we cast the string to a timestamp
-      // so that things like rounding of subsecond precision does not affect the comparison.
-      case p @ Equality(left @ StringType(), right @ TimestampType()) if left.foldable =>
-        p.makeCopy(Array(Cast(left, TimestampType), right))
-      case p @ Equality(left @ TimestampType(), right @ StringType()) if right.foldable =>
-        p.makeCopy(Array(left, Cast(right, TimestampType)))
-
-      case p @ BinaryComparison(left @ StringType(), right @ AtomicType()) if left.foldable =>
-        p.makeCopy(Array(castExpr(left, right.dataType), right))
-
-      case p @ BinaryComparison(left @ AtomicType(), right @ StringType()) if right.foldable =>
-        p.makeCopy(Array(left, castExpr(right, left.dataType)))
+      case b @ BinaryOperator(left @ AtomicType(), right @ StringType()) if right.foldable =>
+        b.makeCopy(Array(left, castExpr(right, left.dataType)))
 
       case Abs(e @ StringType()) if e.foldable => Abs(Cast(e, DoubleType))
       case m @ UnaryMinus(e @ StringType(), _) if e.foldable =>

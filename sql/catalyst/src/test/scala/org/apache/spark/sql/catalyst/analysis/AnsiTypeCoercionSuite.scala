@@ -234,12 +234,10 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
   }
 
   test("implicit type cast - foldable StringType") {
-    val castableTypes =
-      numericTypes ++ datetimeTypes ++ Seq(BinaryType, StringType)
-    castableTypes.foreach { dt =>
+    atomicTypes.foreach { dt =>
       shouldCastStringLiteral(dt, dt)
     }
-    allTypes.filterNot(castableTypes.contains).foreach { dt =>
+    allTypes.filterNot(atomicTypes.contains).foreach { dt =>
       shouldNotCastStringLiteral(dt)
     }
     shouldCastStringLiteral(DecimalType, DecimalType.defaultConcreteType)
@@ -1390,9 +1388,9 @@ class AnsiTypeCoercionSuite extends AnalysisTest {
       EqualTo(castStringLiteralAsTimestamp, timestampLiteral))
 
     ruleTest(rule, Add(stringLiteral, Literal(1)),
-      Add(castStringLiteralAsDouble, Literal(1)))
+      Add(castStringLiteralAsInt, Literal(1)))
     ruleTest(rule, Divide(stringLiteral, Literal(1)),
-      Divide(castStringLiteralAsDouble, Literal(1)))
+      Divide(castStringLiteralAsInt, Literal(1)))
 
     ruleTest(rule,
       In(Literal(1), Seq(stringLiteral, Literal(2))),
