@@ -1141,36 +1141,6 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
-  test("SPARK-34380: unset nonexistent table property") {
-    val t = s"${catalogAndNamespace}table_name"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id int) USING $v2Format TBLPROPERTIES('test' = '34')")
-
-      val tableName = fullTableName(t)
-      val table = getTableMetadata(tableName)
-
-      assert(table.name === tableName)
-      assert(table.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
-
-      val exc = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('unknown')")
-      }
-      assert(exc.getMessage.contains("Attempted to unset non-existent property 'unknown'"))
-
-      // Reserved property "comment" should be allowed regardless.
-      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES ('comment')")
-
-      // The following becomes a no-op because "IF EXISTS" is set.
-      sql(s"ALTER TABLE $t UNSET TBLPROPERTIES IF EXISTS ('unknown')")
-
-      val updated = getTableMetadata(tableName)
-      assert(updated.name === tableName)
-      assert(updated.properties ===
-        withDefaultOwnership(Map("provider" -> v2Format, "test" -> "34")).asJava)
-    }
-  }
-
   test("AlterTable: replace columns") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {

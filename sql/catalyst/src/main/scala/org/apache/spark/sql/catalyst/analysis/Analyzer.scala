@@ -278,7 +278,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
-      ResolveTableProperties ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Apply Char Padding", Once,
