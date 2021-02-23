@@ -82,12 +82,12 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   Seq(
-    ("GenericData.Record", recordDatum),
-    ("GenericData.Array", arrayDatum),
-    ("GenericData.EnumSymbol", enumDatum),
-    ("GenericData.Fixed", fixedDatum)
+    ("Record", recordDatum),
+    ("Array", arrayDatum),
+    ("EnumSymbol", enumDatum),
+    ("Fixed", fixedDatum)
   ).foreach { case (name, datum) =>
-    test(s"SPARK-34477: $name serialization and deserialization") {
+    test(s"SPARK-34477: GenericData.$name serialization and deserialization") {
       val genericSer = new GenericAvroSerializer[datum.type](conf.getAvroSchema)
 
       val outputStream = new ByteArrayOutputStream()
@@ -100,7 +100,8 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
       assert(genericSer.deserializeDatum(input) === datum)
     }
 
-    test(s"SPARK-34477: $name serialization and deserialization through KryoSerializer ") {
+    test(s"SPARK-34477: GenericData.$name serialization and deserialization" +
+      s"through KryoSerializer ") {
       require(conf.get(SERIALIZER) == "org.apache.spark.serializer.KryoSerializer")
       val rdd = sc.parallelize((0 until 10).map(_ => datum), 2)
       assert(rdd.collect() sameElements Array.fill(10)(datum))

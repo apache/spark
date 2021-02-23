@@ -43,6 +43,7 @@ import org.apache.spark.util.Utils
  * @param schemas a map where the keys are unique IDs for Avro schemas and the values are the
  *                string representation of the Avro schema, used to decrease the amount of data
  *                that needs to be serialized.
+ * @tparam D the subtype of [[GenericContainer]] handled by this serializer
  */
 private[serializer] class GenericAvroSerializer[D >: Null <: GenericContainer]
   (schemas: Map[Long, String]) extends KSerializer[D] {

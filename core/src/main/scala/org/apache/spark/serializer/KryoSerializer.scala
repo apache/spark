@@ -33,7 +33,7 @@ import com.esotericsoftware.kryo.io.{UnsafeInput => KryoUnsafeInput, UnsafeOutpu
 import com.esotericsoftware.kryo.pool.{KryoCallback, KryoFactory, KryoPool}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
-import org.apache.avro.generic.{GenericData, GenericRecord}
+import org.apache.avro.generic.{GenericContainer, GenericData, GenericRecord}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
@@ -153,15 +153,13 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    kryo.register(classOf[GenericRecord], new GenericAvroSerializer[GenericRecord](avroSchemas))
-    kryo.register(classOf[GenericData.Record],
-      new GenericAvroSerializer[GenericData.Record](avroSchemas))
-    kryo.register(classOf[GenericData.Array[_]],
-      new GenericAvroSerializer[GenericData.Array[_]](avroSchemas))
-    kryo.register(classOf[GenericData.EnumSymbol],
-      new GenericAvroSerializer[GenericData.EnumSymbol](avroSchemas))
-    kryo.register(classOf[GenericData.Fixed],
-      new GenericAvroSerializer[GenericData.Fixed](avroSchemas))
+    def registerAvro[T >: Null <: GenericContainer](implicit ct: ClassTag[T]) =
+      kryo.register(ct.runtimeClass, new GenericAvroSerializer[T](avroSchemas))
+    registerAvro[GenericRecord]
+    registerAvro[GenericData.Record]
+    registerAvro[GenericData.Array[_]]
+    registerAvro[GenericData.EnumSymbol]
+    registerAvro[GenericData.Fixed]
 
     // Use the default classloader when calling the user registrator.
     Utils.withContextClassLoader(classLoader) {
