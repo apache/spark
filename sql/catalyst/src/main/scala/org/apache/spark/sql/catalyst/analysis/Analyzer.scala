@@ -1119,6 +1119,10 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
         // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
         // inside a view maybe resolved incorrectly.
+        // But for commands like `DropViewCommand`, resolving view is unnecessary even though
+        // there is unresolved node. So use the `performCheck` flag to skip the analysis check
+        // for these commands.
+        // TODO(SPARK-34504): avoid unnecessary view resolving and remove the `performCheck` flag
         if (performCheck) {
           checkAnalysis(newChild)
         }
