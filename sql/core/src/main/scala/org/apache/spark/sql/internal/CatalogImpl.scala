@@ -424,7 +424,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       // same way as how a permanent view is handled. This also avoids a potential issue where a
       // dependent view becomes invalid because of the above while its data is still cached.
       val viewText = viewDef match {
-        case View(desc, _, _) => desc.viewText
+        case v: View => v.desc.viewText
         case _ => None
       }
       val plan = sparkSession.sessionState.executePlan(viewDef)
