@@ -589,8 +589,8 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
     Seq(true, false).foreach { java8Api =>
       withSQLConf(
         SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-        SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
-        SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
         // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
         val millisData = Seq(
           "1000-06-14 08:28:53.123",

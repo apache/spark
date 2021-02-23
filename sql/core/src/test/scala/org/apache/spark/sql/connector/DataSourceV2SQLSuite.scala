@@ -37,7 +37,6 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -845,24 +844,6 @@ class DataSourceV2SQLSuite
         checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "b", 1) :: Nil)
         checkAnswer(sql(s"SELECT * FROM $view"), Row(2) :: Nil)
       }
-    }
-  }
-
-  test("SPARK-33829: Renaming a table should recreate a cache while retaining the old cache info") {
-    withTable("testcat.ns.old", "testcat.ns.new") {
-      def getStorageLevel(tableName: String): StorageLevel = {
-        val table = spark.table(tableName)
-        val optCachedData = spark.sharedState.cacheManager.lookupCachedData(table)
-        assert(optCachedData.isDefined)
-        optCachedData.get.cachedRepresentation.cacheBuilder.storageLevel
-      }
-      sql("CREATE TABLE testcat.ns.old USING foo AS SELECT id, data FROM source")
-      sql("CACHE TABLE testcat.ns.old OPTIONS('storageLevel' 'MEMORY_ONLY')")
-      val oldStorageLevel = getStorageLevel("testcat.ns.old")
-
-      sql("ALTER TABLE testcat.ns.old RENAME TO ns.new")
-      val newStorageLevel = getStorageLevel("testcat.ns.new")
-      assert(oldStorageLevel === newStorageLevel)
     }
   }
 
@@ -1895,20 +1876,16 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterTable: rename table basic test") {
+  test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old")))
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
 
       val e = intercept[AnalysisException] {
         sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
       }
       assert(e.getMessage.contains(
         "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
-
-      sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new")))
     }
   }
 
@@ -2085,8 +2062,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DESCRIBE FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("SHOW FUNCTIONS not valid v1 namespace") {
@@ -2107,8 +2083,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("DROP FUNCTION default.ns1.ns2.fun")
     }
-    assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("CREATE FUNCTION: only support session catalog") {
@@ -2120,8 +2095,7 @@ class DataSourceV2SQLSuite
     val e1 = intercept[AnalysisException] {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
-    assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+    assert(e1.message.contains("Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("REFRESH FUNCTION: only support session catalog") {
@@ -2134,7 +2108,7 @@ class DataSourceV2SQLSuite
       sql("REFRESH FUNCTION default.ns1.ns2.fun")
     }
     assert(e1.message.contains(
-      "The namespace in session catalog must have exactly one name part: default.ns1.ns2.fun"))
+      "Unsupported function name 'default.ns1.ns2.fun'"))
   }
 
   test("global temp view should not be masked by v2 catalog") {
@@ -2172,7 +2146,7 @@ class DataSourceV2SQLSuite
       sql(s"CREATE TABLE $globalTempDB.ns1.ns2.tbl (id bigint, data string) USING json")
     }
     assert(e.message.contains(
-      "The namespace in session catalog must have exactly one name part: global_temp.ns1.ns2.tbl"))
+      "global_temp.ns1.ns2.tbl is not a valid TableIdentifier as it has more than 2 name parts."))
   }
 
   test("table name same as catalog can be used") {
@@ -2201,10 +2175,29 @@ class DataSourceV2SQLSuite
         sql("CREATE TABLE t USING json AS SELECT 1 AS i")
 
         val t = "spark_catalog.t"
+
         def verify(sql: String): Unit = {
           val e = intercept[AnalysisException](spark.sql(sql))
-          assert(e.message.contains(
-            s"The namespace in session catalog must have exactly one name part: $t"))
+          assert(e.message.contains(s"Table or view not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyView(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"View not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyTable(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"Table not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
+        }
+
+        def verifyGeneric(sql: String): Unit = {
+          val e = intercept[AnalysisException](spark.sql(sql))
+          assert(e.message.contains(s"not found: $t"),
+            s"Error message did not contain expected text while evaluting $sql")
         }
 
         verify(s"select * from $t")
@@ -2212,16 +2205,16 @@ class DataSourceV2SQLSuite
         verify(s"REFRESH TABLE $t")
         verify(s"DESCRIBE $t i")
         verify(s"DROP TABLE $t")
-        verify(s"DROP VIEW $t")
-        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS")
-        verify(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
-        verify(s"MSCK REPAIR TABLE $t")
-        verify(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
-        verify(s"SHOW CREATE TABLE $t")
-        verify(s"SHOW CREATE TABLE $t AS SERDE")
-        verify(s"CACHE TABLE $t")
-        verify(s"UNCACHE TABLE $t")
-        verify(s"TRUNCATE TABLE $t")
+        verifyView(s"DROP VIEW $t")
+        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS")
+        verifyGeneric(s"ANALYZE TABLE $t COMPUTE STATISTICS FOR ALL COLUMNS")
+        verifyTable(s"MSCK REPAIR TABLE $t")
+        verifyTable(s"LOAD DATA INPATH 'filepath' INTO TABLE $t")
+        verifyGeneric(s"SHOW CREATE TABLE $t")
+        verifyGeneric(s"SHOW CREATE TABLE $t AS SERDE")
+        verifyGeneric(s"CACHE TABLE $t")
+        verifyGeneric(s"UNCACHE TABLE $t")
+        verifyGeneric(s"TRUNCATE TABLE $t")
         verify(s"SHOW COLUMNS FROM $t")
       }
     }
@@ -2369,7 +2362,7 @@ class DataSourceV2SQLSuite
         sql(s"CACHE TABLE $sessionCatalogName.v")
       )
       assert(e1.message.contains(
-        "The namespace in session catalog must have exactly one name part: spark_catalog.v"))
+        "Table or view not found: spark_catalog.v"))
     }
     val e2 = intercept[AnalysisException] {
       sql(s"CREATE TEMP VIEW $sessionCatalogName.v AS SELECT 1")
@@ -2566,6 +2559,20 @@ class DataSourceV2SQLSuite
 
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
       assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+    }
+  }
+
+  test("SPARK-34468: rename table in place when the destination name has single part") {
+    val tbl = s"${catalogAndNamespace}src_tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      sql(s"INSERT INTO $tbl SELECT 0")
+      checkAnswer(sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"), Nil)
+      sql(s"ALTER TABLE $tbl RENAME TO new_tbl")
+      checkAnswer(
+        sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"),
+        Row("ns1.ns2", "new_tbl", false))
+      checkAnswer(sql(s"SELECT c0 FROM ${catalogAndNamespace}new_tbl"), Row(0))
     }
   }
 

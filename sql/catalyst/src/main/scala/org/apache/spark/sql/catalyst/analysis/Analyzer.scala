@@ -278,6 +278,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       ResolveUnion ::
+      ResolveTableProperties ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Apply Char Padding", Once,
@@ -847,11 +848,11 @@ class Analyzer(override val catalogManager: CatalogManager)
   case class ResolveNamespace(catalogManager: CatalogManager)
     extends Rule[LogicalPlan] with LookupCatalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case s @ ShowTables(UnresolvedNamespace(Seq()), _) =>
+      case s @ ShowTables(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _) =>
+      case s @ ShowTableExtended(UnresolvedNamespace(Seq()), _, _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
-      case s @ ShowViews(UnresolvedNamespace(Seq()), _) =>
+      case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
         ResolvedNamespace(currentCatalog, Seq.empty[String])
@@ -870,24 +871,24 @@ class Analyzer(override val catalogManager: CatalogManager)
   object ResolveTempViews extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case u @ UnresolvedRelation(ident, _, isStreaming) =>
-        lookupTempView(ident, isStreaming).getOrElse(u)
+        lookupTempView(ident, isStreaming, performCheck = true).getOrElse(u)
       case i @ InsertIntoStatement(UnresolvedRelation(ident, _, false), _, _, _, _, _) =>
-        lookupTempView(ident)
+        lookupTempView(ident, performCheck = true)
           .map(view => i.copy(table = view))
           .getOrElse(i)
       case c @ CacheTable(UnresolvedRelation(ident, _, false), _, _, _) =>
-        lookupTempView(ident)
+        lookupTempView(ident, performCheck = true)
           .map(view => c.copy(table = view))
           .getOrElse(c)
       case c @ UncacheTable(UnresolvedRelation(ident, _, false), _, _) =>
-        lookupTempView(ident)
+        lookupTempView(ident, performCheck = true)
           .map(view => c.copy(table = view, isTempView = true))
           .getOrElse(c)
       // TODO (SPARK-27484): handle streaming write commands when we have them.
       case write: V2WriteCommand =>
         write.table match {
           case UnresolvedRelation(ident, _, false) =>
-            lookupTempView(ident).map(EliminateSubqueryAliases(_)).map {
+            lookupTempView(ident, performCheck = true).map(EliminateSubqueryAliases(_)).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
               case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
             }.getOrElse(write)
@@ -920,7 +921,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     def lookupTempView(
-        identifier: Seq[String], isStreaming: Boolean = false): Option[LogicalPlan] = {
+        identifier: Seq[String],
+        isStreaming: Boolean = false,
+        performCheck: Boolean = false): Option[LogicalPlan] = {
       // Permanent View can't refer to temp views, no need to lookup at all.
       if (isResolvingView && !referredTempViewNames.contains(identifier)) return None
 
@@ -933,7 +936,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       if (isStreaming && tmpView.nonEmpty && !tmpView.get.isStreaming) {
         throw QueryCompilationErrors.readNonStreamingTempViewError(identifier.quoted)
       }
-      tmpView.map(ResolveRelations.resolveViews)
+      tmpView.map(ResolveRelations.resolveViews(_, performCheck))
     }
   }
 
@@ -1097,7 +1100,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     // look at `AnalysisContext.catalogAndNamespace` when resolving relations with single-part name.
     // If `AnalysisContext.catalogAndNamespace` is non-empty, analyzer will expand single-part names
     // with it, instead of current catalog and namespace.
-    def resolveViews(plan: LogicalPlan): LogicalPlan = plan match {
+    def resolveViews(plan: LogicalPlan, performCheck: Boolean = false): LogicalPlan = plan match {
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
@@ -1114,9 +1117,18 @@ class Analyzer(override val catalogManager: CatalogManager)
             executeSameContext(child)
           }
         }
+        // Fail the analysis eagerly because outside AnalysisContext, the unresolved operators
+        // inside a view maybe resolved incorrectly.
+        // But for commands like `DropViewCommand`, resolving view is unnecessary even though
+        // there is unresolved node. So use the `performCheck` flag to skip the analysis check
+        // for these commands.
+        // TODO(SPARK-34504): avoid unnecessary view resolving and remove the `performCheck` flag
+        if (performCheck) {
+          checkAnalysis(newChild)
+        }
         view.copy(child = newChild)
       case p @ SubqueryAlias(_, view: View) =>
-        p.copy(child = resolveViews(view))
+        p.copy(child = resolveViews(view, performCheck))
       case _ => plan
     }
 
@@ -1136,14 +1148,14 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case c @ CacheTable(u @ UnresolvedRelation(_, _, false), _, _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(resolveViews)
+          .map(resolveViews(_, performCheck = true))
           .map(EliminateSubqueryAliases(_))
           .map(relation => c.copy(table = relation))
           .getOrElse(c)
 
       case c @ UncacheTable(u @ UnresolvedRelation(_, _, false), _, _) =>
         lookupRelation(u.multipartIdentifier, u.options, false)
-          .map(resolveViews)
+          .map(resolveViews(_, performCheck = true))
           .map(EliminateSubqueryAliases(_))
           .map(relation => c.copy(table = relation))
           .getOrElse(c)
@@ -1169,7 +1181,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case u: UnresolvedRelation =>
         lookupRelation(u.multipartIdentifier, u.options, u.isStreaming)
-          .map(resolveViews).getOrElse(u)
+          .map(resolveViews(_, performCheck = true)).getOrElse(u)
 
       case u @ UnresolvedTable(identifier, cmd, relationTypeMismatchHint) =>
         lookupTableOrView(identifier).map {
@@ -2718,19 +2730,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         p
 
       case p @ Project(projectList, child) =>
-        // Holds the resolved generator, if one exists in the project list.
-        var resolvedGenerator: Generate = null
-
-        val newProjectList = projectList
+        val (resolvedGenerator, newProjectList) = projectList
           .map(trimNonTopLevelAliases)
-          .flatMap {
-            case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
-              // It's a sanity check, this should not happen as the previous case will throw
-              // exception earlier.
-              assert(resolvedGenerator == null, "More than one generator found in SELECT.")
+          .foldLeft((None: Option[Generate], Nil: Seq[NamedExpression])) { (res, e) =>
+            e match {
+              case AliasedGenerator(generator, names, outer) if generator.childrenResolved =>
+                // It's a sanity check, this should not happen as the previous case will throw
+                // exception earlier.
+                assert(res._1.isEmpty, "More than one generator found in SELECT.")
 
-              resolvedGenerator =
-                Generate(
+                val g = Generate(
                   generator,
                   unrequiredChildIndex = Nil,
                   outer = outer,
@@ -2738,12 +2747,14 @@ class Analyzer(override val catalogManager: CatalogManager)
                   generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                   child)
 
-              resolvedGenerator.generatorOutput
-            case other => other :: Nil
+                (Some(g), res._2 ++ g.generatorOutput)
+              case other =>
+                (res._1, res._2 :+ other)
+            }
           }
 
-        if (resolvedGenerator != null) {
-          Project(newProjectList, resolvedGenerator)
+        if (resolvedGenerator.isDefined) {
+          Project(newProjectList, resolvedGenerator.get)
         } else {
           p
         }
