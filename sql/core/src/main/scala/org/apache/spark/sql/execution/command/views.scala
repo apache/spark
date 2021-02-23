@@ -117,7 +117,7 @@ case class CreateViewCommand(
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       if (replace && catalog.getRawTempView(name.table).isDefined &&
           !catalog.getRawTempView(name.table).get.sameResult(aliasedPlan)) {
-        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+        logInfo(s"Try to uncache the ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
