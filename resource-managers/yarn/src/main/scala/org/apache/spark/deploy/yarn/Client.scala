@@ -793,6 +793,25 @@ private[spark] class Client(
       // distributed file.
       amKeytabFileName.foreach { kt => props.setProperty(KEYTAB.key, kt) }
 
+      // Upload user provided ivysettings.xml file to the distributed cache
+      val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
+      if (isClusterMode && ivySettings.isDefined) {
+        val ivySettingsFile = new File(ivySettings.get)
+        require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+        require(ivySettingsFile.isFile(),
+          s"Ivy settings file $ivySettingsFile is not a normal file")
+        // Generate a file name that can be used for the ivySettings file, that does not conflict
+        // with any other conf file.
+        val amIvySettingsFileName = ivySettingsFile.getName() + "-" + UUID.randomUUID().toString
+        confStream.putNextEntry(new ZipEntry(amIvySettingsFileName))
+        Files.copy(ivySettingsFile, confStream)
+        confStream.closeEntry()
+
+        // Override the ivySettings file name with the name of the distributed file
+        props.setProperty("spark.jars.ivySettings", s"$LOCALIZED_CONF_DIR/$amIvySettingsFileName")
+      }
+
+
       writePropertiesToArchive(props, SPARK_CONF_FILE, confStream)
 
       // Write the distributed cache config to the archive.
