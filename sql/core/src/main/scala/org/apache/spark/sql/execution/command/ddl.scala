@@ -815,6 +815,8 @@ case class AlterTableRecoverPartitionsCommand(
       dropPartSpecs,
       ignoreIfNotExists = true,
       purge = false,
+      // Since we have already checked that the partition directory does not exist, we can avoid
+      // additional calls to the file system at the catalog side by setting this flag.
       retainData = true)
     dropPartSpecs.length
   }
