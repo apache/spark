@@ -49,8 +49,16 @@ object DateTimeUtils {
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
   val TIMEZONE_OPTION = "timeZone"
+  val TIME_ZONE_ID = "(\\+|\\-)\\d:".r
 
-  def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+  def getZoneId(timeZoneId: String): ZoneId = {
+    var id = timeZoneId
+    if (TIME_ZONE_ID.findFirstIn(timeZoneId).isDefined) {
+      id = id.replace("+", "+0")
+      .replace("-", "-0")
+    }
+    ZoneId.of(id, ZoneId.SHORT_IDS)
+  }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
   /**
