@@ -15,28 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.tags;
 
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
+import org.scalatest.TagAnnotation;
 
-/**
- * Physical plan node for renaming a table partition.
- */
-case class AlterTableRenamePartitionExec(
-    table: SupportsPartitionManagement,
-    from: ResolvedPartitionSpec,
-    to: ResolvedPartitionSpec,
-    refreshCache: () => Unit) extends V2CommandExec {
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-  override def output: Seq[Attribute] = Seq.empty
-
-  override protected def run(): Seq[InternalRow] = {
-    if (table.renamePartition(from.ident, to.ident)) {
-      refreshCache()
-    }
-    Seq.empty
-  }
-}
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface DedicatedJVMTest { }

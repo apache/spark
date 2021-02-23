@@ -40,7 +40,6 @@ import org.apache.hive.service.server.HiveServer2;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
-import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
@@ -61,8 +60,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   protected int portNum;
   protected InetAddress serverIPAddress;
   protected String hiveHost;
-  protected TServer server;
-  protected org.eclipse.jetty.server.Server httpServer;
+  private Thread serverThread = null;
 
   private boolean isStarted = false;
   protected boolean isEmbedded = false;
@@ -177,26 +175,23 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     super.start();
     if (!isStarted && !isEmbedded) {
       initializeServer();
-      new Thread(this).start();
+      serverThread = new Thread(this);
+      serverThread.setName(getName());
+      serverThread.start();
       isStarted = true;
     }
   }
 
+  protected abstract void stopServer();
+
   @Override
   public synchronized void stop() {
     if (isStarted && !isEmbedded) {
-      if(server != null) {
-        server.stop();
-        LOG.info("Thrift server has stopped");
+      if (serverThread != null) {
+        serverThread.interrupt();
+        serverThread = null;
       }
-      if((httpServer != null) && httpServer.isStarted()) {
-        try {
-          httpServer.stop();
-          LOG.info("Http server has stopped");
-        } catch (Exception e) {
-          LOG.error("Error stopping Http server: ", e);
-        }
-      }
+      stopServer();
       isStarted = false;
     }
     super.stop();
