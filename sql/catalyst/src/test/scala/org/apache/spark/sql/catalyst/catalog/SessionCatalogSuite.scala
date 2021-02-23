@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class InMemorySessionCatalogSuite extends SessionCatalogSuite {
   protected val utils = new CatalogTestUtils {
@@ -642,11 +643,98 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   }
 
   private def getViewPlan(metadata: CatalogTable): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
     val projectList = metadata.schema.map { field =>
-      UpCast(field.name.attr, field.dataType).as(field.name)
+      createNamedExpr(Seq(), field.name, field.dataType, inLambda = false)
     }
     Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
+  }
+
+  private def createNamedExpr(
+    parent: Seq[String],
+    fieldName : String,
+    fieldDateType : DataType,
+    inLambda : Boolean) : NamedExpression = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    createExpr(parent, fieldName, fieldDateType, inLambda).as(fieldName)
+  }
+
+  private def createExpr(
+       parent: Seq[String],
+       fieldName : String,
+       fieldDateType : DataType,
+       inLambda : Boolean) : Expression = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    val key = UnresolvedNamedLambdaVariable(Seq("key"))
+    val value = UnresolvedNamedLambdaVariable(Seq("value"))
+    fieldDateType match {
+      case structType : StructType => CreateStruct.create(structType.map {
+        subField => createNamedExpr(parent :+ fieldName, subField.name, subField.dataType, inLambda)
+      })
+      case arrayType : ArrayType => if (needToBeExplode(arrayType)) {
+        ArrayTransform(
+          (parent :+ fieldName).mkString(".").attr,
+          LambdaFunction(createExpr(Seq(), "value", arrayType.elementType, inLambda = true),
+            Seq(value)
+          )
+        )
+      } else {
+        upCast(parent :+ fieldName, fieldDateType, inLambda)
+      }
+      case mapType : MapType => if (needToBeExplode(mapType.keyType)
+        && needToBeExplode(mapType.valueType)) {
+        TransformValues(
+          TransformKeys(
+            (parent :+ fieldName).mkString(".").attr,
+            LambdaFunction(createExpr(Seq(), "key", mapType.keyType, inLambda = true),
+              Seq(key, value)
+            )
+          ),
+          LambdaFunction(createExpr(Seq(), "value", mapType.valueType, inLambda = true),
+            Seq(key, value)
+          )
+        )
+      } else if (needToBeExplode(mapType.keyType)) {
+        TransformKeys(
+          (parent :+ fieldName).mkString(".").attr,
+          LambdaFunction(createExpr(Seq(), "key", mapType.keyType, inLambda = true),
+            Seq(key, value)
+          )
+        )
+      } else if (needToBeExplode(mapType.valueType)) {
+        TransformValues(
+          (parent :+ fieldName).mkString(".").attr,
+          LambdaFunction(createExpr(Seq(), "value", mapType.valueType, inLambda = true),
+            Seq(key, value)
+          )
+        )
+      } else {
+        upCast(parent :+ fieldName, fieldDateType, inLambda)
+      }
+      case _ => upCast(parent :+ fieldName, fieldDateType, inLambda)
+    }
+  }
+
+  private def upCast(
+        nameParts: Seq[String],
+        fieldDateType: DataType,
+        inLambda : Boolean) = {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+    UpCast(
+      if (inLambda) {
+        UnresolvedNamedLambdaVariable(nameParts)
+      } else {
+      nameParts.mkString(".").attr
+      }, fieldDateType)
+  }
+
+  private def needToBeExplode(dataType : DataType) : Boolean = {
+    dataType match {
+      case _ : StructType => true
+      case arrayType: ArrayType => needToBeExplode(arrayType.elementType)
+      case mapType: MapType => needToBeExplode(mapType.keyType) ||
+        needToBeExplode(mapType.valueType)
+      case _ => false
+    }
   }
 
   test("look up view relation") {
@@ -685,6 +773,63 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, "db3", "view2"), view))
     }
   }
+
+
+    test("SPARK-34528: named explicitly field in struct of a view") {
+      withEmptyCatalog { catalog =>
+        val databaseName = "default"
+        val tableName = "complex_table"
+        val viewName = "view_table"
+        val subSubSchema = new StructType()
+          .add("c", "long")
+          .add("d", "date")
+        val subSchema = new StructType()
+          .add("col1", "int")
+          .add("col2", "string")
+          .add("a", "int")
+          .add("b", "string")
+          .add("subComplex", subSubSchema)
+          .add("subMatrix", new ArrayType(
+            new ArrayType(new MapType(StringType, IntegerType, valueContainsNull = true),
+              containsNull = true), containsNull = true)
+          )
+          .add("subComplexMatrix", new ArrayType(
+            new ArrayType(subSubSchema, containsNull = true), containsNull = true)
+          )
+          .add("subMap", new MapType(StringType, new ArrayType(IntegerType, containsNull = true)
+            , valueContainsNull = true))
+          .add("subComplexMap", new MapType(subSubSchema, StringType, valueContainsNull = true))
+        val schema = new StructType()
+          .add("id", "int")
+          .add("complex", subSchema)
+          .add("array", new ArrayType(IntegerType, containsNull = true))
+          .add("complexArray", new ArrayType(subSchema, containsNull = true))
+          .add("map", new MapType(StringType, IntegerType, valueContainsNull = true))
+          .add("complexMap", new MapType(StringType, subSchema, valueContainsNull = true))
+
+        val complexTable = CatalogTable(
+          identifier = TableIdentifier(tableName, Some(databaseName)),
+          tableType = CatalogTableType.EXTERNAL,
+          storage = storageFormat.copy(locationUri = Some(Utils.createTempDir().toURI)),
+          schema = schema,
+          provider = Some(defaultProvider))
+        catalog.createTable(complexTable, ignoreIfExists = false)
+        val view = CatalogTable(
+          identifier = TableIdentifier(viewName, Some(databaseName)),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = schema,
+          viewText = Some(s"SELECT * FROM $tableName")
+        )
+        catalog.createTable(view, ignoreIfExists = false)
+        val viewMetadata = catalog.externalCatalog.getTable(databaseName, viewName)
+        val viewPlan = View(desc = viewMetadata, isTempView = false,
+          child = getViewPlan(viewMetadata))
+
+        comparePlans(catalog.lookupRelation(TableIdentifier(viewName, Some(databaseName))),
+          SubqueryAlias(Seq(CatalogManager.SESSION_CATALOG_NAME, databaseName, viewName), viewPlan))
+      }
+    }
 
   test("table exists") {
     withBasicCatalog { catalog =>

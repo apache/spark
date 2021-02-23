@@ -205,7 +205,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(spark.table("v"), Row(Row("a", 1)) :: Nil)
 
-      spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `b`, 1 AS b) q1")
+      spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `c`, 1 AS b) q1")
       val df = spark.table("v")
       assert("q1".equals(df.schema.fields(0).name))
       checkAnswer(df, Row(Row("a", 1)) :: Nil)
