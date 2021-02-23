@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.log4j.Level
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Literal, SortOrder}
@@ -165,7 +166,7 @@ class ResolveHintsSuite extends AnalysisTest {
       RepartitionByExpression(
         Seq(AttributeReference("a", IntegerType)()), testRelation, None))
 
-    val e = intercept[IllegalArgumentException] {
+    val e = intercept[AnalysisException] {
       checkAnalysis(
         UnresolvedHint("REPARTITION",
           Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
