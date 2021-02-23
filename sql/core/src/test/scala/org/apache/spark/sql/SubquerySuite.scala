@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators
+import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
@@ -1014,7 +1014,7 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-23957 Remove redundant sort from subquery plan(in subquery)") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopOperators.ruleName) {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopUnion.ruleName) {
       withTempView("t1", "t2", "t3") {
         Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
         Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")

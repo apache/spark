@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators
+import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -388,7 +388,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34283: SQL-style union using Dataset, " +
     "remove unnecessary deduplicate in multiple unions") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopOperators.ruleName) {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopUnion.ruleName) {
       val unionDF = testData.union(testData).distinct().union(testData).distinct()
         .union(testData).distinct().union(testData).distinct()
 
@@ -426,7 +426,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34283: SQL-style union using Dataset, " +
     "keep necessary deduplicate in multiple unions") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopOperators.ruleName) {
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopUnion.ruleName) {
       val df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
       var df2 = Seq((6, 2, 5)).toDF("a", "b", "c")
       var df3 = Seq((2, 4, 3)).toDF("c", "a", "b")
@@ -815,7 +815,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-34474: Remove unnecessary Union under Distinct") {
-    Seq(RemoveNoopOperators.ruleName, "").map { ruleName =>
+    Seq(RemoveNoopUnion.ruleName, "").map { ruleName =>
       withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
         val distinctUnionDF1 = testData.union(testData).distinct()
         checkAnswer(distinctUnionDF1, testData.distinct())

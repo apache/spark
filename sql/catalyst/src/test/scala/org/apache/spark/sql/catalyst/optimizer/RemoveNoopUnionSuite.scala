@@ -18,40 +18,31 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class RemoveNoopOperatorsSuite extends PlanTest {
+class RemoveNoopUnionSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("RemoveNoopOperators", Once,
-        RemoveNoopOperators) :: Nil
+      Batch("RemoveNoopUnion", Once,
+        RemoveNoopUnion) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  test("Remove all redundant projections in one iteration") {
-    val originalQuery = testRelation
-      .select('a, 'b, 'c)
-      .select('a, 'b, 'c)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    comparePlans(optimized, testRelation)
+  test("SPARK-34474: Remove redundant Union under Distinct") {
+    val union = Union(testRelation :: testRelation :: Nil)
+    val distinct = Distinct(union)
+    val optimized = Optimize.execute(distinct)
+    comparePlans(optimized, Distinct(testRelation))
   }
 
-  test("Remove all redundant windows in one iteration") {
-    val originalQuery = testRelation
-      .window(Nil, Nil, Nil)
-      .window(Nil, Nil, Nil)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    comparePlans(optimized, testRelation)
+  test("SPARK-34474: Remove redundant Union under Deduplicate") {
+    val union = Union(testRelation :: testRelation :: Nil)
+    val deduplicate = Deduplicate(testRelation.output, union)
+    val optimized = Optimize.execute(deduplicate)
+    comparePlans(optimized, Deduplicate(testRelation.output, testRelation))
   }
 }
