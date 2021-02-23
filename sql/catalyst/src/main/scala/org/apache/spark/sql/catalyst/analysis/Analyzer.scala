@@ -1172,9 +1172,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             lookupRelation(u.multipartIdentifier, u.options, false)
               .map(EliminateSubqueryAliases(_))
               .map {
-                case v: View =>
-                  throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                    v.desc.identifier, write)
+                case v: View => throw QueryCompilationErrors.writeIntoViewNotAllowedError(
+                  v.desc.identifier, write)
                 case u: UnresolvedCatalogRelation =>
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
