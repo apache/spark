@@ -516,8 +516,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
         case Alias(a: Attribute, _) => a
         case a: Attribute => a
       }
-      if (child.output.size == p.output.size
-          && child.outputSet == AttributeSet(originalOutputs)) {
+      if (child.output.size == p.output.size && child.output == originalOutputs) {
         child
       } else {
         p
