@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_CREATED_FROM_DATAFRAME
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -449,23 +450,22 @@ case class InsertIntoDir(
  * case, the child must be already resolved.
  * This operator will be removed at the end of analysis stage.
  *
- * @param desc An optional view description(CatalogTable) that provides necessary information to
- *             resolve the view.
+ * @param desc A view description(CatalogTable) that provides necessary information to resolve the
+ *             view.
  * @param isTempView A flag to indicate whether the view is temporary or not.
  * @param child The logical plan of a view operator. If the view description is available, it should
  *              be a logical plan parsed from the `CatalogTable.viewText`.
  */
 case class View(
-    desc: Option[CatalogTable],
+    desc: CatalogTable,
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
-  require(desc.isDefined || (isTempView && child.resolved))
+  require(!isDataFrameTempView || child.resolved)
 
   override def output: Seq[Attribute] = child.output
 
   override def simpleString(maxFields: Int): String = {
-    val viewIdent = desc.map(d => s"${d.identifier}, ").getOrElse("")
-    s"View ($viewIdent${output.mkString("[", ",", "]")})"
+    s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
 
   override def doCanonicalize(): LogicalPlan = child match {
@@ -473,7 +473,8 @@ case class View(
     case _ => child.canonicalized
   }
 
-  def isDataFrameTempView: Boolean = desc.isEmpty && isTempView
+  def isDataFrameTempView: Boolean =
+    isTempView && desc.properties.contains(VIEW_CREATED_FROM_DATAFRAME)
 
   // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
   // output schema doesn't change even if the table referenced by the view is changed after view

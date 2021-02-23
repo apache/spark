@@ -871,7 +871,10 @@ class Analyzer(override val catalogManager: CatalogManager)
   }
 
   private def getTempViewRawPlan(plan: LogicalPlan): LogicalPlan = {
-    EliminateDataFrameTempViews(EliminateSubqueryAliases(plan))
+    EliminateSubqueryAliases(plan) match {
+      case v: View if v.isDataFrameTempView => v.child
+      case other => other
+    }
   }
 
   /**
@@ -1112,7 +1115,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
       // operator.
-      case view @ View(Some(desc), isTempView, child) if !child.resolved =>
+      case view @ View(desc, isTempView, child) if !child.resolved =>
         // Resolve all the UnresolvedRelations and Views in the child.
         val newChild = AnalysisContext.withAnalysisContext(desc) {
           val nestedViewDepth = AnalysisContext.get.nestedViewDepth
@@ -1143,8 +1146,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
         // Thus, we need to look at the raw plan of a temporary view.
         getTempViewRawPlan(relation) match {
-          case v: View if v.desc.isDefined =>
-            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.get.identifier, table)
+          case v: View =>
+            throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
         }
 
@@ -1169,9 +1172,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             lookupRelation(u.multipartIdentifier, u.options, false)
               .map(EliminateSubqueryAliases(_))
               .map {
-                case v: View if v.desc.isDefined =>
+                case v: View =>
                   throw QueryCompilationErrors.writeIntoViewNotAllowedError(
-                    v.desc.get.identifier, write)
+                    v.desc.identifier, write)
                 case u: UnresolvedCatalogRelation =>
                   throw QueryCompilationErrors.writeIntoV1TableNotAllowedError(
                     u.tableMeta.identifier, write)
@@ -3731,17 +3734,6 @@ object EliminateSubqueryAliases extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
     plan transformUp {
       case SubqueryAlias(_, child) => child
-    }
-  }
-}
-
-/**
- * Removes [[View]] operators from the plan if they are temp views created from dataframes.
- */
-object EliminateDataFrameTempViews extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = AnalysisHelper.allowInvokingTransformsInAnalyzer {
-    plan transformUp {
-      case v: View if v.isDataFrameTempView => v.child
     }
   }
 }

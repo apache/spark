@@ -49,6 +49,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
+  private def checkAnalysisWithTempViewEliminated(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true): Unit = {
+    checkAnalysisWithTransform(inputPlan, expectedPlan, caseSensitive) { plan =>
+      plan transformUp {
+        case v: View if v.isDataFrameTempView => v.child
+      }
+    }
+  }
+
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
@@ -91,32 +102,30 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("analyze project") {
-    val testTempView = View(None, isTempView = true, testRelation)
-
     checkAnalysis(
       Project(Seq(UnresolvedAttribute("a")), testRelation),
       Project(testRelation.output, testRelation))
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Project(testTempView.output, testTempView))
+      Project(testRelation.output, testRelation))
 
     assertAnalysisError(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Project(testTempView.output, testTempView),
+      Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
-      Project(testTempView.output, testTempView),
+      Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
 
@@ -204,14 +213,12 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("resolve relations") {
-    val testTempView = View(None, isTempView = true, testRelation)
-
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testTempView)
-    checkAnalysis(
-      UnresolvedRelation(TableIdentifier("tAbLe")), testTempView, caseSensitive = false)
-    checkAnalysis(
-      UnresolvedRelation(TableIdentifier("TaBlE")), testTempView, caseSensitive = false)
+    checkAnalysisWithTempViewEliminated(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
+    checkAnalysisWithTempViewEliminated(
+      UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
+    checkAnalysisWithTempViewEliminated(
+      UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {

@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View, With}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -115,8 +115,7 @@ case class CreateViewCommand(
 
     if (viewType == LocalTempView) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && catalog.getRawTempView(name.table).isDefined &&
-          !catalog.getRawTempView(name.table).get.sameResult(aliasedPlan)) {
+      if (replace && !isSamePlan(catalog.getRawTempView(name.table), aliasedPlan)) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
@@ -131,15 +130,16 @@ case class CreateViewCommand(
             aliasedPlan.schema,
             originalText))
       } else {
-        aliasedPlan
+        TemporaryViewRelation(
+          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
+          Some(aliasedPlan))
       }
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && catalog.getRawGlobalTempView(name.table).isDefined &&
-          !catalog.getRawGlobalTempView(name.table).get.sameResult(aliasedPlan)) {
+      if (replace && !isSamePlan(catalog.getRawGlobalTempView(name.table), aliasedPlan)) {
         logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
@@ -153,7 +153,9 @@ case class CreateViewCommand(
             aliasedPlan.schema,
             originalText))
       } else {
-        aliasedPlan
+        TemporaryViewRelation(
+          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
+          Some(aliasedPlan))
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
@@ -188,6 +190,17 @@ case class CreateViewCommand(
       catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
+  }
+
+  /**
+   * Checks if the temp view (the result of getTempViewRawPlan or getRawGlobalTempView) is storing
+   * the same plan as the given aliased plan.
+   */
+  private def isSamePlan(
+      rawTempView: Option[LogicalPlan],
+      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
+    case Some(TemporaryViewRelation(_, Some(p))) => p.sameResult(aliasedPlan)
+    case _ => false
   }
 
   /**
@@ -487,7 +500,7 @@ object ViewHelper {
       path: Seq[TableIdentifier],
       viewIdent: TableIdentifier): Unit = {
     plan match {
-      case v @ View(Some(desc), _, _) =>
+      case v @ View(desc, _, _) =>
         val ident = desc.identifier
         val newPath = path :+ ident
         // If the table identifier equals to the `viewIdent`, current view node is the same with
@@ -547,7 +560,6 @@ object ViewHelper {
       child.flatMap {
         case s @ SubqueryAlias(_, view: View) if view.isTempView =>
           Seq(s.identifier.qualifier :+ s.identifier.name)
-        case w: With => w.innerChildren.flatMap(collectTempViews)
         case plan => plan.expressions.flatMap(_.flatMap {
           case e: SubqueryExpression => collectTempViews(e.plan)
           case _ => Seq.empty
@@ -557,7 +569,6 @@ object ViewHelper {
 
     def collectTempFunctions(child: LogicalPlan): Seq[String] = {
       child.flatMap {
-        case w: With => w.innerChildren.flatMap(collectTempFunctions)
         case plan =>
           plan.expressions.flatMap(_.flatMap {
             case e: SubqueryExpression => collectTempFunctions(e.plan)
@@ -599,5 +610,20 @@ object ViewHelper {
       schema = viewSchema,
       viewText = originalText,
       properties = newProperties)
+  }
+
+  /**
+   * Returns a [[CatalogTable]] that contains information for the temporary view created
+   * from a dataframe.
+   */
+  def prepareTemporaryViewFromDataFrame(
+      viewName: TableIdentifier,
+      analyzedPlan: LogicalPlan): CatalogTable = {
+    CatalogTable(
+      identifier = viewName,
+      tableType = CatalogTableType.VIEW,
+      storage = CatalogStorageFormat.empty,
+      schema = analyzedPlan.schema,
+      properties = Map((VIEW_CREATED_FROM_DATAFRAME, "true")))
   }
 }

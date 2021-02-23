@@ -59,6 +59,17 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
+  protected def checkAnalysisWithTransform(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true)(transform: LogicalPlan => LogicalPlan): Unit = {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      val analyzer = getAnalyzer
+      val actualPlan = analyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
+      comparePlans(transform(actualPlan), expectedPlan)
+    }
+  }
+
   protected override def comparePlans(
       plan1: LogicalPlan,
       plan2: LogicalPlan,

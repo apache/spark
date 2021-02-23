@@ -30,120 +30,126 @@ import org.apache.spark.sql.types.IntegerType
 class ResolveHintsSuite extends AnalysisTest {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
-  val testTempView = View(None, isTempView = true, testRelation)
-  val testTempView2 = View(None, isTempView = true, testRelation2)
-  val testTempView4 = View(None, isTempView = true, testRelation4)
-  val testTempView5 = View(None, isTempView = true, testRelation5)
+  private def checkAnalysisWithTempViewEliminated(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true): Unit = {
+    checkAnalysisWithTransform(inputPlan, expectedPlan, caseSensitive) { plan =>
+      plan transformUp {
+        case v: View if v.isDataFrameTempView => v.child
+      }
+    }
+  }
 
   test("invalid hints should be ignored") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("some_random_hint_that_does_not_exist", Seq("TaBlE"), table("TaBlE")),
-      testTempView,
+      testRelation,
       caseSensitive = false)
   }
 
   test("case-sensitive or insensitive parameters") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
-      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("TaBlE"), table("TaBlE")),
-      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = true)
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("table"), table("TaBlE")),
-      testTempView,
+      testRelation,
       caseSensitive = true)
   }
 
   test("multiple broadcast hint aliases") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("table", "table2"), table("table").join(table("table2"))),
-      Join(ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
-        ResolvedHint(testTempView2, HintInfo(strategy = Some(BROADCAST))),
+      Join(ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
+        ResolvedHint(testRelation2, HintInfo(strategy = Some(BROADCAST))),
         Inner, None, JoinHint.NONE),
       caseSensitive = false)
   }
 
   test("do not traverse past existing broadcast hints") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("table"),
         ResolvedHint(table("table").where('a > 1), HintInfo(strategy = Some(BROADCAST)))),
-      ResolvedHint(testTempView.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
+      ResolvedHint(testRelation.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
       caseSensitive = false)
   }
 
   test("should work for subqueries") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").as("tableAlias")),
-      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
-      ResolvedHint(testTempView, HintInfo(strategy = Some(BROADCAST))),
+      ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
     // Negative case: if the alias doesn't match, don't match the original table name.
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("table"), table("table").as("tableAlias")),
-      testTempView,
+      testRelation,
       caseSensitive = false)
   }
 
   test("do not traverse past subquery alias") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
-      testTempView.where('a > 1).analyze,
+      testRelation.where('a > 1).analyze,
       caseSensitive = false)
   }
 
   test("should work for CTE") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       CatalystSqlParser.parsePlan(
         """
           |WITH ctetable AS (SELECT * FROM table WHERE a > 1)
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testTempView.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
+      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
         .select('a).analyze,
       caseSensitive = false)
   }
 
   test("should not traverse down CTE") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       CatalystSqlParser.parsePlan(
         """
           |WITH ctetable AS (SELECT * FROM table WHERE a > 1)
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
         """.stripMargin
       ),
-      testTempView.where('a > 1).select('a).select('a).analyze,
+      testRelation.where('a > 1).select('a).select('a).analyze,
       caseSensitive = false)
   }
 
   test("coalesce and repartition hint") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("COALESCE", Seq(Literal(10)), table("TaBlE")),
-      Repartition(numPartitions = 10, shuffle = false, child = testTempView))
-    checkAnalysis(
+      Repartition(numPartitions = 10, shuffle = false, child = testRelation))
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("coalesce", Seq(Literal(20)), table("TaBlE")),
-      Repartition(numPartitions = 20, shuffle = false, child = testTempView))
-    checkAnalysis(
+      Repartition(numPartitions = 20, shuffle = false, child = testRelation))
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("REPARTITION", Seq(Literal(100)), table("TaBlE")),
-      Repartition(numPartitions = 100, shuffle = true, child = testTempView))
-    checkAnalysis(
+      Repartition(numPartitions = 100, shuffle = true, child = testRelation))
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("RePARTITion", Seq(Literal(200)), table("TaBlE")),
-      Repartition(numPartitions = 200, shuffle = true, child = testTempView))
+      Repartition(numPartitions = 200, shuffle = true, child = testRelation))
 
     val errMsg = "COALESCE Hint expects a partition number as a parameter"
 
@@ -157,18 +163,18 @@ class ResolveHintsSuite extends AnalysisTest {
       UnresolvedHint("COALESCE", Seq(Literal(1.0)), table("TaBlE")),
       Seq(errMsg))
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("RePartition", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testTempView, 10))
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("REPARTITION", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
-      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testTempView, 10))
+      RepartitionByExpression(Seq(AttributeReference("a", IntegerType)()), testRelation, 10))
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint("REPARTITION", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
-        Seq(AttributeReference("a", IntegerType)()), testTempView, None))
+        Seq(AttributeReference("a", IntegerType)()), testRelation, None))
 
     val e = intercept[IllegalArgumentException] {
       checkAnalysis(
@@ -176,23 +182,23 @@ class ResolveHintsSuite extends AnalysisTest {
           Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
           table("TaBlE")),
         RepartitionByExpression(
-          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testTempView, 10)
+          Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10)
       )
     }
     e.getMessage.contains("For range partitioning use REPARTITION_BY_RANGE instead")
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint(
         "REPARTITION_BY_RANGE", Seq(Literal(10), UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
-        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testTempView, 10))
+        Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)), testRelation, 10))
 
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       UnresolvedHint(
         "REPARTITION_BY_RANGE", Seq(UnresolvedAttribute("a")), table("TaBlE")),
       RepartitionByExpression(
         Seq(SortOrder(AttributeReference("a", IntegerType)(), Ascending)),
-        testTempView, None))
+        testRelation, None))
 
     val errMsg2 = "REPARTITION Hint parameter should include columns, but"
 
@@ -230,9 +236,9 @@ class ResolveHintsSuite extends AnalysisTest {
   test("log warnings for invalid hints") {
     val logAppender = new LogAppender("invalid hints")
     withLogAppender(logAppender) {
-      checkAnalysis(
+      checkAnalysisWithTempViewEliminated(
         UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE")),
-        testTempView,
+        testRelation,
         caseSensitive = false)
     }
     assert(logAppender.loggingEvents.exists(
@@ -241,9 +247,9 @@ class ResolveHintsSuite extends AnalysisTest {
   }
 
   test("SPARK-30003: Do not throw stack overflow exception in non-root unknown hint resolution") {
-    checkAnalysis(
+    checkAnalysisWithTempViewEliminated(
       Project(testRelation.output, UnresolvedHint("unknown_hint", Seq("TaBlE"), table("TaBlE"))),
-      Project(testTempView.output, testTempView),
+      Project(testRelation.output, testRelation),
       caseSensitive = false)
   }
 
@@ -253,46 +259,46 @@ class ResolveHintsSuite extends AnalysisTest {
         ("SHUFFLE_HASH", SHUFFLE_HASH),
         ("SHUFFLE_REPLICATE_NL", SHUFFLE_REPLICATE_NL)).foreach { case (hintName, st) =>
       // local temp table (single-part identifier case)
-      checkAnalysis(
+      checkAnalysisWithTempViewEliminated(
         UnresolvedHint(hintName, Seq("table", "table2"),
           table("TaBlE").join(table("TaBlE2"))),
         Join(
-          ResolvedHint(testTempView, HintInfo(strategy = Some(st))),
-          ResolvedHint(testTempView2, HintInfo(strategy = Some(st))),
+          ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
+          ResolvedHint(testRelation2, HintInfo(strategy = Some(st))),
           Inner,
           None,
           JoinHint.NONE),
         caseSensitive = false)
 
-      checkAnalysis(
+      checkAnalysisWithTempViewEliminated(
         UnresolvedHint(hintName, Seq("TaBlE", "table2"),
           table("TaBlE").join(table("TaBlE2"))),
         Join(
-          ResolvedHint(testTempView, HintInfo(strategy = Some(st))),
-          testTempView2,
+          ResolvedHint(testRelation, HintInfo(strategy = Some(st))),
+          testRelation2,
           Inner,
           None,
           JoinHint.NONE),
         caseSensitive = true)
 
       // global temp table (multi-part identifier case)
-      checkAnalysis(
+      checkAnalysisWithTempViewEliminated(
         UnresolvedHint(hintName, Seq("GlOBal_TeMP.table4", "table5"),
           table("global_temp", "table4").join(table("global_temp", "table5"))),
         Join(
-          ResolvedHint(testTempView4, HintInfo(strategy = Some(st))),
-          ResolvedHint(testTempView5, HintInfo(strategy = Some(st))),
+          ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
+          ResolvedHint(testRelation5, HintInfo(strategy = Some(st))),
           Inner,
           None,
           JoinHint.NONE),
         caseSensitive = false)
 
-      checkAnalysis(
+      checkAnalysisWithTempViewEliminated(
         UnresolvedHint(hintName, Seq("global_temp.TaBlE4", "table5"),
           table("global_temp", "TaBlE4").join(table("global_temp", "TaBlE5"))),
         Join(
-          ResolvedHint(testTempView4, HintInfo(strategy = Some(st))),
-          testTempView5,
+          ResolvedHint(testRelation4, HintInfo(strategy = Some(st))),
+          testRelation5,
           Inner,
           None,
           JoinHint.NONE),

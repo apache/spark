@@ -640,8 +640,7 @@ class SessionCatalog(
   }
 
   /**
-   * Generate a [[View]] operator from the view description if the view stores sql text,
-   * otherwise, it is same to `getRawGlobalTempView`
+   * Generate a [[View]] operator from the global temporary view stored.
    */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
     getRawGlobalTempView(name).map(getTempViewPlan)
@@ -682,7 +681,7 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.get(table).map {
-        case TemporaryViewRelation(metadata) => metadata
+        case TemporaryViewRelation(metadata, _) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table),
@@ -692,7 +691,7 @@ class SessionCatalog(
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
       globalTempViewManager.get(table).map {
-        case TemporaryViewRelation(metadata) => metadata
+        case TemporaryViewRelation(metadata, _) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
@@ -837,9 +836,11 @@ class SessionCatalog(
 
   private def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case viewInfo: TemporaryViewRelation =>
-        fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-      case v => View(None, isTempView = true, v)
+      case TemporaryViewRelation(tableMeta, None) =>
+        fromCatalogTable(tableMeta, isTempView = true)
+      case TemporaryViewRelation(tableMeta, Some(plan)) =>
+        View(desc = tableMeta, isTempView = true, child = plan)
+      case other => other
     }
   }
 
@@ -877,7 +878,7 @@ class SessionCatalog(
       Alias(UpCast(UnresolvedAttribute.quoted(name), field.dataType), field.name)(
         explicitMetadata = Some(field.metadata))
     }
-    View(desc = Some(metadata), isTempView = isTempView, child = Project(projectList, parsedPlan))
+    View(desc = metadata, isTempView = isTempView, child = Project(projectList, parsedPlan))
   }
 
   def lookupTempView(table: String): Option[SubqueryAlias] = {
