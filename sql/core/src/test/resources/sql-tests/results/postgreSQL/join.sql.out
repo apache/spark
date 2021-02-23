@@ -3225,7 +3225,7 @@ select * from
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Reference 'f1' is ambiguous, could be: j.f1, j.f1.; line 2 pos 63
+Reference 'f1' is ambiguous, could be: j.f1#x, j.f1#x.; line 2 pos 63
 
 
 -- !query

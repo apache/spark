@@ -359,7 +359,18 @@ package object expressions  {
 
         case ambiguousReferences =>
           // More than one match.
-          val referenceNames = ambiguousReferences.map(_.qualifiedName).mkString(", ")
+          var referenceNames = ""
+          if (ambiguousReferences.map(_.qualifiedName).toSet.size == 1) {
+            val sz = ambiguousReferences.size
+            var i = 0
+            for (ref <- ambiguousReferences) {
+              i = i + 1
+              referenceNames += ref.qualifiedName + "#" + ref.exprId.id
+              if (i < sz) referenceNames += ", "
+            }
+          } else {
+            referenceNames = ambiguousReferences.map(_.qualifiedName).mkString(", ")
+          }
           throw new AnalysisException(s"Reference '$name' is ambiguous, could be: $referenceNames.")
       }
     }
