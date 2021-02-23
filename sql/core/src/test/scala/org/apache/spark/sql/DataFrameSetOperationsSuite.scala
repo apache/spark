@@ -826,11 +826,37 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
         val distinctUnionDF3 = sql(
           """
-            | select key, value from testData
-            | union
-            | select key, value from testData
+            |select key, value from testData
+            |union
+            |select key, value from testData
             |""".stripMargin)
         checkAnswer(distinctUnionDF3, testData.distinct())
+
+        val distinctUnionDF4 = sql(
+          """
+            |select distinct key, expr
+            |from
+            |(
+            |  select key, key + 1 as expr
+            |  from testData
+            |  union all
+            |  select key, key + 2 as expr
+            |  from testData
+            |)
+            |""".stripMargin)
+        val expected = sql(
+          """
+            |select key, expr
+            |from
+            |(
+            |  select key, key + 1 as expr
+            |  from testData
+            |  union all
+            |  select key, key + 2 as expr
+            |  from testData
+            |) group by key, expr
+            |""".stripMargin)
+        checkAnswer(distinctUnionDF4, expected)
       }
     }
   }
