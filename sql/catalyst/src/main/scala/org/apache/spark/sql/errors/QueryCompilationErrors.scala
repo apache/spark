@@ -753,4 +753,9 @@ private[spark] object QueryCompilationErrors {
   def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
     new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
   }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
+  }
 }

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Expression, Integer
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -188,7 +188,7 @@ object ResolveHints {
           numPartitions: Option[Int], partitionExprs: Seq[Any]): RepartitionByExpression = {
         val sortOrders = partitionExprs.filter(_.isInstanceOf[SortOrder])
         if (sortOrders.nonEmpty) {
-          throw QueryExecutionErrors.invalidRepartitionExpressionsError(sortOrders)
+          throw QueryCompilationErrors.invalidRepartitionExpressionsError(sortOrders)
         }
         val invalidParams = partitionExprs.filter(!_.isInstanceOf[UnresolvedAttribute])
         if (invalidParams.nonEmpty) {
