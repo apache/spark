@@ -1108,7 +1108,7 @@ class Column(val expr: Expression) extends Logging {
    * Gives the column an alias.
    * {{{
    *   // Renames colA to colB in select output.
-   *   df.select($"colA".as('colB))
+   *   df.select($"colA".as("colB"))
    * }}}
    *
    * If the current column has metadata associated with it, this metadata will be propagated
