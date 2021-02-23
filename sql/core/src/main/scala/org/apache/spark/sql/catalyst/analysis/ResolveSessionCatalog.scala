@@ -167,25 +167,25 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         createAlterTable(nameParts, catalog, tbl, changes)
       }
 
-    case AlterTableSetProperties(ResolvedV1TableIdentifier(ident), props) =>
+    case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
 
-    case AlterTableUnsetProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
+    case UnsetTableProperties(ResolvedV1TableIdentifier(ident), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = false)
 
-    case AlterViewSetProperties(ResolvedView(ident, _), props) =>
+    case SetViewProperties(ResolvedView(ident, _), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = true)
 
-    case AlterViewUnsetProperties(ResolvedView(ident, _), keys, ifExists) =>
+    case UnsetViewProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
     case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
       DescribeDatabaseCommand(db, d.extended)
 
-    case AlterNamespaceSetProperties(DatabaseInSessionCatalog(db), properties) =>
+    case SetNamespaceProperties(DatabaseInSessionCatalog(db), properties) =>
       AlterDatabasePropertiesCommand(db, properties)
 
-    case AlterNamespaceSetLocation(DatabaseInSessionCatalog(db), location) =>
+    case SetNamespaceLocation(DatabaseInSessionCatalog(db), location) =>
       AlterDatabaseSetLocationCommand(db, location)
 
     case s @ ShowNamespaces(ResolvedNamespace(cata, _), _, output) if isSessionCatalog(cata) =>
@@ -417,24 +417,24 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       ShowColumnsCommand(db, v1TableName, output)
 
-    case AlterTableRecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
+    case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
       AlterTableRecoverPartitionsCommand(
         ident.asTableIdentifier,
         "ALTER TABLE RECOVER PARTITIONS")
 
-    case AlterTableAddPartition(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
+    case AddPartitions(ResolvedV1TableIdentifier(ident), partSpecsAndLocs, ifNotExists) =>
       AlterTableAddPartitionCommand(
         ident.asTableIdentifier,
         partSpecsAndLocs.asUnresolvedPartitionSpecs.map(spec => (spec.spec, spec.location)),
         ifNotExists)
 
-    case AlterTableRenamePartition(
+    case RenamePartitions(
         ResolvedV1TableIdentifier(ident),
         UnresolvedPartitionSpec(from, _),
         UnresolvedPartitionSpec(to, _)) =>
       AlterTableRenamePartitionCommand(ident.asTableIdentifier, from, to)
 
-    case AlterTableDropPartition(
+    case DropPartitions(
         ResolvedV1TableIdentifier(ident), specs, ifExists, purge) =>
       AlterTableDropPartitionCommand(
         ident.asTableIdentifier,
@@ -443,7 +443,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         purge,
         retainData = false)
 
-    case AlterTableSerDeProperties(
+    case SetTableSerDeProperties(
         ResolvedV1TableIdentifier(ident),
         serdeClassName,
         serdeProperties,
@@ -454,7 +454,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         serdeProperties,
         partitionSpec)
 
-    case AlterTableSetLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
+    case SetTableLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
       AlterTableSetLocationCommand(ident.asTableIdentifier, partitionSpec, location)
 
     case AlterViewAs(ResolvedView(ident, _), originalText, query) =>

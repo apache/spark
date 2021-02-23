@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
@@ -125,5 +126,22 @@ trait DDLCommandTestUtils extends SQLTestUtils {
   def checkCachedRelation(name: String, expected: Seq[Row]): Unit = {
     assert(spark.catalog.isCached(name))
     QueryTest.checkAnswer(sql(s"SELECT * FROM $name"), expected)
+  }
+
+  def checkTables(namespace: String, expectedTables: String*): Unit = {
+    val tables = sql(s"SHOW TABLES IN $catalog.$namespace").select("tableName")
+    val rows = expectedTables.map(Row(_))
+    QueryTest.checkAnswer(tables, rows)
+  }
+
+  def withTableDir(tableName: String)(f: (FileSystem, Path) => Unit): Unit = {
+    val location = sql(s"DESCRIBE TABLE EXTENDED $tableName")
+      .where("col_name = 'Location'")
+      .select("data_type")
+      .first()
+      .getString(0)
+    val root = new Path(location)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
+    f(fs, root)
   }
 }

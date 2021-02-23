@@ -57,12 +57,12 @@ struct<plan:string>
 sum(DISTINCT val): bigint
 Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
 +- SubqueryAlias spark_catalog.default.explain_temp1
-   +- Relation[key#x,val#x] parquet
+   +- Relation default.explain_temp1[key#x,val#x] parquet
 
 == Optimized Logical Plan ==
 Aggregate [sum(distinct val#x) AS sum(DISTINCT val)#xL]
 +- Project [val#x]
-   +- Relation[key#x,val#x] parquet
+   +- Relation default.explain_temp1[key#x,val#x] parquet
 
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
