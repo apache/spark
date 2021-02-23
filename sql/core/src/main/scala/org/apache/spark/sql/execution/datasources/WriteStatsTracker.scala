@@ -117,5 +117,5 @@ trait WriteJobStatsTracker extends Serializable {
    * to the expected derived type when implementing this method in a derived class.
    * The framework will make sure to call this with the right arguments.
    */
-  def processStats(stats: Seq[WriteTaskStats], duration: Long): Unit
+  def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit
 }

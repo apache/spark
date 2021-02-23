@@ -192,7 +192,7 @@ class BasicWriteJobStatsTracker(
     new BasicWriteTaskStatsTracker(serializableHadoopConf.value)
   }
 
-  override def processStats(stats: Seq[WriteTaskStats], duration: Long): Unit = {
+  override def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit = {
     val sparkContext = SparkContext.getActive.get
     var partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
     var numFiles: Long = 0L
@@ -208,7 +208,7 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    metrics(BasicWriteJobStatsTracker.DURATION_FILE_COMMIT).add(duration)
+    metrics(BasicWriteJobStatsTracker.DURATION_JOB_COMMIT).add(jobCommitDuration)
     metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
@@ -224,7 +224,7 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
-  private val DURATION_FILE_COMMIT = "durationCommit"
+  private val DURATION_JOB_COMMIT = "jobCommitDuration"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
@@ -235,7 +235,8 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      DURATION_FILE_COMMIT-> SQLMetrics.createTimingMetric(sparkContext, "duration of commit files")
+      DURATION_JOB_COMMIT->
+        SQLMetrics.createTimingMetric(sparkContext, "duration of committing the job")
     )
   }
 }

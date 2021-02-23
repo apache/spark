@@ -305,7 +305,7 @@ object FileFormatWriter extends Logging {
   private[datasources] def processStats(
       statsTrackers: Seq[WriteJobStatsTracker],
       statsPerTask: Seq[Seq[WriteTaskStats]],
-      duration: Long)
+      jobCommitDuration: Long)
   : Unit = {
 
     val numStatsTrackers = statsTrackers.length
@@ -322,7 +322,7 @@ object FileFormatWriter extends Logging {
     }
 
     statsTrackers.zip(statsPerTracker).foreach {
-      case (statsTracker, stats) => statsTracker.processStats(stats, duration)
+      case (statsTracker, stats) => statsTracker.processStats(stats, jobCommitDuration)
     }
   }
 }
