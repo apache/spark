@@ -26,7 +26,6 @@ import scala.concurrent.duration._
 import scala.io.Source
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.concurrent.Eventually._
@@ -369,19 +368,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     )
     checkResult(finalState, result, "true")
   }
-
-  test("SPARK-34472: ivySettings file should be localized on driver in cluster mode") {
-
-    val emptyIvySettings = File.createTempFile("ivy", ".xml")
-    FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
-
-    val result = File.createTempFile("result", null, tempDir)
-    val finalState = runSpark(clientMode = false,
-      mainClassName(YarnAddJarTest.getClass),
-      appArgs = Seq(result.getAbsolutePath),
-      extraConf = Map("spark.jars.ivySettings" -> emptyIvySettings.getAbsolutePath))
-    checkResult(finalState, result)
-  }
 }
 
 private[spark] class SaveExecutorInfo extends SparkListener {
@@ -595,47 +581,6 @@ private object YarnClasspathTest extends Logging {
     }
   }
 
-}
-
-private object YarnAddJarTest extends Logging {
-  def main(args: Array[String]): Unit = {
-    if (args.length != 1) {
-      // scalastyle:off println
-      System.err.println(
-        s"""
-           |Invalid command line: ${args.mkString(" ")}
-           |
-           |Usage: YarnAddJarTest [result file]
-        """.stripMargin)
-      // scalastyle:on println
-      System.exit(1)
-    }
-
-    val resultPath = args(0)
-    val sc = new SparkContext(new SparkConf())
-
-    var result = "failure"
-    try {
-      val settingsFile = sc.getConf.get("spark.jars.ivySettings")
-      // Delete the original ivySettings file, so we ensure that the YARN localized file
-      // is used by the addJar call
-      // In a real cluster mode, the original settings file at the absolute path won't be present
-      // on the driver
-      new File(settingsFile).delete()
-
-      val caught = intercept[Exception] {
-        sc.addJar("ivy://org.fake-project.test:test:1.0.0")
-      }
-      if (caught.getMessage.contains("unresolved dependency: org.fake-project.test#test")) {
-        // "unresolved dependency" is expected as the dependency does not exist
-        // but exception like "Ivy settings file <file> does not exist should result in failure
-        result = "success"
-      }
-    } finally {
-      Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
-      sc.stop()
-    }
-  }
 }
 
 private object YarnLauncherTestApp {
