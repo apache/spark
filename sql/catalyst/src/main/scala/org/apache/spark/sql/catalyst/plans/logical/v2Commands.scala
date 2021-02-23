@@ -802,7 +802,10 @@ case class DropView(
 /**
  * The logical plan of the MSCK REPAIR TABLE command.
  */
-case class RepairTable(child: LogicalPlan) extends Command {
+case class RepairTable(
+    child: LogicalPlan,
+    enableAddPartitions: Boolean,
+    enableDropPartitions: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 

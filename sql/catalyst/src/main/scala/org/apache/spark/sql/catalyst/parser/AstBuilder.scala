@@ -3659,11 +3659,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *
    * For example:
    * {{{
-   *   MSCK REPAIR TABLE multi_part_name
+   *   MSCK REPAIR TABLE multi_part_name [{ADD|DROP|SYNC} PARTITIONS]
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTable(createUnresolvedTable(ctx.multipartIdentifier, "MSCK REPAIR TABLE"))
+    val (enableAddPartitions, enableDropPartitions, option) =
+      if (ctx.SYNC() != null) {
+        (true, true, " ... SYNC PARTITIONS")
+      } else if (ctx.DROP() != null) {
+        (false, true, " ... DROP PARTITIONS")
+      } else if (ctx.ADD() != null) {
+        (true, false, " ... ADD PARTITIONS")
+      } else {
+        (true, false, "")
+      }
+    RepairTable(
+      createUnresolvedTable(ctx.multipartIdentifier, s"MSCK REPAIR TABLE$option"),
+      enableAddPartitions,
+      enableDropPartitions)
   }
 
   /**

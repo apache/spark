@@ -597,11 +597,13 @@ case class PartitionStatistics(numFiles: Int, totalSize: Long)
  * The syntax of this command is:
  * {{{
  *   ALTER TABLE table RECOVER PARTITIONS;
- *   MSCK REPAIR TABLE table;
+ *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS];
  * }}}
  */
 case class AlterTableRecoverPartitionsCommand(
     tableName: TableIdentifier,
+    enableAddPartitions: Boolean,
+    enableDropPartitions: Boolean,
     cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
 
   // These are list of statistics that can be collected quickly without requiring a scan of the data
@@ -645,34 +647,40 @@ case class AlterTableRecoverPartitionsCommand(
     val hadoopConf = spark.sessionState.newHadoopConf()
     val fs = root.getFileSystem(hadoopConf)
 
-    val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
-    val pathFilter = getPathFilter(hadoopConf)
+    val droppedAmount = if (enableDropPartitions) {
+      dropPartitions(catalog, fs)
+    } else 0
+    val addedAmount = if (enableAddPartitions) {
+      val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
+      val pathFilter = getPathFilter(hadoopConf)
 
-    val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
-    val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
-      try {
-        scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
-          spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
-      } finally {
-        evalPool.shutdown()
+      val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
+      val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
+        try {
+          scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
+            spark.sessionState.conf.resolver, new ForkJoinTaskSupport(evalPool)).seq
+        } finally {
+          evalPool.shutdown()
+        }
+      val total = partitionSpecsAndLocs.length
+      logInfo(s"Found $total partitions in $root")
+
+      val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
+        gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
+      } else {
+        GenMap.empty[String, PartitionStatistics]
       }
-    val total = partitionSpecsAndLocs.length
-    logInfo(s"Found $total partitions in $root")
+      logInfo(s"Finished to gather the fast stats for all $total partitions.")
 
-    val partitionStats = if (spark.sqlContext.conf.gatherFastStats) {
-      gatherPartitionStats(spark, partitionSpecsAndLocs, fs, pathFilter, threshold)
-    } else {
-      GenMap.empty[String, PartitionStatistics]
-    }
-    logInfo(s"Finished to gather the fast stats for all $total partitions.")
-
-    addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
+      addPartitions(spark, table, partitionSpecsAndLocs, partitionStats)
+      total
+    } else 0
     // Updates the table to indicate that its partition metadata is stored in the Hive metastore.
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
     spark.catalog.refreshTable(tableIdentWithDB)
-    logInfo(s"Recovered all partitions ($total).")
+    logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
     Seq.empty[Row]
   }
 
@@ -791,8 +799,28 @@ case class AlterTableRecoverPartitionsCommand(
       logDebug(s"Recovered ${parts.length} partitions ($done/$total so far)")
     }
   }
-}
 
+  // Drops the partitions that do not exist in the file system
+  private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Int = {
+    val dropPartSpecs = ThreadUtils.parmap(
+      catalog.listPartitions(tableName),
+      "AlterTableRecoverPartitionsCommand: non-existing partitions",
+      maxThreads = 8) { partition =>
+      partition.storage.locationUri.flatMap { uri =>
+        if (fs.exists(new Path(uri))) None else Some(partition.spec)
+      }
+    }.flatten
+    catalog.dropPartitions(
+      tableName,
+      dropPartSpecs,
+      ignoreIfNotExists = true,
+      purge = false,
+      // Since we have already checked that partition directories do not exist, we can avoid
+      // additional calls to the file system at the catalog side by setting this flag.
+      retainData = true)
+    dropPartSpecs.length
+  }
+}
 
 /**
  * A command that sets the location of a table or a partition.
