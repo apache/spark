@@ -506,13 +506,18 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
  * Remove no-op `Union` from the query plan that do not make any modifications.
  */
 object RemoveNoopUnion extends Rule[LogicalPlan] {
+  /**
+   * This only removes the `Project` that has only attributes or aliased attributes
+   * from its child.
+   */
   private def removeAliasOnlyProject(plan: LogicalPlan): LogicalPlan = plan match {
     case p @ Project(projectList, child) =>
       val originalOutputs = projectList.collect {
         case Alias(a: Attribute, _) => a
         case a: Attribute => a
       }
-      if (child.outputSet.nonEmpty && child.outputSet == AttributeSet(originalOutputs)) {
+      if (child.output.size == p.output.size
+          && child.outputSet == AttributeSet(originalOutputs)) {
         child
       } else {
         p
