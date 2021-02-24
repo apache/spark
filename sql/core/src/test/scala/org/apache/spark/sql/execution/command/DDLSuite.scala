@@ -480,19 +480,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename a managed table with existing empty directory") {
-    withEmptyDirInTablePath("tab2") { tableLoc =>
-      withTable("tab1") {
-        sql(s"CREATE TABLE tab1 USING $dataSource AS SELECT 1, 'a'")
-        val ex = intercept[AnalysisException] {
-          sql("ALTER TABLE tab1 RENAME TO tab2")
-        }.getMessage
-        assert(ex.contains(
-          "Can not rename the managed table('`default`.`tab1`'). The associated location"))
-      }
-    }
-  }
-
   private def checkSchemaInCreatedDataSourceTable(
       path: File,
       userSpecifiedSchema: Option[String],
@@ -976,55 +963,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         }
       }
     }
-  }
-
-  test("alter table: rename") {
-    val catalog = spark.sessionState.catalog
-    val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
-    val tableIdent2 = TableIdentifier("tab2", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createDatabase(catalog, "dby")
-    createTable(catalog, tableIdent1)
-
-    assert(catalog.listTables("dbx") == Seq(tableIdent1))
-    sql("ALTER TABLE dbx.tab1 RENAME TO dbx.tab2")
-    assert(catalog.listTables("dbx") == Seq(tableIdent2))
-
-    // The database in destination table name can be omitted, and we will use the database of source
-    // table for it.
-    sql("ALTER TABLE dbx.tab2 RENAME TO tab1")
-    assert(catalog.listTables("dbx") == Seq(tableIdent1))
-
-    catalog.setCurrentDatabase("dbx")
-    // rename without explicitly specifying database
-    sql("ALTER TABLE tab1 RENAME TO tab2")
-    assert(catalog.listTables("dbx") == Seq(tableIdent2))
-    // table to rename does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.does_not_exist RENAME TO dbx.tab2")
-    }
-    // destination database is different
-    intercept[AnalysisException] {
-      sql("ALTER TABLE dbx.tab1 RENAME TO dby.tab2")
-    }
-  }
-
-  test("alter table: rename cached table") {
-    import testImplicits._
-    sql("CREATE TABLE students (age INT, name STRING) USING parquet")
-    val df = (1 to 2).map { i => (i, i.toString) }.toDF("age", "name")
-    df.write.insertInto("students")
-    spark.catalog.cacheTable("students")
-    checkAnswer(spark.table("students"), df)
-    assert(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
-    sql("ALTER TABLE students RENAME TO teachers")
-    sql("CREATE TABLE students (age INT, name STRING) USING parquet")
-    // Now we have both students and teachers.
-    // The cached data for the old students table should not be read by the new students table.
-    assert(!spark.catalog.isCached("students"))
-    assert(spark.catalog.isCached("teachers"))
-    assert(spark.table("students").collect().isEmpty)
-    checkAnswer(spark.table("teachers"), df)
   }
 
   test("rename temporary view - destination table with database name") {

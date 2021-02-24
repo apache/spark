@@ -80,9 +80,10 @@ invalid input syntax for type numeric: a
 -- !query
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null)
 -- !query schema
-struct<right(abcd, 2):string,right(abcd, 5):string,right(abcd, 2):string,right(abcd, NULL):string>
+struct<>
 -- !query output
-cd	abcd	cd	NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'substring('abcd', (- CAST('2' AS DOUBLE)), 2147483647)' due to data type mismatch: argument 2 requires int type, however, '(- CAST('2' AS DOUBLE))' is of double type.; line 1 pos 43
 
 
 -- !query
@@ -90,8 +91,8 @@ select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a')
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: a
+org.apache.spark.sql.AnalysisException
+cannot resolve 'substring('abcd', (- CAST('a' AS DOUBLE)), 2147483647)' due to data type mismatch: argument 2 requires int type, however, '(- CAST('a' AS DOUBLE))' is of double type.; line 1 pos 61
 
 
 -- !query
@@ -289,25 +290,28 @@ trim
 -- !query
 SELECT btrim(encode(" xyz ", 'utf-8'))
 -- !query schema
-struct<btrim(encode( xyz , utf-8)):string>
+struct<>
 -- !query output
-xyz
+org.apache.spark.sql.AnalysisException
+cannot resolve 'trim(encode(' xyz ', 'utf-8'))' due to data type mismatch: argument 1 requires string type, however, 'encode(' xyz ', 'utf-8')' is of binary type.; line 1 pos 7
 
 
 -- !query
 SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'))
 -- !query schema
-struct<btrim(encode(yxTomxx, utf-8), encode(xyz, utf-8)):string>
+struct<>
 -- !query output
-Tom
+org.apache.spark.sql.AnalysisException
+cannot resolve 'TRIM(BOTH encode('xyz', 'utf-8') FROM encode('yxTomxx', 'utf-8'))' due to data type mismatch: argument 1 requires string type, however, 'encode('yxTomxx', 'utf-8')' is of binary type. argument 2 requires string type, however, 'encode('xyz', 'utf-8')' is of binary type.; line 1 pos 7
 
 
 -- !query
 SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'))
 -- !query schema
-struct<btrim(encode(xxxbarxxx, utf-8), encode(x, utf-8)):string>
+struct<>
 -- !query output
-bar
+org.apache.spark.sql.AnalysisException
+cannot resolve 'TRIM(BOTH encode('x', 'utf-8') FROM encode('xxxbarxxx', 'utf-8'))' due to data type mismatch: argument 1 requires string type, however, 'encode('xxxbarxxx', 'utf-8')' is of binary type. argument 2 requires string type, however, 'encode('x', 'utf-8')' is of binary type.; line 1 pos 7
 
 
 -- !query

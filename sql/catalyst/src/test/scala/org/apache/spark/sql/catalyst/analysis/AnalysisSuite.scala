@@ -95,7 +95,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("a")), testRelation),
       Project(testRelation.output, testRelation))
 
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
@@ -105,13 +105,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
@@ -203,10 +203,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
+    checkAnalysisWithoutViewWrapper(
       UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }
 

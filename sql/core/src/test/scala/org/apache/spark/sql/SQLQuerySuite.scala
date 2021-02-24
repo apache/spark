@@ -29,14 +29,14 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
-import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, SchemaColumnConvertNotSupportedException}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -4040,6 +4040,49 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
       sql(s"INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
       checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", "Spark SQL"))
+    }
+  }
+
+  test("SPARK-26138 Pushdown limit through InnerLike when condition is empty") {
+    withTable("t1", "t2") {
+      spark.range(5).repartition(1).write.saveAsTable("t1")
+      spark.range(5).repartition(1).write.saveAsTable("t2")
+      val df = spark.sql("SELECT * FROM t1 CROSS JOIN t2 LIMIT 3")
+      val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: LogicalRelation) => l
+      }
+      assert(pushedLocalLimits.length === 2)
+      checkAnswer(df, Row(0, 0) :: Row(0, 1) :: Row(0, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
+    withTable("left_table", "nonempty_right_table", "empty_right_table") {
+      spark.range(5).toDF().repartition(1).write.saveAsTable("left_table")
+      spark.range(3).write.saveAsTable("nonempty_right_table")
+      spark.range(0).write.saveAsTable("empty_right_table")
+      Seq("LEFT SEMI", "LEFT ANTI").foreach { joinType =>
+        val joinWithNonEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN nonempty_right_table LIMIT 3")
+        val joinWithEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN empty_right_table LIMIT 3")
+
+        Seq(joinWithNonEmptyRightDf, joinWithEmptyRightDf).foreach { df =>
+          val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+            case l @ LocalLimit(_, _: LogicalRelation) => l
+          }
+          assert(pushedLocalLimits.length === 1)
+        }
+
+        val expectedAnswer = Seq(Row(0), Row(1), Row(2))
+        if (joinType == "LEFT SEMI") {
+          checkAnswer(joinWithNonEmptyRightDf, expectedAnswer)
+          checkAnswer(joinWithEmptyRightDf, Seq.empty)
+        } else {
+          checkAnswer(joinWithNonEmptyRightDf, Seq.empty)
+          checkAnswer(joinWithEmptyRightDf, expectedAnswer)
+        }
+      }
     }
   }
 }

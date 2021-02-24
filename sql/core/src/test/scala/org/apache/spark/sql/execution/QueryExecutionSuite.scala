@@ -228,4 +228,12 @@ class QueryExecutionSuite extends SharedSparkSession {
       assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
     }
   }
+
+  test("SPARK-34129: Add table name to LogicalRelation.simpleString") {
+    withTable("spark_34129") {
+      spark.sql("CREATE TABLE spark_34129(id INT) using parquet")
+      val df = spark.table("spark_34129")
+      assert(df.queryExecution.optimizedPlan.toString.startsWith("Relation default.spark_34129["))
+    }
+  }
 }

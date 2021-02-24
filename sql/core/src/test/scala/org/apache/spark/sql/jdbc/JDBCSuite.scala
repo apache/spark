@@ -25,6 +25,8 @@ import java.util.{Calendar, GregorianCalendar, Properties}
 import scala.collection.JavaConverters._
 
 import org.h2.jdbc.JdbcSQLException
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
@@ -1781,4 +1783,28 @@ class JDBCSuite extends QueryTest
     assert(options.asProperties.get("url") == url)
     assert(options.asProperties.get("dbtable") == "table3")
   }
+
+  test("SPARK-34379: Map JDBC RowID to StringType rather than LongType") {
+    val mockRsmd = mock(classOf[java.sql.ResultSetMetaData])
+    when(mockRsmd.getColumnCount).thenReturn(1)
+    when(mockRsmd.getColumnLabel(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.ROWID)
+    when(mockRsmd.getColumnTypeName(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getPrecision(anyInt())).thenReturn(0)
+    when(mockRsmd.getScale(anyInt())).thenReturn(0)
+    when(mockRsmd.isSigned(anyInt())).thenReturn(false)
+    when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
+
+    val mockRs = mock(classOf[java.sql.ResultSet])
+    when(mockRs.getMetaData).thenReturn(mockRsmd)
+
+    val mockDialect = mock(classOf[JdbcDialect])
+    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
+      .thenReturn(None)
+
+    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val fields = schema.fields
+    assert(fields.length === 1)
+    assert(fields(0).dataType === StringType)
+   }
 }

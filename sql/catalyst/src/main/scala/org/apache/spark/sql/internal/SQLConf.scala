@@ -2687,7 +2687,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.typeCoercion.datetimeToString.enabled")
       .internal()
       .doc("If it is set to true, date/timestamp will cast to string in binary comparisons " +
-        "with String")
+        s"with String when ${ANSI_ENABLED.key} is false.")
       .version("3.0.0")
       .booleanConf
       .createWithDefault(false)

@@ -2771,7 +2771,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterNamespaceSetProperties]] logical plan.
+   * Create an [[SetNamespaceProperties]] logical plan.
    *
    * For example:
    * {{{
@@ -2782,14 +2782,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitSetNamespaceProperties(ctx: SetNamespacePropertiesContext): LogicalPlan = {
     withOrigin(ctx) {
       val properties = cleanNamespaceProperties(visitPropertyKeyValues(ctx.tablePropertyList), ctx)
-      AlterNamespaceSetProperties(
+      SetNamespaceProperties(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         properties)
     }
   }
 
   /**
-   * Create an [[AlterNamespaceSetLocation]] logical plan.
+   * Create an [[SetNamespaceLocation]] logical plan.
    *
    * For example:
    * {{{
@@ -2798,7 +2798,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitSetNamespaceLocation(ctx: SetNamespaceLocationContext): LogicalPlan = {
     withOrigin(ctx) {
-      AlterNamespaceSetLocation(
+      SetNamespaceLocation(
         UnresolvedNamespace(visitMultipartIdentifier(ctx.multipartIdentifier)),
         visitLocationSpec(ctx.locationSpec))
     }
@@ -3481,7 +3481,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewSetProperties]] or [[AlterTableSetProperties]] commands.
+   * Parse [[SetViewProperties]] or [[SetTableProperties]] commands.
    *
    * For example:
    * {{{
@@ -3494,7 +3494,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     val properties = visitPropertyKeyValues(ctx.tablePropertyList)
     val cleanedTableProperties = cleanTableProperties(ctx, properties)
     if (ctx.VIEW != null) {
-      AlterViewSetProperties(
+      SetViewProperties(
         createUnresolvedView(
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... SET TBLPROPERTIES",
@@ -3502,7 +3502,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           relationTypeMismatchHint = alterViewTypeMismatchHint),
         cleanedTableProperties)
     } else {
-      AlterTableSetProperties(
+      SetTableProperties(
         createUnresolvedTable(
           ctx.multipartIdentifier,
           "ALTER TABLE ... SET TBLPROPERTIES",
@@ -3512,7 +3512,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse [[AlterViewUnsetProperties]] or [[AlterTableUnsetProperties]] commands.
+   * Parse [[UnsetViewProperties]] or [[UnsetTableProperties]] commands.
    *
    * For example:
    * {{{
@@ -3527,7 +3527,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     val ifExists = ctx.EXISTS != null
     if (ctx.VIEW != null) {
-      AlterViewUnsetProperties(
+      UnsetViewProperties(
         createUnresolvedView(
           ctx.multipartIdentifier,
           commandName = "ALTER VIEW ... UNSET TBLPROPERTIES",
@@ -3536,7 +3536,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         cleanedProperties,
         ifExists)
     } else {
-      AlterTableUnsetProperties(
+      UnsetTableProperties(
         createUnresolvedTable(
           ctx.multipartIdentifier,
           "ALTER TABLE ... UNSET TBLPROPERTIES",
@@ -3547,7 +3547,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableSetLocation]] command.
+   * Create an [[SetTableLocation]] command.
    *
    * For example:
    * {{{
@@ -3555,7 +3555,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocation(
+    SetTableLocation(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... SET LOCATION ...",
@@ -3663,11 +3663,24 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    *
    * For example:
    * {{{
-   *   MSCK REPAIR TABLE multi_part_name
+   *   MSCK REPAIR TABLE multi_part_name [{ADD|DROP|SYNC} PARTITIONS]
    * }}}
    */
   override def visitRepairTable(ctx: RepairTableContext): LogicalPlan = withOrigin(ctx) {
-    RepairTable(createUnresolvedTable(ctx.multipartIdentifier, "MSCK REPAIR TABLE"))
+    val (enableAddPartitions, enableDropPartitions, option) =
+      if (ctx.SYNC() != null) {
+        (true, true, " ... SYNC PARTITIONS")
+      } else if (ctx.DROP() != null) {
+        (false, true, " ... DROP PARTITIONS")
+      } else if (ctx.ADD() != null) {
+        (true, false, " ... ADD PARTITIONS")
+      } else {
+        (true, false, "")
+      }
+    RepairTable(
+      createUnresolvedTable(ctx.multipartIdentifier, s"MSCK REPAIR TABLE$option"),
+      enableAddPartitions,
+      enableDropPartitions)
   }
 
   /**
@@ -3750,7 +3763,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
     TruncateTable(
       createUnresolvedTable(ctx.multipartIdentifier, "TRUNCATE TABLE"),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
+      Option(ctx.partitionSpec).map { spec =>
+        UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec))
+      })
   }
 
   /**
@@ -3814,7 +3829,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableRecoverPartitions]]
+   * Create an [[RecoverPartitions]]
    *
    * For example:
    * {{{
@@ -3823,7 +3838,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRecoverPartitions(
       ctx: RecoverPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRecoverPartitions(
+    RecoverPartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... RECOVER PARTITIONS",
@@ -3831,7 +3846,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableAddPartition]].
+   * Create an [[AddPartitions]].
    *
    * For example:
    * {{{
@@ -3853,7 +3868,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       val location = Option(splCtx.locationSpec).map(visitLocationSpec)
       UnresolvedPartitionSpec(spec, location)
     }
-    AlterTableAddPartition(
+    AddPartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... ADD PARTITION ...",
@@ -3863,7 +3878,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableRenamePartition]]
+   * Create an [[RenamePartitions]]
    *
    * For example:
    * {{{
@@ -3872,7 +3887,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartition(
+    RenamePartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... RENAME TO PARTITION",
@@ -3882,7 +3897,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableDropPartition]]
+   * Create an [[DropPartitions]]
    *
    * For example:
    * {{{
@@ -3901,7 +3916,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
     val partSpecs = ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec)
       .map(spec => UnresolvedPartitionSpec(spec))
-    AlterTableDropPartition(
+    DropPartitions(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... DROP PARTITION ...",
@@ -3912,7 +3927,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Create an [[AlterTableSerDeProperties]]
+   * Create an [[SetTableSerDeProperties]]
    *
    * For example:
    * {{{
@@ -3922,7 +3937,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSerDeProperties(
+    SetTableSerDeProperties(
       createUnresolvedTable(
         ctx.multipartIdentifier,
         "ALTER TABLE ... SET [SERDE|SERDEPROPERTIES]",
