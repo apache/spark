@@ -754,7 +754,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
       "partitioning use REPARTITION_BY_RANGE instead.")
   }
-  
+
   def unsupportedCommandForTableValuedError(command: String): Throwable = {
     new AnalysisException(s"Table valued command does not support command '$command'")
   }
