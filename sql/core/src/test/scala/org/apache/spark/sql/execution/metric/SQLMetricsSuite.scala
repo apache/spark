@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
@@ -780,6 +781,19 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         assert(exchanges.size === 1)
         testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
       }
+    }
+  }
+
+  test("SPARK-34399: Add job commit duration metrics for DataWritingCommand") {
+    withTable("t") {
+      sql("CREATE TABLE t(id STRING) USING PARQUET")
+      val df = sql("INSErT INTO TABLE t SELECT 'abc'")
+      val insert = df.queryExecution.executedPlan.collect {
+        case dataWriting: DataWritingCommandExec => dataWriting.cmd
+      }
+      assert(insert.size == 1)
+      assert(insert.head.metrics.contains("jobCommitDuration"))
+      assert(insert.head.metrics("jobCommitDuration").value > 1)
     }
   }
 }
