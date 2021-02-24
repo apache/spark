@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.QueryTest
 
 /**
- * This base suite contains unified tests for the `DROP TABLE` command that check V1 and V2
+ * This base suite contains unified tests for the `TRUNCATE TABLE` command that check V1 and V2
  * table catalogs. The tests that cannot run for all supported catalogs are located in more
  * specific test suites:
  *

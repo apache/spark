@@ -107,9 +107,9 @@ val df = spark
 // 2. Filter by column `favorite_color`;
 // 3. Encode the column `name` in Avro format.
 val output = df
-  .select(from_avro('value, jsonFormatSchema) as 'user)
+  .select(from_avro($"value", jsonFormatSchema) as $"user")
   .where("user.favorite_color == \"red\"")
-  .select(to_avro($"user.name") as 'value)
+  .select(to_avro($"user.name") as $"value")
 
 val query = output
   .writeStream

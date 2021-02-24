@@ -39,12 +39,15 @@ import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
 import org.apache.thrift.TException;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.protocol.TBinaryProtocol;
+import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportFactory;
 
 
 public class ThriftBinaryCLIService extends ThriftCLIService {
+
+  protected TServer server;
 
   public ThriftBinaryCLIService(CLIService cliService) {
     super(cliService, ThriftBinaryCLIService.class.getSimpleName());
@@ -109,6 +112,13 @@ public class ThriftBinaryCLIService extends ThriftCLIService {
     } catch (Exception t) {
       throw new ServiceException("Error initializing " + getName(), t);
     }
+  }
+
+  @Override
+  protected void stopServer() {
+    server.stop();
+    server = null;
+    LOG.info("Thrift server has stopped");
   }
 
   @Override
