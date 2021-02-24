@@ -869,7 +869,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
   }
 
-  private def getTempViewRawPlan(plan: LogicalPlan): LogicalPlan = {
+  private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
     EliminateSubqueryAliases(plan) match {
       case v: View if v.isDataFrameTempView => v.child
       case other => other
@@ -900,7 +900,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case write: V2WriteCommand =>
         write.table match {
           case UnresolvedRelation(ident, _, false) =>
-            lookupTempView(ident, performCheck = true).map(getTempViewRawPlan).map {
+            lookupTempView(ident, performCheck = true).map(unwrapRelationPlan).map {
               case r: DataSourceV2Relation => write.withNewTable(r)
               case _ => throw QueryCompilationErrors.writeIntoTempViewNotAllowedError(ident.quoted)
             }.getOrElse(write)
@@ -1154,8 +1154,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
         // Inserting into a file-based temporary view is allowed.
         // (e.g., spark.read.parquet("path").createOrReplaceTempView("t").
-        // Thus, we need to look at the raw plan of a temporary view.
-        getTempViewRawPlan(relation) match {
+        // Thus, we need to look at the raw plan if `relation` is a temporary view.
+        unwrapRelationPlan(relation) match {
           case v: View =>
             throw QueryCompilationErrors.insertIntoViewNotAllowedError(v.desc.identifier, table)
           case other => i.copy(table = other)
