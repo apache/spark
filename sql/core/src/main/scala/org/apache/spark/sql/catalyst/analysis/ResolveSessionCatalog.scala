@@ -373,11 +373,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         AnalyzePartitionCommand(ident.asTableIdentifier, partitionSpec, noScan)
       }
 
-    case AnalyzeTables(SessionCatalogAndNamespace(_, ns), noScan) =>
-      if (ns.length > 1) {
-        throw new AnalysisException(s"The database name is not valid: ${ns.quoted}")
-      }
-      AnalyzeTablesCommand(ns.headOption, noScan)
+    case AnalyzeTables(DatabaseInSessionCatalog(db), noScan) =>
+      AnalyzeTablesCommand(Some(db), noScan)
 
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
