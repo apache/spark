@@ -49,12 +49,10 @@ object DateTimeUtils {
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
 
   val TIMEZONE_OPTION = "timeZone"
-  val TIME_ZONE_ID = "(\\+|\\-)(\\d)(:)"
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    // To support (+|-)h:mm ZoneOffset format
-    // Because (+|-)h:mm string is unsupported format in 3.0
-      ZoneId.of(timeZoneId.replaceFirst(TIME_ZONE_ID, "$10$2$3"), ZoneId.SHORT_IDS)
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+      ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d)(:)", "$10$2$3"), ZoneId.SHORT_IDS)
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
