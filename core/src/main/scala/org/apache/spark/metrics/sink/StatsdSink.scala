@@ -40,9 +40,7 @@ private[spark] object StatsdSink {
 }
 
 private[spark] class StatsdSink(
-    val property: Properties,
-    val registry: MetricRegistry)
-  extends Sink with Logging {
+    val property: Properties, val registry: MetricRegistry) extends Sink with Logging {
   import StatsdSink._
 
   val host = property.getProperty(STATSD_KEY_HOST, STATSD_DEFAULT_HOST)

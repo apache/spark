@@ -34,9 +34,7 @@ import org.apache.spark.ui.JettyUtils._
  * in terms of key string format.
  */
 private[spark] class PrometheusServlet(
-    val property: Properties,
-    val registry: MetricRegistry)
-  extends Sink {
+    val property: Properties, val registry: MetricRegistry) extends Sink {
 
   val SERVLET_KEY_PATH = "path"
 

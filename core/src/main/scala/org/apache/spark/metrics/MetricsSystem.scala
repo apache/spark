@@ -68,9 +68,7 @@ import org.apache.spark.util.Utils
  * [options] represent the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (
-    val instance: String,
-    conf: SparkConf)
-  extends Logging {
+    val instance: String, conf: SparkConf) extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)
 
@@ -199,20 +197,17 @@ private[spark] class MetricsSystem private (
         try {
           if (kv._1 == "servlet") {
             val servlet = Utils.classForName[MetricsServlet](classPath)
-              .getConstructor(
-                classOf[Properties], classOf[MetricRegistry])
+              .getConstructor(classOf[Properties], classOf[MetricRegistry])
               .newInstance(kv._2, registry)
             metricsServlet = Some(servlet)
           } else if (kv._1 == "prometheusServlet") {
             val servlet = Utils.classForName[PrometheusServlet](classPath)
-              .getConstructor(
-                classOf[Properties], classOf[MetricRegistry])
+              .getConstructor(classOf[Properties], classOf[MetricRegistry])
               .newInstance(kv._2, registry)
             prometheusServlet = Some(servlet)
           } else {
             val sink = Utils.classForName[Sink](classPath)
-              .getConstructor(
-                classOf[Properties], classOf[MetricRegistry])
+              .getConstructor(classOf[Properties], classOf[MetricRegistry])
               .newInstance(kv._2, registry)
             sinks += sink
           }

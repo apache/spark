@@ -30,9 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.ui.JettyUtils._
 
 private[spark] class MetricsServlet(
-    val property: Properties,
-    val registry: MetricRegistry)
-  extends Sink {
+    val property: Properties, val registry: MetricRegistry) extends Sink {
 
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"

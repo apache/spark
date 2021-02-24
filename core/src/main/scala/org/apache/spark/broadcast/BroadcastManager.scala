@@ -29,9 +29,7 @@ import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.internal.Logging
 
 private[spark] class BroadcastManager(
-    val isDriver: Boolean,
-    conf: SparkConf)
-  extends Logging {
+  val isDriver: Boolean, conf: SparkConf) extends Logging {
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
