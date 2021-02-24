@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -93,12 +94,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Cast(Literal("2015-03-18 123142"), DateType), new Date(c.getTimeInMillis))
     checkEvaluation(Cast(Literal("2015-03-18T123123"), DateType), new Date(c.getTimeInMillis))
     checkEvaluation(Cast(Literal("2015-03-18T"), DateType), new Date(c.getTimeInMillis))
-
-    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
-    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
-    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
-    checkEvaluation(Cast(Literal("20150318"), DateType), null)
-    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
   }
 
   test("cast string to timestamp") {
@@ -962,7 +957,7 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   test("ANSI mode: cast string to timestamp with parse error") {
     val activeConf = conf
-    new ParVector(ALL_TIMEZONES.toVector).foreach { zid =>
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
           cast(Literal(str), TimestampType, Option(zid.getId)),
@@ -979,6 +974,30 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
         checkCastWithParseError("20150318")
         checkCastWithParseError("2015-031-8")
         checkCastWithParseError("2015-03-18T12:03:17-0:70")
+        checkCastWithParseError("abdef")
+      }
+    }
+  }
+
+  test("ANSI mode: cast string to date with parse error") {
+    val activeConf = conf
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      def checkCastWithParseError(str: String): Unit = {
+        checkExceptionInExpression[DateTimeException](
+          cast(Literal(str), DateType, Option(zid.getId)),
+          s"Cannot cast $str to DateType.")
+      }
+
+      SQLConf.withExistingConf(activeConf) {
+        checkCastWithParseError("12345")
+        checkCastWithParseError("12345-12-18")
+        checkCastWithParseError("2015-13-18")
+        checkCastWithParseError("2015-03-128")
+        checkCastWithParseError("2015/03/18")
+        checkCastWithParseError("2015.03.18")
+        checkCastWithParseError("20150318")
+        checkCastWithParseError("2015-031-8")
+        checkCastWithParseError("2015-03-18ABC")
         checkCastWithParseError("abdef")
       }
     }
@@ -1024,6 +1043,14 @@ class CastSuite extends CastSuiteBase {
 
     checkEvaluation(cast(123, DecimalType(3, 1)), null)
     checkEvaluation(cast(123, DecimalType(2, 0)), null)
+  }
+
+  test("cast string to date #2") {
+    checkEvaluation(Cast(Literal("2015-03-18X"), DateType), null)
+    checkEvaluation(Cast(Literal("2015/03/18"), DateType), null)
+    checkEvaluation(Cast(Literal("2015.03.18"), DateType), null)
+    checkEvaluation(Cast(Literal("20150318"), DateType), null)
+    checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
   }
 
   test("casting to fixed-precision decimals") {

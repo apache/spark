@@ -74,6 +74,9 @@ object SerializerBuildHelper {
       returnNullable = false)
   }
 
+  def createSerializerForJavaEnum(inputObject: Expression): Expression =
+    createSerializerForString(Invoke(inputObject, "name", ObjectType(classOf[String])))
+
   def createSerializerForSqlTimestamp(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,

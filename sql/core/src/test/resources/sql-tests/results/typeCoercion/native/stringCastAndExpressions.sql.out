@@ -179,7 +179,7 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 -- !query
 select from_unixtime(a) from t
 -- !query schema
-struct<from_unixtime(CAST(a AS BIGINT), yyyy-MM-dd HH:mm:ss):string>
+struct<from_unixtime(a, yyyy-MM-dd HH:mm:ss):string>
 -- !query output
 NULL
 
@@ -187,7 +187,7 @@ NULL
 -- !query
 select from_unixtime('2018-01-01', a) from t
 -- !query schema
-struct<from_unixtime(CAST(2018-01-01 AS BIGINT), a):string>
+struct<from_unixtime(2018-01-01, a):string>
 -- !query output
 NULL
 
@@ -195,7 +195,7 @@ NULL
 -- !query
 select next_day(a, 'MO') from t
 -- !query schema
-struct<next_day(CAST(a AS DATE), MO):date>
+struct<next_day(a, MO):date>
 -- !query output
 NULL
 
@@ -203,7 +203,7 @@ NULL
 -- !query
 select next_day('2018-01-01', a) from t
 -- !query schema
-struct<next_day(CAST(2018-01-01 AS DATE), a):date>
+struct<next_day(2018-01-01, a):date>
 -- !query output
 NULL
 
@@ -211,7 +211,7 @@ NULL
 -- !query
 select trunc(a, 'MM') from t
 -- !query schema
-struct<trunc(CAST(a AS DATE), MM):date>
+struct<trunc(a, MM):date>
 -- !query output
 NULL
 
@@ -219,7 +219,7 @@ NULL
 -- !query
 select trunc('2018-01-01', a) from t
 -- !query schema
-struct<trunc(CAST(2018-01-01 AS DATE), a):date>
+struct<trunc(2018-01-01, a):date>
 -- !query output
 NULL
 
@@ -235,7 +235,7 @@ NULL
 -- !query
 select sha2(a, a) from t
 -- !query schema
-struct<sha2(CAST(a AS BINARY), CAST(a AS INT)):string>
+struct<sha2(a, a):string>
 -- !query output
 NULL
 

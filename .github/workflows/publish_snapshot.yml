@@ -6,6 +6,7 @@ on:
 
 jobs:
   publish-snapshot:
+    if: github.repository == 'apache/spark'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

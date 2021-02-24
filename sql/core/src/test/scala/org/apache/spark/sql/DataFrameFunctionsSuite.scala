@@ -171,10 +171,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("bitwiseNOT") {
+  test("bitwise_not") {
     checkAnswer(
-      testData2.select(bitwiseNOT($"a")),
-      testData2.collect().toSeq.map(r => Row(~r.getInt(0))))
+      testData2.select(bitwiseNOT($"a"), bitwise_not($"a")),
+      testData2.collect().toSeq.map(r => Row(~r.getInt(0), ~r.getInt(0))))
   }
 
   test("bin") {
@@ -943,6 +943,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.select(slice(df("x"), -1, 1)), answerNegative)
     checkAnswer(df.select(slice(df("x"), lit(-1), lit(1))), answerNegative)
     checkAnswer(df.selectExpr("slice(x, -1, 1)"), answerNegative)
+
+    val answerStartExpr = Seq(Row(Seq(2)), Row(Seq(4)))
+    checkAnswer(df.select(slice(df("x"), size($"x") - 1, lit(1))), answerStartExpr)
+    checkAnswer(df.selectExpr("slice(x, size(x) - 1, 1)"), answerStartExpr)
+
+    val answerLengthExpr = Seq(Row(Seq(1, 2)), Row(Seq(4)))
+    checkAnswer(df.select(slice(df("x"), lit(1), size($"x") - 1)), answerLengthExpr)
+    checkAnswer(df.selectExpr("slice(x, 1, size(x) - 1)"), answerLengthExpr)
   }
 
   test("array_join function") {

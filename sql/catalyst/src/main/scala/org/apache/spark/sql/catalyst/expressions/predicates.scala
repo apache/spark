@@ -242,6 +242,24 @@ trait PredicateHelper extends AliasHelper with Logging {
         None
       }
   }
+
+  // If one expression and its children are null intolerant, it is null intolerant.
+  protected def isNullIntolerant(expr: Expression): Boolean = expr match {
+    case e: NullIntolerant => e.children.forall(isNullIntolerant)
+    case _ => false
+  }
+
+  protected def outputWithNullability(
+      output: Seq[Attribute],
+      nonNullAttrExprIds: Seq[ExprId]): Seq[Attribute] = {
+    output.map { a =>
+      if (a.nullable && nonNullAttrExprIds.contains(a.exprId)) {
+        a.withNullability(false)
+      } else {
+        a
+      }
+    }
+  }
 }
 
 @ExpressionDescription(
@@ -255,7 +273,8 @@ trait PredicateHelper extends AliasHelper with Logging {
       > SELECT _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class Not(child: Expression)
   extends UnaryExpression with Predicate with ImplicitCastInputTypes with NullIntolerant {
 
@@ -358,7 +377,8 @@ case class InSubquery(values: Seq[Expression], query: ListQuery)
       > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
        true
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 // scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
@@ -594,7 +614,8 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
       > SELECT false _FUNC_ NULL;
        false
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class And(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -676,7 +697,8 @@ case class And(left: Expression, right: Expression) extends BinaryOperator with 
       > SELECT false _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class Or(left: Expression, right: Expression) extends BinaryOperator with Predicate {
 
   override def inputType: AbstractDataType = BooleanType
@@ -810,7 +832,8 @@ object Equality {
       > SELECT NULL _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -854,7 +877,8 @@ case class EqualTo(left: Expression, right: Expression)
       > SELECT NULL _FUNC_ NULL;
        true
   """,
-  since = "1.1.0")
+  since = "1.1.0",
+  group = "predicate_funcs")
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
   override def symbol: String = "<=>"
@@ -912,7 +936,8 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -943,7 +968,8 @@ case class LessThan(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -974,7 +1000,8 @@ case class LessThanOrEqual(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -1005,7 +1032,8 @@ case class GreaterThan(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 

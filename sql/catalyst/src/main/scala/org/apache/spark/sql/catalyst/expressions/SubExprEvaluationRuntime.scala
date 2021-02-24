@@ -23,6 +23,7 @@ import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionExce
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -128,7 +129,7 @@ case class ExpressionProxy(
 
   // `ExpressionProxy` is for interpreted expression evaluation only. So cannot `doGenCode`.
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw new UnsupportedOperationException(s"Cannot generate code for expression: $this")
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 
   def proxyEval(input: InternalRow = null): Any = child.eval(input)
 

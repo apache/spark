@@ -5,7 +5,7 @@ TakeOrderedAndProject [c_customer_id]
         Project [ctr_customer_sk]
           BroadcastHashJoin [ctr_store_sk,s_store_sk]
             Project [ctr_customer_sk,ctr_store_sk]
-              BroadcastHashJoin [ctr_store_sk,ctr_store_skL,ctr_total_return,(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))]
+              BroadcastHashJoin [ctr_store_sk,ctr_store_skL,ctr_total_return,(avg(ctr_total_return) * 1.2)]
                 Filter [ctr_total_return]
                   HashAggregate [sr_customer_sk,sr_store_sk,sum] [sum(UnscaledValue(sr_return_amt)),ctr_customer_sk,ctr_store_sk,ctr_total_return,sum]
                     InputAdapter
@@ -14,10 +14,12 @@ TakeOrderedAndProject [c_customer_id]
                           HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
                             Project [sr_customer_sk,sr_store_sk,sr_return_amt]
                               BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                Filter [sr_returned_date_sk,sr_store_sk,sr_customer_sk]
+                                Filter [sr_store_sk,sr_customer_sk]
                                   ColumnarToRow
                                     InputAdapter
-                                      Scan parquet default.store_returns [sr_returned_date_sk,sr_customer_sk,sr_store_sk,sr_return_amt]
+                                      Scan parquet default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]
+                                        SubqueryBroadcast [d_date_sk] #1
+                                          ReusedExchange [d_date_sk] #2
                                 InputAdapter
                                   BroadcastExchange #2
                                     WholeStageCodegen (1)
@@ -29,8 +31,8 @@ TakeOrderedAndProject [c_customer_id]
                 InputAdapter
                   BroadcastExchange #3
                     WholeStageCodegen (6)
-                      Filter [(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6)))]
-                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(CAST(avg(ctr_total_return) AS DECIMAL(21,6)) * CAST(1.2 AS DECIMAL(21,6))),ctr_store_skL,sum,count]
+                      Filter [(avg(ctr_total_return) * 1.2)]
+                        HashAggregate [ctr_store_sk,sum,count] [avg(ctr_total_return),(avg(ctr_total_return) * 1.2),ctr_store_skL,sum,count]
                           InputAdapter
                             Exchange [ctr_store_sk] #4
                               WholeStageCodegen (5)
@@ -42,10 +44,11 @@ TakeOrderedAndProject [c_customer_id]
                                           HashAggregate [sr_customer_sk,sr_store_sk,sr_return_amt] [sum,sum]
                                             Project [sr_customer_sk,sr_store_sk,sr_return_amt]
                                               BroadcastHashJoin [sr_returned_date_sk,d_date_sk]
-                                                Filter [sr_returned_date_sk,sr_store_sk]
+                                                Filter [sr_store_sk]
                                                   ColumnarToRow
                                                     InputAdapter
-                                                      Scan parquet default.store_returns [sr_returned_date_sk,sr_customer_sk,sr_store_sk,sr_return_amt]
+                                                      Scan parquet default.store_returns [sr_customer_sk,sr_store_sk,sr_return_amt,sr_returned_date_sk]
+                                                        ReusedSubquery [d_date_sk] #1
                                                 InputAdapter
                                                   ReusedExchange [d_date_sk] #2
             InputAdapter

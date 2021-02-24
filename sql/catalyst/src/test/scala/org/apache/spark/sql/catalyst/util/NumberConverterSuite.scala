@@ -34,9 +34,9 @@ class NumberConverterSuite extends SparkFunSuite {
   test("convert") {
     checkConv("3", 10, 2, "11")
     checkConv("-15", 10, -16, "-F")
-    checkConv("-15", 10, 16, "FFFFFFFFFFFFFFF1")
+    checkConv("-15", 10, 16, "-F")
     checkConv("big", 36, 16, "3A48")
-    checkConv("9223372036854775807", 36, 16, "FFFFFFFFFFFFFFFF")
+    checkConv("9223372036854775807", 36, 16, "12DDAC15F246BAF8C0D551AC7")
     checkConv("11abc", 10, 16, "B")
   }
 

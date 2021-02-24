@@ -193,7 +193,7 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
 |**CalendarIntervalType**|INTERVAL|
-|**ArrayType**|ARRAY<element_type>|
+|**ArrayType**|ARRAY\<element_type>|
 |**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...>|
 |**MapType**|MAP<key_type, value_type>|
 

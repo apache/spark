@@ -151,6 +151,7 @@ class DataStreamReader(OptionUtils):
         recursiveFileLookup: Optional[Union[bool, str]] = ...,
         unescapedQuoteHandling: Optional[str] = ...,
     ) -> DataFrame: ...
+    def table(self, tableName: str) -> DataFrame: ...
 
 class DataStreamWriter:
     def __init__(self, df: DataFrame) -> None: ...
@@ -185,3 +186,12 @@ class DataStreamWriter:
     def foreachBatch(
         self, func: Callable[[DataFrame, int], None]
     ) -> DataStreamWriter: ...
+    def toTable(
+        self,
+        tableName: str,
+        format: Optional[str] = ...,
+        outputMode: Optional[str] = ...,
+        partitionBy: Optional[Union[str, List[str]]] = ...,
+        queryName: Optional[str] = ...,
+        **options: OptionalPrimitiveType
+    ) -> StreamingQuery: ...

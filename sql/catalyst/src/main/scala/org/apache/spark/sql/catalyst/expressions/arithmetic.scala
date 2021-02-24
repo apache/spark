@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{IntervalUtils, TypeUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -33,7 +34,8 @@ import org.apache.spark.unsafe.types.CalendarInterval
       > SELECT _FUNC_(1);
        -1
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class UnaryMinus(
     child: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
@@ -59,7 +61,7 @@ case class UnaryMinus(
         s"""
            |$javaType $originValue = ($javaType)($eval);
            |if ($originValue == $javaBoxedType.MIN_VALUE) {
-           |  throw new ArithmeticException("- " + $originValue + " caused overflow.");
+           |  throw QueryExecutionErrors.unaryMinusCauseOverflowError($originValue);
            |}
            |${ev.value} = ($javaType)(-($originValue));
            """.stripMargin
@@ -105,7 +107,8 @@ case class UnaryMinus(
       > SELECT _FUNC_(1);
        1
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 case class UnaryPositive(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -133,7 +136,8 @@ case class UnaryPositive(child: Expression)
       > SELECT _FUNC_(-1);
        1
   """,
-  since = "1.2.0")
+  since = "1.2.0",
+  group = "math_funcs")
 case class Abs(child: Expression)
   extends UnaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -189,7 +193,8 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
           val javaType = CodeGenerator.boxedType(dataType)
           s"""
              |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw new ArithmeticException($eval1 + " $symbol " + $eval2 + " caused overflow.");
+             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
+             |  $eval1, "$symbol", $eval2);
              |}
            """.stripMargin
         } else {
@@ -236,7 +241,8 @@ object BinaryArithmetic {
       > SELECT 1 _FUNC_ 2;
        3
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Add(
     left: Expression,
     right: Expression,
@@ -274,7 +280,8 @@ case class Add(
       > SELECT 2 _FUNC_ 1;
        1
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Subtract(
     left: Expression,
     right: Expression,
@@ -312,7 +319,8 @@ case class Subtract(
       > SELECT 2 _FUNC_ 3;
        6
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Multiply(
     left: Expression,
     right: Expression,
@@ -356,7 +364,7 @@ trait DivModLike extends BinaryArithmetic {
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw new ArithmeticException("divide by zero")
+          throw QueryExecutionErrors.divideByZeroError
         }
         evalOperation(input1, input2)
       }
@@ -386,7 +394,7 @@ trait DivModLike extends BinaryArithmetic {
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        "throw new ArithmeticException(\"divide by zero\");"
+        s"throw QueryExecutionErrors.divideByZeroError();"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -403,7 +411,7 @@ trait DivModLike extends BinaryArithmetic {
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
       } else {
         ""
       }
@@ -436,7 +444,8 @@ trait DivModLike extends BinaryArithmetic {
       > SELECT 2L _FUNC_ 2L;
        1.0
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class Divide(
     left: Expression,
@@ -465,7 +474,8 @@ case class Divide(
       > SELECT 3 _FUNC_ 2;
        1
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
 case class IntegralDivide(
     left: Expression,
@@ -512,7 +522,8 @@ case class IntegralDivide(
       > SELECT MOD(2, 1.8);
        0.2
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "math_funcs")
 case class Remainder(
     left: Expression,
     right: Expression,
@@ -565,7 +576,8 @@ case class Remainder(
       > SELECT _FUNC_(-10, 3);
        2
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 case class Pmod(
     left: Expression,
     right: Expression,
@@ -601,7 +613,7 @@ case class Pmod(
       } else {
         if (isZero(input2)) {
           // when we reach here, failOnError must bet true.
-          throw new ArithmeticException("divide by zero")
+          throw QueryExecutionErrors.divideByZeroError
         }
         input1 match {
           case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
@@ -662,7 +674,7 @@ case class Pmod(
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
       val divByZero = if (failOnError) {
-        "throw new ArithmeticException(\"divide by zero\");"
+        s"throw QueryExecutionErrors.divideByZeroError();"
       } else {
         s"${ev.isNull} = true;"
       }
@@ -679,7 +691,7 @@ case class Pmod(
     } else {
       val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
       val failOnErrorBranch = if (failOnError) {
-        s"""if ($isZero) throw new ArithmeticException("divide by zero");"""
+        s"if ($isZero) throw QueryExecutionErrors.divideByZeroError();"
       } else {
         ""
       }
@@ -750,7 +762,8 @@ case class Pmod(
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)
@@ -824,7 +837,8 @@ case class Least(children: Seq[Expression]) extends ComplexTypeMergingExpression
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 case class Greatest(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
   override def nullable: Boolean = children.forall(_.nullable)

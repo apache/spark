@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.internal
 
-import org.apache.spark.SparkConf
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{ExperimentalMethods, SparkSession, UDFRegistration, _}
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry, ResolveSessionCatalog}
@@ -74,15 +73,6 @@ abstract class BaseSessionStateBuilder(
   protected def extensions: SparkSessionExtensions = session.extensions
 
   /**
-   * Extract entries from `SparkConf` and put them in the `SQLConf`
-   */
-  protected def mergeSparkConf(sqlConf: SQLConf, sparkConf: SparkConf): Unit = {
-    sparkConf.getAll.foreach { case (k, v) =>
-      sqlConf.setConfString(k, v)
-    }
-  }
-
-  /**
    * SQL-specific key-value configurations.
    *
    * These either get cloned from a pre-existing instance or newly created. The conf is merged
@@ -92,15 +82,15 @@ abstract class BaseSessionStateBuilder(
     parentState.map { s =>
       val cloned = s.conf.clone()
       if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
-        mergeSparkConf(cloned, session.sparkContext.conf)
+        SQLConf.mergeSparkConf(cloned, session.sparkContext.conf)
       }
       cloned
     }.getOrElse {
       val conf = new SQLConf
-      mergeSparkConf(conf, session.sparkContext.conf)
-      options.foreach {
-        case (k, v) => conf.setConfString(k, v)
-      }
+      SQLConf.mergeSparkConf(conf, session.sharedState.conf)
+      // the later added configs to spark conf shall be respected too
+      SQLConf.mergeNonStaticSQLConfigs(conf, session.sparkContext.conf.getAll.toMap)
+      SQLConf.mergeNonStaticSQLConfigs(conf, session.initialSessionOptions)
       conf
     }
   }
@@ -180,8 +170,7 @@ abstract class BaseSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(
-          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
+        new ResolveSessionCatalog(catalogManager) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -189,7 +178,6 @@ abstract class BaseSessionStateBuilder(
         PreprocessTableCreation(session) +:
         PreprocessTableInsertion +:
         DataSourceAnalysis +:
-        ApplyCharTypePadding +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
@@ -241,8 +229,8 @@ abstract class BaseSessionStateBuilder(
       override def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] =
         super.earlyScanPushDownRules ++ customEarlyScanPushDownRules
 
-      override def dataSourceRewriteRules: Seq[Rule[LogicalPlan]] =
-        super.dataSourceRewriteRules ++ customDataSourceRewriteRules
+      override def preCBORules: Seq[Rule[LogicalPlan]] =
+        super.preCBORules ++ customPreCBORules
 
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
@@ -268,13 +256,13 @@ abstract class BaseSessionStateBuilder(
   protected def customEarlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
-   * Custom rules for rewriting data source plans to add to the Optimizer. Prefer overriding
-   * this instead of creating your own Optimizer.
+   * Custom rules for rewriting plans after operator optimization and before CBO.
+   * Prefer overriding this instead of creating your own Optimizer.
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customDataSourceRewriteRules: Seq[Rule[LogicalPlan]] = {
-    extensions.buildDataSourceRewriteRules(session)
+  protected def customPreCBORules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPreCBORules(session)
   }
 
   /**
@@ -374,7 +362,7 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
     parentState.map { s =>
       val cloned = s.conf.clone()
       if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
-        mergeSparkConf(conf, session.sparkContext.conf)
+        SQLConf.mergeSparkConf(conf, session.sparkContext.conf)
       }
       cloned
     }.getOrElse {
@@ -386,7 +374,7 @@ private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
           overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
         }
       }
-      mergeSparkConf(conf, session.sparkContext.conf)
+      SQLConf.mergeSparkConf(conf, session.sparkContext.conf)
       conf
     }
   }

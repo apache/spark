@@ -174,6 +174,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
+    withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
+      statsWithHgms.foreach { case (k, v) =>
+        val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
@@ -245,24 +254,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
       val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows"
       assert(stats.simpleString == expectedString)
-    }
-  }
-
-  test("change stats after truncate command") {
-    val table = "change_stats_truncate_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
-
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
     }
   }
 
@@ -376,22 +367,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("invalidation of tableRelationCache after table truncation") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          sql(s"TRUNCATE TABLE $table")
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
-        }
-      }
-    }
-  }
-
   test("invalidation of tableRelationCache after alter table add partition") {
     val table = "invalidate_catalog_cache_table"
     Seq(false, true).foreach { autoUpdate =>
@@ -441,17 +416,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           .saveAsTable("TBL")
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
-        withTempView("TBL2") {
-          val df2 = spark.sql(
-            """
-              |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
-              |FROM tbl t1
-              |JOIN tbl t2 on t1.id=t2.id
-              |WHERE  t1.fld3 IN (-123.23,321.23)
+        val df2 = spark.sql(
+          """
+             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+             |FROM tbl t1
+             |JOIN tbl t2 on t1.id=t2.id
+             |WHERE  t1.fld3 IN (-123.23,321.23)
           """.stripMargin)
-          df2.createTempView("TBL2")
-          sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
-        }
+        df2.createTempView("TBL2")
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
       }
     }
   }
@@ -544,7 +517,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val errMsg1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg1.contains("Table or view not found for 'ANALYZE TABLE ... FOR COLUMNS ...': " +
+      assert(errMsg1.contains("Table or view not found: " +
         s"$globalTempDB.gTempView"))
       // Analyzes in a global temporary view
       sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
@@ -573,28 +546,32 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("analyzes table statistics in cached catalog view") {
+    def getTableStats(tableName: String): Statistics = {
+      spark.table(tableName).queryExecution.optimizedPlan.stats
+    }
+
     withTempDatabase { database =>
       sql(s"CREATE VIEW $database.v AS SELECT 1 c")
       // Cache data eagerly by default, so this operation collects table stats
       sql(s"CACHE TABLE $database.v")
-      val stats1 = getTableStatsFromOptimizedPlan(s"$database.v")
+      val stats1 = getTableStats(s"$database.v")
       assert(stats1.sizeInBytes > 0)
       assert(stats1.rowCount === Some(1))
       sql(s"UNCACHE TABLE $database.v")
 
       // Cache data lazily, then analyze table stats
       sql(s"CACHE LAZY TABLE $database.v")
-      val stats2 = getTableStatsFromOptimizedPlan(s"$database.v")
+      val stats2 = getTableStats(s"$database.v")
       assert(stats2.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
       assert(stats2.rowCount === None)
 
       sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS NOSCAN")
-      val stats3 = getTableStatsFromOptimizedPlan(s"$database.v")
+      val stats3 = getTableStats(s"$database.v")
       assert(stats3.sizeInBytes === OneRowRelation().computeStats().sizeInBytes)
       assert(stats3.rowCount === None)
 
       sql(s"ANALYZE TABLE $database.v COMPUTE STATISTICS")
-      val stats4 = getTableStatsFromOptimizedPlan(s"$database.v")
+      val stats4 = getTableStats(s"$database.v")
       assert(stats4.sizeInBytes === stats1.sizeInBytes)
       assert(stats4.rowCount === Some(1))
     }
@@ -666,6 +643,38 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           }.getMessage
           assert(errorMsg.contains("Found duplicate column(s)"))
         }
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }

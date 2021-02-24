@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{DropTable, DropView, LogicalPlan, NoopCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{DropTable, DropView, LogicalPlan, NoopCommand, UncacheTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
@@ -31,5 +31,7 @@ object ResolveCommandsWithIfExists extends Rule[LogicalPlan] {
       NoopCommand("DROP TABLE", u.multipartIdentifier)
     case DropView(u: UnresolvedView, ifExists) if ifExists =>
       NoopCommand("DROP VIEW", u.multipartIdentifier)
+    case UncacheTable(u: UnresolvedRelation, ifExists, _) if ifExists =>
+      NoopCommand("UNCACHE TABLE", u.multipartIdentifier)
   }
 }

@@ -155,7 +155,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c2) values(1, 2, 3)"))
-      assert(e1.getMessage === "Found duplicate column(s) in the column list: `c2`;")
+      assert(e1.getMessage === "Found duplicate column(s) in the column list: `c2`")
     }
   }
 
@@ -164,7 +164,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val cols = Seq("c1", "c2", "c3")
       createTable("t1", cols, Seq("int", "long", "string"))
       val e1 = intercept[AnalysisException](sql(s"INSERT INTO t1 (c1, c2, c4) values(1, 2, 3)"))
-      assert(e1.getMessage === "Cannot resolve column name c4;")
+      assert(e1.getMessage === "Cannot resolve column name c4")
     }
   }
 
@@ -198,6 +198,14 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       }
       assert(e1.getMessage.contains("target table has 4 column(s) but the inserted data has 3") ||
         e1.getMessage.contains(v2Msg))
+    }
+  }
+
+  test("SPARK-34223: static partition with null raise NPE") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
+      sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
+      checkAnswer(spark.table("t"), Row("1", null))
     }
   }
 }

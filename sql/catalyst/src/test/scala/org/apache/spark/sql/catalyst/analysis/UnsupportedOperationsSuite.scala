@@ -685,7 +685,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
         isMapGroupsWithState = false, null, streamRelation).groupBy("*")(count("*")),
       OutputMode.Append())
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertFailOnGlobalWatermarkLimit(
         s"stream-stream $joinType after FlatMapGroupsWithState in Append mode",
         streamRelation.join(
@@ -718,7 +718,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite with SQLHelper {
       Deduplicate(Seq(attribute), streamRelation).groupBy("a")(count("*")),
       OutputMode.Append())
 
-    Seq(Inner, LeftOuter, RightOuter).map { joinType =>
+    Seq(Inner, LeftOuter, RightOuter).foreach { joinType =>
       assertPassOnGlobalWatermarkLimit(
         s"$joinType join after deduplicate in Append mode",
         streamRelation.join(Deduplicate(Seq(attribute), streamRelation), joinType = joinType,

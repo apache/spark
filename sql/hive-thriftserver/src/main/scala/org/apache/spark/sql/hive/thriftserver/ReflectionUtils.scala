@@ -53,6 +53,6 @@ private[hive] object ReflectionUtils {
     val (types, values) = args.unzip
     val method = clazz.getDeclaredMethod(methodName, types: _*)
     method.setAccessible(true)
-    method.invoke(obj, values.toSeq: _*)
+    method.invoke(obj, values: _*)
   }
 }

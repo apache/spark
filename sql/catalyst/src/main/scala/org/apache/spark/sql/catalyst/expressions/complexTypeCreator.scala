@@ -52,7 +52,8 @@ trait NoThrow
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
   """,
-  since = "1.1.0")
+  since = "1.1.0",
+  group = "array_funcs")
 case class CreateArray(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   extends Expression with NoThrow {
 
@@ -170,7 +171,8 @@ private [sql] object GenArrayData {
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "map_funcs")
 case class CreateMap(children: Seq[Expression], useStringTypeWhenEmpty: Boolean)
   extends Expression with NoThrow {
 
@@ -271,7 +273,8 @@ object CreateMap {
       > SELECT _FUNC_(array(1.0, 3.0), array('2', '4'));
        {1.0:"2",3.0:"4"}
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "map_funcs")
 case class MapFromArrays(left: Expression, right: Expression)
   extends BinaryExpression with ExpectsInputTypes with NullIntolerant {
 
@@ -369,7 +372,7 @@ object CreateStruct {
         |       {"col1":1,"col2":2,"col3":3}
         |  """.stripMargin,
       "",
-      "",
+      "struct_funcs",
       "1.4.0",
       "")
     ("struct", (info, this.create))
@@ -389,7 +392,8 @@ object CreateStruct {
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "struct_funcs")
 // scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression with NoThrow {
   lazy val (nameExprs, valExprs) = children.grouped(2).map {
@@ -495,7 +499,8 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
       > SELECT _FUNC_('a');
        {"a":null}
   """,
-  since = "2.0.1")
+  since = "2.0.1",
+  group = "map_funcs")
 // scalastyle:on line.size.limit
 case class StringToMap(text: Expression, pairDelim: Expression, keyValueDelim: Expression)
   extends TernaryExpression with ExpectsInputTypes with NullIntolerant {

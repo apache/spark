@@ -594,6 +594,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object SparkScripts extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+        SparkScriptTransformationExec(
+          input,
+          script,
+          output,
+          planLater(child),
+          ScriptTransformationIOSchema(ioschema)
+        ) :: Nil
+      case _ => Nil
+    }
+  }
+
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
@@ -624,6 +638,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.ResolvedHint(child, hints) =>
         throw new IllegalStateException(
           "ResolvedHint operator should have been replaced by join hint in the optimizer")
+      case Deduplicate(_, child) if !child.isStreaming =>
+        throw new IllegalStateException(
+          "Deduplicate operator for non streaming data source should have been replaced " +
+            "by aggregate in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil

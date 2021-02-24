@@ -199,12 +199,90 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("view should use captured catalog and namespace to resolve relation") {
+    withTempDatabase { dbName =>
+      withTable("default.t", s"$dbName.t") {
+        withTempView("t") {
+          // create a table in default database
+          sql("USE DEFAULT")
+          Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+          // create a view refer the created table in default database
+          val viewName = createView("v1", "SELECT * FROM t")
+          // using another database to create a table with same name
+          sql(s"USE $dbName")
+          Seq(4, 5, 6).toDF("c1").write.format("parquet").saveAsTable("t")
+          // create a temporary view with the same name
+          sql("CREATE TEMPORARY VIEW t AS SELECT 1")
+          withView(viewName) {
+            // view v1 should still refer the table defined in `default` database
+            checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-33692: view should use captured catalog and namespace to lookup function") {
+    val avgFuncClass = "test.org.apache.spark.sql.MyDoubleAvg"
+    val sumFuncClass = "test.org.apache.spark.sql.MyDoubleSum"
+    val functionName = "test_udf"
+    withTempDatabase { dbName =>
+      withUserDefinedFunction(
+        s"default.$functionName" -> false,
+        s"$dbName.$functionName" -> false,
+        functionName -> true) {
+        // create a function in default database
+        sql("USE DEFAULT")
+        sql(s"CREATE FUNCTION $functionName AS '$avgFuncClass'")
+        // create a view using a function in 'default' database
+        val viewName = createView("v1", s"SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+        // create function in another database with the same function name
+        sql(s"USE $dbName")
+        sql(s"CREATE FUNCTION $functionName AS '$sumFuncClass'")
+        // create temporary function with the same function name
+        sql(s"CREATE TEMPORARY FUNCTION $functionName AS '$sumFuncClass'")
+        withView(viewName) {
+          // view v1 should still using function defined in `default` database
+          checkViewOutput(viewName, Seq(Row(102.0)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-34260: replace existing view using CREATE OR REPLACE") {
+    val viewName = createView("testView", "SELECT * FROM (SELECT 1)")
+    withView(viewName) {
+      checkViewOutput(viewName, Seq(Row(1)))
+      createView("testView", "SELECT * FROM (SELECT 2)", replace = true)
+      checkViewOutput(viewName, Seq(Row(2)))
+    }
+  }
+
+  test("SPARK-34490 - query should fail if the view refers a dropped table") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      val viewName = createView("testView", "SELECT * FROM t")
+      withView(viewName) {
+        // Always create a temp view in this case, not use `createView` on purpose
+        sql("CREATE TEMP VIEW t AS SELECT 1 AS c1")
+        withTempView("t") {
+          checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
+          // Manually drop table `t` to see if the query will fail
+          sql("DROP TABLE IF EXISTS default.t")
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT * FROM $viewName").collect()
+          }.getMessage
+          assert(e.contains("Table or view not found: t"))
+        }
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def viewTypeString: String = "TEMPORARY VIEW"
   override protected def formattedViewName(viewName: String): String = viewName
-
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {

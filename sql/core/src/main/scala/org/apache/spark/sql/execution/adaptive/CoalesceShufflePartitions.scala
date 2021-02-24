@@ -67,7 +67,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
         // We fall back to Spark default parallelism if the minimum number of coalesced partitions
         // is not set, so to avoid perf regressions compared to no coalescing.
         val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-          .orElse(conf.defaultParallelism).getOrElse(session.sparkContext.defaultParallelism)
+          .getOrElse(session.sparkContext.defaultParallelism)
         val partitionSpecs = ShufflePartitionsUtil.coalescePartitions(
           validMetrics.toArray,
           advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),

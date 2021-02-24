@@ -1,280 +1,295 @@
 == Physical Plan ==
-TakeOrderedAndProject (50)
-+- * Project (49)
-   +- BroadcastNestedLoopJoin Inner BuildRight (48)
-      :- * HashAggregate (27)
-      :  +- Exchange (26)
-      :     +- * HashAggregate (25)
-      :        +- * Project (24)
-      :           +- * BroadcastHashJoin Inner BuildRight (23)
-      :              :- * Project (17)
-      :              :  +- * BroadcastHashJoin Inner BuildRight (16)
-      :              :     :- * Project (10)
-      :              :     :  +- * BroadcastHashJoin Inner BuildRight (9)
-      :              :     :     :- * Filter (3)
-      :              :     :     :  +- * ColumnarToRow (2)
-      :              :     :     :     +- Scan parquet default.web_sales (1)
-      :              :     :     +- BroadcastExchange (8)
-      :              :     :        +- * Project (7)
-      :              :     :           +- * Filter (6)
-      :              :     :              +- * ColumnarToRow (5)
-      :              :     :                 +- Scan parquet default.web_page (4)
-      :              :     +- BroadcastExchange (15)
-      :              :        +- * Project (14)
-      :              :           +- * Filter (13)
-      :              :              +- * ColumnarToRow (12)
-      :              :                 +- Scan parquet default.household_demographics (11)
-      :              +- BroadcastExchange (22)
-      :                 +- * Project (21)
-      :                    +- * Filter (20)
-      :                       +- * ColumnarToRow (19)
-      :                          +- Scan parquet default.time_dim (18)
-      +- BroadcastExchange (47)
-         +- * HashAggregate (46)
-            +- Exchange (45)
-               +- * HashAggregate (44)
-                  +- * Project (43)
-                     +- * BroadcastHashJoin Inner BuildRight (42)
-                        :- * Project (36)
-                        :  +- * BroadcastHashJoin Inner BuildRight (35)
-                        :     :- * Project (33)
-                        :     :  +- * BroadcastHashJoin Inner BuildRight (32)
-                        :     :     :- * Filter (30)
-                        :     :     :  +- * ColumnarToRow (29)
-                        :     :     :     +- Scan parquet default.web_sales (28)
-                        :     :     +- ReusedExchange (31)
-                        :     +- ReusedExchange (34)
-                        +- BroadcastExchange (41)
-                           +- * Project (40)
-                              +- * Filter (39)
-                                 +- * ColumnarToRow (38)
-                                    +- Scan parquet default.time_dim (37)
+* Sort (53)
++- Exchange (52)
+   +- * Project (51)
+      +- BroadcastNestedLoopJoin Inner BuildRight (50)
+         :- * HashAggregate (28)
+         :  +- Exchange (27)
+         :     +- * HashAggregate (26)
+         :        +- * Project (25)
+         :           +- * BroadcastHashJoin Inner BuildRight (24)
+         :              :- * Project (18)
+         :              :  +- * BroadcastHashJoin Inner BuildRight (17)
+         :              :     :- * Project (11)
+         :              :     :  +- * BroadcastHashJoin Inner BuildRight (10)
+         :              :     :     :- * Project (4)
+         :              :     :     :  +- * Filter (3)
+         :              :     :     :     +- * ColumnarToRow (2)
+         :              :     :     :        +- Scan parquet default.web_sales (1)
+         :              :     :     +- BroadcastExchange (9)
+         :              :     :        +- * Project (8)
+         :              :     :           +- * Filter (7)
+         :              :     :              +- * ColumnarToRow (6)
+         :              :     :                 +- Scan parquet default.web_page (5)
+         :              :     +- BroadcastExchange (16)
+         :              :        +- * Project (15)
+         :              :           +- * Filter (14)
+         :              :              +- * ColumnarToRow (13)
+         :              :                 +- Scan parquet default.household_demographics (12)
+         :              +- BroadcastExchange (23)
+         :                 +- * Project (22)
+         :                    +- * Filter (21)
+         :                       +- * ColumnarToRow (20)
+         :                          +- Scan parquet default.time_dim (19)
+         +- BroadcastExchange (49)
+            +- * HashAggregate (48)
+               +- Exchange (47)
+                  +- * HashAggregate (46)
+                     +- * Project (45)
+                        +- * BroadcastHashJoin Inner BuildRight (44)
+                           :- * Project (38)
+                           :  +- * BroadcastHashJoin Inner BuildRight (37)
+                           :     :- * Project (35)
+                           :     :  +- * BroadcastHashJoin Inner BuildRight (34)
+                           :     :     :- * Project (32)
+                           :     :     :  +- * Filter (31)
+                           :     :     :     +- * ColumnarToRow (30)
+                           :     :     :        +- Scan parquet default.web_sales (29)
+                           :     :     +- ReusedExchange (33)
+                           :     +- ReusedExchange (36)
+                           +- BroadcastExchange (43)
+                              +- * Project (42)
+                                 +- * Filter (41)
+                                    +- * ColumnarToRow (40)
+                                       +- Scan parquet default.time_dim (39)
 
 
 (1) Scan parquet default.web_sales
-Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Output [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
 (2) ColumnarToRow [codegen id : 4]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
 (3) Filter [codegen id : 4]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
 
-(4) Scan parquet default.web_page
-Output [2]: [wp_web_page_sk#4, wp_char_count#5]
+(4) Project [codegen id : 4]
+Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
+
+(5) Scan parquet default.web_page
+Output [2]: [wp_web_page_sk#5, wp_char_count#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
 PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
 ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
 
-(5) ColumnarToRow [codegen id : 1]
-Input [2]: [wp_web_page_sk#4, wp_char_count#5]
+(6) ColumnarToRow [codegen id : 1]
+Input [2]: [wp_web_page_sk#5, wp_char_count#6]
 
-(6) Filter [codegen id : 1]
-Input [2]: [wp_web_page_sk#4, wp_char_count#5]
-Condition : (((isnotnull(wp_char_count#5) AND (wp_char_count#5 >= 5000)) AND (wp_char_count#5 <= 5200)) AND isnotnull(wp_web_page_sk#4))
+(7) Filter [codegen id : 1]
+Input [2]: [wp_web_page_sk#5, wp_char_count#6]
+Condition : (((isnotnull(wp_char_count#6) AND (wp_char_count#6 >= 5000)) AND (wp_char_count#6 <= 5200)) AND isnotnull(wp_web_page_sk#5))
 
-(7) Project [codegen id : 1]
-Output [1]: [wp_web_page_sk#4]
-Input [2]: [wp_web_page_sk#4, wp_char_count#5]
+(8) Project [codegen id : 1]
+Output [1]: [wp_web_page_sk#5]
+Input [2]: [wp_web_page_sk#5, wp_char_count#6]
 
-(8) BroadcastExchange
-Input [1]: [wp_web_page_sk#4]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#6]
+(9) BroadcastExchange
+Input [1]: [wp_web_page_sk#5]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
 
-(9) BroadcastHashJoin [codegen id : 4]
+(10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_web_page_sk#3]
-Right keys [1]: [wp_web_page_sk#4]
+Right keys [1]: [wp_web_page_sk#5]
 Join condition: None
 
-(10) Project [codegen id : 4]
+(11) Project [codegen id : 4]
 Output [2]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2]
-Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#4]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#5]
 
-(11) Scan parquet default.household_demographics
-Output [2]: [hd_demo_sk#7, hd_dep_count#8]
+(12) Scan parquet default.household_demographics
+Output [2]: [hd_demo_sk#8, hd_dep_count#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
 PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
-(12) ColumnarToRow [codegen id : 2]
-Input [2]: [hd_demo_sk#7, hd_dep_count#8]
+(13) ColumnarToRow [codegen id : 2]
+Input [2]: [hd_demo_sk#8, hd_dep_count#9]
 
-(13) Filter [codegen id : 2]
-Input [2]: [hd_demo_sk#7, hd_dep_count#8]
-Condition : ((isnotnull(hd_dep_count#8) AND (hd_dep_count#8 = 6)) AND isnotnull(hd_demo_sk#7))
+(14) Filter [codegen id : 2]
+Input [2]: [hd_demo_sk#8, hd_dep_count#9]
+Condition : ((isnotnull(hd_dep_count#9) AND (hd_dep_count#9 = 6)) AND isnotnull(hd_demo_sk#8))
 
-(14) Project [codegen id : 2]
-Output [1]: [hd_demo_sk#7]
-Input [2]: [hd_demo_sk#7, hd_dep_count#8]
+(15) Project [codegen id : 2]
+Output [1]: [hd_demo_sk#8]
+Input [2]: [hd_demo_sk#8, hd_dep_count#9]
 
-(15) BroadcastExchange
-Input [1]: [hd_demo_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#9]
+(16) BroadcastExchange
+Input [1]: [hd_demo_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
 
-(16) BroadcastHashJoin [codegen id : 4]
+(17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_ship_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#7]
+Right keys [1]: [hd_demo_sk#8]
 Join condition: None
 
-(17) Project [codegen id : 4]
+(18) Project [codegen id : 4]
 Output [1]: [ws_sold_time_sk#1]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#7]
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#8]
 
-(18) Scan parquet default.time_dim
-Output [2]: [t_time_sk#10, t_hour#11]
+(19) Scan parquet default.time_dim
+Output [2]: [t_time_sk#11, t_hour#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
-(19) ColumnarToRow [codegen id : 3]
-Input [2]: [t_time_sk#10, t_hour#11]
+(20) ColumnarToRow [codegen id : 3]
+Input [2]: [t_time_sk#11, t_hour#12]
 
-(20) Filter [codegen id : 3]
-Input [2]: [t_time_sk#10, t_hour#11]
-Condition : (((isnotnull(t_hour#11) AND (t_hour#11 >= 8)) AND (t_hour#11 <= 9)) AND isnotnull(t_time_sk#10))
+(21) Filter [codegen id : 3]
+Input [2]: [t_time_sk#11, t_hour#12]
+Condition : (((isnotnull(t_hour#12) AND (t_hour#12 >= 8)) AND (t_hour#12 <= 9)) AND isnotnull(t_time_sk#11))
 
-(21) Project [codegen id : 3]
-Output [1]: [t_time_sk#10]
-Input [2]: [t_time_sk#10, t_hour#11]
+(22) Project [codegen id : 3]
+Output [1]: [t_time_sk#11]
+Input [2]: [t_time_sk#11, t_hour#12]
 
-(22) BroadcastExchange
-Input [1]: [t_time_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+(23) BroadcastExchange
+Input [1]: [t_time_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
 
-(23) BroadcastHashJoin [codegen id : 4]
+(24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_sold_time_sk#1]
-Right keys [1]: [t_time_sk#10]
+Right keys [1]: [t_time_sk#11]
 Join condition: None
 
-(24) Project [codegen id : 4]
+(25) Project [codegen id : 4]
 Output: []
-Input [2]: [ws_sold_time_sk#1, t_time_sk#10]
+Input [2]: [ws_sold_time_sk#1, t_time_sk#11]
 
-(25) HashAggregate [codegen id : 4]
+(26) HashAggregate [codegen id : 4]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#13]
-Results [1]: [count#14]
+Aggregate Attributes [1]: [count#14]
+Results [1]: [count#15]
 
-(26) Exchange
-Input [1]: [count#14]
-Arguments: SinglePartition, true, [id=#15]
+(27) Exchange
+Input [1]: [count#15]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#16]
 
-(27) HashAggregate [codegen id : 5]
-Input [1]: [count#14]
+(28) HashAggregate [codegen id : 5]
+Input [1]: [count#15]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#16]
-Results [1]: [count(1)#16 AS amc#17]
+Aggregate Attributes [1]: [count(1)#17]
+Results [1]: [count(1)#17 AS amc#18]
 
-(28) Scan parquet default.web_sales
-Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+(29) Scan parquet default.web_sales
+Output [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_sales]
 PushedFilters: [IsNotNull(ws_ship_hdemo_sk), IsNotNull(ws_sold_time_sk), IsNotNull(ws_web_page_sk)]
 ReadSchema: struct<ws_sold_time_sk:int,ws_ship_hdemo_sk:int,ws_web_page_sk:int>
 
-(29) ColumnarToRow [codegen id : 9]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+(30) ColumnarToRow [codegen id : 9]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
-(30) Filter [codegen id : 9]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+(31) Filter [codegen id : 9]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 Condition : ((isnotnull(ws_ship_hdemo_sk#2) AND isnotnull(ws_sold_time_sk#1)) AND isnotnull(ws_web_page_sk#3))
 
-(31) ReusedExchange [Reuses operator id: 8]
-Output [1]: [wp_web_page_sk#4]
+(32) Project [codegen id : 9]
+Output [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_date_sk#4]
 
-(32) BroadcastHashJoin [codegen id : 9]
+(33) ReusedExchange [Reuses operator id: 9]
+Output [1]: [wp_web_page_sk#5]
+
+(34) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ws_web_page_sk#3]
-Right keys [1]: [wp_web_page_sk#4]
+Right keys [1]: [wp_web_page_sk#5]
 Join condition: None
 
-(33) Project [codegen id : 9]
+(35) Project [codegen id : 9]
 Output [2]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2]
-Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#4]
+Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page_sk#5]
 
-(34) ReusedExchange [Reuses operator id: 15]
-Output [1]: [hd_demo_sk#7]
+(36) ReusedExchange [Reuses operator id: 16]
+Output [1]: [hd_demo_sk#8]
 
-(35) BroadcastHashJoin [codegen id : 9]
+(37) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ws_ship_hdemo_sk#2]
-Right keys [1]: [hd_demo_sk#7]
+Right keys [1]: [hd_demo_sk#8]
 Join condition: None
 
-(36) Project [codegen id : 9]
+(38) Project [codegen id : 9]
 Output [1]: [ws_sold_time_sk#1]
-Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#7]
+Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#8]
 
-(37) Scan parquet default.time_dim
-Output [2]: [t_time_sk#10, t_hour#11]
+(39) Scan parquet default.time_dim
+Output [2]: [t_time_sk#11, t_hour#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
 PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
-(38) ColumnarToRow [codegen id : 8]
-Input [2]: [t_time_sk#10, t_hour#11]
+(40) ColumnarToRow [codegen id : 8]
+Input [2]: [t_time_sk#11, t_hour#12]
 
-(39) Filter [codegen id : 8]
-Input [2]: [t_time_sk#10, t_hour#11]
-Condition : (((isnotnull(t_hour#11) AND (t_hour#11 >= 19)) AND (t_hour#11 <= 20)) AND isnotnull(t_time_sk#10))
+(41) Filter [codegen id : 8]
+Input [2]: [t_time_sk#11, t_hour#12]
+Condition : (((isnotnull(t_hour#12) AND (t_hour#12 >= 19)) AND (t_hour#12 <= 20)) AND isnotnull(t_time_sk#11))
 
-(40) Project [codegen id : 8]
-Output [1]: [t_time_sk#10]
-Input [2]: [t_time_sk#10, t_hour#11]
+(42) Project [codegen id : 8]
+Output [1]: [t_time_sk#11]
+Input [2]: [t_time_sk#11, t_hour#12]
 
-(41) BroadcastExchange
-Input [1]: [t_time_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+(43) BroadcastExchange
+Input [1]: [t_time_sk#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
 
-(42) BroadcastHashJoin [codegen id : 9]
+(44) BroadcastHashJoin [codegen id : 9]
 Left keys [1]: [ws_sold_time_sk#1]
-Right keys [1]: [t_time_sk#10]
+Right keys [1]: [t_time_sk#11]
 Join condition: None
 
-(43) Project [codegen id : 9]
+(45) Project [codegen id : 9]
 Output: []
-Input [2]: [ws_sold_time_sk#1, t_time_sk#10]
+Input [2]: [ws_sold_time_sk#1, t_time_sk#11]
 
-(44) HashAggregate [codegen id : 9]
+(46) HashAggregate [codegen id : 9]
 Input: []
 Keys: []
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#19]
-Results [1]: [count#20]
+Aggregate Attributes [1]: [count#20]
+Results [1]: [count#21]
 
-(45) Exchange
-Input [1]: [count#20]
-Arguments: SinglePartition, true, [id=#21]
+(47) Exchange
+Input [1]: [count#21]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#22]
 
-(46) HashAggregate [codegen id : 10]
-Input [1]: [count#20]
+(48) HashAggregate [codegen id : 10]
+Input [1]: [count#21]
 Keys: []
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#22]
-Results [1]: [count(1)#22 AS pmc#23]
+Aggregate Attributes [1]: [count(1)#23]
+Results [1]: [count(1)#23 AS pmc#24]
 
-(47) BroadcastExchange
-Input [1]: [pmc#23]
-Arguments: IdentityBroadcastMode, [id=#24]
+(49) BroadcastExchange
+Input [1]: [pmc#24]
+Arguments: IdentityBroadcastMode, [id=#25]
 
-(48) BroadcastNestedLoopJoin
+(50) BroadcastNestedLoopJoin
 Join condition: None
 
-(49) Project [codegen id : 11]
-Output [1]: [CheckOverflow((promote_precision(cast(amc#17 as decimal(15,4))) / promote_precision(cast(pmc#23 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#25]
-Input [2]: [amc#17, pmc#23]
+(51) Project [codegen id : 11]
+Output [1]: [CheckOverflow((promote_precision(cast(amc#18 as decimal(15,4))) / promote_precision(cast(pmc#24 as decimal(15,4)))), DecimalType(35,20), true) AS am_pm_ratio#26]
+Input [2]: [amc#18, pmc#24]
 
-(50) TakeOrderedAndProject
-Input [1]: [am_pm_ratio#25]
-Arguments: 100, [am_pm_ratio#25 ASC NULLS FIRST], [am_pm_ratio#25]
+(52) Exchange
+Input [1]: [am_pm_ratio#26]
+Arguments: rangepartitioning(am_pm_ratio#26 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#27]
+
+(53) Sort [codegen id : 12]
+Input [1]: [am_pm_ratio#26]
+Arguments: [am_pm_ratio#26 ASC NULLS FIRST], true, 0
 

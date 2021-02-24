@@ -68,7 +68,7 @@ case class OrcPartitionReaderFactory(
   }
 
   private def pushDownPredicates(filePath: Path, conf: Configuration): Unit = {
-    if (orcFilterPushDown) {
+    if (orcFilterPushDown && filters.nonEmpty) {
       OrcUtils.readCatalystSchema(filePath, conf, ignoreCorruptFiles).foreach { fileSchema =>
         OrcFilters.createFilter(fileSchema, filters).foreach { f =>
           OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)

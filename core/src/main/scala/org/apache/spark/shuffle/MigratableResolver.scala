@@ -37,6 +37,7 @@ trait MigratableResolver {
 
   /**
    * Write a provided shuffle block as a stream. Used for block migrations.
+   * Up to the implementation to support STORAGE_REMOTE_SHUFFLE_MAX_DISK
    */
   def putShuffleBlockAsStream(blockId: BlockId, serializerManager: SerializerManager):
       StreamCallbackWithID

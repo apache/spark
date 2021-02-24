@@ -17,13 +17,18 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import scala.util.Try
+
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Benchmark to measure TPCDS query performance.
@@ -38,7 +43,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
  *      Results will be written to "benchmarks/TPCDSQueryBenchmark-results.txt".
  * }}}
  */
-object TPCDSQueryBenchmark extends SqlBasedBenchmark {
+object TPCDSQueryBenchmark extends SqlBasedBenchmark with Logging {
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
@@ -60,9 +65,20 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
     "web_returns", "web_site", "reason", "call_center", "warehouse", "ship_mode", "income_band",
     "time_dim", "web_page")
 
-  def setupTables(dataLocation: String): Map[String, Long] = {
+  def setupTables(dataLocation: String, createTempView: Boolean): Map[String, Long] = {
     tables.map { tableName =>
-      spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
+      if (createTempView) {
+        spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
+      } else {
+        spark.sql(s"DROP TABLE IF EXISTS $tableName")
+        spark.catalog.createTable(tableName, s"$dataLocation/$tableName", "parquet")
+        // Recover partitions but don't fail if a table is not partitioned.
+        Try {
+          spark.sql(s"ALTER TABLE $tableName RECOVER PARTITIONS")
+        }.getOrElse {
+          logInfo(s"Recovering partitions of table $tableName failed")
+        }
+      }
       tableName -> spark.table(tableName).count()
     }.toMap
   }
@@ -146,7 +162,25 @@ object TPCDSQueryBenchmark extends SqlBasedBenchmark {
         s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
     }
 
-    val tableSizes = setupTables(benchmarkArgs.dataLocation)
+    val tableSizes = setupTables(benchmarkArgs.dataLocation,
+      createTempView = !benchmarkArgs.cboEnabled)
+    if (benchmarkArgs.cboEnabled) {
+      spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.PLAN_STATS_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.JOIN_REORDER_ENABLED.key}=true")
+      spark.sql(s"SET ${SQLConf.HISTOGRAM_ENABLED.key}=true")
+
+      // Analyze all the tables before running TPCDS queries
+      val startTime = System.nanoTime()
+      tables.foreach { tableName =>
+        spark.sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR ALL COLUMNS")
+      }
+      logInfo("The elapsed time to analyze all the tables is " +
+        s"${(System.nanoTime() - startTime) / NANOS_PER_SECOND.toDouble} seconds")
+    } else {
+      spark.sql(s"SET ${SQLConf.CBO_ENABLED.key}=false")
+    }
+
     runTpcdsQueries(queryLocation = "tpcds", queries = queriesV1_4ToRun, tableSizes)
     runTpcdsQueries(queryLocation = "tpcds-v2.7.0", queries = queriesV2_7ToRun, tableSizes,
       nameSuffix = nameSuffixForQueriesV2_7)

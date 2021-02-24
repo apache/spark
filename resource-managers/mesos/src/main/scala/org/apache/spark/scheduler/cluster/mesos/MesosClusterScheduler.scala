@@ -614,7 +614,7 @@ private[spark] class MesosClusterScheduler(
     val (remainingResources, cpuResourcesToUse) =
       partitionResources(offer.remainingResources, "cpus", desc.cores)
     val (finalResources, memResourcesToUse) =
-      partitionResources(remainingResources.asJava, "mem", desc.mem)
+      partitionResources(remainingResources.asJava, "mem", driverContainerMemory(desc))
     offer.remainingResources = finalResources.asJava
 
     val appName = desc.conf.get("spark.app.name")
@@ -646,7 +646,7 @@ private[spark] class MesosClusterScheduler(
       tasks: mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]): Unit = {
     for (submission <- candidates) {
       val driverCpu = submission.cores
-      val driverMem = submission.mem
+      val driverMem = driverContainerMemory(submission)
       val driverConstraints =
         parseConstraintString(submission.conf.get(config.DRIVER_CONSTRAINTS))
       logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem, " +

@@ -35,7 +35,7 @@ case class DropTableExec(
   override def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
       invalidateCache()
-      catalog.dropTable(ident, purge)
+      if (purge) catalog.purgeTable(ident) else catalog.dropTable(ident)
     } else if (!ifExists) {
       throw new NoSuchTableException(ident)
     }
