@@ -60,7 +60,8 @@ private[spark] object DependencyUtils extends Logging {
    * @return Tuple value of parameter `transitive` and `exclude` value.
    *
    *         1. transitive: whether to download dependency jar of Ivy URI, default value is true
-   *            and this parameter value is case-insensitive. Invalid value will be treat as false.
+   *            and this parameter value is case-insensitive. This mimics Hive's behaviour for
+   *            parsing the transitive parameter. Invalid value will be treat as false.
    *            Example: Input:  exclude=org.mortbay.jetty:jetty&transitive=true
    *            Output:  true
    *
