@@ -70,6 +70,17 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
+  protected def checkAnalysisWithoutViewWrapper(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true): Unit = {
+    checkAnalysisWithTransform(inputPlan, expectedPlan, caseSensitive) { plan =>
+      plan transformUp {
+        case v: View if v.isDataFrameTempView => v.child
+      }
+    }
+  }
+
   protected override def comparePlans(
       plan1: LogicalPlan,
       plan2: LogicalPlan,

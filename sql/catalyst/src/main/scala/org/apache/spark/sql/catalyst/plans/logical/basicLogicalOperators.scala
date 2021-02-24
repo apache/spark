@@ -446,8 +446,10 @@ case class InsertIntoDir(
 /**
  * A container for holding the view description(CatalogTable) and info whether the view is temporary
  * or not. If the view description is available, the child should be a logical plan parsed from the
- * `CatalogTable.viewText`. Otherwise, the view is a temporary one created from a dataframe; in this
- * case, the child must be already resolved.
+ * `CatalogTable.viewText`. Otherwise, the view is a temporary one created from a dataframe and the
+ * view description should contain a `VIEW_CREATED_FROM_DATAFRAME` property; in this case, the child
+ * must be already resolved.
+ *
  * This operator will be removed at the end of analysis stage.
  *
  * @param desc A view description(CatalogTable) that provides necessary information to resolve the

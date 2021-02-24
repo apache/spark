@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, Pe
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -200,6 +200,7 @@ case class CreateViewCommand(
       rawTempView: Option[LogicalPlan],
       aliasedPlan: LogicalPlan): Boolean = rawTempView match {
     case Some(TemporaryViewRelation(_, Some(p))) => p.sameResult(aliasedPlan)
+    case Some(p) => p.sameResult(aliasedPlan)
     case _ => false
   }
 
@@ -500,8 +501,8 @@ object ViewHelper {
       path: Seq[TableIdentifier],
       viewIdent: TableIdentifier): Unit = {
     plan match {
-      case v @ View(desc, _, _) =>
-        val ident = desc.identifier
+      case v: View =>
+        val ident = v.desc.identifier
         val newPath = path :+ ident
         // If the table identifier equals to the `viewIdent`, current view node is the same with
         // the altered view. We detect a view reference cycle, should throw an AnalysisException.
@@ -558,8 +559,9 @@ object ViewHelper {
       catalog: SessionCatalog, child: LogicalPlan): (Seq[Seq[String]], Seq[String]) = {
     def collectTempViews(child: LogicalPlan): Seq[Seq[String]] = {
       child.flatMap {
-        case s @ SubqueryAlias(_, view: View) if view.isTempView =>
-          Seq(s.identifier.qualifier :+ s.identifier.name)
+        case view: View if view.isTempView =>
+          val ident = view.desc.identifier
+          Seq(ident.database.toSeq :+ ident.table)
         case plan => plan.expressions.flatMap(_.flatMap {
           case e: SubqueryExpression => collectTempViews(e.plan)
           case _ => Seq.empty

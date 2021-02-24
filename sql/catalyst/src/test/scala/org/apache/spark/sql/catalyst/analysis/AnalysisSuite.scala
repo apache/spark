@@ -49,17 +49,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
 
-  private def checkAnalysisWithTempViewEliminated(
-      inputPlan: LogicalPlan,
-      expectedPlan: LogicalPlan,
-      caseSensitive: Boolean = true): Unit = {
-    checkAnalysisWithTransform(inputPlan, expectedPlan, caseSensitive) { plan =>
-      plan transformUp {
-        case v: View if v.isDataFrameTempView => v.child
-      }
-    }
-  }
-
   test("fail for unresolved plan") {
     intercept[AnalysisException] {
       // `testRelation` does not have column `b`.
@@ -106,7 +95,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("a")), testRelation),
       Project(testRelation.output, testRelation))
 
-    checkAnalysisWithTempViewEliminated(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
@@ -116,13 +105,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
-    checkAnalysisWithTempViewEliminated(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysisWithTempViewEliminated(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
@@ -214,10 +203,10 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
-    checkAnalysisWithTempViewEliminated(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
-    checkAnalysisWithTempViewEliminated(
+    checkAnalysisWithoutViewWrapper(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
+    checkAnalysisWithoutViewWrapper(
       UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
-    checkAnalysisWithTempViewEliminated(
+    checkAnalysisWithoutViewWrapper(
       UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }
 
