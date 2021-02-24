@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkException
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -40,17 +41,31 @@ object FileStreamSink extends Logging {
    * be read.
    */
   def hasMetadata(path: Seq[String], hadoopConf: Configuration, sqlConf: SQLConf): Boolean = {
-    path match {
-      case Seq(singlePath) =>
-        val hdfsPath = new Path(singlePath)
-        val fs = hdfsPath.getFileSystem(hadoopConf)
-        if (fs.isDirectory(hdfsPath)) {
-          val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
-          fs.exists(metadataPath)
-        } else {
-          false
-        }
-      case _ => false
+    if (sqlConf.getConf(SQLConf.FILE_SINK_FORMAT_CHECK_ENABLED)) {
+      path match {
+        case Seq(singlePath) =>
+          val hdfsPath = new Path(singlePath)
+          try {
+            val fs = hdfsPath.getFileSystem(hadoopConf)
+            if (fs.isDirectory(hdfsPath)) {
+              val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
+              fs.exists(metadataPath)
+            } else {
+              false
+            }
+          } catch {
+            case NonFatal(e) if SparkHadoopUtil.get.isGlobPath(hdfsPath) =>
+              // If this is a glob path, the failure is likely because the path is too long.
+              // Since file streaming sink doesn't support glob path, we can assume there is no
+              // metadata directory.
+              logWarning(s"Assume no metadata directory. Error while looking for " +
+                s"metadata directory using a glob path: ${e.getMessage}")
+              false
+          }
+        case _ => false
+      }
+    } else {
+      false
     }
   }
 
