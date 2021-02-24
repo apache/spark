@@ -52,12 +52,15 @@ object DateTimeUtils {
   val TIME_ZONE_ID = "(\\+|\\-)\\d:".r
 
   def getZoneId(timeZoneId: String): ZoneId = {
-    var id = timeZoneId
+    // To support (+|-)h:mm ZoneOffset format
+    // Because (+|-)h:mm string is unsupported format in 3.0
     if (TIME_ZONE_ID.findFirstIn(timeZoneId).isDefined) {
-      id = id.replace("+", "+0")
+      val id = timeZoneId.replace("+", "+0")
       .replace("-", "-0")
+      ZoneId.of(id, ZoneId.SHORT_IDS)
+    } else {
+      ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
     }
-    ZoneId.of(id, ZoneId.SHORT_IDS)
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
