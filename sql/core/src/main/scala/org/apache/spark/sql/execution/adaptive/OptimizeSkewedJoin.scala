@@ -24,7 +24,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -48,13 +48,10 @@ import org.apache.spark.sql.internal.SQLConf
  * (L2-1, R2), (L2-2, R2),
  * (L3, R3-1), (L3, R3-2),
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
- *
- * Note that, when this rule is enabled, it also coalesces non-skewed partitions like
- * `CoalesceShufflePartitions` does.
  */
-object OptimizeSkewedJoin extends CustomShuffleReaderRule {
-
-  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+class OptimizeSkewedJoin(inputPlan: SparkPlan) extends CustomShuffleReaderRule {
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
+    OptimizeSkewedJoin.supportedShuffleOrigins
 
   private val ensureRequirements = EnsureRequirements
 
@@ -146,7 +143,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
   }
 
   /*
-   * This method aim to optimize the skewed join with the following steps:
+   * This method aims to optimize the skewed join with the following steps:
    * 1. Check whether the shuffle partition is skewed based on the median size
    *    and the skewed partition threshold in origin smj.
    * 2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
@@ -158,10 +155,15 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
    *    3 tasks separately.
    */
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
+    /* Check isSkewJoin below.  Consider Case III with Sh5 above SMJ1 and
+     Sh6 above SMJ2.  As transformUp() runs in apply() will see Sh5 first and
+     call optimizeSkewJoin() to handle SMJ1.  transformUp will then see Sh6,
+     so optimizeSkewJoin() will see SMJ1 again.
+     todo: Perhaps better option is to use TreeNode.tags to make what's already been visited */
     case smj @ SortMergeJoinExec(_, _, joinType, _,
         s1 @ SortExec(_, _, ShuffleStage(left: ShuffleStageInfo), _),
         s2 @ SortExec(_, _, ShuffleStage(right: ShuffleStageInfo), _), _)
-        if supportedJoinTypes.contains(joinType) =>
+      if !smj.isSkewJoin && supportedJoinTypes.contains(joinType) =>
       assert(left.partitionsWithSizes.length == right.partitionsWithSizes.length)
       val numPartitions = left.partitionsWithSizes.length
       // We use the median size of the original shuffle partitions to detect skewed partitions.
@@ -251,59 +253,129 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       }
   }
 
+  /**
+   * A potential stage is from Exchange down.  Actual [[QueryStageExec]] nodes are created
+   * by [[AdaptiveSparkPlanExec.newQueryStage]] bounded by previously created [[QueryStageExec]]
+   * nodes below.
+   * Todo: need better way to identify which join the log msgs below refer to.  Tags?
+   */
+  private def handlePotentialQueryStage(plan: SparkPlan): SparkPlan = {
+    val shuffleStages = collectShuffleStages(plan)
+    val s = ExplainUtils.getAQELogPrefix(shuffleStages)
+
+    if (shuffleStages.length != 2 && !conf.adaptiveForceIfShuffle) {
+      /* Consider Case II.  Shuffle above SMJ1.  We should see 3 SQSE nodes but
+       with adaptiveForceIfShuffle() we should be able to add a new shuffle
+       above SMJ2 to enable skew mitigation of SMJ2.  W/o ability to add a new
+       shuffle skew mitigation is still possible in some cases - to be handled later.
+
+       Add a test for this.
+       See test("skew in deeply nested join - test ShuffleAddedException") and
+       add a similar test with just 2 joins */
+      logInfo(s"OptimizeSkewedJoin: rule is not applied since" +
+        s" shuffleStages.length=${shuffleStages.length} != 2 and " +
+        s"${SQLConf.ADAPTIVE_FORCE_IF_SHUFFLE.key}=false; $s")
+      return plan
+    }
+    val numShufflesBefore = plan.collect {
+      case e: ShuffleExchangeExec => e
+    }.length
+    val mitigatedPlan = optimizeSkewJoin(plan)
+    if (mitigatedPlan eq plan) {
+      return plan
+    }
+    val executedPlan = ensureRequirements.apply(mitigatedPlan)
+    val numNewShuffles = executedPlan.collect {
+      case e: ShuffleExchangeExec => e
+    }.length - numShufflesBefore
+    if(numNewShuffles > 0) {
+      if (conf.adaptiveForceIfShuffle) {
+        logInfo(s"OptimizeSkewedJoin: rule is applied. " +
+          s"$numNewShuffles additional shuffles will be introduced; $s")
+        executedPlan // make sure to return plan with new shuffles
+      } else {
+        logInfo(s"OptimizeSkewedJoin: rule is not applied due" +
+          s" to $numNewShuffles additional shuffles will be introduced; $s")
+        plan
+      }
+    } else {
+      executedPlan
+    }
+  }
+
+  def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
+    case stage: ShuffleQueryStageExec => Seq(stage)
+    case _ => plan.children.flatMap(collectShuffleStages)
+  }
+  /**
+   * Now this runs as part of queryStagePreparationRules() which means it runs over the whole plan
+   * which may have any number of ExchangeExec nodes, i.e. multiple "query stages"
+   *
+   * This runs optimizeSkewJoin() on each "query stage" separately so that
+   * 1. the application of skew mitigation to each join can be considered separately
+   *   Consider Case IV - we can mitigate SMJ2 w/o new shuffle but not SMJ3 so we want to
+   *   accept/reject each join separately - handlePotentialQueryStage()
+   * 2. so that stages with > 1 join can be mitigated w/o a new shuffle (in some cases, for
+   * example, Case II, where Sh1 has skew, both joins join on the the skewed attribute)
+   *
+   * Case I
+   *    SMJ
+   * Sh1  Sh2
+   *
+   * Case II
+   *         SMJ1
+   *    SMJ2       Sh3
+   * Sh1   Sh2
+   *
+   * Case III
+   *        SMJ1
+   *   SMJ2      SMJ3
+   * Sh1  Sh2  Sh3   Sh4
+   *
+   * Case IV
+   *           SMJ1
+   *       Sh3       SMJ3
+   *     SMJ2      Sh1   Sh2
+   *  Sh1   Sh2
+   */
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.getConf(SQLConf.SKEW_JOIN_ENABLED)) {
       return plan
     }
-
-    def collectShuffleStages(plan: SparkPlan): Seq[ShuffleQueryStageExec] = plan match {
-      case stage: ShuffleQueryStageExec => Seq(stage)
-      case _ => plan.children.flatMap(collectShuffleStages)
+    var numExchanges = 0
+    val newPlan = plan.transformUp {
+      case exch: Exchange =>
+        numExchanges += + 1
+        handlePotentialQueryStage(exch)
     }
-
-    val shuffleStages = collectShuffleStages(plan)
-    val s = ExplainUtils.getAQELogPrefix(shuffleStages)
-
-    if (shuffleStages.length == 2) {
-      // When multi table join, there will be too many complex combination to consider.
-      // Currently we only handle 2 table join like following use case.
-      // SMJ
-      //   Sort
-      //     Shuffle
-      //   Sort
-      //     Shuffle
-      val optimizedPlan = optimizeSkewJoin(plan)
-      if(optimizedPlan eq plan) {
-        return plan
+    if (numExchanges == 0) {
+      /* This is the final "stage".
+      Check if there are any output requirements based on inputPlan */
+      // below mimics AdaptiveSparkPlanExec.finalStageOptimizerRules
+      val origins = inputPlan.collect {
+        case s: ShuffleExchangeLike => s.shuffleOrigin
       }
-      val executedPlan = ensureRequirements.apply(optimizedPlan)
-      val numShuffles = executedPlan.collect {
-        case e: ShuffleExchangeExec => e
-      }.length
-
-      if (numShuffles > 0 && !conf.adaptiveForceIfShuffle) {
-        logInfo(s"OptimizeSkewedJoin: rule is not applied due" +
-          s" to additional shuffles will be introduced. numShuffles=$numShuffles; $s")
-        plan
+      if (origins.forall(supportedShuffleOrigins.contains)) {
+        // todo: this can be improved - if we are allowed to add a new shuffle, we
+        // can mitigate final stage but make the shuffle match what the
+        // inputPlan wants.
+        handlePotentialQueryStage(plan)
       } else {
-        logInfo(s"OptimizeSkewedJoin: rule is applied." +
-          s" Additional shuffles may be introduced. numShuffles=$numShuffles; $s")
-        executedPlan
+        plan
       }
     } else {
-      if (shuffleStages.length > 2) {
-        logInfo(s"OptimizeSkewedJoin: rule is not applied since" +
-          s" shuffleStages.length=${shuffleStages.length} <> 2; $s")
-      }
-      plan
+      newPlan
     }
   }
+}
+private object OptimizeSkewedJoin {
+  val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 }
 
 private object ShuffleStage {
   def unapply(plan: SparkPlan): Option[ShuffleStageInfo] = plan match {
     case s: ShuffleQueryStageExec
-        if s.mapStats.isDefined &&
+        if s.isMaterialized && s.mapStats.isDefined &&
           OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
       val mapStats = s.mapStats.get
       val sizes = mapStats.bytesByPartitionId
@@ -313,7 +385,7 @@ private object ShuffleStage {
       Some(ShuffleStageInfo(s, mapStats, partitions))
 
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs)
-        if s.mapStats.isDefined && partitionSpecs.nonEmpty &&
+        if s.isMaterialized && s.mapStats.isDefined && partitionSpecs.nonEmpty &&
           OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
       val mapStats = s.mapStats.get
       val sizes = mapStats.bytesByPartitionId

@@ -142,6 +142,7 @@ abstract class QueryStageExec extends LeafExecNode {
     plan.generateTreeString(
       depth + 1, lastChildren :+ true, append, verbose, "", false, maxFields, printNodeId, indent)
   }
+  private[execution] def isMaterialized = resultOption.get().isDefined
 }
 
 /**
@@ -184,9 +185,9 @@ case class ShuffleQueryStageExec(
    * this method returns None, as there is no map statistics.
    */
   def mapStats: Option[MapOutputStatistics] = {
-    assert(resultOption.get().isDefined, s"${getClass.getSimpleName} should already be ready")
+    assert(isMaterialized, s"${getClass.getSimpleName} should already be ready")
     val stats = resultOption.get().get.asInstanceOf[MapOutputStatistics]
-    Option(stats)
+    Option(stats) // Note: Option(null) eq None
   }
 
   override def getRuntimeStatistics: Statistics = shuffle.runtimeStatistics

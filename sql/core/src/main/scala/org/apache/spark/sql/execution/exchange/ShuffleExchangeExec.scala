@@ -120,7 +120,7 @@ case class ShuffleExchangeExec(
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
   @transient override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (inputRDD.getNumPartitions == 0) {
-      Future.successful(null)
+      Future.successful(null) // Option(null) eq None
     } else {
       sparkContext.submitMapStage(shuffleDependency)
     }

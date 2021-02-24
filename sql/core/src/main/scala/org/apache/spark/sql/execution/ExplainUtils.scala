@@ -263,8 +263,10 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
     val v = "(ShuffleId,QueryStageId,shuffle origin:): " +
       shuffleStages.map(s => {
         // RDD with no partitions (e.g. SparkContext.emptyRDD) has not mapStats even
-        // after stage materialization
-        val shuffleId = if (s.mapStats.isDefined) s.mapStats.get.shuffleId else -1
+        // after stage materialization.  Also Option(null) eq None ....
+        // see ShuffleExchangeExec.mapOutputStatisticsFuture
+        val shuffleId =
+          if (s.isMaterialized && s.mapStats.isDefined) s.mapStats.get.shuffleId else -1
         s"($shuffleId,${s.id},${s.shuffle.shuffleOrigin})"
       }).mkString(",")
     v

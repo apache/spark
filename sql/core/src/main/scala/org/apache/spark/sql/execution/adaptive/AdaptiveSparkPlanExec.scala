@@ -91,14 +91,18 @@ case class AdaptiveSparkPlanExec(
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules // can be set when creating SparkSession
 
+  private def queryStagePreparationRules2: Seq[Rule[SparkPlan]] = Seq(
+    new OptimizeSkewedJoin(inputPlan)
+  )
+
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     ReuseAdaptiveSubquery(context.subqueryCache),
+    // todo: fix this to run after skew join - none of the tests fail...
     CoalesceShufflePartitions(context.session),
     // The following two rules need to make use of 'CustomShuffleReaderExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`. So they must be executed after it.
-    OptimizeSkewedJoin,
     OptimizeLocalShuffleReader
   )
 
@@ -116,6 +120,13 @@ case class AdaptiveSparkPlanExec(
   // from the final stage, depending on the presence and properties of repartition operators.
   private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
     val origins = inputPlan.collect {
+      /* Here the plan is before EnsureRequirements so the only shuffles in it should
+      be those from explicit user request.
+      why walk the whole plan - we just want top level shuffle, no?
+      The top level one controls data layout but should be OK to optimize away if output matches
+      If skew mitigation is allowed to add new shuffles, in the worst case it will reintroduce
+      a new shuffle where one got optimized away.  If it's not allowed, it won't mitigate.
+      Right ? */
       case s: ShuffleExchangeLike => s.shuffleOrigin
     }
     val allRules = queryStageOptimizerRules ++ postStageCreationRules
@@ -236,9 +247,11 @@ case class AdaptiveSparkPlanExec(
         // plans are updated, we can clear the query stage list because at this point the two plans
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-        val (newPhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
+        val (newPhysicalPlan, newLogicalPlan, numOSJShuffles) = reOptimize(logicalPlan)
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-        val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
+        // todo: hack !!!
+        val newCost = SimpleCost(costEvaluator.evaluateCost(newPhysicalPlan)
+          .asInstanceOf[SimpleCost].value - numOSJShuffles)
         if (newCost < origCost ||
             (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
           logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
@@ -248,20 +261,7 @@ case class AdaptiveSparkPlanExec(
           stagesToReplace = Seq.empty[QueryStageExec]
         }
         // Now that some stages have finished, we can try creating new stages.
-        var continue = true
-        while (continue) {
-          try {
-            continue = false
-            result = createQueryStages(currentPhysicalPlan)
-          } catch {
-            case e: ShuffleAddedException =>
-              continue = true
-              val z = insertShuffle(e.sp, currentPhysicalPlan)
-              logOnLevel(s"Plan (new shuffle) changed from $currentPhysicalPlan to $z")
-              currentPhysicalPlan = z
-          }
-        }
-        result = handleFinalStageShuffle(result)
+        result = createQueryStages(currentPhysicalPlan)
       }
 
       // Run the final plan when there's no more unfinished stages.
@@ -275,100 +275,6 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
-  /**
-   * Check if [[queryStageOptimizerRules]] will introduce a new shuffle.
-   * @param result
-   * @return
-   */
-  private def handleFinalStageShuffle(result: CreateStageResult): CreateStageResult = {
-    if (!result.allChildStagesMaterialized) {
-      // this method is called right after createQueryStages() so allChildStagesMaterialized = true
-      // means no new QueryStageExec have been created so the remainder of the query is
-      // the "final" stage unless this method adds a new ShuffleExchangeExec
-      return result
-    }
-    // Run queryStageOptimizerRules to see if a new shuffle will be added.
-    // use queryStageOptimizerRules rather than finalStageOptimizerRules since if we do insert a
-    // new shuffle, we don't need to restrict the rules - whatever is above the shuffle will
-    // have to match the expected output
-    // but don't run createQueryStages() since there are no more Exchange nodes in the
-    // result.newPlan (yet)
-    val optimizedPlan = applyPhysicalRules(result.newPlan,
-      queryStageOptimizerRules,
-      Some((planChangeLogger, "AQE Query Stage Optimization (new shuffle)")))
-    val osp = findNewShuffleLocation(optimizedPlan, result.newPlan)
-    if (osp.isEmpty) {
-      return result
-    }
-    currentPhysicalPlan = insertShuffle(osp.get, result.newPlan)
-    logOnLevel(s"Plan changed from ${result.newPlan} to $currentPhysicalPlan")
-    // now that there is a new shuffle in the plan, create a QueryStage for it
-    // createQueryStages should never throw ShuffleAddedException since we just
-    // ran queryStageOptimizerRules and added the new shuffle in the plan so the
-    // QueryStage wraps that shuffle.
-    createQueryStages(currentPhysicalPlan)
-  }
-
-  private def insertShuffle(sp: NewShuffleLocation, plan: SparkPlan): SparkPlan = {
-    plan.transformUp {
-      case v: SparkPlan if v eq sp.origPlanParent =>
-        val se = createShuffle(v, sp.idx)
-        if (sp.origPlanParent.isInstanceOf[BinaryExecNode]) {
-          // todo: add test where this will be a BinaryExecNode
-          if (sp.idx == 0) {
-            v.withNewChildren(Seq(se, sp.origPlanParent.children(1)))
-          } else {
-            v.withNewChildren(Seq(sp.origPlanParent.children(0), se))
-          }
-        } else {
-          v.withNewChildren(Seq(se))
-        }
-      case o: SparkPlan => o
-    }
-  }
-
-  /**
-   * You cannot run OptimizeSkewedJoin twice - it barfs if it finds something
-   * other than CoalesceShufflePartitions so to maintain the overall flow, insert the equivalent
-   * of newShuffle in result.newPlan and let the main loop of getFinalPhysicalPlan() handle it
-   * @param optimizedPlan after [[queryStageOptimizerRules]]
-   * @param originalPlan
-   * @return [[None]] - means no new shuffle is needed (allowed)
-   */
-  private def findNewShuffleLocation(optimizedPlan: SparkPlan, originalPlan: SparkPlan):
-  Option[NewShuffleLocation] = {
-    val newShuffles = optimizedPlan.collect {
-      // can this ever create > 1 new shuffle?  Logically no since a new shuffle
-      // is only allowed by OptimizeSkewedJoin (above the join)
-      case e: ShuffleExchangeExec => e
-    }
-    assert(newShuffles.length < 2, s"Expected < 2 shuffles $newShuffles")
-    if (newShuffles.isEmpty) {
-      return None
-    }
-    val newShuffle = newShuffles.head
-    val parentOfNewShuffle = optimizedPlan.find(_.containsChild(newShuffle)).get
-    val t = parentOfNewShuffle.getTagValue(SparkPlan.LOGICAL_PLAN_TAG)
-    // find corresponding node in the original plan
-    val origPlanParent = originalPlan
-      .find(_.getTagValue(SparkPlan.LOGICAL_PLAN_TAG).get eq t.get).get
-    val idx = origPlanParent match {
-      case _: UnaryExecNode => 0
-      case _: BinaryExecNode =>
-        // figure out if the new shuffle was added on left or right in "optimizedPlan"
-        val p = parentOfNewShuffle.asInstanceOf[BinaryExecNode]
-        if (p.left eq newShuffle) 0 else 1
-    }
-    Option(NewShuffleLocation(origPlanParent, idx))
-  }
-  // todo: factor out this bit from EnsureRequirements.ensureDistributionAndOrdering()
-  //  and call here to make it clear that this is the same logic .. maybe
-  private def createShuffle(v: SparkPlan, idx: Int): ShuffleExchangeExec = {
-    val distribution = v.requiredChildDistribution(idx)
-    val numPartitions = distribution.requiredNumPartitions
-      .getOrElse(conf.numShufflePartitions)
-    ShuffleExchangeExec(distribution.createPartitioning(numPartitions), v.children(idx))
-  }
   // Use a lazy val to avoid this being called more than once.
   @transient private lazy val finalPlanUpdate: Unit = {
     // Subqueries that don't belong to any query stage of the main query will execute after the
@@ -509,7 +415,7 @@ case class AdaptiveSparkPlanExec(
       context.stageCache.get(e.canonicalized) match {
         case Some(existingStage) if conf.exchangeReuseEnabled =>
           val stage = reuseQueryStage(existingStage, e)
-          val isMaterialized = stage.resultOption.get().isDefined
+          val isMaterialized = stage.isMaterialized
           CreateStageResult(
             newPlan = stage,
             allChildStagesMaterialized = isMaterialized,
@@ -530,7 +436,7 @@ case class AdaptiveSparkPlanExec(
                 newStage = reuseQueryStage(queryStage, e)
               }
             }
-            val isMaterialized = newStage.resultOption.get().isDefined
+            val isMaterialized = newStage.isMaterialized
             CreateStageResult(
               newPlan = newStage,
               allChildStagesMaterialized = isMaterialized,
@@ -543,7 +449,7 @@ case class AdaptiveSparkPlanExec(
 
     case q: QueryStageExec =>
       CreateStageResult(newPlan = q,
-        allChildStagesMaterialized = q.resultOption.get().isDefined, newStages = Seq.empty)
+        allChildStagesMaterialized = q.isMaterialized, newStages = Seq.empty)
 
     case _ =>
       if (plan.children.isEmpty) {
@@ -560,11 +466,6 @@ case class AdaptiveSparkPlanExec(
   private def newQueryStage(e: Exchange): QueryStageExec = {
     val optimizedPlan = applyPhysicalRules(
       e.child, queryStageOptimizerRules, Some((planChangeLogger, "AQE Query Stage Optimization")))
-    val osp = findNewShuffleLocation(optimizedPlan, e.child)
-    if(osp.isDefined) {
-      // will retry createQueryStages() with new shuffle added
-      throw ShuffleAddedException(osp.get)
-    }
     val queryStage = e match {
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
@@ -685,7 +586,7 @@ case class AdaptiveSparkPlanExec(
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
-  private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan) = {
+  private def reOptimize(logicalPlan: LogicalPlan): (SparkPlan, LogicalPlan, Int) = {
     logicalPlan.invalidateStatsCache()
     val optimized = optimizer.execute(logicalPlan)
     val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
@@ -693,7 +594,21 @@ case class AdaptiveSparkPlanExec(
       sparkPlan,
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
-    (newPlan, optimized)
+
+    val numShufflesBefore = newPlan.collect {
+      case e: ShuffleExchangeExec => e
+    }.length
+
+    val mitigatedPlan = applyPhysicalRules(
+      newPlan,
+      queryStagePreparationRules2,
+      Some((planChangeLogger, "AQE OSJ Replanning")))
+
+    val numNewShuffles = mitigatedPlan.collect {
+      case e: ShuffleExchangeExec => e
+    }.length - numShufflesBefore
+
+    (mitigatedPlan, optimized, numNewShuffles)
   }
 
   /**
@@ -839,9 +754,3 @@ case class StageSuccess(stage: QueryStageExec, result: Any) extends StageMateria
  * The materialization of a query stage hit an error and failed.
  */
 case class StageFailure(stage: QueryStageExec, error: Throwable) extends StageMaterializationEvent
-
-case class ShuffleAddedException(sp: NewShuffleLocation) extends Exception
-/**
- * New shuffle should be wrap a child of [[origPlanParent]] at [[idx]]
- */
-case class NewShuffleLocation(origPlanParent: SparkPlan, idx: Int)

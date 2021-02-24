@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object DemoteBroadcastHashJoin extends Rule[LogicalPlan] {
 
   private def shouldDemote(plan: LogicalPlan): Boolean = plan match {
-    case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.resultOption.get().isDefined
+    case LogicalQueryStage(_, stage: ShuffleQueryStageExec) if stage.isMaterialized
       && stage.mapStats.isDefined =>
       val mapStats = stage.mapStats.get
       val partitionCnt = mapStats.bytesByPartitionId.length

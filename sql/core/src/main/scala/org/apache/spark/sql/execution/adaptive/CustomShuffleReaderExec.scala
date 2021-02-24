@@ -107,8 +107,11 @@ case class CustomShuffleReaderExec private(
     Iterator(desc)
   }
 
-  def hasCoalescedPartition: Boolean =
+  def hasCoalescedPartition: Boolean = {
+    // shouldn't this check that at least some index ranges are > 1?
+    // otherwise it's just reading original shuffle results
     partitionSpecs.exists(_.isInstanceOf[CoalescedPartitionSpec])
+  }
 
   def hasSkewedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])

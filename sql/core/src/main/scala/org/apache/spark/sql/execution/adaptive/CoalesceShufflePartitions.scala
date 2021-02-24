@@ -37,6 +37,13 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     }
     if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
         || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
+      /* Todo:
+        * does this need changes to run after Join Skew mitigation?
+        * at a minimum the check for CustomShuffleReaderExec is not right as
+        * skew join will add them
+        * This needs to know not to coalesce anything that was skew mitigated
+        * How does it know?  Skew mitigation creates PartialReducerPartitionSpec
+       */
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.

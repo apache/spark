@@ -1385,7 +1385,13 @@ class AdaptiveQueryExecSuite
       checkNumLocalShuffleReaders(df.queryExecution.executedPlan, numShufflesWithoutLocalReader = 1)
     }
   }
-
+ /**
+  * todo:
+  * Note: my original solution didn't properly handle a case where top level shuffle was
+  * optimized away - or did it????
+  * Id did not.  handleFinalStageShuffle() didn't look at initialPlan, and just ran
+  * OptimizeSkewedJoin, which would've done mitigation...  why doesn't this test fail then!?
+  */
   test("SPARK-33551: Do not use custom shuffle reader for repartition") {
     def hasRepartitionShuffle(plan: SparkPlan): Boolean = {
       find(plan) {
