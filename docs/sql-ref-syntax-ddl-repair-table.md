@@ -41,10 +41,10 @@ MSCK REPAIR TABLE table_identifier [{ADD|DROP|SYNC} PARTITIONS]
 
 * **`{ADD|DROP|SYNC} PARTITIONS`**
 
-    * If specified, `MSCK REPAIR TABLE` only adds partitions to the session catalog.
     * **ADD**, the command adds new partitions to the session catalog for all sub-folder in the base table folder that don't belong to any table partitions.
     * **DROP**, the command drops all partitions from the session catalog that have non-existing locations in the file system.
     * **SYNC** is the combination of **DROP** and **ADD**. 
+    * If not specified, **ADD** is the default.
 
 ### Examples
 
