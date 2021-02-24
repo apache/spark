@@ -512,14 +512,13 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
    */
   private def removeAliasOnlyProject(plan: LogicalPlan): LogicalPlan = plan match {
     case p @ Project(projectList, child) =>
-      val originalOutput = projectList.collect {
-        case Alias(a: Attribute, _) => a
-        case a: Attribute => a
-      }
-      val sameOutput = child.output.zip(originalOutput).forall {
-        case (a1, a2) => a1.semanticEquals(a2)
-      }
-      if (child.output.size == p.output.size && sameOutput) {
+      val aliasOnly = projectList.length == child.output.length &&
+        projectList.zip(child.output).forall {
+          case (Alias(left: Attribute, _), right) => left.semanticEquals(right)
+          case (left: Attribute, right) => left.semanticEquals(right)
+          case _ => false
+        }
+      if (aliasOnly) {
         child
       } else {
         p

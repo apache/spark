@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
@@ -1014,120 +1013,118 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-23957 Remove redundant sort from subquery plan(in subquery)") {
-    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopUnion.ruleName) {
-      withTempView("t1", "t2", "t3") {
-        Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
-        Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
-        Seq((1, 1, 1), (2, 2, 2)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
+    withTempView("t1", "t2", "t3") {
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((1, 1, 1), (2, 2, 2)).toDF("c1", "c2", "c3").createOrReplaceTempView("t3")
 
-        // Simple order by
-        val query1 =
-          """
-            |SELECT c1 FROM t1
-            |WHERE
-            |c1 IN (SELECT c1 FROM t2 ORDER BY c1)
-        """.stripMargin
-        assert(getNumSortsInQuery(query1) == 0)
-
-        // Nested order bys
-        val query2 =
-          """
-            |SELECT c1
-            |FROM   t1
-            |WHERE  c1 IN (SELECT c1
-            |              FROM   (SELECT *
-            |                      FROM   t2
-            |                      ORDER  BY c2)
-            |              ORDER  BY c1)
-        """.stripMargin
-        assert(getNumSortsInQuery(query2) == 0)
-
-
-        // nested IN
-        val query3 =
-          """
-            |SELECT c1
-            |FROM   t1
-            |WHERE  c1 IN (SELECT c1
-            |              FROM   t2
-            |              WHERE  c1 IN (SELECT c1
-            |                            FROM   t3
-            |                            WHERE  c1 = 1
-            |                            ORDER  BY c3)
-            |              ORDER  BY c2)
-        """.stripMargin
-        assert(getNumSortsInQuery(query3) == 0)
-
-        // Complex subplan and multiple sorts
-        val query4 =
-          """
-            |SELECT c1
-            |FROM   t1
-            |WHERE  c1 IN (SELECT c1
-            |              FROM   (SELECT c1, c2, count(*)
-            |                      FROM   t2
-            |                      GROUP BY c1, c2
-            |                      HAVING count(*) > 0
-            |                      ORDER BY c2)
-            |              ORDER  BY c1)
-        """.stripMargin
-        assert(getNumSortsInQuery(query4) == 0)
-
-        // Join in subplan
-        val query5 =
-          """
-            |SELECT c1 FROM t1
-            |WHERE
-            |c1 IN (SELECT t2.c1 FROM t2, t3
-            |       WHERE t2.c1 = t3.c1
-            |       ORDER BY t2.c1)
-        """.stripMargin
-        assert(getNumSortsInQuery(query5) == 0)
-
-        val query6 =
-          """
-            |SELECT c1
-            |FROM   t1
-            |WHERE  (c1, c2) IN (SELECT c1, max(c2)
-            |                    FROM   (SELECT c1, c2, count(*)
-            |                            FROM   t2
-            |                            GROUP BY c1, c2
-            |                            HAVING count(*) > 0
-            |                            ORDER BY c2)
-            |                    GROUP BY c1
-            |                    HAVING max(c2) > 0
-            |                    ORDER  BY c1)
-        """.stripMargin
-
-        assert(getNumSortsInQuery(query6) == 0)
-
-        // Cases when sort is not removed from the plan
-        // Limit on top of sort
-        val query7 =
+      // Simple order by
+      val query1 =
         """
           |SELECT c1 FROM t1
           |WHERE
-          |c1 IN (SELECT c1 FROM t2 ORDER BY c1 limit 1)
+          |c1 IN (SELECT c1 FROM t2 ORDER BY c1)
         """.stripMargin
-        assert(getNumSortsInQuery(query7) == 1)
+      assert(getNumSortsInQuery(query1) == 0)
 
-        // Sort below a set operations (intersect, union)
-        val query8 =
-          """
-            |SELECT c1 FROM t1
-            |WHERE
-            |c1 IN ((
-            |        SELECT c1 FROM t2
-            |        ORDER BY c1
-            |       )
-            |       UNION
-            |       (
-            |         SELECT c1 FROM t2
-            |         ORDER BY c1
-            |       ))
+      // Nested order bys
+      val query2 =
+        """
+          |SELECT c1
+          |FROM   t1
+          |WHERE  c1 IN (SELECT c1
+          |              FROM   (SELECT *
+          |                      FROM   t2
+          |                      ORDER  BY c2)
+          |              ORDER  BY c1)
         """.stripMargin
-        assert(getNumSortsInQuery(query8) == 2)
-      }
+      assert(getNumSortsInQuery(query2) == 0)
+
+
+      // nested IN
+      val query3 =
+        """
+          |SELECT c1
+          |FROM   t1
+          |WHERE  c1 IN (SELECT c1
+          |              FROM   t2
+          |              WHERE  c1 IN (SELECT c1
+          |                            FROM   t3
+          |                            WHERE  c1 = 1
+          |                            ORDER  BY c3)
+          |              ORDER  BY c2)
+        """.stripMargin
+      assert(getNumSortsInQuery(query3) == 0)
+
+      // Complex subplan and multiple sorts
+      val query4 =
+        """
+          |SELECT c1
+          |FROM   t1
+          |WHERE  c1 IN (SELECT c1
+          |              FROM   (SELECT c1, c2, count(*)
+          |                      FROM   t2
+          |                      GROUP BY c1, c2
+          |                      HAVING count(*) > 0
+          |                      ORDER BY c2)
+          |              ORDER  BY c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query4) == 0)
+
+      // Join in subplan
+      val query5 =
+        """
+          |SELECT c1 FROM t1
+          |WHERE
+          |c1 IN (SELECT t2.c1 FROM t2, t3
+          |       WHERE t2.c1 = t3.c1
+          |       ORDER BY t2.c1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query5) == 0)
+
+      val query6 =
+        """
+          |SELECT c1
+          |FROM   t1
+          |WHERE  (c1, c2) IN (SELECT c1, max(c2)
+          |                    FROM   (SELECT c1, c2, count(*)
+          |                            FROM   t2
+          |                            GROUP BY c1, c2
+          |                            HAVING count(*) > 0
+          |                            ORDER BY c2)
+          |                    GROUP BY c1
+          |                    HAVING max(c2) > 0
+          |                    ORDER  BY c1)
+        """.stripMargin
+
+      assert(getNumSortsInQuery(query6) == 0)
+
+      // Cases when sort is not removed from the plan
+      // Limit on top of sort
+      val query7 =
+      """
+        |SELECT c1 FROM t1
+        |WHERE
+        |c1 IN (SELECT c1 FROM t2 ORDER BY c1 limit 1)
+        """.stripMargin
+      assert(getNumSortsInQuery(query7) == 1)
+
+      // Sort below a set operations (intersect, union)
+      val query8 =
+        """
+          |SELECT c1 FROM t1
+          |WHERE
+          |c1 IN ((
+          |        SELECT c1 + 1 AS c1 FROM t2
+          |        ORDER BY c1
+          |       )
+          |       UNION
+          |       (
+          |         SELECT c1 + 2 AS c1 FROM t2
+          |         ORDER BY c1
+          |       ))
+        """.stripMargin
+      assert(getNumSortsInQuery(query8) == 2)
     }
   }
 
