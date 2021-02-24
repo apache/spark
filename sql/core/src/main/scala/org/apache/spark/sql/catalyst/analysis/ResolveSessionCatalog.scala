@@ -401,7 +401,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,
-        partitionSpec)
+        partitionSpec.toSeq.asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
     case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),

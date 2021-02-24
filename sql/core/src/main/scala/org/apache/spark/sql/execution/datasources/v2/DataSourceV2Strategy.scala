@@ -394,8 +394,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowCreateTable(_: ResolvedTable, _) =>
       throw new AnalysisException("SHOW CREATE TABLE is not supported for v2 tables.")
 
-    case TruncateTable(_: ResolvedTable, _) =>
-      throw new AnalysisException("TRUNCATE TABLE is not supported for v2 tables.")
+    case TruncateTable(r: ResolvedTable, parts) =>
+      TruncateTableExec(
+        r.table,
+        parts.toSeq.asResolvedPartitionSpecs.headOption,
+        recacheTable(r)) :: Nil
 
     case ShowColumns(_: ResolvedTable, _, _) =>
       throw new AnalysisException("SHOW COLUMNS is not supported for v2 tables.")

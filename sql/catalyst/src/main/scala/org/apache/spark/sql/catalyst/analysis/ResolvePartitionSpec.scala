@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AddPartitions, DropPartitions, LogicalPlan, RenamePartitions, ShowPartitions}
+import org.apache.spark.sql.catalyst.plans.logical.{AddPartitions, DropPartitions, LogicalPlan, RenamePartitions, ShowPartitions, TruncateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
@@ -64,6 +64,12 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
     case r @ ShowPartitions(
         ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs, _) =>
       r.copy(pattern = resolvePartitionSpecs(
+        table.name,
+        partSpecs.toSeq,
+        table.partitionSchema()).headOption)
+
+    case r @ TruncateTable(ResolvedTable(_, _, table: SupportsPartitionManagement, _), partSpecs) =>
+      r.copy(partitionSpec = resolvePartitionSpecs(
         table.name,
         partSpecs.toSeq,
         table.partitionSchema()).headOption)
