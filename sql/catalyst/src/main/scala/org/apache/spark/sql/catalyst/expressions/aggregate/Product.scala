@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType }
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType}
 
 
 /** Multiply numerical values within an aggregation group */
@@ -73,8 +73,7 @@ case class Product(child: Expression, scale: Double = 1.0)
   }
 
   override lazy val mergeExpressions: Seq[Expression] =
-    Seq(coalesce(coalesce(product.left, one) * product.right,
-                 product.left))
+    Seq(coalesce(coalesce(product.left, one) * product.right, product.left))
 
   override lazy val evaluateExpression: Expression = product
 }
