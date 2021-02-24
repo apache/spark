@@ -377,11 +377,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
     case RepairTable(ResolvedV1TableIdentifier(ident), addPartitions, dropPartitions) =>
-      AlterTableRecoverPartitionsCommand(
-        ident.asTableIdentifier,
-        addPartitions,
-        dropPartitions,
-        "MSCK REPAIR TABLE")
+      RepairTableCommand(ident.asTableIdentifier, addPartitions, dropPartitions)
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -422,7 +418,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ShowColumnsCommand(db, v1TableName, output)
 
     case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
-      AlterTableRecoverPartitionsCommand(
+      RepairTableCommand(
         ident.asTableIdentifier,
         enableAddPartitions = true,
         enableDropPartitions = false,

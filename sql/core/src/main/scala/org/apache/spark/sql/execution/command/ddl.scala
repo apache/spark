@@ -591,7 +591,7 @@ case class AlterTableDropPartitionCommand(
 case class PartitionStatistics(numFiles: Int, totalSize: Long)
 
 /**
- * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
+ * Repair a table by recovering all the partition in the directory of the table and
  * update the catalog.
  *
  * The syntax of this command is:
@@ -600,11 +600,11 @@ case class PartitionStatistics(numFiles: Int, totalSize: Long)
  *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS];
  * }}}
  */
-case class AlterTableRecoverPartitionsCommand(
+case class RepairTableCommand(
     tableName: TableIdentifier,
     enableAddPartitions: Boolean,
     enableDropPartitions: Boolean,
-    cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
+    cmd: String = "MSCK REPAIR TABLE") extends RunnableCommand {
 
   // These are list of statistics that can be collected quickly without requiring a scan of the data
   // see https://github.com/apache/hive/blob/master/
