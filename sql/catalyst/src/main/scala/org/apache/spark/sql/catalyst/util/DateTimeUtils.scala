@@ -54,11 +54,7 @@ object DateTimeUtils {
   def getZoneId(timeZoneId: String): ZoneId = {
     // To support (+|-)h:mm ZoneOffset format
     // Because (+|-)h:mm string is unsupported format in 3.0
-    if (TIME_ZONE_ID.r.findFirstIn(timeZoneId).isDefined) {
       ZoneId.of(timeZoneId.replaceFirst(TIME_ZONE_ID, "$10$2$3"), ZoneId.SHORT_IDS)
-    } else {
-      ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
-    }
   }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
