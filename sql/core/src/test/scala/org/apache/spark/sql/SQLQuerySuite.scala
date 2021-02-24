@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
+import java.time.DateTimeException
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.commons.io.FileUtils
@@ -4023,7 +4024,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33474: Support TypeConstructed partition spec value") {
-    withTable("t1", "t2", "t4") {
+    withTable("t1", "t2", "t4", "t5") {
       sql("CREATE TABLE t1(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
       sql("INSERT INTO t1 PARTITION(part = date'2019-01-02') VALUES('a')")
       checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t1"), Row("a", "2019-01-02"))
@@ -4038,8 +4039,27 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(e.contains("Cannot use interval for partition column"))
 
       sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
-      sql(s"INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
+      sql("INSERT INTO t4 PARTITION(part = X'537061726B2053514C') VALUES('a')")
       checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", "Spark SQL"))
+
+      // test type conversion
+      sql("CREATE TABLE t5(name STRING, part STRING) USING CSV PARTITIONED BY (part)")
+      sql("INSERT INTO t5 PARTITION(part = X'537061726B2053514C') VALUES('a')")
+      sql("INSERT INTO t5 PARTITION(part = date'2019-01-02') VALUES('a')")
+      sql("INSERT INTO t5 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t5"),
+        Row("a", "Spark SQL") :: Row("a", "2019-01-02") ::
+          Row("a", "2019-01-02 11:11:11") :: Nil)
+
+      // test insert timestamp literal partition value to date partition
+      sql("INSERT INTO t1 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('b')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t1"),
+        Row("a", "2019-01-02") :: Row("b", "2019-01-02") :: Nil)
+      // test insert invalid binary string partition value to date partition
+      val e2 = intercept[DateTimeException] {
+        sql("INSERT INTO t2 PARTITION(part = X'537061726B2053514C') VALUES('a')")
+      }.getMessage
+      assert(e2 == "Cannot cast Spark SQL to TimestampType.")
     }
   }
 
