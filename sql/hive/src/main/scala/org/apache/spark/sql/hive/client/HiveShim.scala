@@ -769,6 +769,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
+        // Skip null here is safe, more details could see at ExtractableLiterals.
         val sortedValues = values.filter(_ != null).toSeq
           .sorted(TypeUtils.getInterpretedOrdering(dataType))
         convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
