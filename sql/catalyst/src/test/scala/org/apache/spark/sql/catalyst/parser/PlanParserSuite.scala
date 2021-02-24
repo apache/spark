@@ -503,8 +503,8 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1 cross join t2 join t3 on t3.id = t1.id join t4 on t4.id = t1.id",
       table("t1")
         .join(table("t2"), Cross)
-        .join(table("t3"), Inner, Option(Symbol("t3.id") === Symbol("t1.id")))
-        .join(table("t4"), Inner, Option(Symbol("t4.id") === Symbol("t1.id")))
+        .join(table("t3"), Inner, Option("t3.id".attr === "t1.id".attr))
+        .join(table("t4"), Inner, Option("t4.id".attr === "t1.id".attr))
         .select(star()))
 
     // Test multiple on clauses.
@@ -536,7 +536,7 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t1, t3 join t2 on t1.col1 = t2.col2",
       table("t1")
         .join(table("t3"))
-        .join(table("t2"), Inner, Option(Symbol("t1.col1") === Symbol("t2.col2")))
+        .join(table("t2"), Inner, Option("t1.col1".attr === "t2.col2".attr))
         .select(star()))
   }
 
@@ -648,7 +648,7 @@ class PlanParserSuite extends AnalysisTest {
         "dst",
         UnresolvedSubqueryColumnAliases(
           Seq("a", "b", "c", "d"),
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id")))
+          src1.join(src2, Inner, Option("s1.id".attr === "s2.id".attr))
         )
       ).select(star()))
   }

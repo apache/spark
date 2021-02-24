@@ -97,11 +97,11 @@ class EliminateSortsSuite extends AnalysisTest {
   test("Remove no-op alias") {
     val x = testRelation
 
-    val query = x.select("a".attr.as("'x"), Year(CurrentDate()).as("'y"), "b".attr)
+    val query = x.select("a".attr.as("x"), Year(CurrentDate()).as("y"), "b".attr)
       .orderBy("x".attr.asc, "y".attr.asc, "b".attr.desc)
     val optimized = Optimize.execute(analyzer.execute(query))
     val correctAnswer = analyzer.execute(
-      x.select("a".attr.as("'x"), Year(CurrentDate()).as("'y"), "b".attr)
+      x.select("a".attr.as("x"), Year(CurrentDate()).as("y"), "b".attr)
        .orderBy("x".attr.asc, "b".attr.desc))
 
     comparePlans(optimized, correctAnswer)
@@ -263,10 +263,10 @@ class EliminateSortsSuite extends AnalysisTest {
       testRelation.select("b".attr).where("b".attr > Literal(0)).orderBy("b".attr.desc).analyze
     comparePlans(optimizedWithBoth, correctAnswerWithBoth)
 
-    val orderedThrice = orderedTwiceWithBoth.select(("b".attr + 1).as("'c")).orderBy("c".attr.asc)
+    val orderedThrice = orderedTwiceWithBoth.select(("b".attr + 1).as("c")).orderBy("c".attr.asc)
     val optimizedThrice = Optimize.execute(orderedThrice.analyze)
-    val correctAnswerThrice = testRelation.select("b".attr).where("b"> Literal(0))
-      .select(("b".attr + 1).as("'c")).orderBy("c".attr.asc).analyze
+    val correctAnswerThrice = testRelation.select("b".attr).where("b".attr > Literal(0))
+      .select(("b".attr + 1).as("c")).orderBy("c".attr.asc).analyze
     comparePlans(optimizedThrice, correctAnswerThrice)
   }
 

@@ -235,10 +235,10 @@ class JoinReorderSuite extends JoinReorderPlanTestBase with StatsEstimationTestB
     val tab3 = LocalRelation("a".attr.int, "b".attr.int)
     val original =
       tab1.join(tab2, Cross)
-          .join(tab3, Inner, Some('a === 'x && 'b === 'i))
+          .join(tab3, Inner, Some("a".attr === "x".attr && "b".attr === "i".attr))
     val expected =
-      tab1.join(tab3, Inner, Some('a === 'x))
-          .join(tab2, Cross, Some('b === 'i))
+      tab1.join(tab3, Inner, Some("a".attr === "x".attr))
+          .join(tab2, Cross, Some("b".attr === "i".attr))
           .select(outputsOf(tab1, tab2, tab3): _*)
 
     assertEqualJoinPlans(Optimize, original, expected)
