@@ -217,8 +217,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(child))
-        case other =>
-          throw QueryCompilationErrors.unexpectedColumnExpressionError(other)
+        case _ =>
+          throw new IllegalStateException(s"[BUG] unexpected column expression: $column")
       }
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the

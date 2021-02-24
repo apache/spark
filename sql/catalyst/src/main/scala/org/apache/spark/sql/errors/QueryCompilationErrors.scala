@@ -742,10 +742,6 @@ private[spark] object QueryCompilationErrors {
       "Use sparkSession.udf.register(...) instead.")
   }
 
-  def unexpectedColumnExpressionError(column: Expression): Throwable = {
-    new AnalysisException(s"[BUG] unexpected column expression: $column")
-  }
-
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
     new AnalysisException("Database from v1 session catalog is not specified")
   }
