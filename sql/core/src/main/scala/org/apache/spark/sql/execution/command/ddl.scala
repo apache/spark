@@ -654,7 +654,7 @@ case class RepairTableCommand(
       val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
       val pathFilter = getPathFilter(hadoopConf)
 
-      val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
+      val evalPool = ThreadUtils.newForkJoinPool("RepairTableCommand", 8)
       val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
         try {
           scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
@@ -804,7 +804,7 @@ case class RepairTableCommand(
   private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Int = {
     val dropPartSpecs = ThreadUtils.parmap(
       catalog.listPartitions(tableName),
-      "AlterTableRecoverPartitionsCommand: non-existing partitions",
+      "RepairTableCommand: non-existing partitions",
       maxThreads = 8) { partition =>
       partition.storage.locationUri.flatMap { uri =>
         if (fs.exists(new Path(uri))) None else Some(partition.spec)
