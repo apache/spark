@@ -19,9 +19,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.util.TypeUtils
-import org.apache.spark.sql.types.{ AbstractDataType, DataType, DoubleType }
+import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType}
 
 
 /** Multiply numerical values within an aggregation group */

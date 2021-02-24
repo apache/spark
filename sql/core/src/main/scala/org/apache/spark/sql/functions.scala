@@ -739,18 +739,6 @@ object functions {
     withAggregateFunction { new Product(e.expr, scale = 1.0) }
 
   /**
-   * Aggregate function: returns the product of all numerical elements in a group, after rescaling.
-   *
-   * @param scale A scaling constant to be multiplied into each non-null value in the product,
-   * in order to provide some defence against overflow.
-   *
-   * @group agg_funcs
-   * @since 3.2.0
-   */
-  def product(e: Column, scale: Double): Column =
-    withAggregateFunction { new Product(e.expr, scale) }
-
-  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs

@@ -1587,22 +1587,6 @@ setMethod("product",
           })
 
 #' @details
-#' \code{product}: Returns the product of the values in a group, after scaling.
-#'
-#' @param scale pre-scaling to be applied to each value in the group
-#'
-#' @rdname column_aggregate_functions
-#' @aliases product product,Column-method
-#' @note product since 3.2.0
-setMethod("product",
-          signature(x = "Column", scale = "numeric"),
-          function(x, scale) {
-            jc <- callJStatic("org.apache.spark.sql.functions", "product",
-                              x@jc, scale)
-            column(jc)
-          })
-
-#' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
 #'
 #' @rdname column_datetime_functions

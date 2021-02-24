@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{ col, lit, product }
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, ShortType}
 
 
 class ProductAggSuite extends QueryTest with SharedSparkSession {
@@ -38,9 +40,7 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
   }
 
   test("type flexibility") {
-    import org.apache.spark.sql.types.{ ByteType, DoubleType, FloatType, IntegerType, ShortType }
-    val bytes16 = spark.createDataset((1 to 16).map { _.toByte })(Encoders.scalaByte)
-                       .toDF("x")
+    val bytes16 = spark.createDataset((1 to 16).map { _.toByte })(Encoders.scalaByte).toDF("x")
 
     val variants = Map("int8" -> ByteType, "int16" -> ShortType, "int32" -> IntegerType,
                        "float32" -> FloatType, "float64" -> DoubleType)
@@ -57,8 +57,6 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
   }
 
   test("windowed factorials") {
-    import org.apache.spark.sql.expressions.Window
-
     implicit val enc = Encoders.product[(Long, Double)]
     val win = Window.partitionBy(lit(1)).orderBy("x")
 
@@ -84,9 +82,8 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
 
     val grouped = data16.groupBy((col("x") % 3) as "mod3")
       .agg(product(col("x")) as "product",
-           product(col("x"), 0.5) as "product_scaled",
-           product(col("x"), 1.0) as "product_unity",
-           product(col("x"), -1.0) as "product_minus")
+           product(col("x") * 0.5) as "product_scaled",
+           product(col("x") * -1.0) as "product_minus")
       .orderBy("mod3")
 
     def col2seq(s: String): Seq[Double] =
@@ -99,7 +96,6 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
     assert(col2seq("product") === expectedBase.map { _.toDouble })
     assert(col2seq("product_scaled") ===
             expectedBase.zip(Seq(0.03125, 0.015625, 0.03125)).map { case(a, b) => a * b })
-    assert(col2seq("product_unity") === expectedBase.map { _.toDouble })
     assert(col2seq("product_minus") ===
             expectedBase.zip(Seq(-1.0, 1.0, -1.0)).map { case(a, b) => a * b })
   }
