@@ -190,7 +190,7 @@ private[deploy] class Worker(
   private var connectionAttemptCount = 0
 
   private val metricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.WORKER, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.WORKER, conf)
   private val workerSource = new WorkerSource(this)
 
   val reverseProxy = conf.get(UI_REVERSE_PROXY)

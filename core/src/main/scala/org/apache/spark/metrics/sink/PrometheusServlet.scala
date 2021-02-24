@@ -23,7 +23,7 @@ import javax.servlet.http.HttpServletRequest
 import com.codahale.metrics.MetricRegistry
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.ui.JettyUtils._
 
 /**
@@ -35,8 +35,7 @@ import org.apache.spark.ui.JettyUtils._
  */
 private[spark] class PrometheusServlet(
     val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
+    val registry: MetricRegistry)
   extends Sink {
 
   val SERVLET_KEY_PATH = "path"

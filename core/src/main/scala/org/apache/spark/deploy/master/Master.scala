@@ -87,9 +87,9 @@ private[deploy] class Master(
   Utils.checkHost(address.host)
 
   private val masterMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.MASTER, conf)
   private val applicationMetricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.APPLICATIONS, conf)
   private val masterSource = new MasterSource(this)
 
   // After onStart, webUi will be set

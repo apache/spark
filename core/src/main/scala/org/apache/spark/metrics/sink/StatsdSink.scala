@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
 
-import org.apache.spark.SecurityManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 
@@ -42,8 +41,7 @@ private[spark] object StatsdSink {
 
 private[spark] class StatsdSink(
     val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
+    val registry: MetricRegistry)
   extends Sink with Logging {
   import StatsdSink._
 

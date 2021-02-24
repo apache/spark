@@ -25,7 +25,7 @@ import scala.collection.mutable
 import com.codahale.metrics.{Metric, MetricRegistry}
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.sink.{MetricsServlet, PrometheusServlet, Sink}
@@ -69,8 +69,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class MetricsSystem private (
     val instance: String,
-    conf: SparkConf,
-    securityMgr: SecurityManager)
+    conf: SparkConf)
   extends Logging {
 
   private[this] val metricsConfig = new MetricsConfig(conf)
@@ -201,20 +200,20 @@ private[spark] class MetricsSystem private (
           if (kv._1 == "servlet") {
             val servlet = Utils.classForName[MetricsServlet](classPath)
               .getConstructor(
-                classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-              .newInstance(kv._2, registry, securityMgr)
+                classOf[Properties], classOf[MetricRegistry])
+              .newInstance(kv._2, registry)
             metricsServlet = Some(servlet)
           } else if (kv._1 == "prometheusServlet") {
             val servlet = Utils.classForName[PrometheusServlet](classPath)
               .getConstructor(
-                classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-              .newInstance(kv._2, registry, securityMgr)
+                classOf[Properties], classOf[MetricRegistry])
+              .newInstance(kv._2, registry)
             prometheusServlet = Some(servlet)
           } else {
             val sink = Utils.classForName[Sink](classPath)
               .getConstructor(
-                classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
-              .newInstance(kv._2, registry, securityMgr)
+                classOf[Properties], classOf[MetricRegistry])
+              .newInstance(kv._2, registry)
             sinks += sink
           }
         } catch {
@@ -242,9 +241,8 @@ private[spark] object MetricsSystem {
     }
   }
 
-  def createMetricsSystem(
-      instance: String, conf: SparkConf, securityMgr: SecurityManager): MetricsSystem = {
-    new MetricsSystem(instance, conf, securityMgr)
+  def createMetricsSystem(instance: String, conf: SparkConf): MetricsSystem = {
+    new MetricsSystem(instance, conf)
   }
 }
 
