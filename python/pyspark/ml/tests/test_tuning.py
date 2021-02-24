@@ -26,7 +26,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
 from pyspark.ml.linalg import Vectors
 from pyspark.ml.param import Param, Params
 from pyspark.ml.tuning import CrossValidator, CrossValidatorModel, ParamGridBuilder, \
-    TrainValidationSplit, TrainValidationSplitModel
+    TrainValidationSplit, TrainValidationSplitModel, ParamRandomBuilder
 from pyspark.sql.functions import rand
 from pyspark.testing.mlutils import DummyEvaluator, DummyLogisticRegression, \
     DummyLogisticRegressionModel, SparkSessionTestCase
@@ -63,6 +63,32 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         model = InducedErrorModel()
         self._copyValues(model)
         return model
+
+
+class DummyParams(Params):
+
+    def __init__(self):
+        super(DummyParams, self).__init__()
+        self.test_param = Param(self, "test_param", "dummy parameter for testing")
+
+
+class ParamRandomBuilderTests(unittest.TestCase):
+
+    def __init__(self, uid):
+        super(ParamRandomBuilderTests, self).__init__(methodName=uid)
+        self.dummy_params = DummyParams()
+
+    def test_add_random(self):
+        n = 100
+        lowest = 100
+        highest = 200
+        to_test = ParamRandomBuilder()
+        params = to_test.addRandom(self.dummy_params.test_param, lowest, highest, n).build()
+        self.assertEqual(n, len(params))
+        for param in params:
+            for v in param.values():
+                self.assertGreaterEqual(v, lowest)
+                self.assertLessEqual(v, highest)
 
 
 class ParamGridBuilderTests(SparkSessionTestCase):

@@ -18,6 +18,7 @@
 import os
 import sys
 import itertools
+import random
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
@@ -35,7 +36,7 @@ from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
-           'TrainValidationSplitModel']
+           'TrainValidationSplitModel', 'ParamRandomBuilder']
 
 
 def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
@@ -150,6 +151,13 @@ class ParamGridBuilder(object):
             return [(key, key.typeConverter(value)) for key, value in zip(keys, values)]
 
         return [dict(to_key_value_pairs(keys, prod)) for prod in itertools.product(*grid_values)]
+
+
+class ParamRandomBuilder(ParamGridBuilder):
+    def addRandom(self, param, x, y, n):
+        values = map(lambda _: random.randrange(x, y), range(n))
+        self.addGrid(param, values)
+        return self
 
 
 class _ValidatorParams(HasSeed):
