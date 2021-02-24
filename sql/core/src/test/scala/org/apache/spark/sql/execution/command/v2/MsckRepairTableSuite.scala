@@ -21,22 +21,21 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
 
 /**
- * The class contains tests for the `TRUNCATE TABLE` command to check V2 table catalogs.
+ * The class contains tests for the `MSCK REPAIR TABLE` command
+ * to check V2 table catalogs.
  */
-class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase {
+class MsckRepairTableSuite
+  extends command.MsckRepairTableSuiteBase
+  with CommandSuiteBase {
 
-  override val invalidPartColumnError = "not a valid partition column in table"
-
-  test("truncate a partition of a table which does not support partitions") {
-    withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
-      sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
-      sql(s"INSERT INTO $t SELECT 0")
-
+  // TODO(SPARK-34397): Support v2 `MSCK REPAIR TABLE`
+  test("repairing of v2 tables is not supported") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
       val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+        sql(s"MSCK REPAIR TABLE $t")
       }.getMessage
-      assert(errMsg.contains(
-        "TRUNCATE TABLE cannot run for a table which does not support partitioning"))
+      assert(errMsg.contains("MSCK REPAIR TABLE is not supported for v2 tables"))
     }
   }
 }

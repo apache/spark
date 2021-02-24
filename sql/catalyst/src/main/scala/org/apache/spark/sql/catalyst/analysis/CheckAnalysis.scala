@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table, TruncatableTable}
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -565,16 +565,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               // no validation needed for set and remove property
             }
 
-          case AlterTableAddPartition(r: ResolvedTable, parts, _) =>
+          case AddPartitions(r: ResolvedTable, parts, _) =>
             checkAlterTablePartition(r.table, parts)
 
-          case AlterTableDropPartition(r: ResolvedTable, parts, _, _) =>
+          case DropPartitions(r: ResolvedTable, parts, _, _) =>
             checkAlterTablePartition(r.table, parts)
 
-          case AlterTableRenamePartition(r: ResolvedTable, from, _) =>
+          case RenamePartitions(r: ResolvedTable, from, _) =>
             checkAlterTablePartition(r.table, Seq(from))
 
           case showPartitions: ShowPartitions => checkShowPartitions(showPartitions)
+
+          case truncateTable: TruncateTable => checkTruncateTable(truncateTable)
 
           case _ => // Falls back to the following checks
         }
@@ -1012,11 +1014,30 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   private def checkShowPartitions(showPartitions: ShowPartitions): Unit = showPartitions match {
     case ShowPartitions(rt: ResolvedTable, _, _)
         if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
-      failAnalysis(s"SHOW PARTITIONS cannot run for a table which does not support partitioning")
+      failAnalysis("SHOW PARTITIONS cannot run for a table which does not support partitioning")
     case ShowPartitions(ResolvedTable(_, _, partTable: SupportsPartitionManagement, _), _, _)
         if partTable.partitionSchema().isEmpty =>
       failAnalysis(
         s"SHOW PARTITIONS is not allowed on a table that is not partitioned: ${partTable.name()}")
+    case _ =>
+  }
+
+  private def checkTruncateTable(truncateTable: TruncateTable): Unit = truncateTable match {
+    case TruncateTable(rt: ResolvedTable, None) if !rt.table.isInstanceOf[TruncatableTable] =>
+      failAnalysis(s"The table ${rt.table.name()} does not support truncation")
+    case TruncateTable(rt: ResolvedTable, Some(_))
+        if !rt.table.isInstanceOf[SupportsPartitionManagement] =>
+      failAnalysis("TRUNCATE TABLE cannot run for a table which does not support partitioning")
+    case TruncateTable(
+        ResolvedTable(_, _, _: SupportsPartitionManagement, _),
+        Some(_: UnresolvedPartitionSpec)) =>
+      failAnalysis("Partition spec is not resolved")
+    case TruncateTable(
+        ResolvedTable(_, _, table: SupportsPartitionManagement, _),
+        Some(spec: ResolvedPartitionSpec))
+      if spec.names.length < table.partitionSchema.length &&
+        !table.isInstanceOf[SupportsAtomicPartitionManagement] =>
+      failAnalysis(s"The table ${table.name()} does not support truncation of multiple partitions")
     case _ =>
   }
 }

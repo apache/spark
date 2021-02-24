@@ -1726,9 +1726,10 @@ package object config {
     ConfigBuilder("spark.eventLog.compression.codec")
       .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
-        "the codec. If this is not given, spark.io.compression.codec will be used.")
+        "the codec.")
       .version("3.0.0")
-      .fallbackConf(IO_COMPRESSION_CODEC)
+      .stringConf
+      .createWithDefault("zstd")
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
