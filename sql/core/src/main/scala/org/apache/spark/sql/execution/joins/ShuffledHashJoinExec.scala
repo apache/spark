@@ -117,10 +117,10 @@ case class ShuffledHashJoinExec(
 
     val iter = if (hashedRelation.keyIsUnique) {
       fullOuterJoinWithUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, streamNullRow)
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow)
     } else {
       fullOuterJoinWithNonUniqueKey(streamIter, hashedRelation, joinKeys, joinRowWithStream,
-        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow, streamNullRow)
+        joinRowWithBuild, streamNullJoinRowWithBuild, buildNullRow)
     }
 
     val resultProj = UnsafeProjection.create(output, output)
@@ -146,8 +146,7 @@ case class ShuffledHashJoinExec(
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow,
-      streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
+      buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
     longMetric("buildDataSize") += matchedKeys.capacity / 8
 
@@ -213,8 +212,7 @@ case class ShuffledHashJoinExec(
       joinRowWithStream: InternalRow => JoinedRow,
       joinRowWithBuild: InternalRow => JoinedRow,
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
-      buildNullRow: GenericInternalRow,
-      streamNullRow: GenericInternalRow): Iterator[InternalRow] = {
+      buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
     TaskContext.get().addTaskCompletionListener[Unit](_ => {
       // At the end of the task, update the task's memory usage for this

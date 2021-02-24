@@ -375,6 +375,7 @@ object FunctionRegistry {
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
+    expression[StringTrimBoth]("btrim"),
     expression[Upper]("ucase", true),
     expression[UnBase64]("unbase64"),
     expression[Unhex]("unhex"),

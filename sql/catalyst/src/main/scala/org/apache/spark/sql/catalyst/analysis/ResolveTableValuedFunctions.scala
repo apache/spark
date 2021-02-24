@@ -40,7 +40,7 @@ object ResolveTableValuedFunctions extends Rule[LogicalPlan] {
     def implicitCast(values: Seq[Expression]): Option[Seq[Expression]] = {
       if (args.length == values.length) {
         val casted = values.zip(args).map { case (value, (_, expectedType)) =>
-          TypeCoercion.ImplicitTypeCasts.implicitCast(value, expectedType)
+          TypeCoercion.implicitCast(value, expectedType)
         }
         if (casted.forall(_.isDefined)) {
           return Some(casted.map(_.get))

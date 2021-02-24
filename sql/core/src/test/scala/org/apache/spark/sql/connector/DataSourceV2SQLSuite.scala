@@ -37,7 +37,6 @@ import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -848,24 +847,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33829: Renaming a table should recreate a cache while retaining the old cache info") {
-    withTable("testcat.ns.old", "testcat.ns.new") {
-      def getStorageLevel(tableName: String): StorageLevel = {
-        val table = spark.table(tableName)
-        val optCachedData = spark.sharedState.cacheManager.lookupCachedData(table)
-        assert(optCachedData.isDefined)
-        optCachedData.get.cachedRepresentation.cacheBuilder.storageLevel
-      }
-      sql("CREATE TABLE testcat.ns.old USING foo AS SELECT id, data FROM source")
-      sql("CACHE TABLE testcat.ns.old OPTIONS('storageLevel' 'MEMORY_ONLY')")
-      val oldStorageLevel = getStorageLevel("testcat.ns.old")
-
-      sql("ALTER TABLE testcat.ns.old RENAME TO ns.new")
-      val newStorageLevel = getStorageLevel("testcat.ns.new")
-      assert(oldStorageLevel === newStorageLevel)
-    }
-  }
-
   test("Relation: basic") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
@@ -1241,7 +1222,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetProperties using v2 catalog") {
+  test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test' WITH PROPERTIES ('a'='a','b'='b','c'='c')")
@@ -1257,7 +1238,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetProperties: reserved properties") {
+  test("ALTER NAMESPACE .. SET PROPERTIES reserved properties") {
     import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
@@ -1288,7 +1269,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetLocation using v2 catalog") {
+  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test_1'")
@@ -1895,7 +1876,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterTable: rename table basic test") {
+  test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
@@ -1905,10 +1886,6 @@ class DataSourceV2SQLSuite
       }
       assert(e.getMessage.contains(
         "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
-
-      sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new", false)))
     }
   }
 
@@ -2015,7 +1992,7 @@ class DataSourceV2SQLSuite
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+      sql(s"CREATE VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }
@@ -2582,6 +2559,20 @@ class DataSourceV2SQLSuite
 
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
       assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+    }
+  }
+
+  test("SPARK-34468: rename table in place when the destination name has single part") {
+    val tbl = s"${catalogAndNamespace}src_tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      sql(s"INSERT INTO $tbl SELECT 0")
+      checkAnswer(sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"), Nil)
+      sql(s"ALTER TABLE $tbl RENAME TO new_tbl")
+      checkAnswer(
+        sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"),
+        Row("ns1.ns2", "new_tbl", false))
+      checkAnswer(sql(s"SELECT c0 FROM ${catalogAndNamespace}new_tbl"), Row(0))
     }
   }
 

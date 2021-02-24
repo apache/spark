@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableRecoverPartitions, LocalRelation, LogicalPlan, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
@@ -448,7 +448,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def recoverPartitions(tableName: String): Unit = {
     val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     sparkSession.sessionState.executePlan(
-      AlterTableRecoverPartitions(
+      RecoverPartitions(
         UnresolvedTable(multiPartIdent, "recoverPartitions()", None))).toRdd
   }
 
@@ -552,7 +552,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     // Re-caches the logical plan of the relation.
     // Note this is a no-op for the relation itself if it's not cached, but will clear all
     // caches referencing this relation. If this relation is cached as an InMemoryRelation,
-    // this will clear the relation cache and caches of all its dependants.
+    // this will clear the relation cache and caches of all its dependents.
     relation match {
       case SubqueryAlias(_, relationPlan) =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)

@@ -742,6 +742,19 @@ private[spark] object QueryCompilationErrors {
       "Use sparkSession.udf.register(...) instead.")
   }
 
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
+  }
+  
   def unsupportedCommandForTableValuedError(command: String): Throwable = {
     new AnalysisException(s"Table valued command does not support command '$command'")
   }

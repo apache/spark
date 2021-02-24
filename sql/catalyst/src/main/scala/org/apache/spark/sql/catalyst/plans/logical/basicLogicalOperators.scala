@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.AliasIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_CREATED_FROM_DATAFRAME
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -443,21 +444,25 @@ case class InsertIntoDir(
 }
 
 /**
- * A container for holding the view description(CatalogTable), and the output of the view. The
- * child should be a logical plan parsed from the `CatalogTable.viewText`, should throw an error
- * if the `viewText` is not defined.
+ * A container for holding the view description(CatalogTable) and info whether the view is temporary
+ * or not. If it's a SQL (temp) view, the child should be a logical plan parsed from the
+ * `CatalogTable.viewText`. Otherwise, the view is a temporary one created from a dataframe and the
+ * view description should contain a `VIEW_CREATED_FROM_DATAFRAME` property; in this case, the child
+ * must be already resolved.
+ *
  * This operator will be removed at the end of analysis stage.
  *
  * @param desc A view description(CatalogTable) that provides necessary information to resolve the
  *             view.
- *               we are able to decouple the output from the underlying structure.
- * @param child The logical plan of a view operator, it should be a logical plan parsed from the
- *              `CatalogTable.viewText`, should throw an error if the `viewText` is not defined.
+ * @param isTempView A flag to indicate whether the view is temporary or not.
+ * @param child The logical plan of a view operator. If the view description is available, it should
+ *              be a logical plan parsed from the `CatalogTable.viewText`.
  */
 case class View(
     desc: CatalogTable,
     isTempView: Boolean,
     child: LogicalPlan) extends UnaryNode {
+  require(!isDataFrameTempView || child.resolved)
 
   override def output: Seq[Attribute] = child.output
 
@@ -469,6 +474,9 @@ case class View(
     case p: Project if p.resolved && canRemoveProject(p) => p.child.canonicalized
     case _ => child.canonicalized
   }
+
+  def isDataFrameTempView: Boolean =
+    isTempView && desc.properties.contains(VIEW_CREATED_FROM_DATAFRAME)
 
   // When resolving a SQL view, we use an extra Project to add cast and alias to make sure the view
   // output schema doesn't change even if the table referenced by the view is changed after view

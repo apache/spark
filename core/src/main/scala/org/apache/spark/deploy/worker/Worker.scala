@@ -26,7 +26,7 @@ import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -158,6 +158,18 @@ private[deploy] class Worker(
   val finishedDrivers = new LinkedHashMap[String, DriverRunner]
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
+
+  // Record the consecutive failure attempts of executor state change syncing with Master,
+  // so we don't try it endless. We will exit the Worker process at the end if the failure
+  // attempts reach the max attempts(5). In that case, it's highly possible the Worker
+  // suffers a severe network issue, and the Worker would exit finally either reaches max
+  // re-register attempts or max state syncing attempts.
+  // Map from executor fullId to its consecutive failure attempts number. It's supposed
+  // to be very small since it's only used for the temporary network drop, which doesn't
+  // happen frequently and recover soon.
+  private val executorStateSyncFailureAttempts = new HashMap[String, Int]()
+  lazy private val executorStateSyncFailureHandler = ExecutionContext.fromExecutor(
+    ThreadUtils.newDaemonSingleThreadExecutor("executor-state-sync-failure-handler"))
 
   val retainedExecutors = conf.get(WORKER_UI_RETAINED_EXECUTORS)
   val retainedDrivers = conf.get(WORKER_UI_RETAINED_DRIVERS)
@@ -620,7 +632,7 @@ private[deploy] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
+            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
               Some(e.toString), None))
         }
       }
@@ -750,6 +762,43 @@ private[deploy] class Worker(
     }
   }
 
+  /**
+   * Send `ExecutorStateChanged` to the current master. Unlike `sendToMaster`, we use `askSync`
+   * to send the message in order to ensure Master can receive the message.
+   */
+  private def syncExecutorStateWithMaster(newState: ExecutorStateChanged): Unit = {
+    master match {
+      case Some(masterRef) =>
+        val fullId = s"${newState.appId}/${newState.execId}"
+        // SPARK-34245: We used async `send` to send the state previously. In that case, the
+        // finished executor can be leaked if Worker fails to send `ExecutorStateChanged`
+        // message to Master due to some unexpected errors, e.g., temporary network error.
+        // In the worst case, the application can get hang if the leaked executor is the only
+        // or last executor for the application. Therefore, we switch to `ask` to ensure
+        // the state is handled by Master.
+        masterRef.ask[Boolean](newState).onComplete {
+          case Success(_) =>
+            executorStateSyncFailureAttempts.remove(fullId)
+
+          case Failure(t) =>
+            val failures = executorStateSyncFailureAttempts.getOrElse(fullId, 0) + 1
+            if (failures < 5) {
+              logError(s"Failed to send $newState to Master $masterRef, " +
+                s"will retry ($failures/5).", t)
+              executorStateSyncFailureAttempts(fullId) = failures
+              self.send(newState)
+            } else {
+              logError(s"Failed to send $newState to Master $masterRef for 5 times. Giving up.")
+              System.exit(1)
+            }
+        }(executorStateSyncFailureHandler)
+
+      case None =>
+        logWarning(
+          s"Dropping $newState because the connection to master has not yet been established")
+    }
+  }
+
   private def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
@@ -825,7 +874,7 @@ private[deploy] class Worker(
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
     Unit = {
-    sendToMaster(executorStateChanged)
+    syncExecutorStateWithMaster(executorStateChanged)
     val state = executorStateChanged.state
     if (ExecutorState.isFinished(state)) {
       val appId = executorStateChanged.appId

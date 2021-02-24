@@ -25,7 +25,11 @@ license: |
 
 ### RENAME 
 
-`ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database.
+`ALTER TABLE RENAME TO` statement changes the table name of an existing table in the database. The table rename command cannot be used to move a table between databases, only to rename a table within the same database.
+
+If the table is cached, the commands clear cached data of the table. The cache will be lazily filled when the next time the table is accessed. Additionally:
+  * the table rename command uncaches all table's dependents such as views that refer to the table. The dependents should be cached again explicitly.
+  * the partition rename command clears caches of all table dependents while keeping them as cached. So, their caches will be lazily filled when the next time they are accessed.
 
 #### Syntax
 
@@ -103,6 +107,8 @@ ALTER TABLE table_identifier { ALTER | CHANGE } [ COLUMN ] col_spec alterColumnA
 
 `ALTER TABLE ADD` statement adds partition to the partitioned table.
 
+If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
+
 ##### Syntax
 
 ```sql
@@ -127,6 +133,8 @@ ALTER TABLE table_identifier ADD [IF NOT EXISTS]
 #### DROP PARTITION
 
 `ALTER TABLE DROP` statement drops the partition of the table.
+
+If the table is cached, the command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
 
 ##### Syntax
 
@@ -186,6 +194,8 @@ ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
 
 `ALTER TABLE SET` command can also be used for changing the file location and file format for 
 existing tables. 
+
+If the table is cached, the `ALTER TABLE .. SET LOCATION` command clears cached data of the table and all its dependents that refer to it. The cache will be lazily filled when the next time the table or the dependents are accessed.
 
 ##### Syntax
 
