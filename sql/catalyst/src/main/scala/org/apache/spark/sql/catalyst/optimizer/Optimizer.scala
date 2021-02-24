@@ -502,7 +502,7 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
