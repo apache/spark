@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.security.PrivilegedExceptionAction
 import java.sql.{Connection, Driver}
 import java.util.Properties
-import javax.security.auth.login.Configuration
 
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -35,22 +34,15 @@ private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    val parent = Configuration.getConfiguration
-    try {
-      setAuthenticationConfig(parent, driver, jdbcOptions)
-      UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal,
-        jdbcOptions.keytab)
-        .doAs(
-          new PrivilegedExceptionAction[Connection]() {
-            override def run(): Connection = {
-              OracleConnectionProvider.super.getConnection(driver, options)
-            }
+    setAuthenticationConfig(driver, jdbcOptions)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(
+        new PrivilegedExceptionAction[Connection]() {
+          override def run(): Connection = {
+            OracleConnectionProvider.super.getConnection(driver, options)
           }
-        )
-    } finally {
-      logDebug("Restoring original security configuration")
-      Configuration.setConfiguration(parent)
-    }
+        }
+      )
   }
 
   override def getAdditionalProperties(options: JDBCOptions): Properties = {

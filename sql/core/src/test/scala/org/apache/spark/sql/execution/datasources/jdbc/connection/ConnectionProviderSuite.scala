@@ -61,10 +61,10 @@ class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSpa
     assert(rootConfig.getAppConfigurationEntry(postgresAppEntry) == null)
     assert(rootConfig.getAppConfigurationEntry(db2AppEntry) == null)
 
-    postgresProvider.setAuthenticationConfig(rootConfig, postgresDriver, postgresOptions)
+    postgresProvider.setAuthenticationConfig(postgresDriver, postgresOptions)
     val postgresConfig = Configuration.getConfiguration
 
-    db2Provider.setAuthenticationConfig(postgresConfig, db2Driver, db2Options)
+    db2Provider.setAuthenticationConfig(db2Driver, db2Options)
     val db2Config = Configuration.getConfiguration
 
     // Make sure authentication for the databases are set

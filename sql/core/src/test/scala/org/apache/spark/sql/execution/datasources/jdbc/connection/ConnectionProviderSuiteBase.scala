@@ -61,7 +61,7 @@ abstract class ConnectionProviderSuiteBase extends SparkFunSuite with BeforeAndA
 
     // Make sure setAuthenticationConfig call sets authentication properly
     val savedConfig = Configuration.getConfiguration
-    provider.setAuthenticationConfig(savedConfig, driver, options)
+    provider.setAuthenticationConfig(driver, options)
     val config = Configuration.getConfiguration
     assert(savedConfig != config)
     val appEntry = config.getAppConfigurationEntry(providerAppEntry)

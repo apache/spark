@@ -40,14 +40,8 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    val parent = Configuration.getConfiguration
-    try {
-      setAuthenticationConfig(parent, driver, jdbcOptions)
-      super.getConnection(driver: Driver, options: Map[String, String])
-    } finally {
-      logDebug("Restoring original security configuration")
-      Configuration.setConfiguration(parent)
-    }
+    setAuthenticationConfig(driver, jdbcOptions)
+    super.getConnection(driver: Driver, options: Map[String, String])
   }
 
   /**
@@ -55,10 +49,8 @@ private[jdbc] abstract class SecureConnectionProvider extends BasicConnectionPro
    */
   def appEntry(driver: Driver, options: JDBCOptions): String
 
-  private[connection] def setAuthenticationConfig(
-      parent: Configuration,
-      driver: Driver,
-      options: JDBCOptions) = {
+  private[connection] def setAuthenticationConfig(driver: Driver, options: JDBCOptions) = {
+    val parent = Configuration.getConfiguration
     val config = new SecureConnectionProvider.JDBCConfiguration(
       parent, appEntry(driver, options), options.keytab, options.principal)
     logDebug("Adding database specific security configuration")
