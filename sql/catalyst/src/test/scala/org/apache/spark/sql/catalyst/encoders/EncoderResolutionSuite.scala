@@ -109,7 +109,7 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[NestedArrayClass]
     val et = new StructType().add("arr", ArrayType(
       new StructType().add("a", "int").add("b", "int").add("c", "int")))
-    val attrs = Seq('nestedArr.array(et))
+    val attrs = Seq("nestedArr".attr.array(et))
     val innerArr = new GenericArrayData(Array(InternalRow(1, 2, 3)))
     val outerArr = new GenericArrayData(Array(InternalRow(innerArr)))
     testFromRow(encoder, attrs, InternalRow(outerArr))
@@ -133,13 +133,13 @@ class EncoderResolutionSuite extends PlanTest {
     val encoder = ExpressionEncoder[NestedArrayClass]
 
     withClue("inner element is not array") {
-      val attrs = Seq('nestedArr.array(new StructType().add("arr", "int")))
+      val attrs = Seq("nestedArr".attr.array(new StructType().add("arr", "int")))
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         "need an array field but got int")
     }
 
     withClue("nested array element type is not compatible") {
-      val attrs = Seq('nestedArr.array(new StructType()
+      val attrs = Seq("nestedArr".attr.array(new StructType()
         .add("arr", ArrayType(new StructType().add("c", "int")))))
       assert(intercept[AnalysisException](encoder.resolveAndBind(attrs)).message ==
         "No such struct field a in c")

@@ -65,8 +65,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
           options = Map.empty)(sparkSession = spark)
 
         val logicalRelation = LogicalRelation(relation, tableMeta)
-        val query = Project(Seq(Symbol("i"), Symbol("p")),
-          Filter(Symbol("p") === 1, logicalRelation)).analyze
+        val query = Project(Seq("i".attr, "p".attr),
+          Filter("p".attr === 1, logicalRelation)).analyze
 
         val optimized = Optimize.execute(query)
         assert(optimized.missingInput.isEmpty)

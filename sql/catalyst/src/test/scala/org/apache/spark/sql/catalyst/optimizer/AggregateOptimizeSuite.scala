@@ -35,12 +35,13 @@ class AggregateOptimizeSuite extends AnalysisTest {
       RemoveRepetitionFromGroupExpressions) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  val testRelation = LocalRelation("a".attr.int, "b".attr.int, "c".attr.int)
 
   test("remove literals in grouping expression") {
-    val query = testRelation.groupBy('a, Literal("1"), Literal(1) + Literal(2))(sum('b))
+    val query =
+      testRelation.groupBy("a".attr, Literal("1"), Literal(1) + Literal(2))(sum("b".attr))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = testRelation.groupBy('a)(sum('b)).analyze
+    val correctAnswer = testRelation.groupBy("a".attr)(sum("b".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -48,26 +49,31 @@ class AggregateOptimizeSuite extends AnalysisTest {
   test("do not remove all grouping expressions if they are all literals") {
     withSQLConf(CASE_SENSITIVE.key -> "false", GROUP_BY_ORDINAL.key -> "false") {
       val analyzer = getAnalyzer
-      val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum('b))
+      val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum("b".attr))
       val optimized = Optimize.execute(analyzer.execute(query))
-      val correctAnswer = analyzer.execute(testRelation.groupBy(Literal(0))(sum('b)))
+      val correctAnswer = analyzer.execute(testRelation.groupBy(Literal(0))(sum("b".attr)))
 
       comparePlans(optimized, correctAnswer)
     }
   }
 
   test("Remove aliased literals") {
-    val query = testRelation.select('a, 'b, Literal(1).as('y)).groupBy('a, 'y)(sum('b))
+    val query = testRelation
+      .select("a".attr, "b".attr, Literal(1).as("y"))
+      .groupBy("a".attr, "y".attr)(sum("b".attr))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = testRelation.select('a, 'b, Literal(1).as('y)).groupBy('a)(sum('b)).analyze
+    val correctAnswer = testRelation
+      .select("a".attr, "b".attr, Literal(1).as("y"))
+      .groupBy("a".attr)(sum("b".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("remove repetition in grouping expression") {
-    val query = testRelation.groupBy('a + 1, 'b + 2, Literal(1) + 'A, Literal(2) + 'B)(sum('c))
+    val query = testRelation.groupBy("a".attr + 1,
+      "b".attr + 2, Literal(1) + "A".attr, Literal(2) + "B".attr)(sum("c".attr))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = testRelation.groupBy('a + 1, 'b + 2)(sum('c)).analyze
+    val correctAnswer = testRelation.groupBy("a".attr + 1, "b".attr + 2)(sum("c".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

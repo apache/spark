@@ -141,7 +141,6 @@ package object dsl {
     def desc: SortOrder = SortOrder(expr, Descending)
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
-    def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
 
   trait ExpressionConversions {
@@ -165,9 +164,6 @@ package object dsl {
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
     implicit def instantToLiteral(i: Instant): Literal = Literal(i)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
-
-    implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
-      analysis.UnresolvedAttribute(s.name)
 
     /** Converts $"col name" into an [[analysis.UnresolvedAttribute]]. */
     implicit class StringToAttributeConversionHelper(val sc: StringContext) {
@@ -244,7 +240,6 @@ package object dsl {
     def windowExpr(windowFunc: Expression, windowSpec: WindowSpecDefinition): WindowExpression =
       WindowExpression(windowFunc, windowSpec)
 
-    implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s: String = sym.name }
     // TODO more implicit class for literal?
     implicit class DslString(val s: String) extends ImplicitOperators {
       override def expr: Expression = Literal(s)
@@ -414,8 +409,6 @@ package object dsl {
           orderSpec: Seq[SortOrder]): LogicalPlan =
         Window(windowExpressions, partitionSpec, orderSpec, logicalPlan)
 
-      def subquery(alias: Symbol): LogicalPlan = SubqueryAlias(alias.name, logicalPlan)
-
       def except(otherPlan: LogicalPlan, isAll: Boolean): LogicalPlan =
         Except(logicalPlan, otherPlan, isAll)
 
@@ -443,6 +436,7 @@ package object dsl {
         InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
+      def subquery(alias: String): LogicalPlan = as(alias)
 
       def coalesce(num: Integer): LogicalPlan =
         Repartition(num, shuffle = false, logicalPlan)

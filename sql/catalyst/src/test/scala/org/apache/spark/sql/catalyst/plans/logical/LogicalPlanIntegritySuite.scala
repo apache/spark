@@ -31,7 +31,7 @@ class LogicalPlanIntegritySuite extends PlanTest {
   }
 
   test("Checks if the same `ExprId` refers to a semantically-equal attribute in a plan output") {
-    val t = LocalRelation('a.int, 'b.int)
+    val t = LocalRelation("a".attr.int, "b".attr.int)
     assert(hasUniqueExprIdsForOutput(OutputTestPlan(t, t.output)))
     assert(!hasUniqueExprIdsForOutput(OutputTestPlan(t, t.output.zipWithIndex.map {
       case (a, i) => AttributeReference(s"c$i", LongType)(a.exprId)
@@ -39,7 +39,7 @@ class LogicalPlanIntegritySuite extends PlanTest {
   }
 
   test("Checks if reference ExprIds are not reused when assigning a new ExprId") {
-    val t = LocalRelation('a.int, 'b.int)
+    val t = LocalRelation("a".attr.int, "b".attr.int)
     val Seq(a, b) = t.output
     assert(checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")())))
     assert(!checkIfSameExprIdNotReused(t.select(Alias(a + 1, "a")(exprId = a.exprId))))

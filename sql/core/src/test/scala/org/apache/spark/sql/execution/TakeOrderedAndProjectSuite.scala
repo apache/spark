@@ -52,7 +52,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSparkSession {
   private def noOpFilter(plan: SparkPlan): SparkPlan = FilterExec(Literal(true), plan)
 
   val limit = 250
-  val sortOrder = 'a.desc :: 'b.desc :: Nil
+  val sortOrder = "a".attr.desc :: "b".attr.desc :: Nil
 
   test("TakeOrderedAndProject.doExecute without project") {
     withClue(s"seed = $seed") {

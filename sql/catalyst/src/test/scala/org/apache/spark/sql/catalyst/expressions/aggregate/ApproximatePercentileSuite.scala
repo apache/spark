@@ -282,7 +282,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   }
 
   test("class ApproximatePercentile, automatically add type casting for parameters") {
-    val testRelation = LocalRelation('a.int)
+    val testRelation = LocalRelation("a".attr.int)
 
     // accuracy types must be integral, no type casting
     val accuracyExpressions = Seq(

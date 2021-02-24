@@ -72,8 +72,8 @@ class ResolveHintsSuite extends AnalysisTest {
   test("do not traverse past existing broadcast hints") {
     checkAnalysisWithoutViewWrapper(
       UnresolvedHint("MAPJOIN", Seq("table"),
-        ResolvedHint(table("table").where('a > 1), HintInfo(strategy = Some(BROADCAST)))),
-      ResolvedHint(testRelation.where('a > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
+        ResolvedHint(table("table").where("a".attr > 1), HintInfo(strategy = Some(BROADCAST)))),
+      ResolvedHint(testRelation.where("a".attr > 1), HintInfo(strategy = Some(BROADCAST))).analyze,
       caseSensitive = false)
   }
 
@@ -84,7 +84,7 @@ class ResolveHintsSuite extends AnalysisTest {
       caseSensitive = false)
 
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery('tableAlias)),
+      UnresolvedHint("MAPJOIN", Seq("tableAlias"), table("table").subquery("tableAlias")),
       ResolvedHint(testRelation, HintInfo(strategy = Some(BROADCAST))),
       caseSensitive = false)
 
@@ -97,8 +97,9 @@ class ResolveHintsSuite extends AnalysisTest {
 
   test("do not traverse past subquery alias") {
     checkAnalysisWithoutViewWrapper(
-      UnresolvedHint("MAPJOIN", Seq("table"), table("table").where('a > 1).subquery('tableAlias)),
-      testRelation.where('a > 1).analyze,
+      UnresolvedHint("MAPJOIN", Seq("table"),
+        table("table").where("a".attr > 1).subquery("tableAlias")),
+      testRelation.where("a".attr > 1).analyze,
       caseSensitive = false)
   }
 
@@ -110,8 +111,9 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(ctetable) */ * FROM ctetable
         """.stripMargin
       ),
-      ResolvedHint(testRelation.where('a > 1).select('a), HintInfo(strategy = Some(BROADCAST)))
-        .select('a).analyze,
+      ResolvedHint(testRelation.where("a".attr > 1).select("a".attr),
+        HintInfo(strategy = Some(BROADCAST)))
+        .select("a".attr).analyze,
       caseSensitive = false)
   }
 
@@ -123,7 +125,7 @@ class ResolveHintsSuite extends AnalysisTest {
           |SELECT /*+ BROADCAST(table) */ * FROM ctetable
         """.stripMargin
       ),
-      testRelation.where('a > 1).select('a).select('a).analyze,
+      testRelation.where("a".attr > 1).select("a".attr).select("a".attr).analyze,
       caseSensitive = false)
   }
 

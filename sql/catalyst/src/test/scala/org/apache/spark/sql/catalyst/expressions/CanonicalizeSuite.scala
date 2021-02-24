@@ -99,9 +99,9 @@ class CanonicalizeSuite extends SparkFunSuite {
 
   test("SPARK-32927: Bitwise operations are commutative") {
     Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
-      val e1 = f('a, f('b, 'c))
-      val e2 = f(f('a, 'b), 'c)
-      val e3 = f('a, f('b, 'a))
+      val e1 = f("a".attr, f("b".attr, "c".attr))
+      val e2 = f(f("a".attr, "b".attr), "c".attr)
+      val e3 = f("a".attr, f("b".attr, "a".attr))
 
       assert(e1.canonicalized == e2.canonicalized)
       assert(e1.canonicalized != e3.canonicalized)
@@ -110,9 +110,9 @@ class CanonicalizeSuite extends SparkFunSuite {
 
   test("SPARK-32927: Bitwise operations are commutative for non-deterministic expressions") {
     Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
-      val e1 = f('a, f(rand(42), 'c))
-      val e2 = f(f('a, rand(42)), 'c)
-      val e3 = f('a, f(rand(42), 'a))
+      val e1 = f("a".attr, f(rand(42), "c".attr))
+      val e2 = f(f("a".attr, rand(42)), "c".attr)
+      val e3 = f("a".attr, f(rand(42), "a".attr))
 
       assert(e1.canonicalized == e2.canonicalized)
       assert(e1.canonicalized != e3.canonicalized)
@@ -121,9 +121,9 @@ class CanonicalizeSuite extends SparkFunSuite {
 
   test("SPARK-32927: Bitwise operations are commutative for literal expressions") {
     Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f =>
-      val e1 = f('a, f(42, 'c))
-      val e2 = f(f('a, 42), 'c)
-      val e3 = f('a, f(42, 'a))
+      val e1 = f("a".attr, f(42, "c".attr))
+      val e2 = f(f("a".attr, 42), "c".attr)
+      val e3 = f("a".attr, f(42, "a".attr))
 
       assert(e1.canonicalized == e2.canonicalized)
       assert(e1.canonicalized != e3.canonicalized)
@@ -133,9 +133,9 @@ class CanonicalizeSuite extends SparkFunSuite {
   test("SPARK-32927: Bitwise operations are commutative in a complex case") {
     Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f1 =>
       Seq(BitwiseOr(_, _), BitwiseAnd(_, _), BitwiseXor(_, _)).foreach { f2 =>
-        val e1 = f2(f1('a, f1('b, 'c)), 'a)
-        val e2 = f2(f1(f1('a, 'b), 'c), 'a)
-        val e3 = f2(f1('a, f1('b, 'a)), 'a)
+        val e1 = f2(f1("a".attr, f1("b".attr, "c".attr)), "a".attr)
+        val e2 = f2(f1(f1("a".attr, "b".attr), "c".attr), "a".attr)
+        val e3 = f2(f1("a".attr, f1("b".attr, "a".attr)), "a".attr)
 
         assert(e1.canonicalized == e2.canonicalized)
         assert(e1.canonicalized != e3.canonicalized)

@@ -31,7 +31,7 @@ class OptimizeWindowFunctionsSuite extends PlanTest {
         OptimizeWindowFunctions) :: Nil
   }
 
-  val testRelation = LocalRelation('a.double, 'b.double, 'c.string)
+  val testRelation = LocalRelation("a".attr.double, "b".attr.double, "c".attr.string)
   val a = testRelation.output(0)
   val b = testRelation.output(1)
   val c = testRelation.output(2)

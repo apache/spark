@@ -31,7 +31,7 @@ class TransposeWindowSuite extends PlanTest {
       Batch("FlipWindow", Once, CollapseWindow, TransposeWindow) :: Nil
   }
 
-  val testRelation = LocalRelation('a.string, 'b.string, 'c.int, 'd.string)
+  val testRelation = LocalRelation("a".attr.string, "b".attr.string, "c".attr.int, "d".attr.string)
 
   val a = testRelation.output(0)
   val b = testRelation.output(1)
@@ -48,40 +48,40 @@ class TransposeWindowSuite extends PlanTest {
 
   test("transpose two adjacent windows with compatible partitions") {
     val query = testRelation
-      .window(Seq(sum(c).as('sum_a_2)), partitionSpec2, orderSpec2)
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, orderSpec1)
+      .window(Seq(sum(c).as("sum_a_2")), partitionSpec2, orderSpec2)
+      .window(Seq(sum(c).as("sum_a_1")), partitionSpec1, orderSpec1)
 
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)
 
     val correctAnswer = testRelation
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, orderSpec1)
-      .window(Seq(sum(c).as('sum_a_2)), partitionSpec2, orderSpec2)
-      .select('a, 'b, 'c, 'd, 'sum_a_2, 'sum_a_1)
+      .window(Seq(sum(c).as("sum_a_1")), partitionSpec1, orderSpec1)
+      .window(Seq(sum(c).as("sum_a_2")), partitionSpec2, orderSpec2)
+      .select("a".attr, "b".attr, "c".attr, "d".attr, "sum_a_2".attr, "sum_a_1".attr)
 
     comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("transpose two adjacent windows with differently ordered compatible partitions") {
     val query = testRelation
-      .window(Seq(sum(c).as('sum_a_2)), partitionSpec4, Seq.empty)
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec2, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_2")), partitionSpec4, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_1")), partitionSpec2, Seq.empty)
 
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)
 
     val correctAnswer = testRelation
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec2, Seq.empty)
-      .window(Seq(sum(c).as('sum_a_2)), partitionSpec4, Seq.empty)
-      .select('a, 'b, 'c, 'd, 'sum_a_2, 'sum_a_1)
+      .window(Seq(sum(c).as("sum_a_1")), partitionSpec2, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_2")), partitionSpec4, Seq.empty)
+      .select("a".attr, "b".attr, "c".attr, "d".attr, "sum_a_2".attr, "sum_a_1".attr)
 
     comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("don't transpose two adjacent windows with incompatible partitions") {
     val query = testRelation
-      .window(Seq(sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_2")), partitionSpec3, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_1")), partitionSpec1, Seq.empty)
 
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)
@@ -91,8 +91,8 @@ class TransposeWindowSuite extends PlanTest {
 
   test("don't transpose two adjacent windows with intersection of partition and output set") {
     val query = testRelation
-      .window(Seq(('a + 'b).as('e), sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
-      .window(Seq(sum(c).as('sum_a_1)), Seq(a, 'e), Seq.empty)
+      .window(Seq(("a".attr + "b".attr).as("e"), sum(c).as("sum_a_2")), partitionSpec3, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_1")), Seq(a, "e".attr), Seq.empty)
 
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)
@@ -102,8 +102,8 @@ class TransposeWindowSuite extends PlanTest {
 
   test("don't transpose two adjacent windows with non-deterministic expressions") {
     val query = testRelation
-      .window(Seq(Rand(0).as('e), sum(c).as('sum_a_2)), partitionSpec3, Seq.empty)
-      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, Seq.empty)
+      .window(Seq(Rand(0).as("e"), sum(c).as("sum_a_2")), partitionSpec3, Seq.empty)
+      .window(Seq(sum(c).as("sum_a_1")), partitionSpec1, Seq.empty)
 
     val analyzed = query.analyze
     val optimized = Optimize.execute(analyzed)

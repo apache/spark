@@ -32,17 +32,17 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
         SimplifyCaseConversionExpressions) :: Nil
   }
 
-  val testRelation = LocalRelation('a.string)
+  val testRelation = LocalRelation("a".attr.string)
 
   test("simplify UPPER(UPPER(str))") {
     val originalQuery =
       testRelation
-        .select(Upper(Upper('a)) as 'u)
+        .select(Upper(Upper("a".attr)) as "u")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select(Upper('a) as 'u)
+        .select(Upper("a".attr) as "u")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -51,12 +51,12 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify UPPER(LOWER(str))") {
     val originalQuery =
       testRelation
-        .select(Upper(Lower('a)) as 'u)
+        .select(Upper(Lower("a".attr)) as "u")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select(Upper('a) as 'u)
+        .select(Upper("a".attr) as "u")
         .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -65,11 +65,11 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify LOWER(UPPER(str))") {
     val originalQuery =
       testRelation
-        .select(Lower(Upper('a)) as 'l)
+        .select(Lower(Upper("a".attr)) as "l")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Lower('a) as 'l)
+      .select(Lower("a".attr) as "l")
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -78,11 +78,11 @@ class SimplifyStringCaseConversionSuite extends PlanTest {
   test("simplify LOWER(LOWER(str))") {
     val originalQuery =
       testRelation
-        .select(Lower(Lower('a)) as 'l)
+        .select(Lower(Lower("a".attr)) as "l")
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .select(Lower('a) as 'l)
+      .select(Lower("a".attr) as "l")
       .analyze
 
     comparePlans(optimized, correctAnswer)

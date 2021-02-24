@@ -36,10 +36,11 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
         NullPropagation, UnwrapCastInBinaryComparison) :: Nil
   }
 
-  val testRelation: LocalRelation = LocalRelation('a.short, 'b.float, 'c.decimal(5, 2))
-  val f: BoundReference = 'a.short.canBeNull.at(0)
-  val f2: BoundReference = 'b.float.canBeNull.at(1)
-  val f3: BoundReference = 'c.decimal(5, 2).canBeNull.at(2)
+  val testRelation: LocalRelation =
+    LocalRelation("a".attr.short, "b".attr.float, "c".attr.decimal(5, 2))
+  val f: BoundReference = "a".attr.short.canBeNull.at(0)
+  val f2: BoundReference = "b".attr.float.canBeNull.at(1)
+  val f3: BoundReference = "c".attr.decimal(5, 2).canBeNull.at(2)
 
   test("unwrap casts when literal == max") {
     val v = Short.MaxValue

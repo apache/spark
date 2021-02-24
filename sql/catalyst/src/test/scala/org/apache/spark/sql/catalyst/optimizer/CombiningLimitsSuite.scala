@@ -55,14 +55,14 @@ class CombiningLimitsSuite extends PlanTest {
   test("limits: combines two limits") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select("a".attr)
         .limit(10)
         .limit(5)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select("a".attr)
         .limit(5).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -71,7 +71,7 @@ class CombiningLimitsSuite extends PlanTest {
   test("limits: combines three limits") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select("a".attr)
         .limit(2)
         .limit(7)
         .limit(5)
@@ -79,7 +79,7 @@ class CombiningLimitsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select("a".attr)
         .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -88,15 +88,15 @@ class CombiningLimitsSuite extends PlanTest {
   test("limits: combines two limits after ColumnPruning") {
     val originalQuery =
       testRelation
-        .select('a)
+        .select("a".attr)
         .limit(2)
-        .select('a)
+        .select("a".attr)
         .limit(5)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation
-        .select('a)
+        .select("a".attr)
         .limit(2).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -115,7 +115,7 @@ class CombiningLimitsSuite extends PlanTest {
     comparePlans(optimized2, query2)
 
     // test child max row is none
-    val query3 = testRelation.select(Symbol("a")).limit(1).analyze
+    val query3 = testRelation.select("a".attr).limit(1).analyze
     val optimized3 = Optimize.execute(query3)
     comparePlans(optimized3, query3)
 

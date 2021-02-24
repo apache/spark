@@ -27,14 +27,14 @@ import org.apache.spark.sql.types._
 
 class ResolveGroupingAnalyticsSuite extends AnalysisTest {
 
-  lazy val a = 'a.int
-  lazy val b = 'b.string
-  lazy val c = 'c.string
+  lazy val a = "a".attr.int
+  lazy val b = "b".attr.string
+  lazy val c = "c".attr.string
   lazy val unresolved_a = UnresolvedAttribute("a")
   lazy val unresolved_b = UnresolvedAttribute("b")
   lazy val unresolved_c = UnresolvedAttribute("c")
-  lazy val gid = 'spark_grouping_id.long.withNullability(false)
-  lazy val hive_gid = 'grouping__id.long.withNullability(false)
+  lazy val gid = "spark_grouping_id".attr.long.withNullability(false)
+  lazy val hive_gid = "grouping__id".attr.long.withNullability(false)
   lazy val grouping_a = Cast(ShiftRight(gid, 1) & 1L, ByteType, Option(TimeZone.getDefault().getID))
   lazy val nulInt = Literal(null, IntegerType)
   lazy val nulStr = Literal(null, StringType)
@@ -287,7 +287,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
     val expected = Project(Seq(a, b), Sort(
-      Seq(SortOrder('aggOrder.byte.withNullability(false), Ascending)), true,
+      Seq(SortOrder("aggOrder".attr.byte.withNullability(false), Ascending)), true,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, grouping_a.as("aggOrder")),
         Expand(
@@ -308,7 +308,7 @@ class ResolveGroupingAnalyticsSuite extends AnalysisTest {
       GroupingSets(Seq(Seq(), Seq(unresolved_a), Seq(unresolved_a, unresolved_b)),
         Seq(unresolved_a, unresolved_b), r1, Seq(unresolved_a, unresolved_b)))
     val expected3 = Project(Seq(a, b), Sort(
-      Seq(SortOrder('aggOrder.long.withNullability(false), Ascending)), true,
+      Seq(SortOrder("aggOrder".attr.long.withNullability(false), Ascending)), true,
       Aggregate(Seq(a, b, gid),
         Seq(a, b, gid.as("aggOrder")),
         Expand(

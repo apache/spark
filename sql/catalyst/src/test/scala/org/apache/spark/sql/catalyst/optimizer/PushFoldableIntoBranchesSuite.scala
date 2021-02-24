@@ -38,7 +38,7 @@ class PushFoldableIntoBranchesSuite
       BooleanSimplification, ConstantFolding, SimplifyConditionals, PushFoldableIntoBranches) :: Nil
   }
 
-  private val relation = LocalRelation('a.int, 'b.int, 'c.boolean)
+  private val relation = LocalRelation("a".attr.int, "b".attr.int, "c".attr.boolean)
   private val a = EqualTo(UnresolvedAttribute("a"), Literal(100))
   private val b = UnresolvedAttribute("b")
   private val c = EqualTo(UnresolvedAttribute("c"), Literal(true))
@@ -271,10 +271,10 @@ class PushFoldableIntoBranchesSuite
 
   test("SPARK-33884: simplify CaseWhen clauses with (true and false) and (false and true)") {
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(0)),
-      'a > 10 <=> TrueLiteral)
+      EqualTo(CaseWhen(Seq(("a".attr > 10, Literal(0))), Literal(1)), Literal(0)),
+      "a".attr > 10 <=> TrueLiteral)
     assertEquivalent(
-      EqualTo(CaseWhen(Seq(('a > 10, Literal(0))), Literal(1)), Literal(1)),
-      Not('a > 10 <=> TrueLiteral))
+      EqualTo(CaseWhen(Seq(("a".attr > 10, Literal(0))), Literal(1)), Literal(1)),
+      Not("a".attr > 10 <=> TrueLiteral))
   }
 }

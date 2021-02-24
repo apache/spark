@@ -38,30 +38,34 @@ class RewriteSubquerySuite extends PlanTest {
   }
 
   test("Column pruning after rewriting predicate subquery") {
-    val relation = LocalRelation('a.int, 'b.int)
-    val relInSubquery = LocalRelation('x.int, 'y.int, 'z.int)
+    val relation = LocalRelation("a".attr.int, "b".attr.int)
+    val relInSubquery = LocalRelation("x".attr.int, "y".attr.int, "z".attr.int)
 
-    val query = relation.where('a.in(ListQuery(relInSubquery.select('x)))).select('a)
+    val query =
+      relation.where("a".attr.in(ListQuery(relInSubquery.select("x".attr)))).select("a".attr)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = relation
-      .select('a)
-      .join(relInSubquery.select('x), LeftSemi, Some('a === 'x))
+      .select("a".attr)
+      .join(relInSubquery.select("x".attr), LeftSemi, Some("a".attr === "x".attr))
       .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
   test("NOT-IN subquery nested inside OR") {
-    val relation1 = LocalRelation('a.int, 'b.int)
-    val relation2 = LocalRelation('c.int, 'd.int)
-    val exists = 'exists.boolean.notNull
+    val relation1 = LocalRelation("a".attr.int, "b".attr.int)
+    val relation2 = LocalRelation("c".attr.int, "d".attr.int)
+    val exists = "exists".attr.boolean.notNull
 
-    val query = relation1.where('b === 1 || Not('a.in(ListQuery(relation2.select('c))))).select('a)
+    val query = relation1.
+      where("b".attr === 1 || Not("a".attr.in(ListQuery(relation2.select("c".attr)))))
+      .select("a".attr)
     val correctAnswer = relation1
-      .join(relation2.select('c), ExistenceJoin(exists), Some('a === 'c || IsNull('a === 'c)))
-      .where('b === 1 || Not(exists))
-      .select('a)
+      .join(relation2.select("c".attr), ExistenceJoin(exists),
+        Some("a".attr === "c".attr || IsNull("a".attr === "c".attr)))
+      .where("b".attr === 1 || Not(exists))
+      .select("a".attr)
       .analyze
     val optimized = Optimize.execute(query.analyze)
 

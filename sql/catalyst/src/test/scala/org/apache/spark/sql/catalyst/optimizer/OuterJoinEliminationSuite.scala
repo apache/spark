@@ -36,20 +36,20 @@ class OuterJoinEliminationSuite extends PlanTest {
         PushPredicateThroughJoin) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val testRelation1 = LocalRelation('d.int, 'e.int, 'f.int)
+  val testRelation = LocalRelation("a".attr.int, "b".attr.int, "c".attr.int)
+  val testRelation1 = LocalRelation("d".attr.int, "e".attr.int, "f".attr.int)
 
   test("joins: full outer to inner") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
         .where("x.b".attr >= 1 && "y.d".attr >= 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('b >= 1)
-    val right = testRelation1.where('d >= 2)
+    val left = testRelation.where("b".attr >= 1)
+    val right = testRelation1.where("d".attr >= 2)
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
@@ -57,15 +57,15 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("joins: full outer to right") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr)).where("y.d".attr > 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where('d > 2)
+    val right = testRelation1.where("d".attr > 2)
     val correctAnswer =
       left.join(right, RightOuter, Option("a".attr === "d".attr)).analyze
 
@@ -73,14 +73,14 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("joins: full outer to left") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr)).where("x.a".attr <=> 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('a <=> 2)
+    val left = testRelation.where("a".attr <=> 2)
     val right = testRelation1
     val correctAnswer =
       left.join(right, LeftOuter, Option("a".attr === "d".attr)).analyze
@@ -89,14 +89,14 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("joins: right to inner") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, RightOuter, Option("x.a".attr === "y.d".attr)).where("x.b".attr > 2)
 
     val optimized = Optimize.execute(originalQuery.analyze)
-    val left = testRelation.where('b > 2)
+    val left = testRelation.where("b".attr > 2)
     val right = testRelation1
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
@@ -105,8 +105,8 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("joins: left to inner") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
@@ -114,7 +114,7 @@ class OuterJoinEliminationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where('e.isNotNull)
+    val right = testRelation1.where("e".attr.isNotNull)
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
@@ -123,34 +123,34 @@ class OuterJoinEliminationSuite extends PlanTest {
 
   // evaluating if mixed OR and NOT expressions can eliminate all null-supplying rows
   test("joins: left to inner with complicated filter predicates #1") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
-        .where(!'e.isNull || ('d.isNotNull && 'f.isNull))
+        .where(!"e".attr.isNull || ("d".attr.isNotNull && "f".attr.isNull))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where(!'e.isNull || ('d.isNotNull && 'f.isNull))
+    val right = testRelation1.where(!"e".attr.isNull || ("d".attr.isNotNull && "f".attr.isNull))
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  // eval(emptyRow) of 'e.in(1, 2) will return null instead of false
+  // eval(emptyRow) of "e".attr.in(1, 2) will return null instead of false
   test("joins: left to inner with complicated filter predicates #2") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
-        .where('e.in(1, 2))
+        .where("e".attr.in(1, 2))
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where('e.in(1, 2))
+    val right = testRelation1.where("e".attr.in(1, 2))
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
@@ -159,16 +159,17 @@ class OuterJoinEliminationSuite extends PlanTest {
 
   // evaluating if mixed OR and AND expressions can eliminate all null-supplying rows
   test("joins: left to inner with complicated filter predicates #3") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, LeftOuter, Option("x.a".attr === "y.d".attr))
-        .where((!'e.isNull || ('d.isNotNull && 'f.isNull)) && 'e.isNull)
+        .where((!"e".attr.isNull || ("d".attr.isNotNull && "f".attr.isNull)) && "e".attr.isNull)
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val left = testRelation
-    val right = testRelation1.where((!'e.isNull || ('d.isNotNull && 'f.isNull)) && 'e.isNull)
+    val right = testRelation1.where((!"e".attr.isNull || ("d".attr.isNotNull &&
+      "f".attr.isNull)) && "e".attr.isNull)
     val correctAnswer =
       left.join(right, Inner, Option("a".attr === "d".attr)).analyze
 
@@ -179,8 +180,8 @@ class OuterJoinEliminationSuite extends PlanTest {
   // can eliminate all null-supplying rows
   // FULL OUTER => INNER
   test("joins: left to inner with complicated filter predicates #4") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
@@ -196,8 +197,8 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("joins: no outer join elimination if the filter is not NULL eliminated") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
@@ -215,8 +216,8 @@ class OuterJoinEliminationSuite extends PlanTest {
   }
 
   test("joins: no outer join elimination if the filter's constraints are not NULL eliminated") {
-    val x = testRelation.subquery('x)
-    val y = testRelation1.subquery('y)
+    val x = testRelation.subquery("x")
+    val y = testRelation1.subquery("y")
 
     val originalQuery =
       x.join(y, FullOuter, Option("x.a".attr === "y.d".attr))
@@ -235,8 +236,8 @@ class OuterJoinEliminationSuite extends PlanTest {
 
   test("no outer join elimination if constraint propagation is disabled") {
     withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
-      val x = testRelation.subquery('x)
-      val y = testRelation1.subquery('y)
+      val x = testRelation.subquery("x")
+      val y = testRelation1.subquery("y")
 
       // The predicate "x.b + y.d >= 3" will be inferred constraints like:
       // "x.b != null" and "y.d != null", if constraint propagation is enabled.

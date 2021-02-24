@@ -281,7 +281,7 @@ class SparkSqlParserSuite extends AnalysisTest {
         |FROM testData
       """.stripMargin,
     ScriptTransformation(
-      Seq('a, 'b, 'c),
+      Seq("a".attr, "b".attr, "c".attr),
       "cat",
       Seq(AttributeReference("a", StringType)(),
         AttributeReference("b", StringType)(),

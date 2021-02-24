@@ -97,7 +97,7 @@ class QueryPlanSuite extends SparkFunSuite {
       }
     }
 
-    val t = LocalRelation('a.int, 'b.int)
+    val t = LocalRelation("a".attr.int, "b".attr.int)
     val plan = t.select($"a", $"b").select($"a", $"b").select($"a", $"b").analyze
     assert(testRule(plan).resolved)
   }

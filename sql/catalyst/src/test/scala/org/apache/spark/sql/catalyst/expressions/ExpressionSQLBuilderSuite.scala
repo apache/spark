@@ -94,72 +94,73 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
   }
 
   test("attributes") {
-    checkSQL('a.int, "`a`")
-    checkSQL(Symbol("foo bar").int, "`foo bar`")
+    checkSQL("a".attr.int, "`a`")
+    checkSQL("foo bar".attr.int, "`foo bar`")
     // Keyword
-    checkSQL('int.int, "`int`")
+    checkSQL("int".attr.int, "`int`")
   }
 
   test("binary comparisons") {
-    checkSQL('a.int === 'b.int, "(`a` = `b`)")
-    checkSQL('a.int <=> 'b.int, "(`a` <=> `b`)")
-    checkSQL('a.int =!= 'b.int, "(NOT (`a` = `b`))")
+    checkSQL("a".attr.int === "b".attr.int, "(`a` = `b`)")
+    checkSQL("a".attr.int <=> "b".attr.int, "(`a` <=> `b`)")
+    checkSQL("a".attr.int =!= "b".attr.int, "(NOT (`a` = `b`))")
 
-    checkSQL('a.int < 'b.int, "(`a` < `b`)")
-    checkSQL('a.int <= 'b.int, "(`a` <= `b`)")
-    checkSQL('a.int > 'b.int, "(`a` > `b`)")
-    checkSQL('a.int >= 'b.int, "(`a` >= `b`)")
+    checkSQL("a".attr.int < "b".attr.int, "(`a` < `b`)")
+    checkSQL("a".attr.int <= "b".attr.int, "(`a` <= `b`)")
+    checkSQL("a".attr.int > "b".attr.int, "(`a` > `b`)")
+    checkSQL("a".attr.int >= "b".attr.int, "(`a` >= `b`)")
 
-    checkSQL('a.int in ('b.int, 'c.int), "(`a` IN (`b`, `c`))")
-    checkSQL('a.int in (1, 2), "(`a` IN (1, 2))")
+    checkSQL("a".attr.int in ("b".attr.int, "c".attr.int), "(`a` IN (`b`, `c`))")
+    checkSQL("a".attr.int in (1, 2), "(`a` IN (1, 2))")
 
-    checkSQL('a.int.isNull, "(`a` IS NULL)")
-    checkSQL('a.int.isNotNull, "(`a` IS NOT NULL)")
+    checkSQL("a".attr.int.isNull, "(`a` IS NULL)")
+    checkSQL("a".attr.int.isNotNull, "(`a` IS NOT NULL)")
   }
 
   test("logical operators") {
-    checkSQL('a.boolean && 'b.boolean, "(`a` AND `b`)")
-    checkSQL('a.boolean || 'b.boolean, "(`a` OR `b`)")
-    checkSQL(!'a.boolean, "(NOT `a`)")
-    checkSQL(If('a.boolean, 'b.int, 'c.int), "(IF(`a`, `b`, `c`))")
+    checkSQL("a".attr.boolean && "b".attr.boolean, "(`a` AND `b`)")
+    checkSQL("a".attr.boolean || "b".attr.boolean, "(`a` OR `b`)")
+    checkSQL(!"a".attr.boolean, "(NOT `a`)")
+    checkSQL(If("a".attr.boolean, "b".attr.int, "c".attr.int), "(IF(`a`, `b`, `c`))")
   }
 
   test("arithmetic expressions") {
-    checkSQL('a.int + 'b.int, "(`a` + `b`)")
-    checkSQL('a.int - 'b.int, "(`a` - `b`)")
-    checkSQL('a.int * 'b.int, "(`a` * `b`)")
-    checkSQL('a.int / 'b.int, "(`a` / `b`)")
-    checkSQL('a.int % 'b.int, "(`a` % `b`)")
+    checkSQL("a".attr.int + "b".attr.int, "(`a` + `b`)")
+    checkSQL("a".attr.int - "b".attr.int, "(`a` - `b`)")
+    checkSQL("a".attr.int * "b".attr.int, "(`a` * `b`)")
+    checkSQL("a".attr.int / "b".attr.int, "(`a` / `b`)")
+    checkSQL("a".attr.int % "b".attr.int, "(`a` % `b`)")
 
-    checkSQL(-'a.int, "(- `a`)")
-    checkSQL(-('a.int + 'b.int), "(- (`a` + `b`))")
+    checkSQL(-"a".attr.int, "(- `a`)")
+    checkSQL(-("a".attr.int + "b".attr.int), "(- (`a` + `b`))")
   }
 
   test("window specification") {
     val frame = SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
 
     checkSQL(
-      WindowSpecDefinition('a.int :: Nil, Nil, frame),
+      WindowSpecDefinition("a".attr.int :: Nil, Nil, frame),
       s"(PARTITION BY `a` ${frame.sql})"
     )
 
     checkSQL(
-      WindowSpecDefinition('a.int :: 'b.string :: Nil, Nil, frame),
+      WindowSpecDefinition("a".attr.int :: "b".attr.string :: Nil, Nil, frame),
       s"(PARTITION BY `a`, `b` ${frame.sql})"
     )
 
     checkSQL(
-      WindowSpecDefinition(Nil, 'a.int.asc :: Nil, frame),
+      WindowSpecDefinition(Nil, "a".attr.int.asc :: Nil, frame),
       s"(ORDER BY `a` ASC NULLS FIRST ${frame.sql})"
     )
 
     checkSQL(
-      WindowSpecDefinition(Nil, 'a.int.asc :: 'b.string.desc :: Nil, frame),
+      WindowSpecDefinition(Nil, "a".attr.int.asc :: "b".attr.string.desc :: Nil, frame),
       s"(ORDER BY `a` ASC NULLS FIRST, `b` DESC NULLS LAST ${frame.sql})"
     )
 
     checkSQL(
-      WindowSpecDefinition('a.int :: 'b.string :: Nil, 'c.int.asc :: 'd.string.desc :: Nil, frame),
+      WindowSpecDefinition("a".attr.int :: "b".attr.string :: Nil,
+        "c".attr.int.asc :: "d".attr.string.desc :: Nil, frame),
       s"(PARTITION BY `a`, `b` ORDER BY `c` ASC NULLS FIRST, `d` DESC NULLS LAST ${frame.sql})"
     )
   }
@@ -168,17 +169,17 @@ class ExpressionSQLBuilderSuite extends SparkFunSuite {
     val interval = Literal(new CalendarInterval(0, 0, MICROS_PER_HOUR))
 
     checkSQL(
-      TimeAdd('a, interval),
+      TimeAdd("a".attr, interval),
       "`a` + INTERVAL '1 hours'"
     )
 
     checkSQL(
-      DatetimeSub('a, interval, Literal.default(TimestampType)),
+      DatetimeSub("a".attr, interval, Literal.default(TimestampType)),
       "`a` - INTERVAL '1 hours'"
     )
 
     checkSQL(
-      DateAddInterval('a, interval),
+      DateAddInterval("a".attr, interval),
       "`a` + INTERVAL '1 hours'"
     )
   }

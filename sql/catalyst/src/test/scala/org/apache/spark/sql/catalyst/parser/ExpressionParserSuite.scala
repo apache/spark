@@ -76,41 +76,43 @@ class ExpressionParserSuite extends AnalysisTest {
   // NamedExpression (Alias/Multialias)
   test("named expressions") {
     // No Alias
-    val r0 = 'a
+    val r0 = "a".attr
     assertEqual("a", r0)
 
     // Single Alias.
-    val r1 = 'a as "b"
+    val r1 = "a".attr as "b"
     assertEqual("a as b", r1)
     assertEqual("a b", r1)
 
     // Multi-Alias
-    assertEqual("a as (b, c)", MultiAlias('a, Seq("b", "c")))
-    assertEqual("a() (b, c)", MultiAlias('a.function(), Seq("b", "c")))
+    assertEqual("a as (b, c)", MultiAlias("a".attr, Seq("b", "c")))
+    assertEqual("a() (b, c)", MultiAlias("a".attr.function(), Seq("b", "c")))
 
     // Numeric literals without a space between the literal qualifier and the alias, should not be
     // interpreted as such. An unresolved reference should be returned instead.
     // TODO add the JIRA-ticket number.
-    assertEqual("1SL", Symbol("1SL"))
+    assertEqual("1SL", "1SL".attr)
 
     // Aliased star is allowed.
-    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as 'b)
+    assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as "b")
   }
 
   test("binary logical expressions") {
     // And
-    assertEqual("a and b", 'a && 'b)
+    assertEqual("a and b", "a".attr && "b".attr)
 
     // Or
-    assertEqual("a or b", 'a || 'b)
+    assertEqual("a or b", "a".attr || "b".attr)
 
     // Combination And/Or check precedence
-    assertEqual("a and b or c and d", ('a && 'b) || ('c && 'd))
-    assertEqual("a or b or c and d", 'a || 'b || ('c && 'd))
+    assertEqual("a and b or c and d", ("a".attr && "b".attr) || ("c".attr && "d".attr))
+    assertEqual("a or b or c and d", "a".attr || "b".attr || ("c".attr && "d".attr))
 
     // Multiple AND/OR get converted into a balanced tree
-    assertEqual("a or b or c or d or e or f", (('a || 'b) || 'c) || (('d || 'e) || 'f))
-    assertEqual("a and b and c and d and e and f", (('a && 'b) && 'c) && (('d && 'e) && 'f))
+    assertEqual("a or b or c or d or e or f",
+      (("a".attr || "b".attr) || "c".attr) || (("d".attr || "e".attr) || "f".attr))
+    assertEqual("a and b and c and d and e and f",
+      (("a".attr && "b".attr) && "c".attr) && (("d".attr && "e".attr) && "f".attr))
   }
 
   test("long binary logical expressions") {
@@ -125,8 +127,8 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("not expressions") {
-    assertEqual("not a", !'a)
-    assertEqual("!a", !'a)
+    assertEqual("not a", !"a".attr)
+    assertEqual("!a", !"a".attr)
     assertEqual("not true > true", Not(GreaterThan(true, true)))
   }
 
@@ -137,64 +139,65 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("comparison expressions") {
-    assertEqual("a = b", 'a === 'b)
-    assertEqual("a == b", 'a === 'b)
-    assertEqual("a <=> b", 'a <=> 'b)
-    assertEqual("a <> b", 'a =!= 'b)
-    assertEqual("a != b", 'a =!= 'b)
-    assertEqual("a < b", 'a < 'b)
-    assertEqual("a <= b", 'a <= 'b)
-    assertEqual("a !> b", 'a <= 'b)
-    assertEqual("a > b", 'a > 'b)
-    assertEqual("a >= b", 'a >= 'b)
-    assertEqual("a !< b", 'a >= 'b)
+    assertEqual("a = b", "a".attr === "b".attr)
+    assertEqual("a == b", "a".attr === "b".attr)
+    assertEqual("a <=> b", "a".attr <=> "b".attr)
+    assertEqual("a <> b", "a".attr =!= "b".attr)
+    assertEqual("a != b", "a".attr =!= "b".attr)
+    assertEqual("a < b", "a".attr < "b".attr)
+    assertEqual("a <= b", "a".attr <= "b".attr)
+    assertEqual("a !> b", "a".attr <= "b".attr)
+    assertEqual("a > b", "a".attr > "b".attr)
+    assertEqual("a >= b", "a".attr >= "b".attr)
+    assertEqual("a !< b", "a".attr >= "b".attr)
   }
 
   test("between expressions") {
-    assertEqual("a between b and c", 'a >= 'b && 'a <= 'c)
-    assertEqual("a not between b and c", !('a >= 'b && 'a <= 'c))
+    assertEqual("a between b and c", "a".attr >= "b".attr && "a".attr <= "c".attr)
+    assertEqual("a not between b and c", !("a".attr >= "b".attr && "a".attr <= "c".attr))
   }
 
   test("in expressions") {
-    assertEqual("a in (b, c, d)", 'a in ('b, 'c, 'd))
-    assertEqual("a not in (b, c, d)", !('a in ('b, 'c, 'd)))
+    assertEqual("a in (b, c, d)", "a".attr in ("b".attr, "c".attr, "d".attr))
+    assertEqual("a not in (b, c, d)", !("a".attr in ("b".attr, "c".attr, "d".attr)))
   }
 
   test("in sub-query") {
     assertEqual(
       "a in (select b from c)",
-      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+      InSubquery(Seq("a".attr), ListQuery(table("c").select("b".attr))))
 
     assertEqual(
       "(a, b, c) in (select d, e, f from g)",
-      InSubquery(Seq('a, 'b, 'c), ListQuery(table("g").select('d, 'e, 'f))))
+      InSubquery(Seq("a".attr, "b".attr, "c".attr),
+        ListQuery(table("g").select("d".attr, "e".attr, "f".attr))))
 
     assertEqual(
       "(a, b) in (select c from d)",
-      InSubquery(Seq('a, 'b), ListQuery(table("d").select('c))))
+      InSubquery(Seq("a".attr, "b".attr), ListQuery(table("d").select("c".attr))))
 
     assertEqual(
       "(a) in (select b from c)",
-      InSubquery(Seq('a), ListQuery(table("c").select('b))))
+      InSubquery(Seq("a".attr), ListQuery(table("c").select("b".attr))))
   }
 
   test("like expressions") {
-    assertEqual("a like 'pattern%'", 'a like "pattern%")
-    assertEqual("a not like 'pattern%'", !('a like "pattern%"))
-    assertEqual("a rlike 'pattern%'", 'a rlike "pattern%")
-    assertEqual("a not rlike 'pattern%'", !('a rlike "pattern%"))
-    assertEqual("a regexp 'pattern%'", 'a rlike "pattern%")
-    assertEqual("a not regexp 'pattern%'", !('a rlike "pattern%"))
+    assertEqual("a like 'pattern%'", "a".attr like "pattern%")
+    assertEqual("a not like 'pattern%'", !("a".attr like "pattern%"))
+    assertEqual("a rlike 'pattern%'", "a".attr rlike "pattern%")
+    assertEqual("a not rlike 'pattern%'", !("a".attr rlike "pattern%"))
+    assertEqual("a regexp 'pattern%'", "a".attr rlike "pattern%")
+    assertEqual("a not regexp 'pattern%'", !("a".attr rlike "pattern%"))
   }
 
   test("like escape expressions") {
     val message = "Escape string must contain only one character."
-    assertEqual("a like 'pattern%' escape '#'", 'a.like("pattern%", '#'))
-    assertEqual("a like 'pattern%' escape '\"'", 'a.like("pattern%", '\"'))
+    assertEqual("a like 'pattern%' escape '#'", "a".attr.like("pattern%", '#'))
+    assertEqual("a like 'pattern%' escape '\"'", "a".attr.like("pattern%", '\"'))
     intercept("a like 'pattern%' escape '##'", message)
     intercept("a like 'pattern%' escape ''", message)
-    assertEqual("a not like 'pattern%' escape '#'", !('a.like("pattern%", '#')))
-    assertEqual("a not like 'pattern%' escape '\"'", !('a.like("pattern%", '\"')))
+    assertEqual("a not like 'pattern%' escape '#'", !("a".attr.like("pattern%", '#')))
+    assertEqual("a not like 'pattern%' escape '\"'", !("a".attr.like("pattern%", '\"')))
     intercept("a not like 'pattern%' escape '\"/'", message)
     intercept("a not like 'pattern%' escape ''", message)
   }
@@ -202,21 +205,21 @@ class ExpressionParserSuite extends AnalysisTest {
   test("like expressions with ESCAPED_STRING_LITERALS = true") {
     withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
       val parser = new CatalystSqlParser()
-      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", 'a rlike "^\\x20[\\x20-\\x23]+$", parser)
-      assertEqual("a rlike 'pattern\\\\'", 'a rlike "pattern\\\\", parser)
-      assertEqual("a rlike 'pattern\\t\\n'", 'a rlike "pattern\\t\\n", parser)
+      assertEqual("a rlike '^\\x20[\\x20-\\x23]+$'", "a".attr rlike "^\\x20[\\x20-\\x23]+$", parser)
+      assertEqual("a rlike 'pattern\\\\'", "a".attr rlike "pattern\\\\", parser)
+      assertEqual("a rlike 'pattern\\t\\n'", "a".attr rlike "pattern\\t\\n", parser)
     }
   }
 
   test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a like $quantifier ('foo%', 'b%')", 'a likeAny("foo%", "b%"))
-      assertEqual(s"a not like $quantifier ('foo%', 'b%')", 'a notLikeAny("foo%", "b%"))
-      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !('a likeAny("foo%", "b%")))
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", "a".attr likeAny("foo%", "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", "a".attr notLikeAny("foo%", "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !("a".attr likeAny("foo%", "b%")))
     }
-    assertEqual("a like all ('foo%', 'b%')", 'a likeAll("foo%", "b%"))
-    assertEqual("a not like all ('foo%', 'b%')", 'a notLikeAll("foo%", "b%"))
-    assertEqual("not (a like all ('foo%', 'b%'))", !('a likeAll("foo%", "b%")))
+    assertEqual("a like all ('foo%', 'b%')", "a".attr likeAll("foo%", "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", "a".attr notLikeAll("foo%", "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !("a".attr likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
       intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
@@ -224,73 +227,74 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("is null expressions") {
-    assertEqual("a is null", 'a.isNull)
-    assertEqual("a is not null", 'a.isNotNull)
-    assertEqual("a = b is null", ('a === 'b).isNull)
-    assertEqual("a = b is not null", ('a === 'b).isNotNull)
+    assertEqual("a is null", "a".attr.isNull)
+    assertEqual("a is not null", "a".attr.isNotNull)
+    assertEqual("a = b is null", ("a".attr === "b".attr).isNull)
+    assertEqual("a = b is not null", ("a".attr === "b".attr).isNotNull)
   }
 
   test("is distinct expressions") {
-    assertEqual("a is distinct from b", !('a <=> 'b))
-    assertEqual("a is not distinct from b", 'a <=> 'b)
+    assertEqual("a is distinct from b", !("a".attr <=> "b".attr))
+    assertEqual("a is not distinct from b", "a".attr <=> "b".attr)
   }
 
   test("binary arithmetic expressions") {
     // Simple operations
-    assertEqual("a * b", 'a * 'b)
-    assertEqual("a / b", 'a / 'b)
-    assertEqual("a DIV b", 'a div 'b)
-    assertEqual("a % b", 'a % 'b)
-    assertEqual("a + b", 'a + 'b)
-    assertEqual("a - b", 'a - 'b)
-    assertEqual("a & b", 'a & 'b)
-    assertEqual("a ^ b", 'a ^ 'b)
-    assertEqual("a | b", 'a | 'b)
+    assertEqual("a * b", "a".attr * "b".attr)
+    assertEqual("a / b", "a".attr / "b".attr)
+    assertEqual("a DIV b", "a".attr div "b".attr)
+    assertEqual("a % b", "a".attr % "b".attr)
+    assertEqual("a + b", "a".attr + "b".attr)
+    assertEqual("a - b", "a".attr - "b".attr)
+    assertEqual("a & b", "a".attr & "b".attr)
+    assertEqual("a ^ b", "a".attr ^ "b".attr)
+    assertEqual("a | b", "a".attr | "b".attr)
 
     // Check precedences
     assertEqual(
       "a * t | b ^ c & d - e + f % g DIV h / i * k",
-      'a * 't | ('b ^ ('c & ('d - 'e + (('f % 'g div 'h) / 'i * 'k)))))
+      "a".attr * "t".attr | ("b".attr ^ ("c".attr & ("d".attr - "e".attr +
+        (("f".attr % "g".attr div "h".attr) / "i".attr * "k".attr)))))
   }
 
   test("unary arithmetic expressions") {
-    assertEqual("+a", +'a)
-    assertEqual("-a", -'a)
-    assertEqual("~a", ~'a)
-    assertEqual("-+~~a", -( +(~(~'a))))
+    assertEqual("+a", +"a".attr)
+    assertEqual("-a", -"a".attr)
+    assertEqual("~a", ~"a".attr)
+    assertEqual("-+~~a", -( +(~(~"a".attr))))
   }
 
   test("cast expressions") {
     // Note that DataType parsing is tested elsewhere.
-    assertEqual("cast(a as int)", 'a.cast(IntegerType))
-    assertEqual("cast(a as timestamp)", 'a.cast(TimestampType))
-    assertEqual("cast(a as array<int>)", 'a.cast(ArrayType(IntegerType)))
-    assertEqual("cast(cast(a as int) as long)", 'a.cast(IntegerType).cast(LongType))
+    assertEqual("cast(a as int)", "a".attr.cast(IntegerType))
+    assertEqual("cast(a as timestamp)", "a".attr.cast(TimestampType))
+    assertEqual("cast(a as array<int>)", "a".attr.cast(ArrayType(IntegerType)))
+    assertEqual("cast(cast(a as int) as long)", "a".attr.cast(IntegerType).cast(LongType))
   }
 
   test("function expressions") {
-    assertEqual("foo()", 'foo.function())
+    assertEqual("foo()", "foo".attr.function())
     assertEqual("foo.bar()",
       UnresolvedFunction(FunctionIdentifier("bar", Some("foo")), Seq.empty, isDistinct = false))
-    assertEqual("foo(*)", 'foo.function(star()))
-    assertEqual("count(*)", 'count.function(1))
-    assertEqual("foo(a, b)", 'foo.function('a, 'b))
-    assertEqual("foo(all a, b)", 'foo.function('a, 'b))
-    assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
-    assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
-    assertEqual("`select`(all a, b)", 'select.function('a, 'b))
+    assertEqual("foo(*)", "foo".attr.function(star()))
+    assertEqual("count(*)", "count".attr.function(1))
+    assertEqual("foo(a, b)", "foo".attr.function("a".attr, "b".attr))
+    assertEqual("foo(all a, b)", "foo".attr.function("a".attr, "b".attr))
+    assertEqual("foo(distinct a, b)", "foo".attr.distinctFunction("a".attr, "b".attr))
+    assertEqual("grouping(distinct a, b)", "grouping".attr.distinctFunction("a".attr, "b".attr))
+    assertEqual("`select`(all a, b)", "select".attr.function("a".attr, "b".attr))
     intercept("foo(a x)", "extraneous input 'x'")
   }
 
-  private def lv(s: Symbol) = UnresolvedNamedLambdaVariable(Seq(s.name))
+  private def lv(s: String) = UnresolvedNamedLambdaVariable(Seq(s))
 
   test("lambda functions") {
-    assertEqual("x -> x + 1", LambdaFunction(lv('x) + 1, Seq(lv('x))))
-    assertEqual("(x, y) -> x + y", LambdaFunction(lv('x) + lv('y), Seq(lv('x), lv('y))))
+    assertEqual("x -> x + 1", LambdaFunction(lv("x") + 1, Seq(lv("x"))))
+    assertEqual("(x, y) -> x + y", LambdaFunction(lv("x") + lv("y"), Seq(lv("x"), lv("y"))))
   }
 
   test("window function expressions") {
-    val func = 'foo.function(star())
+    val func = "foo".attr.function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,
@@ -301,27 +305,31 @@ class ExpressionParserSuite extends AnalysisTest {
     // Basic window testing.
     assertEqual("foo(*) over w1", UnresolvedWindowExpression(func, WindowSpecReference("w1")))
     assertEqual("foo(*) over ()", windowed())
-    assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
-    assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
-    assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
+    assertEqual("foo(*) over (partition by a, b)", windowed(Seq("a".attr, "b".attr)))
+    assertEqual("foo(*) over (distribute by a, b)", windowed(Seq("a".attr, "b".attr)))
+    assertEqual("foo(*) over (cluster by a, b)", windowed(Seq("a".attr, "b".attr)))
+    assertEqual("foo(*) over (order by a desc, b asc)",
+      windowed(Seq.empty, Seq("a".attr.desc, "b".attr.asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)",
+      windowed(Seq.empty, Seq("a".attr.desc, "b".attr.asc)))
+    assertEqual("foo(*) over (partition by a, b order by c)",
+      windowed(Seq("a".attr, "b".attr), Seq("c".attr.asc)))
+    assertEqual("foo(*) over (distribute by a, b sort by c)",
+      windowed(Seq("a".attr, "b".attr), Seq("c".attr.asc)))
 
     // Test use of expressions in window functions.
     assertEqual(
       "sum(product + 1) over (partition by ((product) + (1)) order by 2)",
-      WindowExpression('sum.function('product + 1),
-        WindowSpecDefinition(Seq('product + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression("sum".attr.function("product".attr + 1),
+        WindowSpecDefinition(Seq("product".attr + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
     assertEqual(
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
-      WindowExpression('sum.function('product + 1),
-        WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+      WindowExpression("sum".attr.function("product".attr + 1),
+        WindowSpecDefinition(Seq("product".attr / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
   }
 
   test("range/rows window function expressions") {
-    val func = 'foo.function(star())
+    val func = "foo".attr.function(star())
     def windowed(
         partitioning: Seq[Expression] = Seq.empty,
         ordering: Seq[SortOrder] = Seq.empty,
@@ -380,7 +388,8 @@ class ExpressionParserSuite extends AnalysisTest {
         boundaries.foreach {
           case (boundarySql, begin, end) =>
             val query = s"foo(*) over (partition by a order by b $frameTypeSql $boundarySql)"
-            val expr = windowed(Seq('a), Seq('b.asc), SpecifiedWindowFrame(frameType, begin, end))
+            val expr = windowed(
+              Seq("a".attr), Seq("b".attr.asc), SpecifiedWindowFrame(frameType, begin, end))
             assertEqual(query, expr)
         }
     }
@@ -392,65 +401,66 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("row constructor") {
     // Note that '(a)' will be interpreted as a nested expression.
-    assertEqual("(a, b)", CreateStruct(Seq('a, 'b)))
-    assertEqual("(a, b, c)", CreateStruct(Seq('a, 'b, 'c)))
-    assertEqual("(a as b, b as c)", CreateStruct(Seq('a as 'b, 'b as 'c)))
+    assertEqual("(a, b)", CreateStruct(Seq("a".attr, "b".attr)))
+    assertEqual("(a, b, c)", CreateStruct(Seq("a".attr, "b".attr, "c".attr)))
+    assertEqual("(a as b, b as c)", CreateStruct(Seq("a".attr as "b", "b".attr as "c")))
   }
 
   test("scalar sub-query") {
     assertEqual(
       "(select max(val) from tbl) > current",
-      ScalarSubquery(table("tbl").select('max.function('val))) > 'current)
+      ScalarSubquery(table("tbl").select("max".attr.function("val".attr))) > "current".attr)
     assertEqual(
       "a = (select b from s)",
-      'a === ScalarSubquery(table("s").select('b)))
+      "a".attr === ScalarSubquery(table("s").select("b".attr)))
   }
 
   test("case when") {
     assertEqual("case a when 1 then b when 2 then c else d end",
-      CaseKeyWhen('a, Seq(1, 'b, 2, 'c, 'd)))
+      CaseKeyWhen("a".attr, Seq(1, "b".attr, 2, "c".attr, "d".attr)))
     assertEqual("case (a or b) when true then c when false then d else e end",
-      CaseKeyWhen('a || 'b, Seq(true, 'c, false, 'd, 'e)))
+      CaseKeyWhen("a".attr || "b".attr, Seq(true, "c".attr, false, "d".attr, "e".attr)))
     assertEqual("case 'a'='a' when true then 1 end",
       CaseKeyWhen("a" ===  "a", Seq(true, 1)))
     assertEqual("case when a = 1 then b when a = 2 then c else d end",
-      CaseWhen(Seq(('a === 1, 'b.expr), ('a === 2, 'c.expr)), 'd))
+      CaseWhen(Seq(("a".attr === 1, "b".attr.expr), ("a".attr === 2, "c".attr.expr)), "d".attr))
     assertEqual("case when (1) + case when a > b then c else d end then f else g end",
-      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(('a > 'b, 'c.expr)), 'd.expr), 'f.expr)), 'g))
+      CaseWhen(Seq((Literal(1) + CaseWhen(Seq(("a".attr > "b".attr, "c".attr.expr)),
+        "d".attr.expr), "f".attr.expr)), "g".attr))
   }
 
   test("dereference") {
     assertEqual("a.b", UnresolvedAttribute("a.b"))
     assertEqual("`select`.b", UnresolvedAttribute("select.b"))
-    assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
+    assertEqual("(a + b).b", ("a".attr + "b".attr).getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
-      namedStruct(NamePlaceholder, 'a, NamePlaceholder, 'b).getField("b"))
+      namedStruct(NamePlaceholder, "a".attr, NamePlaceholder, "b".attr).getField("b"))
   }
 
   test("reference") {
     // Regular
-    assertEqual("a", 'a)
+    assertEqual("a", "a".attr)
 
     // Starting with a digit.
-    assertEqual("1a", Symbol("1a"))
+    assertEqual("1a", "1a".attr)
 
     // Quoted using a keyword.
-    assertEqual("`select`", 'select)
+    assertEqual("`select`", "select".attr)
 
     // Unquoted using an unreserved keyword.
-    assertEqual("columns", 'columns)
+    assertEqual("columns", "columns".attr)
   }
 
   test("subscript") {
-    assertEqual("a[b]", 'a.getItem('b))
-    assertEqual("a[1 + 1]", 'a.getItem(Literal(1) + 1))
-    assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem('b))
+    assertEqual("a[b]", "a".attr.getItem("b".attr))
+    assertEqual("a[1 + 1]", "a".attr.getItem(Literal(1) + 1))
+    assertEqual("`c`.a[b]", UnresolvedAttribute("c.a").getItem("b".attr))
   }
 
   test("parenthesis") {
-    assertEqual("(a)", 'a)
-    assertEqual("r * (a + b)", 'r * ('a + 'b))
+    assertEqual("(a)", "a".attr)
+    assertEqual("r * (a + b)", "r".attr * ("a".attr + "b".attr))
   }
 
   test("type constructors") {
@@ -759,7 +769,8 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("composed expressions") {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
-    assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
+    assertEqual("1 - f('o', o(bar))",
+      Literal(1) - "f".attr.function("o", "o".attr.function("bar".attr)))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
   }
 
@@ -786,10 +797,10 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {
-    assertEqual("first(a ignore nulls)", First('a, true).toAggregateExpression())
-    assertEqual("first(a)", First('a, false).toAggregateExpression())
-    assertEqual("last(a ignore nulls)", Last('a, true).toAggregateExpression())
-    assertEqual("last(a)", Last('a, false).toAggregateExpression())
+    assertEqual("first(a ignore nulls)", First("a".attr, true).toAggregateExpression())
+    assertEqual("first(a)", First("a".attr, false).toAggregateExpression())
+    assertEqual("last(a ignore nulls)", Last("a".attr, true).toAggregateExpression())
+    assertEqual("last(a)", Last("a".attr, false).toAggregateExpression())
   }
 
   test("timestamp literals") {
@@ -800,7 +811,7 @@ class ExpressionParserSuite extends AnalysisTest {
           TimeUnit.SECONDS.toMicros(seconds)
         }
         assertEval(
-          sqlCommand = "TIMESTAMP '2019-01-14 20:54:00.000'",
+          sqlCommand = "TIMESTAMP '2019-01-14' 20:54:00.000'",
           expect = toMicros(LocalDateTime.of(2019, 1, 14, 20, 54)))
         assertEval(
           sqlCommand = "Timestamp '2000-01-01T00:55:00'",
@@ -808,7 +819,7 @@ class ExpressionParserSuite extends AnalysisTest {
         // Parsing of the string does not depend on the SQL config because the string contains
         // time zone offset already.
         assertEval(
-          sqlCommand = "TIMESTAMP '2019-01-16 20:50:00.567000+01:00'",
+          sqlCommand = "TIMESTAMP '2019-01-16' 20:50:00.567000+01:00'",
           expect = 1547668200567000L)
       }
     }
