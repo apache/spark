@@ -1992,7 +1992,7 @@ class DataSourceV2SQLSuite
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+      sql(s"CREATE VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }

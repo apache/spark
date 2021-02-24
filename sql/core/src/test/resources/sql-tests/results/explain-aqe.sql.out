@@ -904,8 +904,9 @@ struct<plan:string>
 == Physical Plan ==
 Execute CreateViewCommand (1)
    +- CreateViewCommand (2)
-         +- Project (4)
-            +- UnresolvedRelation (3)
+         +- Project (5)
+            +- SubqueryAlias (4)
+               +- LogicalRelation (3)
 
 
 (1) Execute CreateViewCommand
@@ -914,11 +915,26 @@ Output: []
 (2) CreateViewCommand
 Arguments: `default`.`explain_view`, SELECT key, val FROM explain_temp1, false, false, PersistedView
 
-(3) UnresolvedRelation
-Arguments: [explain_temp1], [], false
+(3) LogicalRelation
+Arguments: parquet, [key#x, val#x], CatalogTable(
+Database: default
+Table: explain_temp1
+Created Time [not included in comparison]
+Last Access [not included in comparison]
+Created By [not included in comparison]
+Type: MANAGED
+Provider: PARQUET
+Location [not included in comparison]/{warehouse_dir}/explain_temp1
+Schema: root
+-- key: integer (nullable = true)
+-- val: integer (nullable = true)
+), false
 
-(4) Project
-Arguments: ['key, 'val]
+(4) SubqueryAlias
+Arguments: spark_catalog.default.explain_temp1
+
+(5) Project
+Arguments: [key#x, val#x]
 
 
 -- !query
