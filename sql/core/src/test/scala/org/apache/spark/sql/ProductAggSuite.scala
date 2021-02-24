@@ -42,13 +42,15 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
   test("type flexibility") {
     val bytes16 = spark.createDataset((1 to 16).map { _.toByte })(Encoders.scalaByte).toDF("x")
 
-    val variants = Map("int8" -> ByteType, "int16" -> ShortType, "int32" -> IntegerType,
-                       "float32" -> FloatType, "float64" -> DoubleType)
+    val variants = Map(
+      "int8" -> ByteType, "int16" -> ShortType, "int32" -> IntegerType,
+      "float32" -> FloatType, "float64" -> DoubleType)
 
     val prods = variants.foldLeft(bytes16) { case (df, (id, typ)) =>
       df.withColumn(id, df.col("x").cast(typ))
-    }.agg(lit(1) as "dummy",
-          variants.keys.toSeq.map { id => product(col(id)) as id } : _*)
+    }.agg(
+      lit(1) as "dummy",
+      variants.keys.toSeq.map { id => product(col(id)) as id } : _*)
 
     variants.keys.foreach { typ =>
       val prod = prods.select(typ).as[Double](Encoders.scalaDouble).head
@@ -81,9 +83,10 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
     implicit val enc = Encoders.scalaDouble
 
     val grouped = data16.groupBy((col("x") % 3) as "mod3")
-      .agg(product(col("x")) as "product",
-           product(col("x") * 0.5) as "product_scaled",
-           product(col("x") * -1.0) as "product_minus")
+      .agg(
+        product(col("x")) as "product",
+        product(col("x") * 0.5) as "product_scaled",
+        product(col("x") * -1.0) as "product_minus")
       .orderBy("mod3")
 
     def col2seq(s: String): Seq[Double] =
@@ -94,9 +97,11 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
                            (2 * 5 * 8 * 11 * 14))
 
     assert(col2seq("product") === expectedBase.map { _.toDouble })
-    assert(col2seq("product_scaled") ===
-            expectedBase.zip(Seq(0.03125, 0.015625, 0.03125)).map { case(a, b) => a * b })
-    assert(col2seq("product_minus") ===
-            expectedBase.zip(Seq(-1.0, 1.0, -1.0)).map { case(a, b) => a * b })
+    assert(
+      col2seq("product_scaled") ===
+      expectedBase.zip(Seq(0.03125, 0.015625, 0.03125)).map { case(a, b) => a * b })
+    assert(
+      col2seq("product_minus") ===
+      expectedBase.zip(Seq(-1.0, 1.0, -1.0)).map { case(a, b) => a * b })
   }
 }

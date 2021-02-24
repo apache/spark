@@ -73,8 +73,7 @@ case class Product(child: Expression, scale: Double = 1.0)
   }
 
   override lazy val mergeExpressions: Seq[Expression] =
-    Seq(coalesce(coalesce(product.left, one) * product.right,
-                 product.left))
+    Seq(coalesce(coalesce(product.left, one) * product.right, product.left))
 
   override lazy val evaluateExpression: Expression = product
 }
