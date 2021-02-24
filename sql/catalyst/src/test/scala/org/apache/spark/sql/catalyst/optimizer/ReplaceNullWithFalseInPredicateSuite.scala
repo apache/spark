@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.dsl.AttributeSymbol
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, ArrayTransform, CaseWhen, Expression, GreaterThan, If, LambdaFunction, Literal, MapFilter, NamedExpression, Or, UnresolvedNamedLambdaVariable}
@@ -44,7 +43,7 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
 
   private val testRelation =
     LocalRelation("i".attr.int, "b".attr.boolean, "a".attr.array(IntegerType),
-      "m".attr.map(IntegerType, IntegerType))
+      "m".attr.mapAttr(IntegerType, IntegerType))
   private val anotherTestRelation = LocalRelation("d".attr.int)
 
   test("replace null inside filter and join conditions") {
