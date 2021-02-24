@@ -4040,7 +4040,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       spark.range(5).toDF().repartition(1).write.saveAsTable("left_table")
       spark.range(3).write.saveAsTable("nonempty_right_table")
       spark.range(0).write.saveAsTable("empty_right_table")
-      Seq("LEFT SEMI").foreach { joinType =>
+      Seq("LEFT SEMI", "LEFT ANTI").foreach { joinType =>
         val joinWithNonEmptyRightDf = spark.sql(
           s"SELECT * FROM left_table $joinType JOIN nonempty_right_table LIMIT 3")
         val joinWithEmptyRightDf = spark.sql(
