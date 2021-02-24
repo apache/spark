@@ -464,7 +464,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // with dummy input, resolve the plan by the analyzer, and replace the dummy input
     // with a literal for tests.
     val unresolvedDeser = UnresolvedDeserializer(encoderFor[Map[Int, String]].deserializer)
-    val dummyInputPlan = LocalRelation(attr"value".map(MapType(IntegerType, StringType)))
+    val dummyInputPlan = LocalRelation("value".attr.map(MapType(IntegerType, StringType)))
     val plan = Project(Alias(unresolvedDeser, "none")() :: Nil, dummyInputPlan)
 
     val analyzedPlan = SimpleAnalyzer.execute(plan)

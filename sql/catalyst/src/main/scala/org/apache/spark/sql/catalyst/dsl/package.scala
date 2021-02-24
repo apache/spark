@@ -142,10 +142,7 @@ package object dsl {
     def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
-    def as(alias: AttributeSymbol): NamedExpression = Alias(expr, alias.name)()
   }
-
-  class AttributeSymbol(val name: String)
 
   trait ExpressionConversions {
     implicit class DslExpression(e: Expression) extends ImplicitOperators {
@@ -178,10 +175,6 @@ package object dsl {
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
         analysis.UnresolvedAttribute(sc.s(args : _*))
-      }
-
-      def attr(args: Any*): AttributeSymbol = {
-        new AttributeSymbol(sc.s(args : _*))
       }
     }
 
@@ -260,10 +253,6 @@ package object dsl {
     implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
       def s: String = attr.name
     }
-    implicit class DslAttributeSymbol(sym: AttributeSymbol) extends ImplicitAttribute {
-      def s: String = sym.name
-    }
-    implicit def attrSymToUnresolvedAttr(sym: AttributeSymbol): UnresolvedAttribute = sym.expr
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
@@ -319,10 +308,10 @@ package object dsl {
         AttributeReference(s, arrayType)()
 
       /** Creates a new AttributeReference of type map */
-      def map(keyType: DataType, valueType: DataType): AttributeReference =
-        map(MapType(keyType, valueType))
+      def mapAttr(keyType: DataType, valueType: DataType): AttributeReference =
+        mapAttr(MapType(keyType, valueType))
 
-      def map(mapType: MapType): AttributeReference =
+      def mapAttr(mapType: MapType): AttributeReference =
         AttributeReference(s, mapType, nullable = true)()
 
       /** Creates a new AttributeReference of type struct */

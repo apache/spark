@@ -624,8 +624,8 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("Join can work on binary types but can't work on map types") {
-    val left = LocalRelation(Symbol("a").binary, Symbol("b").map(StringType, StringType))
-    val right = LocalRelation(Symbol("c").binary, Symbol("d").map(StringType, StringType))
+    val left = LocalRelation(Symbol("a").binary, Symbol("b").mapAttr(StringType, StringType))
+    val right = LocalRelation(Symbol("c").binary, Symbol("d").mapAttr(StringType, StringType))
 
     val plan1 = left.join(
       right,

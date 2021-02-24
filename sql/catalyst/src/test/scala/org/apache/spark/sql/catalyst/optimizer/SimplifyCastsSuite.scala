@@ -31,15 +31,15 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable element array to nullable element array cast") {
-    val input = LocalRelation(attr"a".array(ArrayType(IntegerType, false)))
-    val plan = input.select(attr"a".cast(ArrayType(IntegerType, true)).as("casted")).analyze
+    val input = LocalRelation("a".attr.array(ArrayType(IntegerType, false)))
+    val plan = input.select("a".attr.cast(ArrayType(IntegerType, true)).as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select(attr"a".as("casted")).analyze
+    val expected = input.select("a".attr.as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
   test("nullable element to non-nullable element array cast") {
-    val input = LocalRelation(attr"a".array(ArrayType(IntegerType, true)))
+    val input = LocalRelation("a".attr.array(ArrayType(IntegerType, true)))
     val attr = input.output.head
     val plan = input.select(attr.cast(ArrayType(IntegerType, false)).as("casted"))
     val optimized = Optimize.execute(plan)
@@ -49,16 +49,16 @@ class SimplifyCastsSuite extends PlanTest {
   }
 
   test("non-nullable value map to nullable value map cast") {
-    val input = LocalRelation(attr"m".map(MapType(StringType, StringType, false)))
-    val plan = input.select(attr"m".cast(MapType(StringType, StringType, true))
+    val input = LocalRelation("m".attr.mapAttr(MapType(StringType, StringType, false)))
+    val plan = input.select("m".attr.cast(MapType(StringType, StringType, true))
       .as("casted")).analyze
     val optimized = Optimize.execute(plan)
-    val expected = input.select(attr"m".as("casted")).analyze
+    val expected = input.select("m".attr.as("casted")).analyze
     comparePlans(optimized, expected)
   }
 
   test("nullable value map to non-nullable value map cast") {
-    val input = LocalRelation(attr"m".map(MapType(StringType, StringType, true)))
+    val input = LocalRelation("m".attr.mapAttr(MapType(StringType, StringType, true)))
     val attr = input.output.head
     val plan = input.select(attr.cast(MapType(StringType, StringType, false))
       .as("casted"))

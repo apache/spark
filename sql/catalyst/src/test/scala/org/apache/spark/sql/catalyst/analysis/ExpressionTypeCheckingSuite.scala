@@ -34,7 +34,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     Symbol("booleanField").boolean,
     Symbol("decimalField").decimal(8, 0),
     Symbol("arrayField").array(StringType),
-    Symbol("mapField").map(StringType, LongType))
+    Symbol("mapField").mapAttr(StringType, LongType))
 
   def assertError(expr: Expression, errorMessage: String): Unit = {
     val e = intercept[AnalysisException] {
