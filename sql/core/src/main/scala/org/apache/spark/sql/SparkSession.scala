@@ -934,11 +934,11 @@ object SparkSession extends Logging {
 
       if (nonEffectConfigurations.nonEmpty) {
         logWarning(
-          s"""Since spark has been submitted, such configurations
-             | `${nonEffectConfigurations.mkString(", ")}` may not take effect.
-             | For how to set these configuration correctly, you can refer to
-             | https://spark.apache.org/docs/latest/configuration.html#dynamically-loading-spark-properties.
-             |""".stripMargin)
+          s"Since spark has been submitted, such configurations" +
+            s" `${nonEffectConfigurations.mkString(", ")}` may not take effect." +
+            s" For how to set these configuration correctly, you can refer to" +
+            s" https://spark.apache.org/docs/latest/configuration.html" +
+            s"#dynamically-loading-spark-properties.")
       }
 
       mayEffectConfigurations.foreach { case (k, v) => sparkConf.set(k, v) }
