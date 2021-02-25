@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset}
@@ -270,21 +271,21 @@ private[continuous] class EpochCoordinator(
   }
 
   private def checkTotalCores(): Unit = {
-    val INSTRUCTION_FOR_FEWER_CORES =
-      """
-        |Total %s (kafka partitions) * %s (cpus per task) = %s needed,
-        |but only have %s (executors) * %s (cores per executor) = %s (total cores).
-        |Please increase total number of executor cores to at least %s.
-    """.stripMargin
-    val numExecutors = session.conf.get("spark.executor.instances", "1").toInt
-    val coresPerExecutor = session.conf.get("spark.executor.cores", "1").toInt
-    val cpusPerTask = session.conf.get("spark.task.cpus", "1").toInt
+    val numExecutors = session.conf.get(config.EXECUTOR_INSTANCES.key, "1").toInt
+    val coresPerExecutor = session.conf.get(config.EXECUTOR_CORES.key, "1").toInt
+    val cpusPerTask = session.conf.get(config.CPUS_PER_TASK.key, "1").toInt
     val totalCores = numExecutors * coresPerExecutor
     val neededCores = numReaderPartitions * cpusPerTask
-    if (totalCores < numReaderPartitions) {
-      query.stopInNewThread(new IllegalStateException(INSTRUCTION_FOR_FEWER_CORES
-        .format(numReaderPartitions, cpusPerTask, neededCores, numExecutors, coresPerExecutor,
-          totalCores, neededCores)))
+    val INSTRUCTION_FOR_FEWER_CORES =
+      s"""
+        |Total $numReaderPartitions (kafka partitions) * $cpusPerTask (cpus per task) =
+        | $neededCores needed,
+        |but only have $numExecutors (executors) * $coresPerExecutor (cores per executor) =
+        | $totalCores (total cores).
+        |Please increase total number of executor cores to at least $neededCores.
+    """.stripMargin
+    if (totalCores < neededCores) {
+      query.stopInNewThread(new IllegalStateException(INSTRUCTION_FOR_FEWER_CORES))
     }
   }
 }
