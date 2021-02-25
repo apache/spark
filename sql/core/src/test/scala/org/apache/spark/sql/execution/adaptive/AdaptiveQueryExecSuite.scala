@@ -1249,7 +1249,7 @@ class AdaptiveQueryExecSuite
           ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData",
             false),
           // broadcast left side
-          ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false),
+          ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false)
         ).foreach { case (query, isEliminated) =>
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
           val bnlj = findTopLevelBroadcastNestedLoopJoin(plan)
