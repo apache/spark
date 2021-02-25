@@ -114,12 +114,22 @@ in the `spark-defaults.conf` file. A few configuration keys have been renamed si
 versions of Spark; in such cases, the older key names are still accepted, but take lower
 precedence than any instance of the newer key.
 
-Spark properties mainly can be divided into two kinds: one is related to deploy, like
-"spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
-setting programmatically through `SparkConf` in runtime, or the behavior is depending on which
-cluster manager and deploy mode you choose, so it would be suggested to set through configuration
-file or `spark-submit` command line options; another is mainly related to Spark runtime control,
-like "spark.task.maxFailures", this kind of properties can be set in either way.
+Spark properties mainly can be divided into three kinds: 
+
+    1. configuration used to submit application, such as "spark.driver.memory", "spark.driver.extraclassPath",
+       these kind of properties only effect before driver's JVM is started, so it would be suggested to set through
+       configuration file or `spark-submit` command line options. For these kind of configuration, they are 
+       "spark.driver.memory", "spark.driver.memoryOverhead", "spark.driver.cores", "spark.driver.userClassPathFirst",
+       "spark.driver.extraClassPath", "spark.driver.defaultJavaOptions", "spark.driver.extraJavaOptions",
+       "spark.driver.extraLibraryPath", "spark.driver.resource.*", "spark.pyspark.driver.python", "spark.pyspark.python", "spark.r.shell.command",
+       "spark.launcher.childProcLoggerName", "spark.launcher.childConectionTimeout", "spark.yarn.driver.*".
+    2. one is related to deploy, like "spark.master", "spark.executor.instances", this kind of properties may not
+       be affected when setting programmatically through `SparkConf` in runtime after SparkContext has been started,
+       or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to
+       set through configuration file, `spark-submit` command line options, or setting programmatically through `SparkConf`
+       in runtime before start SparkContext.
+    3. another is mainly related to Spark runtime control,
+       like "spark.task.maxFailures", this kind of properties can be set in either way.
 
 ## Viewing Spark Properties
 

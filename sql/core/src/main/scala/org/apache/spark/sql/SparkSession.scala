@@ -29,7 +29,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, TaskContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
+import org.apache.spark.internal.config.{ConfigEntry, DRIVER_CORES, DRIVER_MEMORY_OVERHEAD, DRIVER_USER_CLASS_PATH_FIRST, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.launcher.SparkLauncher._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
@@ -903,10 +903,12 @@ object SparkSession extends Logging {
     // setting programmatically through SparkConf in runtime, or the behavior is
     // depending on which cluster manager and deploy mode you choose, so it would
     // be suggested to set through configuration file or spark-submit command line options.
-    private val DRIVER_RELATED_LAUNCHER_CONFIG = Seq(DRIVER_MEMORY, DRIVER_EXTRA_CLASSPATH,
+    private val DRIVER_RELATED_LAUNCHER_CONFIG = Seq(DRIVER_MEMORY, DRIVER_CORES.key,
+      DRIVER_MEMORY_OVERHEAD.key, DRIVER_EXTRA_CLASSPATH,
       DRIVER_DEFAULT_JAVA_OPTIONS, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_LIBRARY_PATH,
-      PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON, SPARKR_R_SHELL, CHILD_PROCESS_LOGGER_NAME,
-      CHILD_CONNECTION_TIMEOUT)
+      "spark.driver.resource", PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON, SPARKR_R_SHELL,
+      CHILD_PROCESS_LOGGER_NAME, CHILD_CONNECTION_TIMEOUT, DRIVER_USER_CLASS_PATH_FIRST.key,
+      "spark.yarn.*")
 
     // These configurations related to executor when deploy like `spark.executor.memory`,
     // `spark.executor.cores`, this kind of properties may not be affected when setting
@@ -934,33 +936,20 @@ object SparkSession extends Logging {
     def getOrCreate(): SparkSession = synchronized {
       val sparkConf = new SparkConf()
       val (nonEffectConfigurations, mayEffectConfigurations) =
-        options.partition((DRIVER_RELATED_LAUNCHER_CONFIG).contains)
+        options.partition { case (key: String, _) =>
+          DRIVER_RELATED_LAUNCHER_CONFIG.exists(keys => key.startsWith(keys))
+        }
 
       if (nonEffectConfigurations.nonEmpty) {
         logWarning(
-          s"""Since spark has been started, such configuration
-             | `${nonEffectConfigurations.mkString(", ")}` may not be affected when setting
-             |  programmatically through SparkConf in runtime, or the behavior is depending
-             | on which cluster manager and deploy mode you choose, so it would be suggested to
-             | set through configuration file or spark-submit command line options.
+          s"""Since spark has been submitted, such configurations
+             | `${nonEffectConfigurations.mkString(", ")}` may not take effect.
+             | For how to set these configuration correctly, you can refer to
+             | https://spark.apache.org/docs/latest/configuration.html#dynamically-loading-spark-properties.
              |""".stripMargin)
       }
 
-      val (scAlreadySetConfigurations, normalConfigs) =
-        mayEffectConfigurations.partition(EXECUTOR_LAUNCHER_CONFIG.contains)
-
-      if (SparkContext.getActive.isDefined) {
-        logWarning(
-          s"""Since spark has been started and SparkContext has been initialized, SparkSession
-             | will use an existing SparkContext, such configuration
-             | `${scAlreadySetConfigurations.mkString(", ")}` may not be affected when
-             | setting programmatically through SparkConf in runtime, so it would
-             | be suggested to set through configuration file or spark-submit command line options.
-             |""".stripMargin)
-        normalConfigs.foreach { case (k, v) => sparkConf.set(k, v) }
-      } else {
-        mayEffectConfigurations.foreach { case (k, v) => sparkConf.set(k, v) }
-      }
+      mayEffectConfigurations.foreach { case (k, v) => sparkConf.set(k, v) }
 
       if (!sparkConf.get(EXECUTOR_ALLOW_SPARK_CONTEXT)) {
         assertOnDriver()
