@@ -379,11 +379,11 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
         }.getMessage
         assert(message.contains("No Avro files found."))
 
-        val srcFile = new File("src/test/resources/episodes.avro")
-        val destFile = new File(dir, "episodes.avro")
-        FileUtils.copyFile(srcFile, destFile)
+        Files.copy(
+          Paths.get(new URL(episodesAvro).toURI),
+          Paths.get(dir.getCanonicalPath, "episodes.avro"))
 
-        val result = spark.read.format("avro").load(srcFile.getAbsolutePath).collect()
+        val result = spark.read.format("avro").load(episodesAvro).collect()
         checkAnswer(spark.read.format("avro").load(dir.getAbsolutePath), result)
       }
     }
@@ -586,6 +586,14 @@ abstract class AvroSuite extends QueryTest with SharedSparkSession {
       val schema = rawSaved.collect().mkString("")
       assert(schema.contains(name))
       assert(schema.contains(namespace))
+    }
+  }
+
+  test("SPARK-34229: Avro should read decimal values with the file schema") {
+    withTempPath { path =>
+      sql("SELECT 3.14 a").write.format("avro").save(path.toString)
+      val data = spark.read.schema("a DECIMAL(4, 3)").format("avro").load(path.toString).collect()
+      assert(data.map(_ (0)).contains(new java.math.BigDecimal("3.140")))
     }
   }
 

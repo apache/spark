@@ -1305,7 +1305,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     }
   }
 
-  test("SPARK-34055: refresh cache in partition adding") {
+  private def testCacheRefreshing(cmd: String => DataFrame): Unit = {
     withTable("t") {
       sql("CREATE TABLE t (id int, part int) USING parquet PARTITIONED BY (part)")
       sql("INSERT INTO t PARTITION (part=0) SELECT 0")
@@ -1326,9 +1326,21 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       val part1Loc = part0Loc.replace("part=0", "part=1")
       FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
 
-      sql(s"ALTER TABLE t ADD PARTITION (part=1) LOCATION '$part1Loc'")
+      cmd(part1Loc)
       assert(spark.catalog.isCached("t"))
       checkAnswer(sql("SELECT * FROM t"), Seq(Row(0, 0), Row(0, 1)))
+    }
+  }
+
+  test("SPARK-34055: refresh cache in partition adding") {
+    testCacheRefreshing { location =>
+      sql(s"ALTER TABLE t ADD PARTITION (part=1) LOCATION '$location'")
+    }
+  }
+
+  test("SPARK-34027: refresh cache in partitions recovering") {
+    testCacheRefreshing { _ =>
+      sql("ALTER TABLE t RECOVER PARTITIONS")
     }
   }
 }

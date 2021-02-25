@@ -131,7 +131,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
     }
 
-    SharedState.loadHiveConfFile(sparkConf, conf)
+    SharedState.resolveWarehousePath(sparkConf, conf)
     SessionState.start(sessionState)
 
     // Clean up after we exit

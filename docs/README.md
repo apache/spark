@@ -39,6 +39,12 @@ installed. Also install the following libraries:
 $ sudo gem install jekyll jekyll-redirect-from rouge
 ```
 
+If your ruby version is 3.0 or higher, you should also install `webrick`.
+
+```sh
+$ sudo gem install jekyll jekyll-redirect-from webrick
+```
+
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
 ### R Documentation
@@ -58,7 +64,7 @@ Note: Other versions of roxygen2 might work in SparkR documentation generation b
 To generate API docs for any language, you'll need to install these libraries:
 
 ```sh
-$ sudo pip install sphinx mkdocs numpy
+$ sudo pip install 'sphinx<3.5.0' mkdocs numpy
 ```
 
 ## Generating the Documentation HTML
