@@ -164,6 +164,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case _: BinaryComparison => true
     case _: In | _: InSet => true
     case _: StringPredicate => true
+    case _: MultiLikeBase => true
     case _ => false
   }
 
