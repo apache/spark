@@ -1246,7 +1246,8 @@ class AdaptiveQueryExecSuite
           // broadcast non-empty right side
           ("SELECT /*+ broadcast(testData3) */ * FROM testData LEFT ANTI JOIN testData3", true),
           // broadcast empty right side
-          ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData", false),
+          ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData",
+            false),
           // broadcast left side
           ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false),
         ).foreach { case (query, isEliminated) =>
