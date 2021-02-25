@@ -351,7 +351,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
       WritableColumnVector c,
       int rowId,
       int level,
-      VectorizedValuesReader data) throws IOException {
+      VectorizedValuesReader data,
+      boolean downCastLongToInt) throws IOException {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -359,17 +360,34 @@ public final class VectorizedRleValuesReader extends ValuesReader
       switch (mode) {
         case RLE:
           if (currentValue == level) {
-            data.readLongs(n, c, rowId);
+            if (downCastLongToInt) {
+              for (int i = 0; i < n; ++i) {
+                c.putInt(rowId + i, (int) data.readLong());
+              }
+            } else {
+              data.readLongs(n, c, rowId);
+            }
           } else {
             c.putNulls(rowId, n);
           }
           break;
         case PACKED:
-          for (int i = 0; i < n; ++i) {
-            if (currentBuffer[currentBufferIdx++] == level) {
-              c.putLong(rowId + i, data.readLong());
-            } else {
-              c.putNull(rowId + i);
+          // code repeated for performance
+          if (downCastLongToInt) {
+            for (int i = 0; i < n; ++i) {
+              if (currentBuffer[currentBufferIdx++] == level) {
+                c.putInt(rowId + i, (int) data.readLong());
+              } else {
+                c.putNull(rowId + i);
+              }
+            }
+          } else {
+            for (int i = 0; i < n; ++i) {
+              if (currentBuffer[currentBufferIdx++] == level) {
+                c.putLong(rowId + i, data.readLong());
+              } else {
+                c.putNull(rowId + i);
+              }
             }
           }
           break;

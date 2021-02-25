@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.AnalysisException
@@ -41,17 +41,6 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
       sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
     }.getMessage
     assert(errMsg.contains("Table not found"))
-  }
-
-  def withTableDir(tableName: String)(f: (FileSystem, Path) => Unit): Unit = {
-    val location = sql(s"DESCRIBE TABLE EXTENDED $tableName")
-      .where("col_name = 'Location'")
-      .select("data_type")
-      .first()
-      .getString(0)
-    val root = new Path(location)
-    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
-    f(fs, root)
   }
 
   test("valid locations") {

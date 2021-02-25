@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expr
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper, BroadcastQueryStageExec, DisableAdaptiveExecution, EliminateJoinToEmptyRelation}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
+import org.apache.spark.sql.execution.adaptive._
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.functions._
@@ -44,13 +44,8 @@ abstract class DynamicPartitionPruningSuiteBase
 
   import testImplicits._
 
-  val adaptiveExecutionOn: Boolean
-
   override def beforeAll(): Unit = {
     super.beforeAll()
-
-    spark.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, adaptiveExecutionOn)
-    spark.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY, true)
 
     val factData = Seq[(Int, Int, Int, Int)](
       (1000, 1, 1, 10),
@@ -195,8 +190,8 @@ abstract class DynamicPartitionPruningSuiteBase
     subqueryBroadcast.foreach { s =>
       s.child match {
         case _: ReusedExchangeExec => // reuse check ok.
-        case BroadcastQueryStageExec(_, _: ReusedExchangeExec, _) =>
-        case b: BroadcastExchangeExec =>
+        case BroadcastQueryStageExec(_, _: ReusedExchangeExec, _) => // reuse check ok.
+        case b: BroadcastExchangeLike =>
           val hasReuse = plan.find {
             case ReusedExchangeExec(_, e) => e eq b
             case _ => false
@@ -337,7 +332,7 @@ abstract class DynamicPartitionPruningSuiteBase
 
         def getFactScan(plan: SparkPlan): SparkPlan = {
           val scanOption =
-            plan.find {
+            find(plan) {
               case s: FileSourceScanExec =>
                 s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
               case _ => false
@@ -1261,7 +1256,7 @@ abstract class DynamicPartitionPruningSuiteBase
       val countSubqueryBroadcasts =
         collectWithSubqueries(plan)({ case _: SubqueryBroadcastExec => 1 }).sum
 
-      if (adaptiveExecutionOn) {
+      if (conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)) {
         val countReusedSubqueryBroadcasts =
           collectWithSubqueries(plan)({ case ReusedSubqueryExec(_: SubqueryBroadcastExec) => 1}).sum
 
@@ -1390,10 +1385,8 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 }
 
-class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase {
-  override val adaptiveExecutionOn: Boolean = false
-}
+class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase
+  with DisableAdaptiveExecutionSuite
 
-class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase {
-  override val adaptiveExecutionOn: Boolean = true
-}
+class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase
+  with EnableAdaptiveExecutionSuite

@@ -25,21 +25,18 @@ import org.apache.spark.sql.execution.command
  */
 class TruncateTableSuite extends command.TruncateTableSuiteBase with CommandSuiteBase {
 
-  // TODO(SPARK-34290): Support v2 TRUNCATE TABLE
-  test("truncation of v2 tables is not supported") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
-      sql(s"INSERT INTO $t PARTITION (part=1) SELECT 1")
+  override val invalidPartColumnError = "not a valid partition column in table"
 
-      Seq(
-        s"TRUNCATE TABLE $t PARTITION (part=1)",
-        s"TRUNCATE TABLE $t").foreach { truncateCmd =>
-        val errMsg = intercept[AnalysisException] {
-          sql(truncateCmd)
-        }.getMessage
-        assert(errMsg.contains("TRUNCATE TABLE is not supported for v2 tables"))
-      }
+  test("truncate a partition of a table which does not support partitions") {
+    withNamespaceAndTable("ns", "tbl", s"non_part_$catalog") { t =>
+      sql(s"CREATE TABLE $t (c0 INT) $defaultUsing")
+      sql(s"INSERT INTO $t SELECT 0")
+
+      val errMsg = intercept[AnalysisException] {
+        sql(s"TRUNCATE TABLE $t PARTITION (c0=1)")
+      }.getMessage
+      assert(errMsg.contains(
+        "TRUNCATE TABLE cannot run for a table which does not support partitioning"))
     }
   }
 }
