@@ -418,6 +418,52 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
+  test("getPartitionsByFilter: not in chunk") {
+    testMetastorePartitionFiltering(
+      Not(In(attr("chunk"), Seq(Literal("aa"), Literal("ab")))),
+      dsValue,
+      hValue,
+      Seq("ba", "bb"),
+      dateValue,
+      dateStrValue
+    )
+  }
+
+  test("getPartitionsByFilter: not in ds") {
+    testMetastorePartitionFiltering(
+      Not(In(attr("ds"), Seq(Literal(20170102)))),
+      Seq(20170101, 20170103),
+      hValue,
+      chunkValue,
+      dateValue,
+      dateStrValue
+    )
+  }
+
+  test("getPartitionsByFilter: not inset date") {
+    testMetastorePartitionFiltering(
+      Not(InSet(attr("d"),
+        Set(Literal(Date.valueOf("2019-01-01")).eval(),
+          Literal(Date.valueOf("2019-01-02")).eval()))),
+      dsValue,
+      hValue,
+      chunkValue,
+      Seq("2019-01-03") ++ defaultPartition,
+      dateStrValue
+    )
+  }
+
+  test("getPartitionsByFilter: not inset h") {
+    testMetastorePartitionFiltering(
+      Not(InSet(attr("h"), Set(1, 2))),
+      dsValue,
+      Seq(0, 3, 4),
+      chunkValue,
+      dateValue,
+      dateStrValue
+    )
+  }
+
   test("getPartitionsByFilter: cast(datestr as date)= 2020-01-01") {
     testMetastorePartitionFiltering(
       attr("datestr").cast(DateType) === Date.valueOf("2020-01-01"),

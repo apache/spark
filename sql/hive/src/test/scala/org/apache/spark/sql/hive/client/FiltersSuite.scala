@@ -108,6 +108,28 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
     "datecol != 2019-01-01")
 
+  filterTest("not-in int filter",
+    (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2))))) :: Nil,
+    "(intcol != 1 and intcol != 2)")
+
+  filterTest("not-in string filter",
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-inset, int filter",
+    (Not(InSet(a("intcol", IntegerType), Set(1, 2)))) :: Nil,
+    "(intcol != 1 and intcol != 2)")
+
+  filterTest("not-inset, string filter",
+    (Not(InSet(a("strcol", StringType), Set(Literal("a").eval(), Literal("b").eval())))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-inset, date filter",
+    (Not(InSet(a("datecol", DateType),
+      Set(Literal(Date.valueOf("2020-01-01")).eval(),
+        Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
+    """(datecol != "2020-01-01" and datecol != "2020-01-02")""")
+
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
   filterTest("SPARK-24879 IN predicates with only NULLs will not cause a NPE",
