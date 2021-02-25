@@ -713,6 +713,11 @@ class AdaptiveQueryExecSuite
           .selectExpr("id as key3", "id as value3")
           .createOrReplaceTempView("skewData3")
 
+        // to check that CoalescedShufflePartitions did something
+        def isReallyCoalesced(partSpec: CoalescedPartitionSpec): Boolean = {
+          partSpec.endReducerIndex - partSpec.startReducerIndex > 1
+        }
+
         def caseI: Unit = {
           /*
         SMJ1
@@ -735,8 +740,9 @@ class AdaptiveQueryExecSuite
             assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
               s"actual plan=$innerAdaptivePlan")
             assert(!innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+            // since skew is not mitigated, presence of CustomShuffleReaderExec indicates
+            // CoalescedShufflePartitons has ran.  No partitions are combined
             assert(csre.length == 4, s"actual plan=$innerAdaptivePlan")
-            // todo: check that CSRE actually coalesced something?
           } else {
             assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
               s"actual plan=$innerAdaptivePlan")
@@ -759,10 +765,6 @@ class AdaptiveQueryExecSuite
           assert(innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
           assert(csre.length == 2, s"actual plan=$innerAdaptivePlan")
 
-          // to check that CoalescedShufflePartitons did something
-          def isReallyCoalesced(partSpec: CoalescedPartitionSpec) = {
-            partSpec.endReducerIndex - partSpec.startReducerIndex > 1
-          }
           val lhsCsre = csre.head
           assert(lhsCsre.hasCoalescedPartition, lhsCsre)
           val v = lhsCsre.partitionSpecs.filter(_.isInstanceOf[CoalescedPartitionSpec])
@@ -774,8 +776,37 @@ class AdaptiveQueryExecSuite
             .map(_.asInstanceOf[CoalescedPartitionSpec]).filter(isReallyCoalesced)
           assert(v1.length == 1, v1)
         }
+        def caseIII: Unit = {
+          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM skewData1 JOIN skewData2 ON key1 = key2 " +
+              "INNER JOIN skewData3 on key1 = key3 where cast(value1 as int) < 10")
+          val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          val csre = findCustomShuffleReaders(innerAdaptivePlan)
+          if (conf.adaptiveForceIfShuffle) {
+            assert(innerSmj.size == 2 && innerSmj.head.isSkewJoin,
+              s"actual plan=$innerAdaptivePlan")
+            assert(innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+            assert(csre.length == 4, s"actual plan=$innerAdaptivePlan")
+            csre.foreach(reader => {
+              val v = reader.partitionSpecs.filter(_.isInstanceOf[CoalescedPartitionSpec])
+                .exists(c => isReallyCoalesced(c.asInstanceOf[CoalescedPartitionSpec]))
+              assert(v, s"Coalesced partition not found: ${reader.partitionSpecs}")
+            })
+          } else {
+            assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
+              s"actual plan=$innerAdaptivePlan")
+            assert(!innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+            assert(csre.length == 3, s"actual plan=$innerAdaptivePlan")
+            csre.foreach(reader => {
+              val v = reader.partitionSpecs.filter(_.isInstanceOf[CoalescedPartitionSpec])
+                .exists(c => isReallyCoalesced(c.asInstanceOf[CoalescedPartitionSpec]))
+              assert(v, s"Coalesced partition not found: ${reader.partitionSpecs}")
+            })
+          }
+        }
         caseI
         caseII
+        caseIII
       }
     }
   }
