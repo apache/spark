@@ -816,7 +816,7 @@ case class AlterViewAs(
     child: LogicalPlan,
     originalText: String,
     query: LogicalPlan) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+  override def children: Seq[LogicalPlan] = child :: query :: Nil
 }
 
 /**

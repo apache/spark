@@ -266,21 +266,17 @@ case class AlterViewAsCommand(
     name: TableIdentifier,
     originalText: String,
     query: LogicalPlan) extends RunnableCommand {
+  require(query.resolved)
 
   import ViewHelper._
 
   override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(session: SparkSession): Seq[Row] = {
-    // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = session.sessionState.executePlan(query)
-    qe.assertAnalyzed()
-    val analyzedPlan = qe.analyzed
-
     if (session.sessionState.catalog.isTempView(name)) {
-      alterTemporaryView(session, analyzedPlan)
+      alterTemporaryView(session, query)
     } else {
-      alterPermanentView(session, analyzedPlan)
+      alterPermanentView(session, query)
     }
     Seq.empty[Row]
   }
