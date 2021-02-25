@@ -186,7 +186,8 @@ class ParamRandomBuilder(ParamGridBuilder):
         [1.6, 65.3, 221.9, 1024.3, 8997.5]
         """
         def logarithmic_random():
-            value = math.log10(random.uniform(10 ** x, 10 ** y))
+            rand = random.uniform(math.log10(x), math.log10(y))
+            value = 10 ** rand
             if type(x) == int and type(y) == int:
                 value = int(value)
             return value
