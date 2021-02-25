@@ -910,14 +910,6 @@ object SparkSession extends Logging {
       CHILD_PROCESS_LOGGER_NAME, CHILD_CONNECTION_TIMEOUT, DRIVER_USER_CLASS_PATH_FIRST.key,
       "spark.yarn.*")
 
-    // These configurations related to executor when deploy like `spark.executor.memory`,
-    // `spark.executor.cores`, this kind of properties may not be affected when setting
-    // programmatically after SparkContext is started, so it would
-    // be suggested to set through configuration file or spark-submit command line options.
-    private val EXECUTOR_LAUNCHER_CONFIG = Seq(SPARK_MASTER, DEPLOY_MODE, EXECUTOR_MEMORY,
-      EXECUTOR_EXTRA_CLASSPATH, EXECUTOR_DEFAULT_JAVA_OPTIONS, EXECUTOR_EXTRA_JAVA_OPTIONS,
-      EXECUTOR_EXTRA_LIBRARY_PATH, EXECUTOR_CORES)
-
     /**
      * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
      * one based on the options set in this builder.
