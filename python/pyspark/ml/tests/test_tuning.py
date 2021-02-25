@@ -74,21 +74,44 @@ class DummyParams(Params):
 
 class ParamRandomBuilderTests(unittest.TestCase):
 
-    def __init__(self, uid):
-        super(ParamRandomBuilderTests, self).__init__(methodName=uid)
+    def __init__(self, methodName):
+        super(ParamRandomBuilderTests, self).__init__(methodName=methodName)
         self.dummy_params = DummyParams()
+        self.to_test = ParamRandomBuilder()
+        self.n = 100
 
-    def test_add_random(self):
-        n = 100
-        lowest = 100
-        highest = 200
-        to_test = ParamRandomBuilder()
-        params = to_test.addRandom(self.dummy_params.test_param, lowest, highest, n).build()
-        self.assertEqual(n, len(params))
+    def check_ranges(self, params, lowest, highest, expected_type):
+        self.assertEqual(self.n, len(params))
         for param in params:
             for v in param.values():
                 self.assertGreaterEqual(v, lowest)
                 self.assertLessEqual(v, highest)
+                self.assertEqual(type(v), expected_type)
+
+    def test_add_random_integer_range(self):
+        lowest = 100
+        highest = 200
+        params = self.to_test.addRandom(self.dummy_params.test_param, lowest, highest, self.n)\
+            .build()
+        self.check_ranges(params, lowest, highest, int)
+
+    def test_add_random_float_and_integer_yields_floats(self):
+        lowest = 100
+        highest = 200.
+        params = self.to_test.addRandom(self.dummy_params.test_param, lowest, highest, self.n)\
+            .build()
+        self.check_ranges(params, lowest, highest, float)
+
+    def test_add_random_float_range(self):
+        lowest = 100.
+        highest = 200.
+        params = self.to_test.addRandom(self.dummy_params.test_param, lowest, highest, self.n)\
+            .build()
+        self.check_ranges(params, lowest, highest, float)
+
+    def test_unexpected_type(self):
+        with self.assertRaises(TypeError):
+            self.to_test.addRandom(self.dummy_params.test_param, 1, "wrong type", 1).build()
 
 
 class ParamGridBuilderTests(SparkSessionTestCase):

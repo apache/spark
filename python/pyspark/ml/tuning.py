@@ -155,7 +155,12 @@ class ParamGridBuilder(object):
 
 class ParamRandomBuilder(ParamGridBuilder):
     def addRandom(self, param, x, y, n):
-        values = map(lambda _: random.randrange(x, y), range(n))
+        if type(x) == int and type(y) == int:
+            values = map(lambda _: random.randrange(x, y), range(n))
+        elif type(x) == float or type(y) == float:
+            values = map(lambda _: random.uniform(x, y), range(n))
+        else:
+            raise TypeError("unable to make range for types %s and %s" % type(x) % type(y))
         self.addGrid(param, values)
         return self
 
