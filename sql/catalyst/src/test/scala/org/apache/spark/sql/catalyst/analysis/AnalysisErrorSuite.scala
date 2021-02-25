@@ -630,14 +630,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan1 = left.join(
       right,
       joinType = Cross,
-      condition = Some(Symbol("a") === Symbol("c")))
+      condition = Some("a".attr === "c".attr))
 
     assertAnalysisSuccess(plan1)
 
     val plan2 = left.join(
       right,
       joinType = Cross,
-      condition = Some(Symbol("b") === Symbol("d")))
+      condition = Some("b".attr === "d".attr))
     assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
@@ -705,7 +705,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   test("Error on filter condition containing aggregate expressions") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-    val plan = Filter(Symbol("a") === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
+    val plan = Filter("a".attr === UnresolvedFunction("max", Seq(b), true), LocalRelation(a, b))
     assertAnalysisError(plan,
       "Aggregate/Window/Generate expressions are not valid in where clause of the query" :: Nil)
   }
