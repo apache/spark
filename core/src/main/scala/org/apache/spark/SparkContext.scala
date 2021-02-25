@@ -2692,7 +2692,7 @@ object SparkContext extends Logging {
         if (config.getAll.nonEmpty) {
           logWarning("Using an existing SparkContext; some configuration may not take effect." +
             " For how to set these configuration correctly, you can refer to" +
-            " https://spark.apache.org/docs/latest/configuration.html" +
+            s" https://spark.apache.org/docs/$SPARK_VERSION/configuration.html" +
             "#dynamically-loading-spark-properties.")
         }
       }
