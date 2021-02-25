@@ -19,6 +19,7 @@ import os
 import sys
 import itertools
 import random
+import math
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
@@ -154,7 +155,20 @@ class ParamGridBuilder(object):
 
 
 class ParamRandomBuilder(ParamGridBuilder):
+    r"""
+    Builder for random value parameters used in search-based model selection.
+
+
+    .. versionadded:: 3.2.0
+    """
+
+    @since("3.2.0")
     def addRandom(self, param, x, y, n):
+        """
+        Adds n random values between x and y.
+        The arguments x and y can be integers, floats or a combination of the two. If either
+        x or y is a float, the domain of the random value will be float.
+        """
         if type(x) == int and type(y) == int:
             values = map(lambda _: random.randrange(x, y), range(n))
         elif type(x) == float or type(y) == float:
@@ -162,6 +176,24 @@ class ParamRandomBuilder(ParamGridBuilder):
         else:
             raise TypeError("unable to make range for types %s and %s" % type(x) % type(y))
         self.addGrid(param, values)
+        return self
+
+    @since("3.2.0")
+    def addLog10Random(self, param, x, y, n):
+        """
+        Adds n random values scaled logarithmically (base 10) between x and y.
+        For instance, a distribution for x=1.0, y=10000.0 and n=5 might reasonably look like
+        [1.6, 65.3, 221.9, 1024.3, 8997.5]
+        """
+        def logarithmic_random():
+            value = math.log10(random.uniform(10 ** x, 10 ** y))
+            if type(x) == int and type(y) == int:
+                value = int(value)
+            return value
+
+        values = map(lambda _: logarithmic_random(), range(n))
+        self.addGrid(param, values)
+
         return self
 
 

@@ -16,8 +16,10 @@
 #
 
 import tempfile
+import math
 import unittest
 
+import numpy as np
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml import Estimator, Pipeline, Model
 from pyspark.ml.classification import LogisticRegression, LogisticRegressionModel, OneVsRest
@@ -88,26 +90,31 @@ class ParamRandomBuilderTests(unittest.TestCase):
                 self.assertLessEqual(v, highest)
                 self.assertEqual(type(v), expected_type)
 
+    def check_addRandom_ranges(self, x, y, expected_type):
+        params = self.to_test.addRandom(self.dummy_params.test_param, x, y, self.n).build()
+        self.check_ranges(params, x, y, expected_type)
+
+    def check_addLog10Random_ranges(self, x, y, expected_type):
+        params = self.to_test.addLog10Random(self.dummy_params.test_param, x, y, self.n).build()
+        self.check_ranges(params, x, y, expected_type)
+
+    def test_add_random_integer_logarithmic_range(self):
+        self.check_addLog10Random_ranges(100, 200, int)
+
+    def test_add_logarithmic_random_float_and_integer_yields_floats(self):
+        self.check_addLog10Random_ranges(100, 200., float)
+
+    def test_add_random_float_logarithmic_range(self):
+        self.check_addLog10Random_ranges(100., 200., float)
+
     def test_add_random_integer_range(self):
-        lowest = 100
-        highest = 200
-        params = self.to_test.addRandom(self.dummy_params.test_param, lowest, highest, self.n)\
-            .build()
-        self.check_ranges(params, lowest, highest, int)
+        self.check_addRandom_ranges(100, 200, int)
 
     def test_add_random_float_and_integer_yields_floats(self):
-        lowest = 100
-        highest = 200.
-        params = self.to_test.addRandom(self.dummy_params.test_param, lowest, highest, self.n)\
-            .build()
-        self.check_ranges(params, lowest, highest, float)
+        self.check_addRandom_ranges(100, 200., float)
 
     def test_add_random_float_range(self):
-        lowest = 100.
-        highest = 200.
-        params = self.to_test.addRandom(self.dummy_params.test_param, lowest, highest, self.n)\
-            .build()
-        self.check_ranges(params, lowest, highest, float)
+        self.check_addRandom_ranges(100., 200., float)
 
     def test_unexpected_type(self):
         with self.assertRaises(TypeError):
