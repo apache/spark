@@ -60,7 +60,7 @@ object ResolvePartitionSpec extends Rule[LogicalPlan] {
       tableName,
       conf.resolver)
     if (!allowPartitionSpec) {
-      requireExactMatchedPartitionSpec(tableName, _, partSchema.fieldNames)
+      requireExactMatchedPartitionSpec(tableName, normalizedSpec, partSchema.fieldNames)
     }
     val partitionNames = normalizedSpec.keySet
     val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))

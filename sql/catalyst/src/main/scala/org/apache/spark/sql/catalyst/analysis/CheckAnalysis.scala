@@ -152,12 +152,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       case command: V2PartitionCommand =>
         command.table match {
-          case r @ ResolvedTable(_, _, table, _) =>
-            if (!table.isInstanceOf[SupportsPartitionManagement]) {
+          case r @ ResolvedTable(_, _, table, _) => table match {
+            case t: SupportsPartitionManagement =>
+              if (t.partitionSchema.isEmpty) {
+                failAnalysis(s"Table ${r.name} is not partitioned.")
+              }
+            case _ =>
               failAnalysis(s"Table ${r.name} does not support partition management.")
-            }
+          }
           case _ =>
         }
+
+      // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
+      case _: ShowTableExtended =>
+        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
