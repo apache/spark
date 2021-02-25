@@ -92,9 +92,10 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
     def col2seq(s: String): Seq[Double] =
       grouped.select(s).as[Double].collect.toSeq
 
-    val expectedBase = Seq((3 * 6 * 9 * 12 * 15),
-                           (1 * 4 * 7 * 10 * 13 * 16),
-                           (2 * 5 * 8 * 11 * 14))
+    val expectedBase = Seq(
+      (3 * 6 * 9 * 12 * 15),
+      (1 * 4 * 7 * 10 * 13 * 16),
+      (2 * 5 * 8 * 11 * 14))
 
     assert(col2seq("product") === expectedBase.map { _.toDouble })
     assert(

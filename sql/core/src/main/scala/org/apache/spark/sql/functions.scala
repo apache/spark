@@ -736,7 +736,7 @@ object functions {
    * @since 3.2.0
    */
   def product(e: Column): Column =
-    withAggregateFunction { new Product(e.expr, scale = 1.0) }
+    withAggregateFunction { new Product(e.expr) }
 
   /**
    * Aggregate function: returns the skewness of the values in a group.

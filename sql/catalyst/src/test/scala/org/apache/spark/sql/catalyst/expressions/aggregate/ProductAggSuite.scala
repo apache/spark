@@ -25,7 +25,6 @@ import org.apache.spark.sql.types.DoubleType
 class ProductAggSuite extends SparkFunSuite {
   val input = AttributeReference("product", DoubleType, nullable = true)()
   val evaluator = DeclarativeAggregateEvaluator(Product(input), Seq(input))
-  val evaluatorWithScale = DeclarativeAggregateEvaluator(Product(input, 2.0), Seq(input))
 
   test("empty buffer") {
     assert(evaluator.initialize() === InternalRow(null))
@@ -40,15 +39,6 @@ class ProductAggSuite extends SparkFunSuite {
     assert(result === InternalRow(210.0))
   }
 
-  test("update - with scale") {
-    val result = evaluatorWithScale.update(
-      InternalRow(-2.0),
-      InternalRow(3.0),
-      InternalRow(-5.0),
-      InternalRow(7.0) )
-    assert(result === InternalRow(210.0 * (1 << 4)))
-  }
-
   test("update - with nulls") {
     val result1 = evaluator.update(
       InternalRow(null),
@@ -61,11 +51,6 @@ class ProductAggSuite extends SparkFunSuite {
       InternalRow(null),
       InternalRow(null))
     assert(result2 === InternalRow(null))
-
-    val result3 = evaluatorWithScale.update(
-      InternalRow(null),
-      InternalRow(17.0))
-    assert(result3 === InternalRow(34.0))
   }
 
   test("merge") {
@@ -88,30 +73,28 @@ class ProductAggSuite extends SparkFunSuite {
   }
 
   test("merge - with nulls") {
-    val p0 = evaluatorWithScale.update(InternalRow(null), InternalRow(null))
-    val p1 = evaluatorWithScale.update(InternalRow(5.0), InternalRow(null))
-    val p2 = evaluatorWithScale.update(InternalRow(null), InternalRow(7.0))
+    val p0 = evaluator.update(InternalRow(null), InternalRow(null))
+    val p1 = evaluator.update(InternalRow(5.0), InternalRow(null))
+    val p2 = evaluator.update(InternalRow(null), InternalRow(7.0))
 
     assert(evaluator.merge(p0, p0) === p0)
     assert(evaluator.merge(p0, p1) === p1)
     assert(evaluator.merge(p2, p0) === p2)
 
-    assert(evaluator.merge(p2, p1, p0) === InternalRow((5 * 7 * 4).toDouble))
+    assert(evaluator.merge(p2, p1, p0) === InternalRow((5 * 7).toDouble))
   }
 
   test("eval") {
     // Null
     assert(evaluator.eval(InternalRow(null)) === InternalRow(null))
-    assert(evaluatorWithScale.eval(InternalRow(null)) === InternalRow(null))
 
     // Empty
     assert(evaluator.eval(evaluator.initialize()) === InternalRow(null))
-    assert(evaluatorWithScale.eval(evaluatorWithScale.initialize()) === InternalRow(null))
 
     // Non-trivial
     val p1 = evaluator.update(InternalRow(2.0), InternalRow(3.0))
-    val p2 = evaluatorWithScale.update(InternalRow(5.0), InternalRow(7.0), InternalRow(11.0))
+    val p2 = evaluator.update(InternalRow(5.0), InternalRow(7.0), InternalRow(11.0))
     val m12 = evaluator.merge(p1, p2)
-    assert(evaluator.eval(m12) === InternalRow((2.0 * 3 * 5 * 7 * 11) * (1 << 3)))
+    assert(evaluator.eval(m12) === InternalRow(2.0 * 3 * 5 * 7 * 11))
   }
 }

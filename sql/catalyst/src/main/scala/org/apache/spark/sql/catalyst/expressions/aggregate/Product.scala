@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType}
 
 
 /** Multiply numerical values within an aggregation group */
-case class Product(child: Expression, scale: Double = 1.0)
+case class Product(child: Expression)
     extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = child :: Nil
@@ -58,12 +58,7 @@ case class Product(child: Expression, scale: Double = 1.0)
     // when multiplying together many child values, without needing
     // to explicitly rescale a Column beforehand.
 
-    val protoResult =
-      coalesce(product, one) * (scale match {
-        case 1.0 => child
-        case -1.0 => -child
-        case _ => child * scale
-      })
+    val protoResult = coalesce(product, one) * child
 
     if (child.nullable) {
       Seq(coalesce(protoResult, product))
