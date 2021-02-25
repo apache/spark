@@ -42,10 +42,10 @@ class ConstantPropagationSuite extends PlanTest {
 
   val testRelation = LocalRelation("a".attr.int, "b".attr.int, "c".attr.int, "d".attr.int.notNull)
 
-  private val columnA = "a"
-  private val columnB = "b"
-  private val columnC = "c"
-  private val columnD = "d"
+  private val columnA = "a".attr
+  private val columnB = "b".attr
+  private val columnC = "c".attr
+  private val columnD = "d".attr
 
   test("basic test") {
     val query = testRelation

@@ -95,7 +95,7 @@ class LikeSimplificationSuite extends PlanTest {
 
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = testRelation
-      .where(('a === "") || ('a === "abc"))
+      .where(("a".attr === "") || ("a".attr === "abc"))
       .analyze
 
     comparePlans(optimized, correctAnswer)

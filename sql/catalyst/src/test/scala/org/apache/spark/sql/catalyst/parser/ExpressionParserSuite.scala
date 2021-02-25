@@ -135,7 +135,7 @@ class ExpressionParserSuite extends AnalysisTest {
   test("exists expression") {
     assertEqual(
       "exists (select 1 from b where b.x = a.x)",
-      Exists(table("b").where(Symbol("b.x") === Symbol("a.x")).select(1)))
+      Exists(table("b").where("b.x".attr === "a.x".attr).select(1)))
   }
 
   test("comparison expressions") {
@@ -811,7 +811,7 @@ class ExpressionParserSuite extends AnalysisTest {
           TimeUnit.SECONDS.toMicros(seconds)
         }
         assertEval(
-          sqlCommand = "TIMESTAMP '2019-01-14' 20:54:00.000'",
+          sqlCommand = "TIMESTAMP '2019-01-14 20:54:00.000'",
           expect = toMicros(LocalDateTime.of(2019, 1, 14, 20, 54)))
         assertEval(
           sqlCommand = "Timestamp '2000-01-01T00:55:00'",
@@ -819,7 +819,7 @@ class ExpressionParserSuite extends AnalysisTest {
         // Parsing of the string does not depend on the SQL config because the string contains
         // time zone offset already.
         assertEval(
-          sqlCommand = "TIMESTAMP '2019-01-16' 20:50:00.567000+01:00'",
+          sqlCommand = "TIMESTAMP '2019-01-16 20:50:00.567000+01:00'",
           expect = 1547668200567000L)
       }
     }

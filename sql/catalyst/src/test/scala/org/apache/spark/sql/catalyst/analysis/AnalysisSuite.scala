@@ -567,7 +567,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         outputNames,
         SubqueryAlias(
           "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+          src1.join(src2, Inner, Option("s1.id".attr === "s2.id".attr)))
       ).select(star())
     }
     assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
