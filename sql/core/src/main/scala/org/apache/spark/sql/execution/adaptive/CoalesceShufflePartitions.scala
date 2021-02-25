@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.execution.{ExplainUtils, SparkPlan}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, ExplainUtils, PartialReducerPartitionSpec, ShufflePartitionSpec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REPARTITION, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -35,20 +37,17 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
     }
-    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])
-        || plan.find(_.isInstanceOf[CustomShuffleReaderExec]).isDefined) {
-      /* Todo:
-        * does this need changes to run after Join Skew mitigation?
-        * at a minimum the check for CustomShuffleReaderExec is not right as
-        * skew join will add them
-        * This needs to know not to coalesce anything that was skew mitigated
-        * How does it know?  Skew mitigation creates PartialReducerPartitionSpec
-       */
+    /* This is running before new QueryStageExec creation so either all leaves are
+     QueryStageExec nodes or all leaves are CustomShuffleReaderExec if OptimizeSkewJoin
+     mitigated something in the new stage. */
+    if (!plan.collectLeaves().forall(_.isInstanceOf[QueryStageExec])) {
       // If not all leaf nodes are query stages, it's not safe to reduce the number of
       // shuffle partitions, because we may break the assumption that all children of a spark plan
       // have same number of output partitions.
+      // If OptimizeSkewedJoin mitigated the stage, it would have wrapped all QueryStageExec
+      // nodes with CustomShuffleReaderExec
       logInfo(s"CoalesceShufflePartitions: " +
-        s"Cannot coalesce due to not all leaves are SQE or have CSRE.")
+        s"Cannot coalesce due to not all leaves are SQE.")
       return plan
     }
 
@@ -63,9 +62,13 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
     if (!shuffleStages.forall(s => supportCoalesce(s.shuffle))) {
       logInfo(s"CoalesceShufflePartitions: Cannot coalesce due to explicit Repartition; $s")
-      // if it bails here, there are no CustomShuffleReaderExec nodes...  how is it read then
       plan
     } else {
+      // todo: perhaps add a check the set of children of nodes in csreList
+      //  are exactly the shuffleStages
+      val csreList = plan.collect {
+        case csre: CustomShuffleReaderExec => csre
+      }
       // `ShuffleQueryStageExec#mapStats` returns None when the input RDD has 0 partitions,
       // we should skip it when calculating the `partitionStartIndices`.
       val validMetrics = shuffleStages.flatMap(_.mapStats)
@@ -86,12 +89,23 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
           minNumPartitions = minPartitionNum)
         // This transformation adds new nodes, so we must use `transformUp` here.
         val stageIds = shuffleStages.map(_.id).toSet
-        plan.transformUp {
-          // even for shuffle exchange whose input RDD has 0 partition, we should still update its
-          // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
-          // number of output partitions.
-          case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
-            CustomShuffleReaderExec(stage, partitionSpecs)
+
+        if(csreList.isEmpty) {
+          plan.transformUp {
+            // even for shuffle exchange whose input RDD has 0 partition, we should still update its
+            // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
+            // number of output partitions.
+            case stage: ShuffleQueryStageExec if stageIds.contains(stage.id) =>
+              CustomShuffleReaderExec(stage, partitionSpecs)
+          }
+        } else {
+          plan.transformUp {
+                // why check stageIds.contains(stage.id) above?
+            case customReader: CustomShuffleReaderExec =>
+              CustomShuffleReaderExec(customReader.child,
+                newPartitionSpec(partitionSpecs.asInstanceOf[Seq[CoalescedPartitionSpec]],
+                  customReader))
+          }
         }
       } else {
         logInfo(s"CoalesceShufflePartitions: Cannot coalesce due to distinct partition counts:" +
@@ -101,6 +115,77 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     }
   }
 
+  /**
+   * This assumes that any partition is either skewed and needs to be split or it's
+   * too small and needs to be coalesced but not both.  (It can be neither and taken as is).
+   * For example,
+   * coalescedPartitionSpecs: CoalescedPartitionSpec(0,1), CoalescedPartitionSpec(1,4)
+   *
+   * and balancedReader.partitionSpecs (0th partition is replicated):
+   * CoalescedPartitionSpec(0,1)
+   * CoalescedPartitionSpec(0,1)
+   * CoalescedPartitionSpec(0,1)
+   * CoalescedPartitionSpec(1,2)
+   * CoalescedPartitionSpec(2,3)
+   * CoalescedPartitionSpec(3,4)
+   *
+   * desired output:
+   * CoalescedPartitionSpec(0,1)
+   * CoalescedPartitionSpec(0,1)
+   * CoalescedPartitionSpec(0,1)
+   * CoalescedPartitionSpec(1,4)
+   *
+   *
+   * and balancedReader.partitionSpecs (0th partition is split):
+   * (different invocation of newPartitionSpec())
+   * PartialReducerPartitionSpec(0,0,1)
+   * PartialReducerPartitionSpec(0,1,5)
+   * PartialReducerPartitionSpec(0,5,10)
+   * CoalescedPartitionSpec(1,2)
+   * CoalescedPartitionSpec(2,3)
+   * CoalescedPartitionSpec(3,4)
+   *
+   * desired output:
+   * PartialReducerPartitionSpec(0,0,1)
+   * PartialReducerPartitionSpec(0,1,5)
+   * PartialReducerPartitionSpec(0,5,10)
+   * CoalescedPartitionSpec(1,4)
+   *
+   * @param coalescedPartitionSpecs - as produced by [[ShufflePartitionsUtil.coalescePartitions]]
+   * @param balancedReader          - created by [[OptimizeSkewedJoin]]
+   * @return updated partition spec that combines results of skew mitigation and coalescing
+   */
+  private def newPartitionSpec(coalescedPartitionSpecs: Seq[CoalescedPartitionSpec],
+                               balancedReader: CustomShuffleReaderExec) = {
+    var balancedReaderPartIdx = 0;
+    val newPartSpecs = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
+    coalescedPartitionSpecs.foreach(cps => {
+      if (cps.endReducerIndex - cps.startReducerIndex > 1) {
+        // cps is really coalesced
+        newPartSpecs += cps
+        balancedReaderPartIdx += (cps.endReducerIndex - cps.startReducerIndex)
+      } else {
+        // the matching reducer partition may have been split/replicated due to skew
+        var iterate = true
+        while (iterate && balancedReaderPartIdx < balancedReader.partitionSpecs.length) {
+          val balancedReaderSpec = balancedReader.partitionSpecs(balancedReaderPartIdx)
+          val startReducerIndex: Int = balancedReaderSpec match {
+            case c: CoalescedPartitionSpec => c.startReducerIndex
+            case p: PartialReducerPartitionSpec => p.reducerIndex
+            case m =>
+              throw new IllegalArgumentException(m.toString)
+          }
+          if (startReducerIndex == cps.startReducerIndex) {
+            newPartSpecs += balancedReaderSpec
+            balancedReaderPartIdx += 1
+          } else {
+            iterate = false
+          }
+        }
+      }
+    })
+    newPartSpecs
+  }
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
     s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }

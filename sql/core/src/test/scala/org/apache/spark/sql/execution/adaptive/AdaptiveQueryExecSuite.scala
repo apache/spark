@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
 import java.net.URI
-
 import org.apache.log4j.Level
-
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -699,7 +697,7 @@ class AdaptiveQueryExecSuite
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100"
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "500"
     ) {
       withTempView("skewData1", "skewData2", "skewData3") {
         spark
@@ -707,7 +705,7 @@ class AdaptiveQueryExecSuite
           .selectExpr("id % 3 as key1", "id as value1")
           .createOrReplaceTempView("skewData1")
         spark
-          .range(0, 1000, 1, 10)
+          .range(0, 1000, 1, 10) // 1 part with 6.3KB, others 0
           .selectExpr("id % 1 as key2", "id as value2")
           .createOrReplaceTempView("skewData2")
         spark
@@ -715,7 +713,8 @@ class AdaptiveQueryExecSuite
           .selectExpr("id as key3", "id as value3")
           .createOrReplaceTempView("skewData3")
 
-        /*
+        def caseI: Unit = {
+          /*
         SMJ1
         :-Sort
           :-Agg
@@ -726,23 +725,57 @@ class AdaptiveQueryExecSuite
         Agg is on SMJ2 key, so no skew mitigation unless adaptiveForceIfShuffle is ON
         in which case SMJ2.isSkewJoin = true & a new shuffle is added for Agg
         */
-        val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
-          "select * from (SELECT key1, count(*) as c FROM skewData1 JOIN " +
-            "skewData2 ON key1 = key2 group by key1 ) A " +
-            "INNER JOIN skewData3 on c = value3")
-        val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
-        val csre = findCustomShuffleReaders(innerAdaptivePlan)
-        if(!conf.adaptiveForceIfShuffle) {
-          assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
-            s"actual plan=$innerAdaptivePlan")
-          assert(!innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
-          assert(csre.length == 4, s"actual plan=$innerAdaptivePlan")
-        } else {
-          assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
+          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+            "select * from (SELECT key1, count(*) as c FROM skewData1 JOIN " +
+              "skewData2 ON key1 = key2 group by key1 ) A " +
+              "INNER JOIN skewData3 on c = value3")
+          val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          val csre = findCustomShuffleReaders(innerAdaptivePlan)
+          if (!conf.adaptiveForceIfShuffle) {
+            assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
+              s"actual plan=$innerAdaptivePlan")
+            assert(!innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+            assert(csre.length == 4, s"actual plan=$innerAdaptivePlan")
+            // todo: check that CSRE actually coalesced something?
+          } else {
+            assert(innerSmj.size == 2 && !innerSmj.head.isSkewJoin,
+              s"actual plan=$innerAdaptivePlan")
+            assert(innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
+            assert(csre.length == 5, s"actual plan=$innerAdaptivePlan")
+          }
+        }
+
+        /**
+         * this just tests that coalesce after skew join works - nothing to do with forceIfShuffle
+         */
+        def caseII: Unit = {
+          // this just tests
+          val (_, innerAdaptivePlan) = runAdaptiveAndVerifyResult(
+            "SELECT * FROM skewData3 INNER JOIN skewData2 ON key3 = key2")
+          val innerSmj = findTopLevelSortMergeJoin(innerAdaptivePlan)
+          val csre = findCustomShuffleReaders(innerAdaptivePlan)
+          assert(innerSmj.size == 1 && innerSmj.head.isSkewJoin,
             s"actual plan=$innerAdaptivePlan")
           assert(innerSmj.last.isSkewJoin, s"actual plan=$innerAdaptivePlan")
-          assert(csre.length == 5, s"actual plan=$innerAdaptivePlan")
+          assert(csre.length == 2, s"actual plan=$innerAdaptivePlan")
+
+          // to check that CoalescedShufflePartitons did something
+          def isReallyCoalesced(partSpec: CoalescedPartitionSpec) = {
+            partSpec.endReducerIndex - partSpec.startReducerIndex > 1
+          }
+          val lhsCsre = csre.head
+          assert(lhsCsre.hasCoalescedPartition, lhsCsre)
+          val v = lhsCsre.partitionSpecs.filter(_.isInstanceOf[CoalescedPartitionSpec])
+            .map(_.asInstanceOf[CoalescedPartitionSpec]).filter(isReallyCoalesced)
+          assert(v.length == 1, v)
+          val rhsCsre = csre.last
+          assert(rhsCsre.hasCoalescedPartition, lhsCsre)
+          val v1 = rhsCsre.partitionSpecs.filter(_.isInstanceOf[CoalescedPartitionSpec])
+            .map(_.asInstanceOf[CoalescedPartitionSpec]).filter(isReallyCoalesced)
+          assert(v1.length == 1, v1)
         }
+        caseI
+        caseII
       }
     }
   }

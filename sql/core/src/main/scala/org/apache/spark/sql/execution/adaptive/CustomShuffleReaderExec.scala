@@ -110,6 +110,7 @@ case class CustomShuffleReaderExec private(
   def hasCoalescedPartition: Boolean = {
     // shouldn't this check that at least some index ranges are > 1?
     // otherwise it's just reading original shuffle results
+    // that is how OptimizeSkewedJoin.optimizeSkewJoin defines it
     partitionSpecs.exists(_.isInstanceOf[CoalescedPartitionSpec])
   }
 
