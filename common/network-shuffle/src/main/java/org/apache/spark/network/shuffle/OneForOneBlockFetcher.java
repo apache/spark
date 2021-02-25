@@ -81,7 +81,6 @@ public class OneForOneBlockFetcher {
       TransportConf transportConf,
       DownloadFileManager downloadFileManager) {
     this.client = client;
-    this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
@@ -90,8 +89,10 @@ public class OneForOneBlockFetcher {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
     if (!transportConf.useOldFetchProtocol() && isShuffleBlocks(blockIds)) {
-      this.message = createFetchShuffleBlocksMsg(appId, execId, blockIds);
+      this.blockIds = new String[blockIds.length];
+      this.message = createFetchShuffleBlocksMsgAndBuildBlockIds(appId, execId, blockIds);
     } else {
+      this.blockIds = blockIds;
       this.message = new OpenBlocks(appId, execId, blockIds);
     }
   }
@@ -110,7 +111,7 @@ public class OneForOneBlockFetcher {
    * The blockIds has been sorted by mapId and reduceId. It's produced in
    * org.apache.spark.MapOutputTracker.convertMapStatuses.
    */
-  private FetchShuffleBlocks createFetchShuffleBlocksMsg(
+  private FetchShuffleBlocks createFetchShuffleBlocksMsgAndBuildBlockIds(
       String appId, String execId, String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
@@ -138,9 +139,23 @@ public class OneForOneBlockFetcher {
     }
     long[] mapIds = Longs.toArray(mapIdToReduceIds.keySet());
     int[][] reduceIdArr = new int[mapIds.length][];
+    int blockIdIndex = 0;
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
+      // rebuild blockIds order to match read order when shuffle data read
+      if (!batchFetchEnabled) {
+        for (int j = 0; j < reduceIdArr[i].length; j++) {
+          this.blockIds[blockIdIndex++] = "shuffle_" + shuffleId + "_" + mapIds[i] + "_"
+                  + reduceIdArr[i][j];
+        }
+      } else {
+        assert (reduceIdArr[i].length == 2);
+        this.blockIds[blockIdIndex++] = "shuffle_" + shuffleId + "_" + mapIds[i] + "_"
+                + reduceIdArr[i][0] + "_" + reduceIdArr[i][1];
+      }
     }
+    assert(blockIdIndex == this.blockIds.length);
+
     return new FetchShuffleBlocks(
       appId, execId, shuffleId, mapIds, reduceIdArr, batchFetchEnabled);
   }
