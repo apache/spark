@@ -21,7 +21,7 @@ license: |
 
 ### Description
 
-The `ANALYZE TABLES` statement collects statistics about all the tables in a database to be used by the query optimizer to find a better query execution plan.
+The `ANALYZE TABLES` statement collects statistics about all the tables in a specified database to be used by the query optimizer to find a better query execution plan.
 
 ### Syntax
 
@@ -37,7 +37,7 @@ ANALYZE TABLES [ { FROM | IN } database_name ] COMPUTE STATISTICS [ NOSCAN ]
 
 * **[ NOSCAN ]**
 
-    Collects only the table's size in bytes ( which does not require scanning the entire table ).
+    Collects only the table's size in bytes (which does not require scanning the entire table).
 
 ### Examples
 
@@ -48,100 +48,61 @@ USE school_db;
 CREATE TABLE teachers (name STRING, teacher_id INT);
 INSERT INTO teachers VALUES ('Tom', 1), ('Jerry', 2);
 
-CREATE TABLE students (name STRING, student_id INT);
-INSERT INTO students VALUES ('Mark', 111111), ('John', 222222);
+CREATE TABLE students (name STRING, student_id INT, age SHORT);
+INSERT INTO students VALUES ('Mark', 111111, 10), ('John', 222222, 11);
 
 ANALYZE TABLES IN school_db COMPUTE STATISTICS NOSCAN;
 
-SHOW TABLE EXTENDED IN school_db LIKE '*';
-+------------+------------+--------------+----------------------------------------------------+
-|  database  | tableName  | isTemporary  |                    information                     |
-+------------+------------+--------------+----------------------------------------------------+
-|school_db   |students    |false         |Database: school_db
-                                          Table: students
-                                          Owner: root
-                                          Created Time: Wed Dec 09 14:23:25 CST 2020
-                                          Last Access: UNKNOWN
-                                          Created By: Spark 3.2.0-SNAPSHOT
-                                          Type: MANAGED
-                                          Provider: hive
-                                          Table Properties: [transient_lastDdlTime=1607495032]
-                                          Statistics: 24 bytes
-                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/students
-                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
-                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-                                          Storage Properties: [serialization.format=1]
-                                          Partition Provider: Catalog
-                                          Schema: root
-                                           |-- name: string (nullable = true)
-                                           |-- student_id: integer (nullable = true)          |
-|school_db   |teachers    |false         |Database: school_db
-                                          Table: teachers
-                                          Owner: root
-                                          Created Time: Wed Dec 09 14:24:15 CST 2020
-                                          Last Access: UNKNOWN
-                                          Created By: Spark 3.2.0-SNAPSHOT
-                                          Type: MANAGED
-                                          Provider: hive
-                                          Table Properties: [transient_lastDdlTime=1607495059]
-                                          Statistics: 14 bytes
-                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/teachers
-                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
-                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-                                          Storage Properties: [serialization.format=1]
-                                          Partition Provider: Catalog
-                                          Schema: root
-                                           |-- name: string (nullable = true)
-                                           |-- teacher_id: integer (nullable = true)          |
-+------------+------------+--------------+----------------------------------------------------+
+DESC EXTENDED teachers;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          teacher_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|            Provider|             parquet|       |
+|          Statistics|          1382 bytes|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
+
+DESC EXTENDED students;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 age|            smallint|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|          1828 bytes|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
 
 ANALYZE TABLES COMPUTE STATISTICS;
 
-SHOW TABLE EXTENDED IN school_db LIKE '*';
-+------------+------------+--------------+----------------------------------------------------+
-|  database  | tableName  | isTemporary  |                    information                     |
-+------------+------------+--------------+----------------------------------------------------+
-|school_db   |students    |false         |Database: school_db
-                                          Table: students
-                                          Owner: root
-                                          Created Time: Wed Dec 09 14:23:25 CST 2020
-                                          Last Access: UNKNOWN
-                                          Created By: Spark 3.2.0-SNAPSHOT
-                                          Type: MANAGED
-                                          Provider: hive
-                                          Table Properties: [transient_lastDdlTime=1607495311]
-                                          Statistics: 24 bytes, 2 rows
-                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/students
-                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
-                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-                                          Storage Properties: [serialization.format=1]
-                                          Partition Provider: Catalog
-                                          Schema: root
-                                           |-- name: string (nullable = true)
-                                           |-- student_id: integer (nullable = true)          |
-|school_db   |teachers    |false         |Database: school_db
-                                          Table: teachers
-                                          Owner: root
-                                          Created Time: Wed Dec 09 14:24:15 CST 2020
-                                          Last Access: UNKNOWN
-                                          Created By: Spark 3.2.0-SNAPSHOT
-                                          Type: MANAGED
-                                          Provider: hive
-                                          Table Properties: [transient_lastDdlTime=1607495312]
-                                          Statistics: 14 bytes, 2 rows
-                                          Location: file:/opt/spark1/spark/spark-warehouse/school_db.db/teachers
-                                          Serde Library: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                                          InputFormat: org.apache.hadoop.mapred.TextInputFormat
-                                          OutputFormat: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-                                          Storage Properties: [serialization.format=1]
-                                          Partition Provider: Catalog
-                                          Schema: root
-                                           |-- name: string (nullable = true)
-                                           |-- teacher_id: integer (nullable = true)          |
-+------------+------------+--------------+----------------------------------------------------+
+DESC EXTENDED teachers;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          teacher_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|            Provider|             parquet|       |
+|          Statistics|  1382 bytes, 2 rows|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
+
+DESC EXTENDED students;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 age|            smallint|   null|
+|                 ...|                 ...|    ...|
+|            Provider|             parquet|       |
+|          Statistics|  1828 bytes, 2 rows|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
 ```
 
 ### Related Statements
