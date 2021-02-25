@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
@@ -35,8 +34,7 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  *    because sort merge join and shuffled hash join will be changed to broadcast hash join with AQE
  *    at the first place.
  *
- * 3. Join is left anti join without condition, and broadcasted join right side is not empty.
- *    This applies to broadcast nested loop join only.
+ * 3. Join is left anti join without condition, and join right side is non-empty.
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
@@ -59,18 +57,12 @@ object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
       LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
 
     case j @ Join(_, _, LeftAnti, None, _) =>
-      val isNonEmptyBroadcastedRightSide = j.right match {
-        case LogicalQueryStage(_, stage: BroadcastQueryStageExec)
-          if stage.resultOption.get().isDefined =>
-          stage.broadcast.relationFuture.get().value match {
-            // Match with Array[InternalRow] as this is the type of broadcast result
-            // in [[BroadcastNestedLoopJoinExec]].
-            case v: Array[InternalRow] => v.nonEmpty
-            case _ => false
-          }
+      val isNonEmptyRightSide = j.right match {
+        case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+          stage.getRuntimeStatistics.rowCount.exists(_ > 0)
         case _ => false
       }
-      if (isNonEmptyBroadcastedRightSide) {
+      if (isNonEmptyRightSide) {
         LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
       } else {
         j
