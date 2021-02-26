@@ -247,7 +247,7 @@ def product(col):
     +----+-------+
 
     """
-    return _invoke_function("product", _to_java_column(col))
+    return _invoke_function_over_column("product", col)
 
 
 def acos(col):

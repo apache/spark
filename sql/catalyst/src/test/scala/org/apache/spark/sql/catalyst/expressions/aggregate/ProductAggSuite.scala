@@ -35,7 +35,7 @@ class ProductAggSuite extends SparkFunSuite {
       InternalRow(-2.0),
       InternalRow(3.0),
       InternalRow(-5.0),
-      InternalRow(7.0) )
+      InternalRow(7.0))
     assert(result === InternalRow(210.0))
   }
 
@@ -44,7 +44,7 @@ class ProductAggSuite extends SparkFunSuite {
       InternalRow(null),
       InternalRow(11.0),
       InternalRow(null),
-      InternalRow(13.0) )
+      InternalRow(13.0))
     assert(result1 === InternalRow(143.0))
 
     val result2 = evaluator.update(
