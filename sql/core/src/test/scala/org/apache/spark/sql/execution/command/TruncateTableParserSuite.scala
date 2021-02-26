@@ -20,30 +20,30 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.TruncateTable
+import org.apache.spark.sql.catalyst.plans.logical.{TruncatePartition, TruncateTable}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class TruncateTableParserSuite extends AnalysisTest with SharedSparkSession {
   test("truncate table") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c"),
-      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None), None))
+      TruncateTable(UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None)))
   }
 
   test("truncate a single part partition") {
     comparePlans(
       parsePlan("TRUNCATE TABLE a.b.c PARTITION(ds='2017-06-10')"),
-      TruncateTable(
+      TruncatePartition(
         UnresolvedTable(Seq("a", "b", "c"), "TRUNCATE TABLE", None),
-        Some(UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"), None))))
+        UnresolvedPartitionSpec(Map("ds" -> "2017-06-10"), None)))
   }
 
   test("truncate a multi parts partition") {
     comparePlans(
       parsePlan("TRUNCATE TABLE ns.tbl PARTITION(a = 1, B = 'ABC')"),
-      TruncateTable(
+      TruncatePartition(
         UnresolvedTable(Seq("ns", "tbl"), "TRUNCATE TABLE", None),
-        Some(UnresolvedPartitionSpec(Map("a" -> "1", "B" -> "ABC"), None))))
+        UnresolvedPartitionSpec(Map("a" -> "1", "B" -> "ABC"), None)))
   }
 
   test("empty values in non-optional partition specs") {

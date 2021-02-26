@@ -187,5 +187,20 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     }
   }
 
+  test("SPARK-34538: Skip InSet null value during push filter to Hive metastore") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
+      val intFilter = InSet(a("p", IntegerType), Set(null, 1, 2))
+      val intConverted = shim.convertFilters(testTable, Seq(intFilter), conf.sessionLocalTimeZone)
+      assert(intConverted == "(p = 1 or p = 2)")
+    }
+
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
+      val dateFilter = InSet(a("p", DateType), Set(null,
+        Literal(Date.valueOf("2020-01-01")).eval(), Literal(Date.valueOf("2021-01-01")).eval()))
+      val dateConverted = shim.convertFilters(testTable, Seq(dateFilter), conf.sessionLocalTimeZone)
+      assert(dateConverted == "(p = 2020-01-01 or p = 2021-01-01)")
+    }
+  }
+
   private def a(name: String, dataType: DataType) = AttributeReference(name, dataType)()
 }

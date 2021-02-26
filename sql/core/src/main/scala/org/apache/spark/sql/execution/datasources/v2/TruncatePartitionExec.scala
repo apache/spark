@@ -18,20 +18,35 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.TruncatableTable
+import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 
 /**
- * Physical plan node for table truncation.
+ * Physical plan node for table partition truncation.
  */
-case class TruncateTableExec(
-    table: TruncatableTable,
+case class TruncatePartitionExec(
+    table: SupportsPartitionManagement,
+    partSpec: ResolvedPartitionSpec,
     refreshCache: () => Unit) extends V2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    if (table.truncateTable()) refreshCache()
+    val isTableAltered = if (table.partitionSchema.length != partSpec.names.length) {
+      table match {
+        case atomicPartTable: SupportsAtomicPartitionManagement =>
+          val partitionIdentifiers = atomicPartTable.listPartitionIdentifiers(
+            partSpec.names.toArray, partSpec.ident)
+          atomicPartTable.truncatePartitions(partitionIdentifiers)
+        case _ =>
+          throw new UnsupportedOperationException(
+            s"The table ${table.name()} does not support truncation of multiple partition.")
+      }
+    } else {
+      table.truncatePartition(partSpec.ident)
+    }
+    if (isTableAltered) refreshCache()
     Seq.empty
   }
 }

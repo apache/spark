@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -57,6 +57,11 @@ trait V2WriteCommand extends Command {
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
+}
+
+trait V2PartitionCommand extends Command {
+  def table: LogicalPlan
+  def allowPartialPartitionSpec: Boolean = false
 }
 
 /**
@@ -677,13 +682,10 @@ case class AnalyzeColumn(
  * }}}
  */
 case class AddPartitions(
-    child: LogicalPlan,
+    table: LogicalPlan,
     parts: Seq[PartitionSpec],
-    ifNotExists: Boolean) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    ifNotExists: Boolean) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
@@ -699,29 +701,21 @@ case class AddPartitions(
  * }}}
  */
 case class DropPartitions(
-    child: LogicalPlan,
+    table: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    purge: Boolean) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
  * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
  */
 case class RenamePartitions(
-    child: LogicalPlan,
+    table: LogicalPlan,
     from: PartitionSpec,
-    to: PartitionSpec) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      from.isInstanceOf[ResolvedPartitionSpec] &&
-      to.isInstanceOf[ResolvedPartitionSpec]
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    to: PartitionSpec) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
@@ -767,23 +761,29 @@ object ShowColumns {
 /**
  * The logical plan of the TRUNCATE TABLE command.
  */
-case class TruncateTable(
-    child: LogicalPlan,
-    partitionSpec: Option[PartitionSpec]) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+case class TruncateTable(table: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the TRUNCATE TABLE ... PARTITION command.
+ */
+case class TruncatePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
+  override def allowPartialPartitionSpec: Boolean = true
 }
 
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
 case class ShowPartitions(
-    child: LogicalPlan,
+    table: LogicalPlan,
     pattern: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
-
-  override lazy val resolved: Boolean =
-    childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
+  override def allowPartialPartitionSpec: Boolean = true
 }
 
 object ShowPartitions {
