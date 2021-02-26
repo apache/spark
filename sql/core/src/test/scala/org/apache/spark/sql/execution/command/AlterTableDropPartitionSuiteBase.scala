@@ -237,7 +237,7 @@ trait AlterTableDropPartitionSuiteBase extends QueryTest with DDLCommandTestUtil
       sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
       checkPartitions(t, Map("part" -> "2020-01-01"))
       sql(s"ALTER TABLE $t DROP PARTITION (part = date'2020-01-01')")
-      checkPartitions(t, Map())
+      checkPartitions(t)
     }
   }
 }
