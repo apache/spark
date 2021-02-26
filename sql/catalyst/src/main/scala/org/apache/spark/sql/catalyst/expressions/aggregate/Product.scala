@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ImplicitCastInputTypes, Literal}
-import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types.{AbstractDataType, DataType, DoubleType}
 
 
@@ -30,33 +28,24 @@ case class Product(child: Expression)
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
 
-  override def dataType: DataType = resultType
+  override def dataType: DataType = DoubleType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType)
 
-  override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function product")
+  private lazy val product = AttributeReference("product", dataType)()
 
-  private val resultType = DoubleType
-
-  private lazy val product = AttributeReference("product", resultType)()
-
-  private lazy val one = Literal(1.0, resultType)
+  private lazy val one = Literal(1.0, dataType)
 
   override lazy val aggBufferAttributes = product :: Nil
 
   override lazy val initialValues: Seq[Expression] =
-    Seq(Literal(null, resultType))
+    Seq(Literal(null, dataType))
 
   override lazy val updateExpressions: Seq[Expression] = {
     // Treat the result as null until we have seen at least one child value,
     // whereupon the previous product is promoted to being unity.
-    // Each child value is implicitly multiplied by a scaling factor
-    // (1.0 by default) so that the client has some control over overflow
-    // when multiplying together many child values, without needing
-    // to explicitly rescale a Column beforehand.
 
     val protoResult = coalesce(product, one) * child
 
