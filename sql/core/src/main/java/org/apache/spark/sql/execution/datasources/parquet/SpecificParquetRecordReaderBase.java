@@ -102,6 +102,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
+    reader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
