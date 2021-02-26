@@ -586,8 +586,8 @@ class LogisticRegression @Since("1.2.0") (
         val featuresMean = summarizer.mean.toArray
         println(s"featuresMean: ${summarizer.mean}")
 
-        // val featuresStd = Array.fill(featuresMean.length)(1.0)
-        val featuresStd = summarizer.std.toArray
+        val featuresStd = Array.fill(featuresMean.length)(1.0)
+        // val featuresStd = summarizer.std.toArray
         println(s"featuresStd: ${summarizer.std}")
 
 
