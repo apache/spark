@@ -128,7 +128,7 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (Not(InSet(a("datecol", DateType),
       Set(Literal(Date.valueOf("2020-01-01")).eval(),
         Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
-    """(datecol != "2020-01-01" and datecol != "2020-01-02")""")
+    """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
 
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.

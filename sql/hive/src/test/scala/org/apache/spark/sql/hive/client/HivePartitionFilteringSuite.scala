@@ -448,7 +448,7 @@ class HivePartitionFilteringSuite(version: String)
       dsValue,
       hValue,
       chunkValue,
-      Seq("2019-01-03") ++ defaultPartition,
+      Seq("2019-01-03"),
       dateStrValue
     )
   }
