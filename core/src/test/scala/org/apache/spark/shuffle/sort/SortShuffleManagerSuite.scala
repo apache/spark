@@ -32,7 +32,6 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark._
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
-import org.apache.spark.util.Utils
 
 /**
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
