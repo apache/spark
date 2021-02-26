@@ -23,20 +23,24 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, ShortType}
 
 
-class ProductAggSuite extends QueryTest with SharedSparkSession {
+class ProductAggSuite extends QueryTest
+  with SharedSparkSession {
+
   // Sequence of integers small enough that factorial is representable exactly as DoubleType:
   private lazy val data16 = spark.range(1, 17).toDF("x")
 
   private lazy val factorials = (1 to 16).scanLeft(1L) { case (f, x) => f * x }
 
   test("bare factorial") {
-    implicit val enc = Encoders.scalaDouble
+    checkAnswer(
+      data16.agg(product(col("x"))),
+      Row((1L to 16L).reduce { _ * _ }.toDouble)
+    )
 
-    val prod = data16.agg(product(col("x"))).as[Double].head
-    val expected = (1L to 16L).reduce { _ * _ }.toDouble
-
-    assert(prod === expected)
-    assert(prod === factorials(16))
+    checkAnswer(
+      data16.agg(product(col("x"))),
+      Row(factorials(16))
+    )
   }
 
   test("type flexibility") {
@@ -53,35 +57,40 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
       variants.keys.toSeq.map { id => product(col(id)) as id } : _*)
 
     variants.keys.foreach { typ =>
-      val prod = prods.select(typ).as[Double](Encoders.scalaDouble).head
-      assert(prod === factorials(16))
+      checkAnswer(
+        prods.select(typ),
+        Row(factorials(16))
+      )
     }
   }
 
   test("windowed factorials") {
-    implicit val enc = Encoders.product[(Long, Double)]
     val win = Window.partitionBy(lit(1)).orderBy("x")
 
     val prodFactorials = data16.withColumn("f", product(col("x")).over(win))
 
-    val prodMap = prodFactorials.as[(Long, Double)].collect.toMap
+    assert(prodFactorials.count === 16)
 
-    assert(prodMap.size === 16)
+    checkAnswer(
+      prodFactorials.limit(5),
+      Seq(
+        Row(1, 1.0),
+        Row(2, 2.0),
+        Row(3, 6.0),
+        Row(4, 24.0),
+        Row(5, 120.0)
+      )
+    )
 
-    assert(prodMap(1) === 1.0)
-    assert(prodMap(2) === 2.0)
-    assert(prodMap(3) === 6.0)
-    assert(prodMap(4) === 24.0)
-    assert(prodMap(5) === 120.0)
-
-    factorials.zipWithIndex.drop(1).foreach { case (expected, idx) =>
-      assert(prodMap(idx) === expected)
-    }
+    checkAnswer(
+      prodFactorials,
+      factorials.zipWithIndex.drop(1).map { case (fac, idx) =>
+        Row(idx, fac)
+      }
+    )
   }
 
   test("grouped factorials") {
-    implicit val enc = Encoders.scalaDouble
-
     val grouped = data16.groupBy((col("x") % 3) as "mod3")
       .agg(
         product(col("x")) as "product",
@@ -89,20 +98,24 @@ class ProductAggSuite extends QueryTest with SharedSparkSession {
         product(col("x") * -1.0) as "product_minus")
       .orderBy("mod3")
 
-    def col2seq(s: String): Seq[Double] =
-      grouped.select(s).as[Double].collect.toSeq
-
     val expectedBase = Seq(
       (3 * 6 * 9 * 12 * 15),
       (1 * 4 * 7 * 10 * 13 * 16),
       (2 * 5 * 8 * 11 * 14))
 
-    assert(col2seq("product") === expectedBase.map { _.toDouble })
-    assert(
-      col2seq("product_scaled") ===
-      expectedBase.zip(Seq(0.03125, 0.015625, 0.03125)).map { case(a, b) => a * b })
-    assert(
-      col2seq("product_minus") ===
-      expectedBase.zip(Seq(-1.0, 1.0, -1.0)).map { case(a, b) => a * b })
+    checkAnswer(
+      grouped.select("product"),
+      expectedBase.map { n => Row(n.toDouble) }
+    )
+
+    checkAnswer(
+      grouped.select("product_scaled"),
+      expectedBase.zip(Seq(0.03125, 0.015625, 0.03125)).map { case(a, b) => Row(a * b) }
+    )
+
+    checkAnswer(
+      grouped.select("product_minus"),
+      expectedBase.zip(Seq(-1.0, 1.0, -1.0)).map { case(a, b) => Row(a * b) }
+    )
   }
 }
