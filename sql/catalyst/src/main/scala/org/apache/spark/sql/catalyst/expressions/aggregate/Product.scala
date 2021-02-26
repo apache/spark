@@ -28,7 +28,7 @@ case class Product(child: Expression)
 
   override def children: Seq[Expression] = child :: Nil
 
-  override def nullable: Boolean = child.nullable
+  override def nullable: Boolean = true
 
   override def dataType: DataType = DoubleType
 
