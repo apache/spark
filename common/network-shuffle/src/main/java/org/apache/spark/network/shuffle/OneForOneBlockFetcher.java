@@ -81,6 +81,7 @@ public class OneForOneBlockFetcher {
       TransportConf transportConf,
       DownloadFileManager downloadFileManager) {
     this.client = client;
+    this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
@@ -89,10 +90,8 @@ public class OneForOneBlockFetcher {
       throw new IllegalArgumentException("Zero-sized blockIds array");
     }
     if (!transportConf.useOldFetchProtocol() && isShuffleBlocks(blockIds)) {
-      this.blockIds = new String[blockIds.length];
-      this.message = createFetchShuffleBlocksMsgAndBuildBlockIds(appId, execId, blockIds);
+      this.message = createFetchShuffleBlocksMsg(appId, execId, blockIds);
     } else {
-      this.blockIds = blockIds;
       this.message = new OpenBlocks(appId, execId, blockIds);
     }
   }
@@ -111,13 +110,14 @@ public class OneForOneBlockFetcher {
    * The blockIds has been sorted by mapId and reduceId. It's produced in
    * org.apache.spark.MapOutputTracker.convertMapStatuses.
    */
-  private FetchShuffleBlocks createFetchShuffleBlocksMsgAndBuildBlockIds(
+  private FetchShuffleBlocks createFetchShuffleBlocksMsg(
       String appId, String execId, String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
     boolean batchFetchEnabled = firstBlock.length == 5;
 
     HashMap<Long, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
+    ArrayList<Long> orderedMapId = new ArrayList<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
       if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
@@ -125,10 +125,15 @@ public class OneForOneBlockFetcher {
           ", got:" + blockId);
       }
       long mapId = Long.parseLong(blockIdParts[2]);
+      assert(orderedMapId.isEmpty() || mapId >= orderedMapId.get(orderedMapId.size() - 1));
       if (!mapIdToReduceIds.containsKey(mapId)) {
         mapIdToReduceIds.put(mapId, new ArrayList<>());
+        orderedMapId.add(mapId);
       }
-      mapIdToReduceIds.get(mapId).add(Integer.parseInt(blockIdParts[3]));
+      ArrayList<Integer> reduceIdsByMapId = mapIdToReduceIds.get(mapId);
+      int reduceId = Integer.parseInt(blockIdParts[3]);
+      assert(reduceIdsByMapId.isEmpty() || reduceId > reduceIdsByMapId.get(reduceIdsByMapId.size() - 1));
+      reduceIdsByMapId.add(reduceId);
       if (batchFetchEnabled) {
         // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
         // FetchShuffleBlocks to store the start and end reduce id for range
@@ -137,24 +142,11 @@ public class OneForOneBlockFetcher {
         mapIdToReduceIds.get(mapId).add(Integer.parseInt(blockIdParts[4]));
       }
     }
-    long[] mapIds = Longs.toArray(mapIdToReduceIds.keySet());
+    long[] mapIds = Longs.toArray(orderedMapId);
     int[][] reduceIdArr = new int[mapIds.length][];
-    int blockIdIndex = 0;
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
-      // rebuild blockIds order to match read order when shuffle data read
-      if (!batchFetchEnabled) {
-        for (int j = 0; j < reduceIdArr[i].length; j++) {
-          this.blockIds[blockIdIndex++] = "shuffle_" + shuffleId + "_" + mapIds[i] + "_"
-                  + reduceIdArr[i][j];
-        }
-      } else {
-        assert (reduceIdArr[i].length == 2);
-        this.blockIds[blockIdIndex++] = "shuffle_" + shuffleId + "_" + mapIds[i] + "_"
-                + reduceIdArr[i][0] + "_" + reduceIdArr[i][1];
-      }
     }
-    assert(blockIdIndex == this.blockIds.length);
 
     return new FetchShuffleBlocks(
       appId, execId, shuffleId, mapIds, reduceIdArr, batchFetchEnabled);
