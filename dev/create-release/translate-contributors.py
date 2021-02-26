@@ -38,11 +38,11 @@ from releaseutils import JIRA, JIRAError, get_jira_name, Github, get_github_name
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", None)
 JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", None)
-GITHUB_API_TOKEN = os.environ.get("GITHUB_API_TOKEN", None)
+GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY", os.environ.get("GITHUB_API_TOKEN", None))
 if not JIRA_USERNAME or not JIRA_PASSWORD:
     sys.exit("Both JIRA_USERNAME and JIRA_PASSWORD must be set")
-if not GITHUB_API_TOKEN:
-    sys.exit("GITHUB_API_TOKEN must be set")
+if not GITHUB_OAUTH_KEY:
+    sys.exit("GITHUB_OAUTH_KEY must be set")
 
 # Write new contributors list to <old_file_name>.final
 if not os.path.isfile(contributors_file_name):
@@ -64,7 +64,7 @@ if INTERACTIVE_MODE:
 # Setup GitHub and JIRA clients
 jira_options = {"server": JIRA_API_BASE}
 jira_client = JIRA(options=jira_options, basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
-github_client = Github(GITHUB_API_TOKEN)
+github_client = Github(GITHUB_OAUTH_KEY)
 
 # Load known author translations that are cached locally
 known_translations = {}
