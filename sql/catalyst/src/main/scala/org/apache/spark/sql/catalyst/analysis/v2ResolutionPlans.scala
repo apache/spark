@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.types.DataType
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -73,11 +75,18 @@ case class UnresolvedTableOrView(
   override def output: Seq[Attribute] = Nil
 }
 
-sealed trait PartitionSpec
+sealed trait PartitionSpec extends LeafExpression with Unevaluable {
+  override def dataType: DataType = throw new IllegalStateException(
+    "PartitionSpec.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "PartitionSpec.nullable should not be called.")
+}
 
 case class UnresolvedPartitionSpec(
     spec: TablePartitionSpec,
-    location: Option[String] = None) extends PartitionSpec
+    location: Option[String] = None) extends PartitionSpec {
+  override lazy val resolved = false
+}
 
 /**
  * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
@@ -109,6 +118,7 @@ case class ResolvedTable(
     val qualifier = catalog.name +: identifier.namespace :+ identifier.name
     outputAttributes.map(_.withQualifier(qualifier))
   }
+  def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }
 
 object ResolvedTable {
