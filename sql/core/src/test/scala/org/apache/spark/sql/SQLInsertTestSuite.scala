@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.time.DateTimeException
+
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The base trait for DML - insert syntax
@@ -206,6 +210,53 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
       sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
       checkAnswer(spark.table("t"), Row("1", null))
+    }
+  }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withTable("t1", "t2", "t4", "t5") {
+      val binaryStr = "Spark SQL"
+      val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
+      sql("CREATE TABLE t1(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql("INSERT INTO t1 PARTITION(part = date'2019-01-02') VALUES('a')")
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t1"), Row("a", "2019-01-02"))
+
+      sql("CREATE TABLE t2(name STRING, part TIMESTAMP) USING PARQUET PARTITIONED BY (part)")
+      sql("INSERT INTO t2 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
+      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t2"), Row("a", "2019-01-02 11:11:11"))
+
+      val e = intercept[AnalysisException] {
+        sql("CREATE TABLE t3(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
+      }.getMessage
+      assert(e.contains("Cannot use interval for partition column"))
+
+      sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
+      sql(s"INSERT INTO t4 PARTITION(part = X'$binaryHexStr') VALUES('a')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", binaryStr))
+
+      // test type conversion
+      sql("CREATE TABLE t5(name STRING, part STRING) USING CSV PARTITIONED BY (part)")
+      sql(s"INSERT INTO t5 PARTITION(part = X'$binaryHexStr') VALUES('a')")
+      sql("INSERT INTO t5 PARTITION(part = date'2019-01-02') VALUES('a')")
+      sql("INSERT INTO t5 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t5"),
+        Row("a", binaryStr) :: Row("a", "2019-01-02") ::
+          Row("a", "2019-01-02 11:11:11") :: Nil)
+
+      // test insert timestamp literal partition value to date partition
+      sql("INSERT INTO t1 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('b')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t1"),
+        Row("a", "2019-01-02") :: Row("b", "2019-01-02") :: Nil)
+      // test insert invalid binary string partition value to date partition
+      val e2 = intercept[DateTimeException] {
+        sql(s"INSERT INTO t2 PARTITION(part = X'$binaryHexStr') VALUES('a')")
+      }.getMessage
+      assert(e2 == s"Cannot cast $binaryStr to TimestampType.")
+
+      // test change work for ALTER TABLE ... ADD PARTITION(part = date'2020-01-01')
+      sql("ALTER TABLE t1 ADD PARTITION(part = date'2020-02-01')")
+      checkAnswer(sql("SHOW PARTITIONS t1"),
+        Row("part=2019-01-02") :: Row("part=2020-02-01") :: Nil)
     }
   }
 }

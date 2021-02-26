@@ -509,6 +509,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case Literal(null, _) if !legacyNullAsString => null
       case l @ Literal(null, _) => l.toString
       case l: Literal =>
+        // TODO For v2 commands, we will cast the string back to its actual value,
+        //  which is a waste and can be improved in the future.
         Cast(l, StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
       case _ =>
         throw new IllegalArgumentException("Only support convert Literal to string when visit" +
