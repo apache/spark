@@ -71,6 +71,9 @@ private[ml] trait DifferentiableLossAggregator[
       s"greater than 0.0, but was $weightSum.")
     val result = Vectors.dense(gradientSumArray.clone())
     BLAS.scal(1.0 / weightSum, result)
+    // scalastyle:off println
+    println(s"gradient: $result")
+    // scalastyle:on println
     result
   }
 

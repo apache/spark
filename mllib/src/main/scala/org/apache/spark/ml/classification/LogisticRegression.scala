@@ -45,6 +45,7 @@ import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils
 
+// scalastyle:off println
 /**
  * Params for logistic regression.
  */
@@ -583,7 +584,12 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val featuresMean = summarizer.mean.toArray
+        println(s"featuresMean: ${summarizer.mean}")
+
+        // val featuresStd = Array.fill(featuresMean.length)(1.0)
         val featuresStd = summarizer.std.toArray
+        println(s"featuresStd: ${summarizer.std}")
+
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
@@ -689,6 +695,7 @@ class LogisticRegression @Since("1.2.0") (
           }
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
         }
+        println(s"optimizer: $optimizer")
 
         /*
           The coefficients are laid out in column major order during training. Here we initialize
@@ -792,6 +799,7 @@ class LogisticRegression @Since("1.2.0") (
           }
         }
 
+        println(s"initialCoefWithInterceptMatrix $initialCoefWithInterceptMatrix")
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
           new BDV[Double](initialCoefWithInterceptMatrix.toArray))
 
@@ -804,6 +812,7 @@ class LogisticRegression @Since("1.2.0") (
         var state: optimizer.State = null
         while (states.hasNext) {
           state = states.next()
+          println(s"solution: ${state.x.toArray.clone().mkString(",")}")
           arrayBuilder += state.adjustedValue
         }
         bcFeaturesStd.destroy()
@@ -842,6 +851,7 @@ class LogisticRegression @Since("1.2.0") (
             denseCoefficientMatrix.update(classIndex, featureIndex,
               value / featuresStd(featureIndex))
           }
+          // It seems that we only adjust coef, intercept is missing?
           if (isIntercept) interceptVec.toArray(classIndex) = value
         }
 
