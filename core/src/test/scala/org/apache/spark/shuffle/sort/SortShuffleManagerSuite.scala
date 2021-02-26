@@ -17,13 +17,23 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.File
+
+import scala.collection.JavaConverters._
+
+import org.apache.commons.io.FileUtils
+import org.apache.commons.io.filefilter.TrueFileFilter
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
+import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
+import org.apache.spark.util.Utils
+
 
 /**
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
@@ -129,6 +139,31 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
       aggregator = Some(mock(classOf[Aggregator[Any, Any, Any]])),
       mapSideCombine = true
     )))
+  }
+
+  test("SPARK-34541 Data could not be cleaned up when unregisterShuffle") {
+    val conf = new SparkConf(loadDefaults = false)
+    val tempDir: File = Utils.createTempDir()
+    conf.set("spark.local.dir", tempDir.getAbsolutePath)
+    val sc: SparkContext = new SparkContext("local", "SPARK-34541", conf)
+    val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
+    // Create a shuffleRdd
+    val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
+      .setSerializer(new JavaSerializer(conf))
+    def getAllFiles: Set[File] =
+      FileUtils.listFiles(tempDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    val filesBeforeShuffle = getAllFiles
+    // Force the shuffle to be performed
+    shuffledRdd.count()
+    // Ensure that the shuffle actually created files that will need to be cleaned up
+    val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
+    filesCreatedByShuffle.map(_.getName) should be
+    Set("shuffle_0_0_0.data", "shuffle_0_0_0.index")
+    // Check that the cleanup actually removes the files
+    sc.env.blockManager.master.removeShuffle(0, blocking = true)
+    for (file <- filesCreatedByShuffle) {
+      assert (!file.exists(), s"Shuffle file $file was not cleaned up")
+    }
   }
 
 }
