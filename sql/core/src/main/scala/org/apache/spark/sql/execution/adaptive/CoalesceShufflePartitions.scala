@@ -184,7 +184,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
         }
       }
     })
-    newPartSpecs
+    newPartSpecs.toSeq
   }
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
     s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
