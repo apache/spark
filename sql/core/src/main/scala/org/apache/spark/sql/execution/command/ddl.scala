@@ -825,12 +825,7 @@ case class AlterTableSetLocationCommand(
         DDLUtils.verifyPartitionProviderIsHive(
           sparkSession, table, "ALTER TABLE ... SET LOCATION")
         // Partition spec is specified, so we set the location only for this partition
-        val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
-          spec,
-          table.partitionSchema,
-          table.identifier.quotedString,
-          sparkSession.sessionState.conf.resolver)
-        val part = catalog.getPartition(table.identifier, normalizedSpec)
+        val part = catalog.getPartition(table.identifier, spec)
         val newPart = part.copy(storage = part.storage.copy(locationUri = Some(locUri)))
         catalog.alterPartitions(table.identifier, Seq(newPart))
       case None =>
