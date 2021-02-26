@@ -32,7 +32,7 @@ class RemoveNoopUnionSuite extends PlanTest {
           RemoveNoopUnion) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int)
+  val testRelation = LocalRelation("a".attr.int, "b".attr.int)
 
   test("SPARK-34474: Remove redundant Union under Distinct") {
     val union = Union(testRelation :: testRelation :: Nil)
