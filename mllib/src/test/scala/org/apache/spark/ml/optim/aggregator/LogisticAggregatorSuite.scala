@@ -61,7 +61,8 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
-    new LogisticAggregator(bcFeaturesStd, numClasses, fitIntercept, isMultinomial)(bcCoefficients)
+    new LogisticAggregator(
+      null, bcFeaturesStd, numClasses, fitIntercept, isMultinomial)(bcCoefficients)
   }
 
   test("aggregator add method input size") {

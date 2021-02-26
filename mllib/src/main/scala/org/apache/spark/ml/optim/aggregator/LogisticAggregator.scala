@@ -19,7 +19,7 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.ml.linalg.{DenseVector, Vector}
+import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector}
 import org.apache.spark.mllib.util.MLUtils
 
 /**
@@ -183,6 +183,7 @@ import org.apache.spark.mllib.util.MLUtils
  * since this form is optimal for the matrix operations used for prediction.
  */
 private[ml] class LogisticAggregator(
+    bcFeaturesAvg: Broadcast[Array[Double]],
     bcFeaturesStd: Broadcast[Array[Double]],
     numClasses: Int,
     fitIntercept: Boolean,
@@ -216,28 +217,77 @@ private[ml] class LogisticAggregator(
       s"is applied, multinomial loss will produce a result different from binary loss.")
   }
 
+  // dot of a empty vector (with intercept if any)
+  // With it as an offset, for a sparse vector,
+  // we only need to deal with the non-zero values in prediction.
+  @transient private lazy val binarySumOffset: Double = {
+    val localCoefficients = coefficientsArray
+    val localFeaturesAvg = bcFeaturesAvg.value
+    val localFeaturesStd = bcFeaturesStd.value
+    var sum = if (fitIntercept) localCoefficients(numFeaturesPlusIntercept - 1) else 0.0
+    var i = 0
+    while (i < localFeaturesAvg.length) {
+      if (localFeaturesStd(i) != 0.0) {
+        sum += localCoefficients(i) * (0.0 - localFeaturesAvg(i)) / localFeaturesStd(i)
+      }
+      i += 1
+    }
+    sum
+  }
+
+  // With it as an offset, for a sparse vector,
+  // we only need to deal with the non-zero values in gradient calculation.
+  @transient private lazy val binaryGradOffset: Array[Double] = {
+    bcFeaturesAvg.value.zip(bcFeaturesStd.value).map { case (avg, std) =>
+      if (std != 0) avg / std else 0.0
+    }
+  }
+
   /** Update gradient and loss using binary loss function. */
   private def binaryUpdateInPlace(features: Vector, weight: Double, label: Double): Unit = {
 
+    val localFeaturesAvg = bcFeaturesAvg.value
     val localFeaturesStd = bcFeaturesStd.value
     val localCoefficients = coefficientsArray
     val localGradientArray = gradientSumArray
+
+
+    // following equals to:
+    //    val margin = - {
+    //      var sum = 0.0
+    //      features.foreach { (index, value) =>
+    //        if (localFeaturesStd(index) != 0.0) {
+    //          sum += localCoefficients(index) *
+    //            (value - localFeaturesAvg(index)) / localFeaturesStd(index)
+    //        }
+    //      }
+    //      if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
+    //      sum
+    //    }
     val margin = - {
-      var sum = 0.0
+      var sum = binarySumOffset
       features.foreachNonZero { (index, value) =>
         if (localFeaturesStd(index) != 0.0) {
           sum += localCoefficients(index) * value / localFeaturesStd(index)
         }
       }
-      if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
       sum
     }
 
     val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
+    // following equals to:
+    //    features.foreach { (index, value) =>
+    //      if (localFeaturesStd(index) != 0.0) {
+    //        localGradientArray(index) +=
+    //          multiplier * (value - localFeaturesAvg(index)) / localFeaturesStd(index)
+    //      }
+    //    }
+    BLAS.f2jBLAS.daxpy(numFeatures, -multiplier, binaryGradOffset, 1, localGradientArray, 1)
     features.foreachNonZero { (index, value) =>
       if (localFeaturesStd(index) != 0.0) {
-        localGradientArray(index) += multiplier * value / localFeaturesStd(index)
+        localGradientArray(index) +=
+          multiplier * value / localFeaturesStd(index)
       }
     }
 

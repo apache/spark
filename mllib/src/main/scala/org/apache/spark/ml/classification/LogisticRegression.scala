@@ -601,9 +601,10 @@ class LogisticRegression @Since("1.2.0") (
         val regParamL1 = $(elasticNetParam) * $(regParam)
         val regParamL2 = (1.0 - $(elasticNetParam)) * $(regParam)
 
+        val bcFeaturesAvg = instances.context.broadcast(featuresMean)
         val bcFeaturesStd = instances.context.broadcast(featuresStd)
-        val getAggregatorFunc = new LogisticAggregator(bcFeaturesStd, numClasses, $(fitIntercept),
-          multinomial = isMultinomial)(_)
+        val getAggregatorFunc = new LogisticAggregator(
+          bcFeaturesAvg, bcFeaturesStd, numClasses, $(fitIntercept), multinomial = isMultinomial)(_)
         val getFeaturesStd = (j: Int) => if (j >= 0 && j < numCoefficientSets * numFeatures) {
           featuresStd(j / numCoefficientSets)
         } else {
@@ -853,6 +854,21 @@ class LogisticRegression @Since("1.2.0") (
           }
           // It seems that we only adjust coef, intercept is missing?
           if (isIntercept) interceptVec.toArray(classIndex) = value
+        }
+
+        // adjust intercept
+        if ($(fitIntercept)) {
+          var i = 0
+          while (i < denseCoefficientMatrix.numRows) {
+            var j = 0
+            var adjust = 0.0
+            while (j < numFeatures) {
+              adjust += denseCoefficientMatrix(i, j) * featuresMean(j)
+              j += 1
+            }
+            interceptVec.toArray(i) -= adjust
+            i += 1
+          }
         }
 
         if ($(regParam) == 0.0 && isMultinomial && !usingBoundConstrainedOptimization) {
