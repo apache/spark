@@ -59,7 +59,10 @@ object DateTimeUtils {
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
-  def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+  def getZoneId(timeZoneId: String): ZoneId = {
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+  }
   def getTimeZone(timeZoneId: String): TimeZone = {
     TimeZone.getTimeZone(getZoneId(timeZoneId))
   }
