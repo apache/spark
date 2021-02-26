@@ -503,7 +503,8 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove no-op `Union` from the query plan that do not make any modifications.
+ * Smplify the children of `Union` or remove no-op `Union` from the query plan that
+ * do not make any modifications to the query.
  */
 object RemoveNoopUnion extends Rule[LogicalPlan] {
   /**
@@ -526,21 +527,29 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
     case _ => plan
   }
 
-  private def removeUnion(u: Union): Option[LogicalPlan] = {
-    val unionChildren = u.children.map(removeAliasOnlyProject)
-    if (unionChildren.tail.forall(unionChildren.head.sameResult(_))) {
-      Some(u.children.head)
+  private def simplifyUnion(u: Union): LogicalPlan = {
+    val uniqueChildren = mutable.ArrayBuffer.empty[LogicalPlan]
+    val uniqueChildrenKey = mutable.HashSet.empty[LogicalPlan]
+
+    u.children.foreach { c =>
+      val key = removeAliasOnlyProject(c).canonicalized
+      if (!uniqueChildrenKey.contains(key)) {
+        uniqueChildren += c
+        uniqueChildrenKey += key
+      }
+    }
+    if (uniqueChildren.size == 1) {
+      u.children.head
     } else {
-      None
+      u.copy(children = uniqueChildren)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case d @ Distinct(u: Union) =>
-      removeUnion(u).map(c => d.withNewChildren(Seq(c))).getOrElse(d)
-
+      d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
-      removeUnion(u).map(c => d.withNewChildren(Seq(c))).getOrElse(d)
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
