@@ -252,11 +252,6 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
         sql(s"INSERT INTO t2 PARTITION(part = X'$binaryHexStr') VALUES('a')")
       }.getMessage
       assert(e2 == s"Cannot cast $binaryStr to TimestampType.")
-
-      // test change work for ALTER TABLE ... ADD PARTITION(part = date'2020-01-01')
-      sql("ALTER TABLE t1 ADD PARTITION(part = date'2020-02-01')")
-      checkAnswer(sql("SHOW PARTITIONS t1"),
-        Row("part=2019-01-02") :: Row("part=2020-02-01") :: Nil)
     }
   }
 }
