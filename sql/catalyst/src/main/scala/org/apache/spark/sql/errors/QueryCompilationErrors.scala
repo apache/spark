@@ -192,11 +192,6 @@ private[spark] object QueryCompilationErrors {
       s"$quoted as it's not a data source v2 relation.")
   }
 
-  def expectTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table",
-      t.origin.line, t.origin.startPosition)
-  }
-
   def expectTableOrPermanentViewNotTempViewError(
       quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
@@ -745,5 +740,18 @@ private[spark] object QueryCompilationErrors {
   def noHandlerForUDAFError(name: String): Throwable = {
     new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
       "Use sparkSession.udf.register(...) instead.")
+  }
+
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
   }
 }

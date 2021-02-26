@@ -135,7 +135,7 @@ class MockExecutorLaunchFailWorker(master: Master, conf: SparkConf = new SparkCo
       assert(master.idToApp.contains(appId))
       appIdsToLaunchExecutor += appId
       failedCnt += 1
-      master.self.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
+      master.self.askSync(ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None))
 
     case otherMsg => super.receive(otherMsg)
   }

@@ -30,7 +30,6 @@ import org.apache.spark.unsafe.types.UTF8String
  * A deserializer to deserialize ORC structs to Spark rows.
  */
 class OrcDeserializer(
-    dataSchema: StructType,
     requiredSchema: StructType,
     requestedColIds: Array[Int]) {
 

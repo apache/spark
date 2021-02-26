@@ -105,8 +105,7 @@ case class OrcPartitionReaderFactory(
       new EmptyPartitionReader[InternalRow]
     } else {
       val (requestedColIds, canPruneCols) = resultedColPruneInfo.get
-      val resultSchemaString = OrcUtils.orcResultSchemaString(canPruneCols,
-        dataSchema, resultSchema, partitionSchema, conf)
+      OrcUtils.orcResultSchemaString(canPruneCols, dataSchema, resultSchema, partitionSchema, conf)
       assert(requestedColIds.length == readDataSchema.length,
         "[BUG] requested column IDs do not match required schema")
 
@@ -118,7 +117,7 @@ case class OrcPartitionReaderFactory(
 
       val orcRecordReader = new OrcInputFormat[OrcStruct]
         .createRecordReader(fileSplit, taskAttemptContext)
-      val deserializer = new OrcDeserializer(dataSchema, readDataSchema, requestedColIds)
+      val deserializer = new OrcDeserializer(readDataSchema, requestedColIds)
       val fileReader = new PartitionReader[InternalRow] {
         override def next(): Boolean = orcRecordReader.nextKeyValue()
 

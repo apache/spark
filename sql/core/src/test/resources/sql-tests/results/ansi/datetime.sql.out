@@ -536,7 +536,7 @@ select date'2011-11-11' + '1'
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DOUBLE)' is of double type.; line 1 pos 7
+cannot resolve 'date_add(DATE '2011-11-11', CAST('1' AS DATE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('1' AS DATE)' is of date type.; line 1 pos 7
 
 
 -- !query
@@ -576,8 +576,8 @@ select date '2001-10-01' - '7'
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(DATE '2001-10-01', CAST('7' AS DOUBLE))' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, 'CAST('7' AS DOUBLE)' is of double type.; line 1 pos 7
+java.time.DateTimeException
+Cannot cast 7 to DateType.
 
 
 -- !query

@@ -21,11 +21,12 @@ import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.{Calendar, GregorianCalendar, Properties}
-import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 
 import org.h2.jdbc.JdbcSQLException
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
@@ -614,13 +615,7 @@ class JDBCSuite extends QueryTest
   test("H2 time types") {
     val rows = sql("SELECT * FROM timetypes").collect()
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    val epochMillis = java.time.LocalTime.ofNanoOfDay(
-      TimeUnit.MILLISECONDS.toNanos(rows(0).getAs[Int](0)))
-      .atDate(java.time.LocalDate.ofEpochDay(0))
-      .atZone(java.time.ZoneId.systemDefault())
-      .toInstant()
-      .toEpochMilli()
-    cal.setTime(new Date(epochMillis))
+    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
     assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
     assert(cal.get(Calendar.MINUTE) === 34)
     assert(cal.get(Calendar.SECOND) === 56)
@@ -639,20 +634,15 @@ class JDBCSuite extends QueryTest
     assert(rows(0).getAs[java.sql.Timestamp](2).getNanos === 543543000)
   }
 
-  test("SPARK-33888: test TIME types") {
+  test("SPARK-34357: test TIME types") {
     val rows = spark.read.jdbc(
       urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
     val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
       .cache().collect()
-    val expectedTimeRaw = java.sql.Time.valueOf("12:34:56")
-    val expectedTimeMillis = Math.toIntExact(
-      java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(
-        expectedTimeRaw.toLocalTime().toNanoOfDay()
-      )
-    )
-    assert(rows(0).getAs[Int](0) === expectedTimeMillis)
-    assert(rows(1).getAs[Int](0) === expectedTimeMillis)
-    assert(cachedRows(0).getAs[Int](0) === expectedTimeMillis)
+    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
   }
 
   test("test DATE types") {
@@ -1793,4 +1783,28 @@ class JDBCSuite extends QueryTest
     assert(options.asProperties.get("url") == url)
     assert(options.asProperties.get("dbtable") == "table3")
   }
+
+  test("SPARK-34379: Map JDBC RowID to StringType rather than LongType") {
+    val mockRsmd = mock(classOf[java.sql.ResultSetMetaData])
+    when(mockRsmd.getColumnCount).thenReturn(1)
+    when(mockRsmd.getColumnLabel(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.ROWID)
+    when(mockRsmd.getColumnTypeName(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getPrecision(anyInt())).thenReturn(0)
+    when(mockRsmd.getScale(anyInt())).thenReturn(0)
+    when(mockRsmd.isSigned(anyInt())).thenReturn(false)
+    when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
+
+    val mockRs = mock(classOf[java.sql.ResultSet])
+    when(mockRs.getMetaData).thenReturn(mockRsmd)
+
+    val mockDialect = mock(classOf[JdbcDialect])
+    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
+      .thenReturn(None)
+
+    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val fields = schema.fields
+    assert(fields.length === 1)
+    assert(fields(0).dataType === StringType)
+   }
 }

@@ -48,6 +48,7 @@ dev/pr-deps/
 dist/
 docs/_site/
 docs/api
+docs/.local_ruby_bundle
 sql/docs
 sql/site
 lib_managed/

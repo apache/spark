@@ -1088,4 +1088,6 @@ trait ComplexTypeMergingExpression extends Expression {
  * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
  * and Hive function wrappers.
  */
-trait UserDefinedExpression
+trait UserDefinedExpression {
+  def name: String
+}

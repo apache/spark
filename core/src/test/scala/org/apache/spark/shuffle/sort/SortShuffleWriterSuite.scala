@@ -46,7 +46,7 @@ class SortShuffleWriterSuite extends SparkFunSuite with SharedSparkContext with 
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     val partitioner = new Partitioner() {
       def numPartitions = numMaps
       def getPartition(key: Any) = Utils.nonNegativeMod(key.hashCode, numPartitions)

@@ -21,12 +21,14 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDelete, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 object DataSourceV2Implicits {
+  private val METADATA_COL_ATTR_KEY = "__metadata_col"
+
   implicit class TableHelper(table: Table) {
     def asReadable: SupportsRead = {
       table match {
@@ -83,13 +85,19 @@ object DataSourceV2Implicits {
   implicit class MetadataColumnsHelper(metadata: Array[MetadataColumn]) {
     def asStruct: StructType = {
       val fields = metadata.map { metaCol =>
-        val field = StructField(metaCol.name, metaCol.dataType, metaCol.isNullable)
+        val fieldMeta = new MetadataBuilder().putBoolean(METADATA_COL_ATTR_KEY, true).build()
+        val field = StructField(metaCol.name, metaCol.dataType, metaCol.isNullable, fieldMeta)
         Option(metaCol.comment).map(field.withComment).getOrElse(field)
       }
       StructType(fields)
     }
 
     def toAttributes: Seq[AttributeReference] = asStruct.toAttributes
+  }
+
+  implicit class MetadataColumnHelper(attr: Attribute) {
+    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
+      attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
   }
 
   implicit class OptionsHelper(options: Map[String, String]) {
