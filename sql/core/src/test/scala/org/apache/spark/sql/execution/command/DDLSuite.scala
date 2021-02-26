@@ -1261,6 +1261,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // set table partition location
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
     verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
+    // set location for partition spec in the upper case
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      sql("ALTER TABLE dbx.tab1 PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways2'")
+      verifyLocation(new URI("/path/to/part/ways2"), Some(partSpec))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val errMsg = intercept[AnalysisException] {
+        sql("ALTER TABLE dbx.tab1 PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways3'")
+      }.getMessage
+      assert(errMsg.contains("not a valid partition column"))
+    }
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
