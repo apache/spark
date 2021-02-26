@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.optimizer.RemoveNoopUnion
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -387,100 +388,104 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-34283: SQL-style union using Dataset, " +
     "remove unnecessary deduplicate in multiple unions") {
-    val unionDF = testData.union(testData).distinct().union(testData).distinct()
-      .union(testData).distinct().union(testData).distinct()
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopUnion.ruleName) {
+      val unionDF = testData.union(testData).distinct().union(testData).distinct()
+        .union(testData).distinct().union(testData).distinct()
 
-    // Before optimizer, there are three 'union.deduplicate' operations should be combined.
-    assert(unionDF.queryExecution.analyzed.collect {
-      case u: Union if u.children.size == 4 => u
-    }.size === 1)
+      // Before optimizer, there are three 'union.deduplicate' operations should be combined.
+      assert(unionDF.queryExecution.analyzed.collect {
+        case u: Union if u.children.size == 4 => u
+      }.size === 1)
 
-    // After optimizer, four 'union.deduplicate' operations should be combined.
-    assert(unionDF.queryExecution.optimizedPlan.collect {
-      case u: Union if u.children.size == 5 => u
-    }.size === 1)
+      // After optimizer, four 'union.deduplicate' operations should be combined.
+      assert(unionDF.queryExecution.optimizedPlan.collect {
+        case u: Union if u.children.size == 5 => u
+      }.size === 1)
 
-    checkAnswer(
-      unionDF.agg(avg("key"), max("key"), min("key"),
-        sum("key")), Row(50.5, 100, 1, 5050) :: Nil
-    )
+      checkAnswer(
+        unionDF.agg(avg("key"), max("key"), min("key"),
+          sum("key")), Row(50.5, 100, 1, 5050) :: Nil
+      )
 
-    // The result of SQL-style union
-    val unionSQLResult = sql(
-      """
-        | select key, value from testData
-        | union
-        | select key, value from testData
-        | union
-        | select key, value from testData
-        | union
-        | select key, value from testData
-        | union
-        | select key, value from testData
-        |""".stripMargin)
-    checkAnswer(unionDF, unionSQLResult)
+      // The result of SQL-style union
+      val unionSQLResult = sql(
+        """
+          | select key, value from testData
+          | union
+          | select key, value from testData
+          | union
+          | select key, value from testData
+          | union
+          | select key, value from testData
+          | union
+          | select key, value from testData
+          |""".stripMargin)
+      checkAnswer(unionDF, unionSQLResult)
+    }
   }
 
   test("SPARK-34283: SQL-style union using Dataset, " +
     "keep necessary deduplicate in multiple unions") {
-    val df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
-    var df2 = Seq((6, 2, 5)).toDF("a", "b", "c")
-    var df3 = Seq((2, 4, 3)).toDF("c", "a", "b")
-    var df4 = Seq((1, 4, 5)).toDF("b", "a", "c")
+    withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> RemoveNoopUnion.ruleName) {
+      val df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+      var df2 = Seq((6, 2, 5)).toDF("a", "b", "c")
+      var df3 = Seq((2, 4, 3)).toDF("c", "a", "b")
+      var df4 = Seq((1, 4, 5)).toDF("b", "a", "c")
 
-    val unionDF = df1.unionByName(df2).dropDuplicates(Seq("a"))
-      .unionByName(df3).dropDuplicates("c").unionByName(df4)
-      .dropDuplicates("b")
+      val unionDF = df1.unionByName(df2).dropDuplicates(Seq("a"))
+        .unionByName(df3).dropDuplicates("c").unionByName(df4)
+        .dropDuplicates("b")
 
-    // In this case, there is no 'union.deduplicate' operation will be combined.
-    assert(unionDF.queryExecution.analyzed.collect {
-      case u: Union if u.children.size == 2 => u
-    }.size === 3)
+      // In this case, there is no 'union.deduplicate' operation will be combined.
+      assert(unionDF.queryExecution.analyzed.collect {
+        case u: Union if u.children.size == 2 => u
+      }.size === 3)
 
-    assert(unionDF.queryExecution.optimizedPlan.collect {
-      case u: Union if u.children.size == 2 => u
-    }.size === 3)
+      assert(unionDF.queryExecution.optimizedPlan.collect {
+        case u: Union if u.children.size == 2 => u
+      }.size === 3)
 
-    checkAnswer(
-      unionDF,
-      Row(4, 3, 2) :: Row(4, 1, 5) :: Row(1, 2, 3) :: Nil
-    )
+      checkAnswer(
+        unionDF,
+        Row(4, 3, 2) :: Row(4, 1, 5) :: Row(1, 2, 3) :: Nil
+      )
 
-    val unionDF1 = df1.unionByName(df2).dropDuplicates(Seq("B", "A", "c"))
-      .unionByName(df3).dropDuplicates().unionByName(df4)
-      .dropDuplicates("A")
+      val unionDF1 = df1.unionByName(df2).dropDuplicates(Seq("B", "A", "c"))
+        .unionByName(df3).dropDuplicates().unionByName(df4)
+        .dropDuplicates("A")
 
-    // In this case, there are two 'union.deduplicate' operations will be combined.
-    assert(unionDF1.queryExecution.analyzed.collect {
-      case u: Union if u.children.size == 2 => u
-    }.size === 1)
-    assert(unionDF1.queryExecution.analyzed.collect {
-      case u: Union if u.children.size == 3 => u
-    }.size === 1)
+      // In this case, there are two 'union.deduplicate' operations will be combined.
+      assert(unionDF1.queryExecution.analyzed.collect {
+        case u: Union if u.children.size == 2 => u
+      }.size === 1)
+      assert(unionDF1.queryExecution.analyzed.collect {
+        case u: Union if u.children.size == 3 => u
+      }.size === 1)
 
-    assert(unionDF1.queryExecution.optimizedPlan.collect {
-      case u: Union if u.children.size == 2 => u
-    }.size === 1)
-    assert(unionDF1.queryExecution.optimizedPlan.collect {
-      case u: Union if u.children.size == 3 => u
-    }.size === 1)
+      assert(unionDF1.queryExecution.optimizedPlan.collect {
+        case u: Union if u.children.size == 2 => u
+      }.size === 1)
+      assert(unionDF1.queryExecution.optimizedPlan.collect {
+        case u: Union if u.children.size == 3 => u
+      }.size === 1)
 
-    checkAnswer(
-      unionDF1,
-      Row(4, 3, 2) :: Row(6, 2, 5) :: Row(1, 2, 3) :: Nil
-    )
+      checkAnswer(
+        unionDF1,
+        Row(4, 3, 2) :: Row(6, 2, 5) :: Row(1, 2, 3) :: Nil
+      )
 
-    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-      df2 = Seq((6, 2, 5)).toDF("a", "B", "C")
-      df3 = Seq((2, 1, 3)).toDF("b", "a", "c")
-      df4 = Seq((1, 4, 5)).toDF("b", "a", "c")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        df2 = Seq((6, 2, 5)).toDF("a", "B", "C")
+        df3 = Seq((2, 1, 3)).toDF("b", "a", "c")
+        df4 = Seq((1, 4, 5)).toDF("b", "a", "c")
 
-      val unionDF2 = df1.unionByName(df2, true).distinct()
-        .unionByName(df3, true).dropDuplicates(Seq("a")).unionByName(df4, true).distinct()
+        val unionDF2 = df1.unionByName(df2, true).distinct()
+          .unionByName(df3, true).dropDuplicates(Seq("a")).unionByName(df4, true).distinct()
 
-      checkAnswer(unionDF2,
-        Row(4, 1, 5, null, null) :: Row(1, 2, 3, null, null) :: Row(6, null, null, 2, 5) :: Nil)
-      assert(unionDF2.schema.fieldNames === Array("a", "b", "c", "B", "C"))
+        checkAnswer(unionDF2,
+          Row(4, 1, 5, null, null) :: Row(1, 2, 3, null, null) :: Row(6, null, null, 2, 5) :: Nil)
+        assert(unionDF2.schema.fieldNames === Array("a", "b", "c", "B", "C"))
+      }
     }
   }
 
@@ -807,6 +812,53 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       1, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 2, 20, 3, 4, 5, 6, 7, 8, 9))
     // scalastyle:on
     checkAnswer(union, row1 :: row2 :: Nil)
+  }
+
+  test("SPARK-34474: Remove unnecessary Union under Distinct") {
+    Seq(RemoveNoopUnion.ruleName, "").map { ruleName =>
+      withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
+        val distinctUnionDF1 = testData.union(testData).distinct()
+        checkAnswer(distinctUnionDF1, testData.distinct())
+
+
+        val distinctUnionDF2 = testData.union(testData).dropDuplicates(Seq("key"))
+        checkAnswer(distinctUnionDF2, testData.dropDuplicates(Seq("key")))
+
+        val distinctUnionDF3 = sql(
+          """
+            |select key, value from testData
+            |union
+            |select key, value from testData
+            |""".stripMargin)
+        checkAnswer(distinctUnionDF3, testData.distinct())
+
+        val distinctUnionDF4 = sql(
+          """
+            |select distinct key, expr
+            |from
+            |(
+            |  select key, key + 1 as expr
+            |  from testData
+            |  union all
+            |  select key, key + 2 as expr
+            |  from testData
+            |)
+            |""".stripMargin)
+        val expected = sql(
+          """
+            |select key, expr
+            |from
+            |(
+            |  select key, key + 1 as expr
+            |  from testData
+            |  union all
+            |  select key, key + 2 as expr
+            |  from testData
+            |) group by key, expr
+            |""".stripMargin)
+        checkAnswer(distinctUnionDF4, expected)
+      }
+    }
   }
 }
 

@@ -591,7 +591,7 @@ case class AlterTableDropPartitionCommand(
 case class PartitionStatistics(numFiles: Int, totalSize: Long)
 
 /**
- * Recover Partitions in ALTER TABLE: recover all the partition in the directory of a table and
+ * Repair a table by recovering all the partition in the directory of the table and
  * update the catalog.
  *
  * The syntax of this command is:
@@ -600,11 +600,11 @@ case class PartitionStatistics(numFiles: Int, totalSize: Long)
  *   MSCK REPAIR TABLE table [{ADD|DROP|SYNC} PARTITIONS];
  * }}}
  */
-case class AlterTableRecoverPartitionsCommand(
+case class RepairTableCommand(
     tableName: TableIdentifier,
     enableAddPartitions: Boolean,
     enableDropPartitions: Boolean,
-    cmd: String = "ALTER TABLE RECOVER PARTITIONS") extends RunnableCommand {
+    cmd: String = "MSCK REPAIR TABLE") extends RunnableCommand {
 
   // These are list of statistics that can be collected quickly without requiring a scan of the data
   // see https://github.com/apache/hive/blob/master/
@@ -654,7 +654,7 @@ case class AlterTableRecoverPartitionsCommand(
       val threshold = spark.sparkContext.conf.get(RDD_PARALLEL_LISTING_THRESHOLD)
       val pathFilter = getPathFilter(hadoopConf)
 
-      val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
+      val evalPool = ThreadUtils.newForkJoinPool("RepairTableCommand", 8)
       val partitionSpecsAndLocs: GenSeq[(TablePartitionSpec, Path)] =
         try {
           scanPartitions(spark, fs, pathFilter, root, Map(), table.partitionColumnNames, threshold,
@@ -804,7 +804,7 @@ case class AlterTableRecoverPartitionsCommand(
   private def dropPartitions(catalog: SessionCatalog, fs: FileSystem): Int = {
     val dropPartSpecs = ThreadUtils.parmap(
       catalog.listPartitions(tableName),
-      "AlterTableRecoverPartitionsCommand: non-existing partitions",
+      "RepairTableCommand: non-existing partitions",
       maxThreads = 8) { partition =>
       partition.storage.locationUri.flatMap { uri =>
         if (fs.exists(new Path(uri))) None else Some(partition.spec)

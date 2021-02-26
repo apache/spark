@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
 
-import org.apache.spark.SecurityManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 
@@ -41,10 +40,7 @@ private[spark] object StatsdSink {
 }
 
 private[spark] class StatsdSink(
-    val property: Properties,
-    val registry: MetricRegistry,
-    securityMgr: SecurityManager)
-  extends Sink with Logging {
+    val property: Properties, val registry: MetricRegistry) extends Sink with Logging {
   import StatsdSink._
 
   val host = property.getProperty(STATSD_KEY_HOST, STATSD_DEFAULT_HOST)
