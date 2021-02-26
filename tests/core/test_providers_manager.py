@@ -101,6 +101,7 @@ CONNECTIONS_LIST = [
     'databricks',
     'dataprep',
     'docker',
+    'druid',
     'elasticsearch',
     'emr',
     'exasol',
