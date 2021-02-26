@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.random.RandomSampler
@@ -76,6 +77,13 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 
   override lazy val validConstraints: ExpressionSet =
     getAllValidConstraints(projectList)
+
+  val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hiddenOutput")
+
+  override def metadataOutput: Seq[Attribute] = {
+    child.metadataOutput ++
+      getTagValue(hiddenOutputTag).getOrElse(Seq.empty[Attribute])
+  }
 }
 
 /**
@@ -950,7 +958,7 @@ case class SubqueryAlias(
 
   override def metadataOutput: Seq[Attribute] = {
     val qualifierList = identifier.qualifier :+ alias
-    child.metadataOutput.map(_.withQualifier(qualifierList))
+    child.metadataOutput.filterNot(_.isHiddenCol).map(_.withQualifier(qualifierList))
   }
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
