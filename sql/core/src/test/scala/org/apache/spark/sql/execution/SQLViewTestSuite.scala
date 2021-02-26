@@ -249,6 +249,35 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
+
+  test("SPARK-34260: replace existing view using CREATE OR REPLACE") {
+    val viewName = createView("testView", "SELECT * FROM (SELECT 1)")
+    withView(viewName) {
+      checkViewOutput(viewName, Seq(Row(1)))
+      createView("testView", "SELECT * FROM (SELECT 2)", replace = true)
+      checkViewOutput(viewName, Seq(Row(2)))
+    }
+  }
+
+  test("SPARK-34490 - query should fail if the view refers a dropped table") {
+    withTable("t") {
+      Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
+      val viewName = createView("testView", "SELECT * FROM t")
+      withView(viewName) {
+        // Always create a temp view in this case, not use `createView` on purpose
+        sql("CREATE TEMP VIEW t AS SELECT 1 AS c1")
+        withTempView("t") {
+          checkViewOutput(viewName, Seq(Row(2), Row(3), Row(1)))
+          // Manually drop table `t` to see if the query will fail
+          sql("DROP TABLE IF EXISTS default.t")
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT * FROM $viewName").collect()
+          }.getMessage
+          assert(e.contains("Table or view not found: t"))
+        }
+      }
+    }
+  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {

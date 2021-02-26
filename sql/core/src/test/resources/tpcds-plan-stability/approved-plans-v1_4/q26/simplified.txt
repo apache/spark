@@ -1,6 +1,6 @@
 TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
   WholeStageCodegen (6)
-    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cast(cs_quantity as bigint)),avg(UnscaledValue(cs_list_price)),avg(UnscaledValue(cs_coupon_amt)),avg(UnscaledValue(cs_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
+    HashAggregate [i_item_id,sum,count,sum,count,sum,count,sum,count] [avg(cs_quantity),avg(UnscaledValue(cs_list_price)),avg(UnscaledValue(cs_coupon_amt)),avg(UnscaledValue(cs_sales_price)),agg1,agg2,agg3,agg4,sum,count,sum,count,sum,count,sum,count]
       InputAdapter
         Exchange [i_item_id] #1
           WholeStageCodegen (5)
@@ -11,14 +11,16 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                     BroadcastHashJoin [cs_item_sk,i_item_sk]
                       Project [cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt]
                         BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
-                          Project [cs_sold_date_sk,cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt]
+                          Project [cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_sold_date_sk]
                             BroadcastHashJoin [cs_bill_cdemo_sk,cd_demo_sk]
-                              Filter [cs_bill_cdemo_sk,cs_sold_date_sk,cs_item_sk,cs_promo_sk]
+                              Filter [cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk]
                                 ColumnarToRow
                                   InputAdapter
-                                    Scan parquet default.catalog_sales [cs_sold_date_sk,cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt]
+                                    Scan parquet default.catalog_sales [cs_bill_cdemo_sk,cs_item_sk,cs_promo_sk,cs_quantity,cs_list_price,cs_sales_price,cs_coupon_amt,cs_sold_date_sk]
+                                      SubqueryBroadcast [d_date_sk] #1
+                                        ReusedExchange [d_date_sk] #2
                               InputAdapter
-                                BroadcastExchange #2
+                                BroadcastExchange #3
                                   WholeStageCodegen (1)
                                     Project [cd_demo_sk]
                                       Filter [cd_gender,cd_marital_status,cd_education_status,cd_demo_sk]
@@ -26,7 +28,7 @@ TakeOrderedAndProject [i_item_id,agg1,agg2,agg3,agg4]
                                           InputAdapter
                                             Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status]
                           InputAdapter
-                            BroadcastExchange #3
+                            BroadcastExchange #2
                               WholeStageCodegen (2)
                                 Project [d_date_sk]
                                   Filter [d_year,d_date_sk]

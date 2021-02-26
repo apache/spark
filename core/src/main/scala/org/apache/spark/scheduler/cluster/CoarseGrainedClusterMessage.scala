@@ -49,6 +49,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
 
+  case class DecommissionExecutorsOnHost(host: String)
+    extends CoarseGrainedClusterMessage
+
   case class UpdateDelegationTokens(tokens: Array[Byte])
     extends CoarseGrainedClusterMessage
 

@@ -109,7 +109,7 @@ Refer to the [`CrossValidator` Java docs](api/java/org/apache/spark/ml/tuning/Cr
 
 <div data-lang="python" markdown="1">
 
-Refer to the [`CrossValidator` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.CrossValidator) for more details on the API.
+Refer to the [`CrossValidator` Python docs](api/python/reference/api/pyspark.ml.tuning.CrossValidator.html) for more details on the API.
 
 {% include_example python/ml/cross_validator.py %}
 </div>
@@ -149,7 +149,7 @@ Refer to the [`TrainValidationSplit` Java docs](api/java/org/apache/spark/ml/tun
 
 <div data-lang="python" markdown="1">
 
-Refer to the [`TrainValidationSplit` Python docs](api/python/pyspark.ml.html#pyspark.ml.tuning.TrainValidationSplit) for more details on the API.
+Refer to the [`TrainValidationSplit` Python docs](api/python/reference/api/pyspark.ml.tuning.TrainValidationSplit.html) for more details on the API.
 
 {% include_example python/ml/train_validation_split.py %}
 </div>

@@ -512,6 +512,18 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
   }
 
+  test("SPARK-34269: correlated subquery with view in aggregate's grouping expression") {
+    withTable("tr") {
+      withView("vr") {
+        r.write.saveAsTable("tr")
+        sql("create view vr as select * from tr")
+        checkAnswer(
+          sql("select a, (select sum(d) from vr where a = c) sum_d from l l1 group by 1, 2"),
+          Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
+      }
+    }
+  }
+
   test("SPARK-18504 extra GROUP BY column in correlated scalar subquery is not permitted") {
     withTempView("t") {
       Seq((1, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")

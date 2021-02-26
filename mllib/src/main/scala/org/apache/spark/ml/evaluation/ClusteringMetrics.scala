@@ -37,13 +37,18 @@ class ClusteringMetrics private[spark](dataset: Dataset[_]) {
 
   def getDistanceMeasure: String = distanceMeasure
 
-  def setDistanceMeasure(value: String) : Unit = distanceMeasure = value
+  def setDistanceMeasure(value: String) : this.type = {
+    require(value.equalsIgnoreCase("squaredEuclidean") ||
+      value.equalsIgnoreCase("cosine"))
+    distanceMeasure = value
+    this
+  }
 
   /**
    * Returns the silhouette score
    */
   @Since("3.1.0")
-  lazy val silhouette: Double = {
+  def silhouette(): Double = {
     val columns = dataset.columns.toSeq
     if (distanceMeasure.equalsIgnoreCase("squaredEuclidean")) {
       SquaredEuclideanSilhouette.computeSilhouetteScore(

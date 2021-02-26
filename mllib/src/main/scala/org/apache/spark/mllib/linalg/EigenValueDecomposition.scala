@@ -67,7 +67,7 @@ private[mllib] object EigenValueDecomposition {
     // "LM" : compute the NEV largest (in magnitude) eigenvalues
     val which = "LM"
 
-    var iparam = new Array[Int](11)
+    val iparam = new Array[Int](11)
     // use exact shift in each iteration
     iparam(0) = 1
     // maximum number of Arnoldi update iterations, or the actual number of iterations on output

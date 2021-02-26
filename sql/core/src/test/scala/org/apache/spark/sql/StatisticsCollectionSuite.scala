@@ -257,24 +257,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
-  test("change stats after truncate command") {
-    val table = "change_stats_truncate_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
-
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
-    }
-  }
-
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
     val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
@@ -380,22 +362,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
           spark.table(table)
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
-        }
-      }
-    }
-  }
-
-  test("invalidation of tableRelationCache after table truncation") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          sql(s"TRUNCATE TABLE $table")
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
         }
       }
     }
@@ -677,6 +643,38 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           }.getMessage
           assert(errorMsg.contains("Found duplicate column(s)"))
         }
+      }
+    }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
       }
     }
   }

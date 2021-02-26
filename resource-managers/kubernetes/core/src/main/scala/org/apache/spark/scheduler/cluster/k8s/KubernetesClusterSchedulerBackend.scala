@@ -29,9 +29,10 @@ import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.rpc.RpcAddress
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
@@ -95,11 +96,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
     podAllocator.start(applicationId())
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    setUpExecutorConfigMap()
+    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      setUpExecutorConfigMap()
+    }
   }
 
   override def stop(): Unit = {
-    super.stop()
+    // When `CoarseGrainedSchedulerBackend.stop` throws `SparkException`,
+    // K8s cluster scheduler should log and proceed in order to delete the K8s cluster resources.
+    Utils.tryLogNonFatalError {
+      super.stop()
+    }
 
     Utils.tryLogNonFatalError {
       snapshotsStore.stop()
@@ -121,12 +128,14 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .delete()
       }
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .configMaps()
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
+      if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .configMaps()
+            .withLabel(SPARK_APP_ID_LABEL, applicationId())
+            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+            .delete()
+        }
       }
     }
 
@@ -210,6 +219,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   }
 
   private class KubernetesDriverEndpoint extends DriverEndpoint {
+    private def ignoreRegisterExecutorAtStoppedContext: PartialFunction[Any, Unit] = {
+      case _: RegisterExecutor if sc.isStopped => // No-op
+    }
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] =
+      ignoreRegisterExecutorAtStoppedContext.orElse(super.receiveAndReply(context))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to
