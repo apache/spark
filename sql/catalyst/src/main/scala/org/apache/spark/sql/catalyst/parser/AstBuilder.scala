@@ -3757,11 +3757,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    TruncateTable(
-      createUnresolvedTable(ctx.multipartIdentifier, "TRUNCATE TABLE"),
-      Option(ctx.partitionSpec).map { spec =>
-        UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec))
-      })
+    val table = createUnresolvedTable(ctx.multipartIdentifier, "TRUNCATE TABLE")
+    Option(ctx.partitionSpec).map { spec =>
+      TruncatePartition(table, UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(spec)))
+    }.getOrElse(TruncateTable(table))
   }
 
   /**

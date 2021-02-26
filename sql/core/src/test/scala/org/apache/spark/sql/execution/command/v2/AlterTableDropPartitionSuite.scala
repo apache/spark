@@ -36,7 +36,7 @@ class AlterTableDropPartitionSuite
       val errMsg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $t DROP PARTITION (id=1)")
       }.getMessage
-      assert(errMsg.contains("can not alter partitions"))
+      assert(errMsg.contains(s"Table $t does not support partition management"))
     }
   }
 

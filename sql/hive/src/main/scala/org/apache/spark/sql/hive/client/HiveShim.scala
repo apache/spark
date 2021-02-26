@@ -700,7 +700,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -715,7 +715,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {

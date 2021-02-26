@@ -394,10 +394,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ShowCreateTableCommand(ident.asTableIdentifier)
       }
 
-    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
+    case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
+      TruncateTableCommand(ident.asTableIdentifier, None)
+
+    case TruncatePartition(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,
-        partitionSpec.toSeq.asUnresolvedPartitionSpecs.map(_.spec).headOption)
+        Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
     case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),

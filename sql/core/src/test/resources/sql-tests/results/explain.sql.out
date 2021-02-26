@@ -203,7 +203,7 @@ Input [3]: [key#x, max(val)#x, max(val#x)#x]
 EXPLAIN FORMATTED
   SELECT key, val FROM explain_temp1 WHERE key > 0
   UNION 
-  SELECT key, val FROM explain_temp1 WHERE key > 0
+  SELECT key, val FROM explain_temp1 WHERE key > 1
 -- !query schema
 struct<plan:string>
 -- !query output
@@ -238,7 +238,7 @@ Condition : (isnotnull(key#x) AND (key#x > 0))
 Output [2]: [key#x, val#x]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/explain_temp1]
-PushedFilters: [IsNotNull(key), GreaterThan(key,0)]
+PushedFilters: [IsNotNull(key), GreaterThan(key,1)]
 ReadSchema: struct<key:int,val:int>
 
 (5) ColumnarToRow [codegen id : 2]
@@ -246,7 +246,7 @@ Input [2]: [key#x, val#x]
 
 (6) Filter [codegen id : 2]
 Input [2]: [key#x, val#x]
-Condition : (isnotnull(key#x) AND (key#x > 0))
+Condition : (isnotnull(key#x) AND (key#x > 1))
 
 (7) Union
 
