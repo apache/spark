@@ -117,6 +117,8 @@ public class OneForOneBlockFetcher {
     boolean batchFetchEnabled = firstBlock.length == 5;
 
     HashMap<Long, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
+    // The mapIds and reducesId must be same order with blockIds because the shuffle data's
+    // return order will match the `blockIds` order to ensure blockId and data match.
     ArrayList<Long> orderedMapId = new ArrayList<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
