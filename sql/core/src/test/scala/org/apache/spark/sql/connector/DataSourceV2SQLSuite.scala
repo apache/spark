@@ -2492,6 +2492,35 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34547: metadata columns are resolved last") {
+    val t1 = s"${catalogAndNamespace}tableOne"
+    val t2 = s"${catalogAndNamespace}tableTwo"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"CREATE TABLE $t2 (id bigint, index int) USING $v2Format")
+      sql(s"INSERT INTO $t2 VALUES (1, -1), (2, -2), (3, -3)")
+
+      val sqlQuery = spark.sql(s"SELECT $t1.id, $t2.id, data, index, $t1.index, $t2.index FROM " +
+        s"$t1 JOIN $t2 WHERE $t1.id = $t2.id")
+      val t1Table = spark.table(t1)
+      val t2Table = spark.table(t2)
+      val dfQuery = t1Table.join(t2Table, t1Table.col("id") === t2Table.col("id"))
+        .select(s"$t1.id", s"$t2.id", "data", "index", s"$t1.index", s"$t2.index")
+
+      Seq(sqlQuery, dfQuery).foreach { query =>
+        checkAnswer(query,
+          Seq(
+            Row(1, 1, "a", -1, 0, -1),
+            Row(2, 2, "b", -2, 0, -2),
+            Row(3, 3, "c", -3, 0, -3)
+          )
+        )
+      }
+    }
+  }
+
   test("SPARK-33505: insert into partitioned table") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
