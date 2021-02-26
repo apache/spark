@@ -111,7 +111,7 @@ private[spark] object Minikube extends Logging {
   }
 
   private def kubectlBasedKubernetesClientConf: Config = {
-    val outputs = executeMinikube("kubectl config view")
+    val outputs = executeMinikube("kubectl config view --minify")
     val apiVersionString = outputs.find(_.contains(APIVERSION_PREFIX))
     val serverString = outputs.find(_.contains(SERVER_PREFIX))
     val caString = outputs.find(_.contains(CA_PREFIX))
