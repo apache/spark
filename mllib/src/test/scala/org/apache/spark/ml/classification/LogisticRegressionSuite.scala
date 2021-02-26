@@ -150,8 +150,8 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
 
     val lr = new LogisticRegression()
       .setMaxIter(100)
-      .setRegParam(0.0)
-      .setElasticNetParam(0.0)
+      .setRegParam(regParam)
+      .setElasticNetParam(0.5)
       .setFitIntercept(true)
 
 
