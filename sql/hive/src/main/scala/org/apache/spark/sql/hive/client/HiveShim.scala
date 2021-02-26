@@ -783,6 +783,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
           LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
 
+      case Not(InSet(_, values)) if values.size > inSetThreshold =>
+        None
+
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>
         Some(convertInToOr(name, values))

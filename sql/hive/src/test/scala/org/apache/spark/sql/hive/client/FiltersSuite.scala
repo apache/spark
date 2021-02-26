@@ -211,5 +211,13 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     }
   }
 
+  test("Don't push not inset if it's values exceeds the threshold") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "2") {
+      val filter = Not(InSet(a("p", IntegerType), Set(1, 2, 3)))
+      val converted = shim.convertFilters(testTable, Seq(filter), conf.sessionLocalTimeZone)
+      assert(converted.isEmpty)
+    }
+  }
+
   private def a(name: String, dataType: DataType) = AttributeReference(name, dataType)()
 }
