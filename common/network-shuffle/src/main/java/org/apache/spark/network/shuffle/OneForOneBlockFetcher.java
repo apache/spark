@@ -132,14 +132,15 @@ public class OneForOneBlockFetcher {
       }
       ArrayList<Integer> reduceIdsByMapId = mapIdToReduceIds.get(mapId);
       int reduceId = Integer.parseInt(blockIdParts[3]);
-      assert(reduceIdsByMapId.isEmpty() || reduceId > reduceIdsByMapId.get(reduceIdsByMapId.size() - 1));
+      assert(reduceIdsByMapId.isEmpty()
+              || reduceId > reduceIdsByMapId.get(reduceIdsByMapId.size() - 1));
       reduceIdsByMapId.add(reduceId);
       if (batchFetchEnabled) {
         // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
         // FetchShuffleBlocks to store the start and end reduce id for range
         // [startReduceId, endReduceId).
         assert(blockIdParts.length == 5);
-        mapIdToReduceIds.get(mapId).add(Integer.parseInt(blockIdParts[4]));
+        reduceIdsByMapId.add(Integer.parseInt(blockIdParts[4]));
       }
     }
     long[] mapIds = Longs.toArray(orderedMapId);
