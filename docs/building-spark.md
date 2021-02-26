@@ -163,9 +163,8 @@ For the meanings of these two options, please carefully read the [Setting up Mav
 
 ## Speeding up Compilation
 
-Developers who compile Spark frequently may want to speed up compilation; e.g., by using Zinc
-(for developers who build with Maven) or by avoiding re-compilation of the assembly JAR (for
-developers who build with SBT).  For more information about how to do this, refer to the
+Developers who compile Spark frequently may want to speed up compilation; e.g., by avoiding re-compilation of the
+assembly JAR (for developers who build with SBT).  For more information about how to do this, refer to the
 [Useful Developer Tools page](https://spark.apache.org/developer-tools.html#reducing-build-times).
 
 ## Encrypted Filesystems
