@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -91,13 +91,6 @@ class AdaptiveQueryExecSuite
     }
     assert(exchanges.isEmpty, "The final plan should not contain any Exchange node.")
     (dfAdaptive.queryExecution.sparkPlan, adaptivePlan)
-  }
-
-  private def findTopLevelBroadcastNestedLoopJoin(
-      plan: SparkPlan): Seq[BroadcastNestedLoopJoinExec] = {
-    collect(plan) {
-      case j: BroadcastNestedLoopJoinExec => j
-    }
   }
 
   private def findTopLevelBroadcastHashJoin(plan: SparkPlan): Seq[BroadcastHashJoinExec] = {
@@ -1252,10 +1245,8 @@ class AdaptiveQueryExecSuite
           ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false)
         ).foreach { case (query, isEliminated) =>
           val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-          val bnlj = findTopLevelBroadcastNestedLoopJoin(plan)
-          assert(bnlj.size == 1)
-          val join = findTopLevelBaseJoin(adaptivePlan)
-          assert(isEliminated == join.isEmpty)
+          assert(findTopLevelBaseJoin(plan).size == 1)
+          assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
         }
       }
     }
