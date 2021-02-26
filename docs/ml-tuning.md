@@ -101,6 +101,10 @@ Refer to the [`ParamRandomBuilder` Java docs](api/java/org/apache/spark/ml/tunin
 
 Python users are recommended to look at Python libraries that are specifically for hyperparameter tuning such as Hyperopt.  
 
+Refer to the [`ParamRandomBuilder` Java docs](api/python/reference/api/pyspark.ml.tuning.ParamRandomBuilder.html) for details on the API.
+
+{% include_example python/ml/model_selection_random_hyperparameters_example.py %}
+
 </div>
 
 </div>
