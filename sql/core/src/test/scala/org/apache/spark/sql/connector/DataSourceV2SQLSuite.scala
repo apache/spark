@@ -2605,6 +2605,27 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34555: Resolve DataFrame metadata column") {
+    val t1 = s"${catalogAndNamespace}table"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      val tableOne = spark.table(t1)
+      val dfQuery = tableOne.select(
+        tableOne.col("id"),
+        tableOne.col("data"),
+        tableOne.col("index"),
+        tableOne.col("_partition")
+      )
+
+      checkAnswer(
+        dfQuery,
+        Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+      )
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
