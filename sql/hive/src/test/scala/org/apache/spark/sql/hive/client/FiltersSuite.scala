@@ -109,25 +109,27 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     "datecol != 2019-01-01")
 
   filterTest("not-in int filter",
-    (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2))))) :: Nil,
+    (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2), Literal(null))))) :: Nil,
     "(intcol != 1 and intcol != 2)")
 
   filterTest("not-in string filter",
-    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
     """(strcol != "a" and strcol != "b")""")
 
   filterTest("not-inset, int filter",
-    (Not(InSet(a("intcol", IntegerType), Set(1, 2)))) :: Nil,
+    (Not(InSet(a("intcol", IntegerType), Set(1, 2, null)))) :: Nil,
     "(intcol != 1 and intcol != 2)")
 
   filterTest("not-inset, string filter",
-    (Not(InSet(a("strcol", StringType), Set(Literal("a").eval(), Literal("b").eval())))) :: Nil,
+    (Not(InSet(a("strcol", StringType),
+      Set(Literal("a").eval(), Literal("b").eval(), Literal(null).eval())))) :: Nil,
     """(strcol != "a" and strcol != "b")""")
 
   filterTest("not-inset, date filter",
     (Not(InSet(a("datecol", DateType),
       Set(Literal(Date.valueOf("2020-01-01")).eval(),
-        Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
+        Literal(Date.valueOf("2020-01-02")).eval(),
+        Literal(null).eval())))) :: Nil,
     """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
 
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
