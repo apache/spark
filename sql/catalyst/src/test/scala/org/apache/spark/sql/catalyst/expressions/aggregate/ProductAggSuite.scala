@@ -53,6 +53,41 @@ class ProductAggSuite extends SparkFunSuite {
     assert(result2 === InternalRow(null))
   }
 
+  test("update - with specials") {
+    val result1 = evaluator.update(
+      InternalRow(Double.NaN),
+      InternalRow(2.0))
+    assert(result1 === InternalRow(Double.NaN))
+
+    val result2 = evaluator.update(
+      InternalRow(3.0),
+      InternalRow(Double.PositiveInfinity))
+    assert(result2 === InternalRow(Double.PositiveInfinity))
+
+    val result3 = evaluator.update(
+      InternalRow(Double.NegativeInfinity),
+      InternalRow(5.0))
+    assert(result3 === InternalRow(Double.NegativeInfinity))
+
+    val result4 = evaluator.update(
+      InternalRow(7.0),
+      InternalRow(Double.PositiveInfinity),
+      InternalRow(null))
+    assert(result4 === InternalRow(Double.PositiveInfinity))
+
+    val result5 = evaluator.update(
+      InternalRow(Double.NaN),
+      InternalRow(Double.PositiveInfinity),
+      InternalRow(1.0))
+    assert(result5 === InternalRow(Double.NaN))
+
+    val result6 = evaluator.update(
+      InternalRow(Double.NegativeInfinity),
+      InternalRow(2.0),
+      InternalRow(Double.NaN))
+    assert(result6 === InternalRow(Double.NaN))
+  }
+
   test("merge") {
     // Empty
     val p0 = evaluator.initialize()
@@ -82,6 +117,27 @@ class ProductAggSuite extends SparkFunSuite {
     assert(evaluator.merge(p2, p0) === p2)
 
     assert(evaluator.merge(p2, p1, p0) === InternalRow((5 * 7).toDouble))
+  }
+
+  test("merge - with specials") {
+    val p0 = evaluator.update(InternalRow(Double.NaN), InternalRow(1.0))
+    val p1 = evaluator.update(InternalRow(Double.PositiveInfinity), InternalRow(1.0))
+    val p2 = evaluator.update(InternalRow(Double.NegativeInfinity), InternalRow(1.0))
+    val p3 = evaluator.update(InternalRow(null), InternalRow(1.0))
+
+    assert(evaluator.merge(p0, p0) === p0)
+    assert(evaluator.merge(p0, p1) === p0)
+    assert(evaluator.merge(p0, p2) === p0)
+    assert(evaluator.merge(p0, p3) === p0)
+
+    assert(evaluator.merge(p1, p1) === p1)
+    assert(evaluator.merge(p1, p2) === p2)
+    assert(evaluator.merge(p1, p3) === p1)
+
+    assert(evaluator.merge(p2, p2) === p1)
+    assert(evaluator.merge(p2, p3) === p2)
+
+    assert(evaluator.merge(p3, p3) === p3)
   }
 
   test("eval") {
