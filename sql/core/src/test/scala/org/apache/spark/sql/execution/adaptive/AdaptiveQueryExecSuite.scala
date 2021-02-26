@@ -1230,6 +1230,28 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-34533: Eliminate left anti join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("emptyTestData") {
+        spark.range(0).write.saveAsTable("emptyTestData")
+        Seq(
+          // broadcast non-empty right side
+          ("SELECT /*+ broadcast(testData3) */ * FROM testData LEFT ANTI JOIN testData3", true),
+          // broadcast empty right side
+          ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData",
+            false),
+          // broadcast left side
+          ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false)
+        ).foreach { case (query, isEliminated) =>
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(findTopLevelBaseJoin(plan).size == 1)
+          assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+        }
+      }
+    }
+  }
+
   test("SPARK-32753: Only copy tags to node with no tags") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v1") {
