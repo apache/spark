@@ -32,14 +32,7 @@ import os
 import sys
 
 from releaseutils import JIRA, JIRAError, get_jira_name, Github, get_github_name, \
-    contributors_file_name, is_valid_author, raw_input, capitalize_author, yesOrNoPrompt
-
-try:
-    import unidecode
-except ImportError:
-    print("This tool requires the unidecode library to decode obscure github usernames")
-    print("Install using 'sudo pip install unidecode'")
-    sys.exit(-1)
+    contributors_file_name, is_valid_author, capitalize_author, yesOrNoPrompt
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
@@ -139,15 +132,8 @@ def generate_candidates(author, issues):
                     (NOT_FOUND, "No full name found for %s assignee %s" % (issue, user_name)))
         else:
             candidates.append((NOT_FOUND, "No assignee found for %s" % issue))
-    # Guard against special characters in candidate names
-    # Note that the candidate name may already be in unicode (JIRA returns this)
     for i, (candidate, source) in enumerate(candidates):
-        try:
-            candidate = unicode(candidate, "UTF-8")  # noqa: F821
-        except TypeError:
-            # already in unicode
-            pass
-        candidate = unidecode.unidecode(candidate).strip()
+        candidate = candidate.strip()
         candidates[i] = (candidate, source)
     return candidates
 
@@ -209,13 +195,13 @@ for i, line in enumerate(lines):
         if INTERACTIVE_MODE:
             print("    [%d] %s - Raw GitHub username" % (raw_index, author))
             print("    [%d] Custom" % custom_index)
-            response = raw_input("    Your choice: ")
+            response = input("    Your choice: ")
             last_index = custom_index
             while not response.isdigit() or int(response) > last_index:
-                response = raw_input("    Please enter an integer between 0 and %d: " % last_index)
+                response = input("    Please enter an integer between 0 and %d: " % last_index)
             response = int(response)
             if response == custom_index:
-                new_author = raw_input("    Please type a custom name for this author: ")
+                new_author = input("    Please type a custom name for this author: ")
             elif response != raw_index:
                 new_author = candidate_names[response]
         # In non-interactive mode, just pick the first candidate
