@@ -20,9 +20,6 @@ package org.apache.spark.sql.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.util.Utils
-
-
 /**
  * Static SQL configuration is a cross-session, immutable Spark configuration. External users can
  * see the static sql configs via `SparkSession.conf`, but can NOT set/unset them.
@@ -35,7 +32,7 @@ object StaticSQLConf {
     .doc("The default location for managed databases and tables.")
     .version("2.0.0")
     .stringConf
-    .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
+    .createWithDefault("spark-warehouse")
 
   val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
     .internal()
