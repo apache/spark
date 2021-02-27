@@ -2581,7 +2581,7 @@ class DataSourceV2SQLSuite
     withTable(tbl) {
       sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
       val description = sql(s"DESCRIBE TABLE $tbl")
-      val noComment = description.drop("comment")
+      val noCommentDataset = description.drop("comment")
       val expectedSchema = new StructType()
         .add(
           name = "col_name",
@@ -2593,9 +2593,10 @@ class DataSourceV2SQLSuite
           dataType = StringType,
           nullable = false,
           metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
-      assert(noComment.schema === expectedSchema)
-      val isNull = noComment.withColumn("is_null", noComment("col_name").isNull)
-      assert(isNull.schema === expectedSchema.add("is_null", BooleanType, false))
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("col_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
     }
   }
 
