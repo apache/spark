@@ -988,9 +988,19 @@ class Analyzer(override val catalogManager: CatalogManager)
   object AddMetadataColumns extends Rule[LogicalPlan] {
     import org.apache.spark.sql.catalyst.util._
 
+    private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
+      plan.expressions.collect {
+        case a: Attribute if a.isMetadataCol => a
+        case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
+          childMetadataOutput.find(_.exprId == a.exprId).get
+      }
+    }
+
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
       plan.expressions.exists(_.find {
-        case a: Attribute => a.isMetadataCol
+        case a: Attribute => a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
         case _ => false
       }.isDefined)
     }
@@ -1006,7 +1016,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = node.expressions.flatMap(_.collect {
+        val metaCols = getMetadataAttributes(node).flatMap(_.collect {
           case a: Attribute if a.isMetadataCol && !inputAttrs.contains(a) => a
         })
         if (metaCols.isEmpty) {

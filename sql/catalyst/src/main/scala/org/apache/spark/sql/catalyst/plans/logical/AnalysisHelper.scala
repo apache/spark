@@ -85,7 +85,7 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
     if (!analyzed) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
         val afterRuleOnChildren = mapChildren(_.resolveOperatorsUp(rule))
-        if (self fastEquals afterRuleOnChildren) {
+        val newNode = if (self fastEquals afterRuleOnChildren) {
           CurrentOrigin.withOrigin(origin) {
             rule.applyOrElse(self, identity[LogicalPlan])
           }
@@ -94,6 +94,8 @@ trait AnalysisHelper extends QueryPlan[LogicalPlan] { self: LogicalPlan =>
             rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
           }
         }
+        newNode.copyTagsFrom(this)
+        newNode
       }
     } else {
       self
