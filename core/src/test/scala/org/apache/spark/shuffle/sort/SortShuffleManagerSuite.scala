@@ -37,7 +37,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
  * performed in other suites.
  */
-class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
+class SortShuffleManagerSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
@@ -143,7 +143,7 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
     withTempDir { tmpDir =>
       val conf = new SparkConf(loadDefaults = false)
       conf.set("spark.local.dir", tmpDir.getAbsolutePath)
-      val sc: SparkContext = new SparkContext("local", "SPARK-34541", conf)
+      sc = new SparkContext("local", "SPARK-34541", conf)
       val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
       // Create a shuffleRdd
       val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
