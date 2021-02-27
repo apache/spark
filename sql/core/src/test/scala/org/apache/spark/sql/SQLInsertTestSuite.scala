@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.time.DateTimeException
-
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.Hex
 import org.apache.spark.sql.connector.InMemoryPartitionTableCatalog
@@ -228,7 +226,7 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t3(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
       }.getMessage
-      assert(e.contains("Cannot use interval for partition column"))
+      assert(e.contains("Cannot use interval"))
 
       sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
       sql(s"INSERT INTO t4 PARTITION(part = X'$binaryHexStr') VALUES('a')")
@@ -247,11 +245,6 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       sql("INSERT INTO t1 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('b')")
       checkAnswer(sql("SELECT name, cast(part as string) FROM t1"),
         Row("a", "2019-01-02") :: Row("b", "2019-01-02") :: Nil)
-      // test insert invalid binary string partition value to date partition
-      val e2 = intercept[DateTimeException] {
-        sql(s"INSERT INTO t2 PARTITION(part = X'$binaryHexStr') VALUES('a')")
-      }.getMessage
-      assert(e2 == s"Cannot cast $binaryStr to TimestampType.")
     }
   }
 }
