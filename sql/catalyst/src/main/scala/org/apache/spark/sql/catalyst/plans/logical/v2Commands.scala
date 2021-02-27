@@ -347,7 +347,7 @@ case class DescribeRelation(
     partitionSpec: TablePartitionSpec,
     isExtended: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+  override val output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
 }
 
 /**
