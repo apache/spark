@@ -990,17 +990,18 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
       lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
-      plan.expressions.collect {
+      plan.expressions.flatMap(_.collect {
         case a: Attribute if a.isMetadataCol => a
         case a: Attribute if childMetadataOutput.exists(_.exprId == a.exprId) =>
           childMetadataOutput.find(_.exprId == a.exprId).get
-      }
+      })
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
       lazy val childMetadataOutput = plan.children.flatMap(_.metadataOutput)
       plan.expressions.exists(_.find {
-        case a: Attribute => a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
+        case a: Attribute =>
+          a.isMetadataCol || childMetadataOutput.exists(_.exprId == a.exprId)
         case _ => false
       }.isDefined)
     }
@@ -1016,9 +1017,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
       case node if node.children.nonEmpty && node.resolved && hasMetadataCol(node) =>
         val inputAttrs = AttributeSet(node.children.flatMap(_.output))
-        val metaCols = getMetadataAttributes(node).flatMap(_.collect {
-          case a: Attribute if a.isMetadataCol && !inputAttrs.contains(a) => a
-        })
+        val metaCols = getMetadataAttributes(node).filterNot(inputAttrs.contains)
         if (metaCols.isEmpty) {
           node
         } else {
