@@ -23,11 +23,12 @@ import scala.util.Properties
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.FileUtils
 import org.scalatest.Assertions._
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
-
 import org.apache.spark._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
@@ -408,10 +409,11 @@ object SetWarehouseLocationTest extends Logging {
 
     }
 
-    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != expectedWarehouseLocation) {
+    val qualifiedWH = FileUtils.makeQualified(
+      new Path(expectedWarehouseLocation), sparkSession.sparkContext.hadoopConfiguration).toString
+    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != qualifiedWH) {
       throw new Exception(
-        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location " +
-        s"$expectedWarehouseLocation.")
+        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location $qualifiedWH.")
     }
 
     val catalog = sparkSession.sessionState.catalog
@@ -424,7 +426,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        CatalogUtils.stringToURI(s"file:${expectedWarehouseLocation.toString}/testlocation")
+        CatalogUtils.stringToURI(s"$qualifiedWH/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -440,7 +442,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation = CatalogUtils.stringToURI(
-        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation")
+        s"$qualifiedWH/testlocationdb.db/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
