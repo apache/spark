@@ -495,7 +495,7 @@ abstract class AvroSuite
       df.write.format("avro").save(snappyDir)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "zstandard")
       df.write.format("avro").save(zstandardDir)
-      com.github.luben.zstd.ZstdOutputStream
+
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
       val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
       val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
