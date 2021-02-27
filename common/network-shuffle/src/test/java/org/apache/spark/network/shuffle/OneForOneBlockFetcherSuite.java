@@ -212,7 +212,8 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(
       blocks,
       blockIds,
-      new FetchShuffleBlocks("app-id", "exec-id", 0, new long[]{0, 2, 10}, new int[][]{{0}, {1}, {2}}, false),
+      new FetchShuffleBlocks("app-id", "exec-id", 0,
+              new long[]{0, 2, 10}, new int[][]{{0}, {1}, {2}}, false),
       conf);
 
     for (int chunkIndex = 0; chunkIndex < blockIds.length; chunkIndex++) {
@@ -232,7 +233,8 @@ public class OneForOneBlockFetcherSuite {
     BlockFetchingListener listener = fetchBlocks(
       blocks,
       blockIds,
-      new FetchShuffleBlocks("app-id", "exec-id", 0, new long[]{0, 2, 10}, new int[][]{{1, 2}, {2, 3}, {3, 4}}, true),
+      new FetchShuffleBlocks("app-id", "exec-id", 0,
+              new long[]{0, 2, 10}, new int[][]{{1, 2}, {2, 3}, {3, 4}}, true),
       conf);
 
     for (int chunkIndex = 0; chunkIndex < blockIds.length; chunkIndex++) {
