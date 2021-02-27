@@ -491,13 +491,10 @@ case class RenameTable(
  */
 case class ShowTables(
     namespace: LogicalPlan,
-    pattern: Option[String],
-    override val output: Seq[Attribute] = ShowTables.OUTPUT) extends Command {
+    pattern: Option[String]) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
-}
 
-object ShowTables {
-  val OUTPUT = Seq(
+  override val output: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)())
