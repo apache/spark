@@ -476,7 +476,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
         .na.fill(Map("testDF.`ColWith.Dot`" -> na)),
       Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
   }
-  
+
   test("SPARK-34417 - test fillMap() for column without a dot in the name" +
     " and dataframe with another column having a dot in the name") {
     val na = "n/a"
