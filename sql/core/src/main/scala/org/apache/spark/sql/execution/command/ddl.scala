@@ -827,7 +827,7 @@ case class AlterTableSetLocationCommand(
         // Partition spec is specified, so we set the location only for this partition
         val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
           spec,
-          table.partitionSchema,
+          table.partitionColumnNames,
           table.identifier.quotedString,
           sparkSession.sessionState.conf.resolver)
         val part = catalog.getPartition(table.identifier, normalizedSpec)
