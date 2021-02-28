@@ -593,11 +593,11 @@ private[spark] object LegacyConfigsRegister {
   }
 
   def registerAlternated(
-      key: String,
+      activeKey: String,
       alternativeConfigs: Seq[(String, String, String => String)]): Unit = {
-    val configs = alternatedConfigs.getOrElseUpdate(key, new ArrayBuffer[AlternateConfig]())
-    configs ++= alternativeConfigs.map { case (key, version, translation) =>
-      AlternateConfig(key, version, translation)
+    val configs = alternatedConfigs.getOrElseUpdate(activeKey, new ArrayBuffer[AlternateConfig]())
+    configs ++= alternativeConfigs.map { case (alternativeKey, version, translation) =>
+      AlternateConfig(alternativeKey, version, translation)
     }
   }
 
