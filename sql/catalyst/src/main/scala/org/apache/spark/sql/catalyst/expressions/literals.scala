@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{Boolean => JavaBoolean}
 import java.lang.{Byte => JavaByte}
+import java.lang.{Character => JavaChar}
 import java.lang.{Double => JavaDouble}
 import java.lang.{Float => JavaFloat}
 import java.lang.{Integer => JavaInteger}
@@ -38,11 +39,12 @@ import scala.util.Try
 
 import org.json4s.JsonAST._
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.instantToMicros
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types._
 import org.apache.spark.util.Utils
@@ -61,10 +63,14 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case c: Char => Literal(UTF8String.fromString(c.toString), StringType)
+    case ac: Array[Char] => Literal(UTF8String.fromString(String.valueOf(ac)), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
+    case d: BigDecimal =>
+      val decimal = Decimal(d)
+      Literal(decimal, DecimalType.fromDecimal(decimal))
     case d: JavaBigDecimal =>
-      Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
+      val decimal = Decimal(d)
+      Literal(decimal, DecimalType.fromDecimal(decimal))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
     case i: Instant => Literal(instantToMicros(i), TimestampType)
     case t: Timestamp => Literal(DateTimeUtils.fromJavaTimestamp(t), TimestampType)
@@ -81,7 +87,7 @@ object Literal {
     case null => Literal(null, NullType)
     case v: Literal => v
     case _ =>
-      throw new RuntimeException("Unsupported literal type " + v.getClass + " " + v)
+      throw QueryExecutionErrors.literalTypeUnsupportedError(v)
   }
 
   /**
@@ -98,6 +104,7 @@ object Literal {
     case JavaByte.TYPE => ByteType
     case JavaFloat.TYPE => FloatType
     case JavaBoolean.TYPE => BooleanType
+    case JavaChar.TYPE => StringType
 
     // java classes
     case _ if clz == classOf[LocalDate] => DateType
@@ -106,6 +113,7 @@ object Literal {
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
+    case _ if clz == classOf[Array[Char]] => StringType
     case _ if clz == classOf[JavaShort] => ShortType
     case _ if clz == classOf[JavaInteger] => IntegerType
     case _ if clz == classOf[JavaLong] => LongType
@@ -122,7 +130,7 @@ object Literal {
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
 
-    case _ => throw new AnalysisException(s"Unsupported component type $clz in arrays")
+    case _ => throw QueryCompilationErrors.arrayComponentTypeUnsupportedError(clz)
   }
 
   /**
@@ -161,14 +169,14 @@ object Literal {
     case TimestampType => create(0L, TimestampType)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
-    case CalendarIntervalType => Literal(new CalendarInterval(0, 0))
+    case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
     case arr: ArrayType => create(Array(), arr)
     case map: MapType => create(Map(), map)
     case struct: StructType =>
       create(InternalRow.fromSeq(struct.fields.map(f => default(f.dataType).value)), struct)
     case udt: UserDefinedType[_] => Literal(default(udt.sqlType).value, udt)
     case other =>
-      throw new RuntimeException(s"no default for type $dataType")
+      throw QueryExecutionErrors.noDefaultForDataTypeError(dataType)
   }
 
   private[expressions] def validateLiteralValue(value: Any, dataType: DataType): Unit = {
@@ -223,11 +231,41 @@ object NonNullLiteral {
 }
 
 /**
+ * Extractor for retrieving Float literals.
+ */
+object FloatLiteral {
+  def unapply(a: Any): Option[Float] = a match {
+    case Literal(a: Float, FloatType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving Double literals.
+ */
+object DoubleLiteral {
+  def unapply(a: Any): Option[Double] = a match {
+    case Literal(a: Double, DoubleType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
  * Extractor for retrieving Int literals.
  */
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
+/**
+ * Extractor for retrieving String literals.
+ */
+object StringLiteral {
+  def unapply(a: Any): Option[String] = a match {
+    case Literal(s: UTF8String, StringType) => Some(s.toString)
     case _ => None
   }
 }
@@ -260,10 +298,21 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def foldable: Boolean = true
   override def nullable: Boolean = value == null
 
+  private def timeZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
   override def toString: String = value match {
     case null => "null"
     case binary: Array[Byte] => s"0x" + DatatypeConverter.printHexBinary(binary)
-    case other => other.toString
+    case d: ArrayBasedMapData => s"map(${d.toString})"
+    case other =>
+      dataType match {
+        case DateType =>
+          DateFormatter(timeZoneId).format(value.asInstanceOf[Int])
+        case TimestampType =>
+          TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case _ =>
+          other.toString
+      }
   }
 
   override def hashCode(): Int = {
@@ -281,7 +330,11 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       (value, o.value) match {
         case (null, null) => true
         case (a: Array[Byte], b: Array[Byte]) => util.Arrays.equals(a, b)
-        case (a, b) => a != null && a.equals(b)
+        case (a: ArrayBasedMapData, b: ArrayBasedMapData) =>
+          a.keyArray == b.keyArray && a.valueArray == b.valueArray
+        case (a: Double, b: Double) if a.isNaN && b.isNaN => true
+        case (a: Float, b: Float) if a.isNaN && b.isNaN => true
+        case (a, b) => a != null && a == b
       }
     case _ => false
   }
@@ -291,8 +344,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
-      case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
-      case (l: Long, TimestampType) => JString(DateTimeUtils.toJavaTimestamp(l).toString)
+      case (i: Int, DateType) => JString(toString)
+      case (l: Long, TimestampType) => JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -359,7 +412,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ if v.isNaN => "'NaN'"
         case Float.PositiveInfinity => "'Infinity'"
         case Float.NegativeInfinity => "'-Infinity'"
-        case _ => v
+        case _ => s"'$v'"
       }
       s"CAST($castedValue AS ${FloatType.sql})"
     case (v: Double, DoubleType) =>
@@ -370,8 +423,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case _ => v + "D"
       }
     case (v: Decimal, t: DecimalType) => v + "BD"
-    case (v: Int, DateType) => s"DATE '${DateTimeUtils.toJavaDate(v)}'"
-    case (v: Long, TimestampType) => s"TIMESTAMP('${DateTimeUtils.toJavaTimestamp(v)}')"
+    case (v: Int, DateType) =>
+      s"DATE '$toString'"
+    case (v: Long, TimestampType) =>
+      s"TIMESTAMP '$toString'"
+    case (i: CalendarInterval, CalendarIntervalType) =>
+      s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case _ => value.toString
   }

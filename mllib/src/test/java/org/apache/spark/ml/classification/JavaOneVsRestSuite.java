@@ -62,12 +62,12 @@ public class JavaOneVsRestSuite extends SharedSparkSession {
   public void oneVsRestDefaultParams() {
     OneVsRest ova = new OneVsRest();
     ova.setClassifier(new LogisticRegression());
-    Assert.assertEquals(ova.getLabelCol(), "label");
-    Assert.assertEquals(ova.getPredictionCol(), "prediction");
+    Assert.assertEquals("label", ova.getLabelCol());
+    Assert.assertEquals("prediction", ova.getPredictionCol());
     OneVsRestModel ovaModel = ova.fit(dataset);
     Dataset<Row> predictions = ovaModel.transform(dataset).select("label", "prediction");
     predictions.collectAsList();
-    Assert.assertEquals(ovaModel.getLabelCol(), "label");
-    Assert.assertEquals(ovaModel.getPredictionCol(), "prediction");
+    Assert.assertEquals("label", ovaModel.getLabelCol());
+    Assert.assertEquals("prediction", ovaModel.getPredictionCol());
   }
 }

@@ -102,4 +102,27 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
     MLTestingUtils.checkNumericTypes(evaluator, spark)
   }
+
+  test("getMetrics") {
+    val weightCol = "weight"
+    // get metric with weight column
+    val evaluator = new BinaryClassificationEvaluator()
+      .setWeightCol(weightCol)
+    val vectorDF = Seq(
+      (0.0, Vectors.dense(2.5, 12), 1.0),
+      (1.0, Vectors.dense(1, 3), 1.0),
+      (0.0, Vectors.dense(10, 2), 1.0)
+    ).toDF("label", "rawPrediction", weightCol)
+
+    val metrics = evaluator.getMetrics(vectorDF)
+    val roc = metrics.areaUnderROC()
+    val pr = metrics.areaUnderPR()
+
+    // default = areaUnderROC
+    assert(evaluator.evaluate(vectorDF) == roc)
+
+    // areaUnderPR
+    evaluator.setMetricName("areaUnderPR")
+    assert(evaluator.evaluate(vectorDF) == pr)
+  }
 }

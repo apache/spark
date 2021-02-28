@@ -23,16 +23,19 @@ private[spark] object Streaming {
 
   private[spark] val STREAMING_DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.streaming.dynamicAllocation.enabled")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val STREAMING_DYN_ALLOCATION_TESTING =
     ConfigBuilder("spark.streaming.dynamicAllocation.testing")
+      .version("3.0.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val STREAMING_DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.streaming.dynamicAllocation.minExecutors")
+      .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The min executor number of streaming dynamic " +
         "allocation must be positive.")
@@ -40,6 +43,7 @@ private[spark] object Streaming {
 
   private[spark] val STREAMING_DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.streaming.dynamicAllocation.maxExecutors")
+      .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The max executor number of streaming dynamic " +
         "allocation must be positive.")
@@ -47,6 +51,7 @@ private[spark] object Streaming {
 
   private[spark] val STREAMING_DYN_ALLOCATION_SCALING_INTERVAL =
     ConfigBuilder("spark.streaming.dynamicAllocation.scalingInterval")
+      .version("3.0.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ > 0, "The scaling interval of streaming dynamic " +
         "allocation must be positive.")
@@ -54,6 +59,7 @@ private[spark] object Streaming {
 
   private[spark] val STREAMING_DYN_ALLOCATION_SCALING_UP_RATIO =
     ConfigBuilder("spark.streaming.dynamicAllocation.scalingUpRatio")
+      .version("3.0.0")
       .doubleConf
       .checkValue(_ > 0, "The scaling up ratio of streaming dynamic " +
         "allocation must be positive.")
@@ -61,6 +67,7 @@ private[spark] object Streaming {
 
   private[spark] val STREAMING_DYN_ALLOCATION_SCALING_DOWN_RATIO =
     ConfigBuilder("spark.streaming.dynamicAllocation.scalingDownRatio")
+      .version("3.0.0")
       .doubleConf
       .checkValue(_ > 0, "The scaling down ratio of streaming dynamic " +
         "allocation must be positive.")

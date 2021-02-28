@@ -17,12 +17,9 @@
 
 package org.apache.spark.executor
 
-import java.lang.management.ManagementFactory
 import java.util.concurrent.ThreadPoolExecutor
-import javax.management.{MBeanServer, ObjectName}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 import org.apache.hadoop.fs.FileSystem
@@ -30,7 +27,10 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.metrics.source.Source
 
 private[spark]
-class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends Source {
+class ExecutorSource(
+    threadPool: ThreadPoolExecutor,
+    executorId: String,
+    fileSystemSchemes: Array[String]) extends Source {
 
   private def fileStats(scheme: String) : Option[FileSystem.Statistics] =
     FileSystem.getAllStatistics.asScala.find(s => s.getScheme.equals(scheme))
@@ -56,6 +56,11 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
     override def getValue: Long = threadPool.getCompletedTaskCount()
   })
 
+  // Gauge for executor, number of tasks started
+  metricRegistry.register(MetricRegistry.name("threadpool", "startedTasks"), new Gauge[Long] {
+    override def getValue: Long = threadPool.getTaskCount()
+  })
+
   // Gauge for executor thread pool's current number of threads
   metricRegistry.register(MetricRegistry.name("threadpool", "currentPool_size"), new Gauge[Int] {
     override def getValue: Int = threadPool.getPoolSize()
@@ -68,7 +73,7 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   })
 
   // Gauge for file system stats of this executor
-  for (scheme <- Array("hdfs", "file")) {
+  for (scheme <- fileSystemSchemes) {
     registerFileSystemStat(scheme, "read_bytes", _.getBytesRead(), 0L)
     registerFileSystemStat(scheme, "write_bytes", _.getBytesWritten(), 0L)
     registerFileSystemStat(scheme, "read_ops", _.getReadOps(), 0)
@@ -77,7 +82,8 @@ class ExecutorSource(threadPool: ThreadPoolExecutor, executorId: String) extends
   }
 
   // Expose executor task metrics using the Dropwizard metrics system.
-  // The list is taken from TaskMetrics.scala
+  // The list of available Task metrics can be found in TaskMetrics.scala
+  val SUCCEEDED_TASKS = metricRegistry.counter(MetricRegistry.name("succeededTasks"))
   val METRIC_CPU_TIME = metricRegistry.counter(MetricRegistry.name("cpuTime"))
   val METRIC_RUN_TIME = metricRegistry.counter(MetricRegistry.name("runTime"))
   val METRIC_JVM_GC_TIME = metricRegistry.counter(MetricRegistry.name("jvmGCTime"))

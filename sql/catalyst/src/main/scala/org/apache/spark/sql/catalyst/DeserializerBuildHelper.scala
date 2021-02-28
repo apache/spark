@@ -161,6 +161,10 @@ object DeserializerBuildHelper {
     case _: StructType => expr
     case _: ArrayType => expr
     case _: MapType => expr
+    case _: DecimalType =>
+      // For Scala/Java `BigDecimal`, we accept decimal types of any valid precision/scale.
+      // Here we use the `DecimalType` object to indicate it.
+      UpCast(expr, DecimalType, walkedTypePath.getPaths)
     case _ => UpCast(expr, expected, walkedTypePath.getPaths)
   }
 }

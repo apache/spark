@@ -2,6 +2,21 @@
 layout: global
 displayTitle: Spark SQL, DataFrames and Datasets Guide
 title: Spark SQL and DataFrames
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 Spark SQL is a Spark module for structured data processing. Unlike the basic Spark RDD API, the interfaces provided
@@ -46,7 +61,7 @@ In Scala and Java, a DataFrame is represented by a Dataset of `Row`s.
 In [the Scala API][scala-datasets], `DataFrame` is simply a type alias of `Dataset[Row]`.
 While, in [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.
 
-[scala-datasets]: api/scala/index.html#org.apache.spark.sql.Dataset
+[scala-datasets]: api/scala/org/apache/spark/sql/Dataset.html
 [java-datasets]: api/java/index.html?org/apache/spark/sql/Dataset.html
 
 Throughout this document, we will often refer to Scala/Java Datasets of `Row`s as DataFrames.

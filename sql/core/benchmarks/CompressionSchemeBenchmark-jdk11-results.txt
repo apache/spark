@@ -1,0 +1,137 @@
+================================================================================================
+Compression Scheme Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+BOOLEAN Encode:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    1              1           0      53450.1           0.0       1.0X
+RunLengthEncoding(2.496)                            533            545          10        125.8           7.9       0.0X
+BooleanBitSet(0.125)                                287            293           6        234.2           4.3       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+BOOLEAN Decode:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         105            108           2        638.6           1.6       1.0X
+RunLengthEncoding                                   490            497           6        136.8           7.3       0.2X
+BooleanBitSet                                       911            914           4         73.7          13.6       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+SHORT Encode (Lower Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    3              3           0      20673.0           0.0       1.0X
+RunLengthEncoding(1.495)                            750            757           9         89.5          11.2       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+SHORT Decode (Lower Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         637            647           7        105.3           9.5       1.0X
+RunLengthEncoding                                  1056           1069          17         63.5          15.7       0.6X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+SHORT Encode (Higher Skew):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    3              3           0      21332.2           0.0       1.0X
+RunLengthEncoding(2.004)                            768            783          15         87.4          11.4       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+SHORT Decode (Higher Skew):               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         640            643           4        104.9           9.5       1.0X
+RunLengthEncoding                                  1073           1078           6         62.5          16.0       0.6X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+INT Encode (Lower Skew):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    9              9           1       7640.9           0.1       1.0X
+RunLengthEncoding(1.003)                            882            883           2         76.1          13.1       0.0X
+DictionaryEncoding(0.500)                           587            624          33        114.3           8.7       0.0X
+IntDelta(0.250)                                     122            127           5        549.8           1.8       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+INT Decode (Lower Skew):                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         684            709          27         98.1          10.2       1.0X
+RunLengthEncoding                                  1068           1075          10         62.8          15.9       0.6X
+DictionaryEncoding                                  517            526           6        129.8           7.7       1.3X
+IntDelta                                            541            545           4        124.0           8.1       1.3X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+INT Encode (Higher Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                    9             10           1       7475.0           0.1       1.0X
+RunLengthEncoding(1.339)                            908            922          12         73.9          13.5       0.0X
+DictionaryEncoding(0.501)                           629            652          16        106.6           9.4       0.0X
+IntDelta(0.250)                                     124            128           3        542.5           1.8       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+INT Decode (Higher Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         778            783           8         86.3          11.6       1.0X
+RunLengthEncoding                                  1217           1217           1         55.2          18.1       0.6X
+DictionaryEncoding                                  690            704          12         97.2          10.3       1.1X
+IntDelta                                            691            699          13         97.1          10.3       1.1X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+LONG Encode (Lower Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                   18             19           1       3772.0           0.3       1.0X
+RunLengthEncoding(0.750)                            985            987           2         68.1          14.7       0.0X
+DictionaryEncoding(0.250)                           665            668           4        100.9           9.9       0.0X
+LongDelta(0.125)                                    124            128           2        539.4           1.9       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+LONG Decode (Lower Skew):                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         837            841           7         80.2          12.5       1.0X
+RunLengthEncoding                                  1177           1180           4         57.0          17.5       0.7X
+DictionaryEncoding                                  741            747           7         90.6          11.0       1.1X
+LongDelta                                           509            520          13        131.8           7.6       1.6X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+LONG Encode (Higher Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                   18             20           1       3769.4           0.3       1.0X
+RunLengthEncoding(1.005)                           1016           1054          54         66.1          15.1       0.0X
+DictionaryEncoding(0.251)                           923            928           4         72.7          13.8       0.0X
+LongDelta(0.125)                                    125            127           2        538.8           1.9       0.1X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+LONG Decode (Higher Skew):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                         842            846           5         79.7          12.5       1.0X
+RunLengthEncoding                                  1222           1264          59         54.9          18.2       0.7X
+DictionaryEncoding                                  757            776          20         88.7          11.3       1.1X
+LongDelta                                           681            686           4         98.5          10.2       1.2X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+STRING Encode:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough(1.000)                                   27             29           2       2510.4           0.4       1.0X
+RunLengthEncoding(0.888)                           1651           1663          18         40.7          24.6       0.0X
+DictionaryEncoding(0.167)                          1851           1863          17         36.3          27.6       0.0X
+
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.5
+Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+STRING Decode:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+PassThrough                                        1485           1495          15         45.2          22.1       1.0X
+RunLengthEncoding                                  2010           2066          80         33.4          30.0       0.7X
+DictionaryEncoding                                 1788           1790           4         37.5          26.6       0.8X
+
+

@@ -36,7 +36,7 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
 
   start()
 
-  private def start() {
+  private def start(): Unit = {
     logInfo("Starting ZooKeeper LeaderElection agent")
     zk = SparkCuratorUtil.newClient(conf)
     leaderLatch = new LeaderLatch(zk, workingDir)
@@ -44,12 +44,12 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
     leaderLatch.start()
   }
 
-  override def stop() {
+  override def stop(): Unit = {
     leaderLatch.close()
     zk.close()
   }
 
-  override def isLeader() {
+  override def isLeader(): Unit = {
     synchronized {
       // could have lost leadership by now.
       if (!leaderLatch.hasLeadership) {
@@ -61,7 +61,7 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
     }
   }
 
-  override def notLeader() {
+  override def notLeader(): Unit = {
     synchronized {
       // could have gained leadership by now.
       if (leaderLatch.hasLeadership) {
@@ -73,7 +73,7 @@ private[master] class ZooKeeperLeaderElectionAgent(val masterInstance: LeaderEle
     }
   }
 
-  private def updateLeadershipStatus(isLeader: Boolean) {
+  private def updateLeadershipStatus(isLeader: Boolean): Unit = {
     if (isLeader && status == LeadershipStatus.NOT_LEADER) {
       status = LeadershipStatus.LEADER
       masterInstance.electedLeader()

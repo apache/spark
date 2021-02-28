@@ -21,11 +21,12 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.metrics2.MetricsRecordBuilder
 import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}
 import org.mockito.Mockito.{mock, times, verify, when}
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.server.OneForOneStreamManager
-import org.apache.spark.network.shuffle.{ExternalShuffleBlockHandler, ExternalShuffleBlockResolver}
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, ExternalShuffleBlockResolver}
 
 class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
@@ -33,13 +34,13 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   val blockResolver = mock(classOf[ExternalShuffleBlockResolver])
   when(blockResolver.getRegisteredExecutorsSize).thenReturn(42)
 
-  val metrics = new ExternalShuffleBlockHandler(streamManager, blockResolver).getAllMetrics
+  val metrics = new ExternalBlockHandler(streamManager, blockResolver).getAllMetrics
 
   test("metrics named as expected") {
     val allMetrics = Set(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
-      "numRegisteredConnections")
+      "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis")
 
     metrics.getMetrics.keySet().asScala should be (allMetrics)
   }

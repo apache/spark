@@ -17,8 +17,9 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * Request to fetch a sequence of a single chunk of a stream. This will correspond to a single
@@ -64,8 +65,8 @@ public final class ChunkFetchRequest extends AbstractMessage implements RequestM
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamChunkId", streamChunkId)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("streamChunkId", streamChunkId)
       .toString();
   }
 }

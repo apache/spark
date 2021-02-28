@@ -17,7 +17,7 @@
 
 package org.apache.spark.security
 
-import java.io.{BufferedOutputStream, DataInputStream, DataOutputStream, OutputStream}
+import java.io.{DataInputStream, DataOutputStream}
 import java.net.Socket
 import java.nio.charset.StandardCharsets.UTF_8
 
@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  *
  * There's no secrecy, so this relies on the sockets being either local or somehow encrypted.
  */
-private[spark] class SocketAuthHelper(conf: SparkConf) {
+private[spark] class SocketAuthHelper(val conf: SparkConf) {
 
   val secret = Utils.createSecret(conf)
 
@@ -112,22 +112,5 @@ private[spark] class SocketAuthHelper(conf: SparkConf) {
     dout.writeInt(bytes.length)
     dout.write(bytes, 0, bytes.length)
     dout.flush()
-  }
-
-}
-
-private[spark] object SocketAuthHelper {
-  def serveToStream(
-      threadName: String,
-      authHelper: SocketAuthHelper)(writeFunc: OutputStream => Unit): Array[Any] = {
-    val (port, secret) = SocketAuthServer.setupOneConnectionServer(authHelper, threadName) { s =>
-      val out = new BufferedOutputStream(s.getOutputStream())
-      Utils.tryWithSafeFinally {
-        writeFunc(out)
-      } {
-        out.close()
-      }
-    }
-    Array(port, secret)
   }
 }

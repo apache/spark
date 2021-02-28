@@ -16,38 +16,30 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.csv
 
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
-import org.apache.spark.sql.sources.v2.Table
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CSVDataSourceV2 extends FileDataSourceV2 {
 
-  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
+  override def fallbackFileFormat: Class[_ <: FileFormat] = classOf[CSVFileFormat]
 
   override def shortName(): String = "csv"
 
   override def getTable(options: CaseInsensitiveStringMap): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, options, paths, None)
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    CSVTable(tableName, sparkSession, optionsWithoutPaths, paths, None, fallbackFileFormat)
   }
 
   override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
     val paths = getPaths(options)
-    val tableName = getTableName(paths)
-    CSVTable(tableName, sparkSession, options, paths, Some(schema))
-  }
-}
-
-object CSVDataSourceV2 {
-  def supportsDataType(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
-
-    case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
-
-    case _ => false
+    val tableName = getTableName(options, paths)
+    val optionsWithoutPaths = getOptionsWithoutPaths(options)
+    CSVTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
   }
 }

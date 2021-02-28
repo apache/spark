@@ -26,7 +26,7 @@ import org.apache.spark.sql.SparkSession
  * Usage: GroupByTest [numMappers] [numKVPairs] [KeySize] [numReducers]
  */
 object GroupByTest {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
       .appName("GroupBy Test")

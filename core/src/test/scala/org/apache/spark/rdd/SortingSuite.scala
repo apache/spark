@@ -17,7 +17,8 @@
 
 package org.apache.spark.rdd
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
@@ -25,7 +26,7 @@ import org.apache.spark.internal.Logging
 class SortingSuite extends SparkFunSuite with SharedSparkContext with Matchers with Logging {
 
   test("sortByKey") {
-    val pairs = sc.parallelize(Array((1, 0), (2, 0), (0, 0), (3, 0)), 2)
+    val pairs = sc.parallelize(Seq((1, 0), (2, 0), (0, 0), (3, 0)), 2)
     assert(pairs.sortByKey().collect() === Array((0, 0), (1, 0), (2, 0), (3, 0)))
   }
 

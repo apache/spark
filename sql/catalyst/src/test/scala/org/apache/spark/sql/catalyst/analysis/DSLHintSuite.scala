@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 class DSLHintSuite extends AnalysisTest {
-  lazy val a = 'a.int
-  lazy val b = 'b.string
-  lazy val c = 'c.string
+  lazy val a = Symbol("a").int
+  lazy val b = Symbol("b").string
+  lazy val c = Symbol("c").string
   lazy val r1 = LocalRelation(a, b, c)
 
   test("various hint parameters") {

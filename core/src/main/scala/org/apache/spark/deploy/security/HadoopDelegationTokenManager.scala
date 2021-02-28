@@ -65,11 +65,6 @@ private[spark] class HadoopDelegationTokenManager(
     protected val hadoopConf: Configuration,
     protected val schedulerRef: RpcEndpointRef) extends Logging {
 
-  private val deprecatedProviderEnabledConfigs = List(
-    "spark.yarn.security.tokens.%s.enabled",
-    "spark.yarn.security.credentials.%s.enabled")
-  private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
-
   private val principal = sparkConf.get(PRINCIPAL).orNull
 
   // The keytab can be a local: URI for cluster mode, so translate it to a regular path. If it is
@@ -136,13 +131,35 @@ private[spark] class HadoopDelegationTokenManager(
 
   /**
    * Fetch new delegation tokens for configured services, storing them in the given credentials.
-   * Tokens are fetched for the current logged in user.
    *
    * @param creds Credentials object where to store the delegation tokens.
-   * @return The time by which the tokens must be renewed.
    */
-  def obtainDelegationTokens(creds: Credentials): Long = {
-    delegationTokenProviders.values.flatMap { provider =>
+  def obtainDelegationTokens(creds: Credentials): Unit = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val hasKerberosCreds = principal != null ||
+      Option(currentUser.getRealUser()).getOrElse(currentUser).hasKerberosCredentials()
+
+    // Delegation tokens can only be obtained if the real user has Kerberos credentials, so
+    // skip creation when those are not available.
+    if (hasKerberosCreds) {
+      val freshUGI = doLogin()
+      freshUGI.doAs(new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          val (newTokens, _) = obtainDelegationTokens()
+          creds.addAll(newTokens)
+        }
+      })
+    }
+  }
+
+  /**
+   * Fetch new delegation tokens for configured services.
+   *
+   * @return 2-tuple (credentials with new tokens, time by which the tokens must be renewed)
+   */
+  private def obtainDelegationTokens(): (Credentials, Long) = {
+    val creds = new Credentials()
+    val nextRenewal = delegationTokenProviders.values.flatMap { provider =>
       if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
         provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
@@ -151,6 +168,7 @@ private[spark] class HadoopDelegationTokenManager(
         None
       }
     }.foldLeft(Long.MaxValue)(math.min)
+    (creds, nextRenewal)
   }
 
   // Visible for testing.
@@ -158,32 +176,9 @@ private[spark] class HadoopDelegationTokenManager(
     delegationTokenProviders.contains(serviceName)
   }
 
-  protected def isServiceEnabled(serviceName: String): Boolean = {
-    val key = providerEnabledConfig.format(serviceName)
-
-    deprecatedProviderEnabledConfigs.foreach { pattern =>
-      val deprecatedKey = pattern.format(serviceName)
-      if (sparkConf.contains(deprecatedKey)) {
-        logWarning(s"${deprecatedKey} is deprecated.  Please use ${key} instead.")
-      }
-    }
-
-    val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
-      sparkConf
-        .getOption(pattern.format(serviceName))
-        .map(_.toBoolean)
-        .getOrElse(true)
-    }
-
-    sparkConf
-      .getOption(key)
-      .map(_.toBoolean)
-      .getOrElse(isEnabledDeprecated)
-  }
-
   private def scheduleRenewal(delay: Long): Unit = {
     val _delay = math.max(0, delay)
-    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(delay)}.")
+    logInfo(s"Scheduling renewal in ${UIUtils.formatDuration(_delay)}.")
 
     val renewalTask = new Runnable() {
       override def run(): Unit = {
@@ -228,14 +223,15 @@ private[spark] class HadoopDelegationTokenManager(
   private def obtainTokensAndScheduleRenewal(ugi: UserGroupInformation): Credentials = {
     ugi.doAs(new PrivilegedExceptionAction[Credentials]() {
       override def run(): Credentials = {
-        val creds = new Credentials()
-        val nextRenewal = obtainDelegationTokens(creds)
+        val (creds, nextRenewal) = obtainDelegationTokens()
 
         // Calculate the time when new credentials should be created, based on the configured
         // ratio.
         val now = System.currentTimeMillis
         val ratio = sparkConf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
         val delay = (ratio * (nextRenewal - now)).toLong
+        logInfo(s"Calculated delay on renewal is $delay, based on next renewal $nextRenewal " +
+          s"and the ratio $ratio, and current time $now")
         scheduleRenewal(delay)
         creds
       }
@@ -249,12 +245,14 @@ private[spark] class HadoopDelegationTokenManager(
       val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
       logInfo("Successfully logged into KDC.")
       ugi
-    } else {
+    } else if (!SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())) {
       logInfo(s"Attempting to load user's ticket cache.")
       val ccache = sparkConf.getenv("KRB5CCNAME")
       val user = Option(sparkConf.getenv("KRB5PRINCIPAL")).getOrElse(
         UserGroupInformation.getCurrentUser().getUserName())
       UserGroupInformation.getUGIFromTicketCache(ccache, user)
+    } else {
+      UserGroupInformation.getCurrentUser()
     }
   }
 
@@ -275,8 +273,39 @@ private[spark] class HadoopDelegationTokenManager(
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers
-      .filter { p => isServiceEnabled(p.serviceName) }
+      .filter { p => HadoopDelegationTokenManager.isServiceEnabled(sparkConf, p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
+  }
+}
+
+private[spark] object HadoopDelegationTokenManager extends Logging {
+  private val providerEnabledConfig = "spark.security.credentials.%s.enabled"
+
+  private val deprecatedProviderEnabledConfigs = List(
+    "spark.yarn.security.tokens.%s.enabled",
+    "spark.yarn.security.credentials.%s.enabled")
+
+  def isServiceEnabled(sparkConf: SparkConf, serviceName: String): Boolean = {
+    val key = providerEnabledConfig.format(serviceName)
+
+    deprecatedProviderEnabledConfigs.foreach { pattern =>
+      val deprecatedKey = pattern.format(serviceName)
+      if (sparkConf.contains(deprecatedKey)) {
+        logWarning(s"${deprecatedKey} is deprecated.  Please use ${key} instead.")
+      }
+    }
+
+    val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
+      sparkConf
+        .getOption(pattern.format(serviceName))
+        .map(_.toBoolean)
+        .getOrElse(true)
+    }
+
+    sparkConf
+      .getOption(key)
+      .map(_.toBoolean)
+      .getOrElse(isEnabledDeprecated)
   }
 }

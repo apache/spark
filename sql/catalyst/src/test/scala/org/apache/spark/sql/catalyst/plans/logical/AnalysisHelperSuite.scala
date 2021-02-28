@@ -118,7 +118,7 @@ class AnalysisHelperSuite extends SparkFunSuite {
 
   test("do not allow transform in analyzer") {
     val plan = Project(Nil, LocalRelation())
-    // These should be OK since we are not in the analzyer
+    // These should be OK since we are not in the analyzer
     plan.transform { case p: Project => p }
     plan.transformUp { case p: Project => p }
     plan.transformDown { case p: Project => p }

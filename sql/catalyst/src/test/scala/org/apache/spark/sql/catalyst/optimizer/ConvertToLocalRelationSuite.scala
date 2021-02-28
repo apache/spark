@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{LessThan, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, LessThan, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.{DataType, StructType}
 
 
 class ConvertToLocalRelationSuite extends PlanTest {
@@ -69,5 +71,37 @@ class ConvertToLocalRelationSuite extends PlanTest {
     val optimized = Optimize.execute(filterAndProjectOnLocal.analyze)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-27798: Expression reusing output shouldn't override values in local relation") {
+    val testRelation = LocalRelation(
+      LocalRelation('a.int).output,
+      InternalRow(1) :: InternalRow(2) :: Nil)
+
+    val correctAnswer = LocalRelation(
+      LocalRelation('a.struct('a1.int)).output,
+      InternalRow(InternalRow(1)) :: InternalRow(InternalRow(2)) :: Nil)
+
+    val projected = testRelation.select(ExprReuseOutput(UnresolvedAttribute("a")).as("a"))
+    val optimized = Optimize.execute(projected.analyze)
+
+    comparePlans(optimized, correctAnswer)
+  }
+}
+
+
+// Dummy expression used for testing. It reuses output row. Assumes child expr outputs an integer.
+case class ExprReuseOutput(child: Expression) extends UnaryExpression {
+  override def dataType: DataType = StructType.fromDDL("a1 int")
+  override def nullable: Boolean = true
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw new UnsupportedOperationException("Should not trigger codegen")
+
+  private val row: InternalRow = new GenericInternalRow(1)
+
+  override def eval(input: InternalRow): Any = {
+    row.update(0, child.eval(input))
+    row
   }
 }

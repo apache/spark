@@ -76,7 +76,7 @@ class ExternalAppendOnlyMap[K, V, C](
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       serializer: Serializer,
-      blockManager: BlockManager) {
+      blockManager: BlockManager) = {
     this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
   }
 
@@ -367,7 +367,7 @@ class ExternalAppendOnlyMap[K, V, C](
     private def removeFromBuffer[T](buffer: ArrayBuffer[T], index: Int): T = {
       val elem = buffer(index)
       buffer(index) = buffer(buffer.size - 1)  // This also works if index == buffer.size - 1
-      buffer.reduceToSize(buffer.size - 1)
+      buffer.trimEnd(1)
       elem
     }
 
@@ -549,7 +549,7 @@ class ExternalAppendOnlyMap[K, V, C](
       item
     }
 
-    private def cleanup() {
+    private def cleanup(): Unit = {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       if (deserializeStream != null) {
         deserializeStream.close()

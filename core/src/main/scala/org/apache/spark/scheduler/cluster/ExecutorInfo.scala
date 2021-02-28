@@ -17,6 +17,8 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.resource.ResourceInformation
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 
 /**
  * :: DeveloperApi ::
@@ -24,13 +26,33 @@ import org.apache.spark.annotation.DeveloperApi
  */
 @DeveloperApi
 class ExecutorInfo(
-   val executorHost: String,
-   val totalCores: Int,
-   val logUrlMap: Map[String, String],
-   val attributes: Map[String, String]) {
+    val executorHost: String,
+    val totalCores: Int,
+    val logUrlMap: Map[String, String],
+    val attributes: Map[String, String],
+    val resourcesInfo: Map[String, ResourceInformation],
+    val resourceProfileId: Int) {
 
   def this(executorHost: String, totalCores: Int, logUrlMap: Map[String, String]) = {
-    this(executorHost, totalCores, logUrlMap, Map.empty)
+    this(executorHost, totalCores, logUrlMap, Map.empty, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+  }
+
+  def this(
+      executorHost: String,
+      totalCores: Int,
+      logUrlMap: Map[String, String],
+      attributes: Map[String, String]) = {
+    this(executorHost, totalCores, logUrlMap, attributes, Map.empty, DEFAULT_RESOURCE_PROFILE_ID)
+  }
+
+  def this(
+      executorHost: String,
+      totalCores: Int,
+      logUrlMap: Map[String, String],
+      attributes: Map[String, String],
+      resourcesInfo: Map[String, ResourceInformation]) = {
+    this(executorHost, totalCores, logUrlMap, attributes, resourcesInfo,
+      DEFAULT_RESOURCE_PROFILE_ID)
   }
 
   def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]
@@ -41,12 +63,15 @@ class ExecutorInfo(
         executorHost == that.executorHost &&
         totalCores == that.totalCores &&
         logUrlMap == that.logUrlMap &&
-        attributes == that.attributes
+        attributes == that.attributes &&
+        resourcesInfo == that.resourcesInfo &&
+        resourceProfileId == that.resourceProfileId
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(executorHost, totalCores, logUrlMap, attributes)
+    val state = Seq(executorHost, totalCores, logUrlMap, attributes, resourcesInfo,
+      resourceProfileId)
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 }

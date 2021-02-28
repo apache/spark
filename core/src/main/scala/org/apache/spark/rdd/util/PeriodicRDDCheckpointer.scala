@@ -76,8 +76,13 @@ import org.apache.spark.util.PeriodicCheckpointer
  */
 private[spark] class PeriodicRDDCheckpointer[T](
     checkpointInterval: Int,
-    sc: SparkContext)
+    sc: SparkContext,
+    storageLevel: StorageLevel)
   extends PeriodicCheckpointer[RDD[T]](checkpointInterval, sc) {
+  require(storageLevel != StorageLevel.NONE)
+
+  def this(checkpointInterval: Int, sc: SparkContext) =
+    this(checkpointInterval, sc, StorageLevel.MEMORY_ONLY)
 
   override protected def checkpoint(data: RDD[T]): Unit = data.checkpoint()
 
@@ -85,7 +90,7 @@ private[spark] class PeriodicRDDCheckpointer[T](
 
   override protected def persist(data: RDD[T]): Unit = {
     if (data.getStorageLevel == StorageLevel.NONE) {
-      data.persist()
+      data.persist(storageLevel)
     }
   }
 

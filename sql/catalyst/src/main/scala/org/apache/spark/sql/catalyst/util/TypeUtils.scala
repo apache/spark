@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.RowOrdering
 import org.apache.spark.sql.types._
@@ -60,8 +61,13 @@ object TypeUtils {
     }
   }
 
-  def getNumeric(t: DataType): Numeric[Any] =
-    t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+  def getNumeric(t: DataType, exactNumericRequired: Boolean = false): Numeric[Any] = {
+    if (exactNumericRequired) {
+      t.asInstanceOf[NumericType].exactNumeric.asInstanceOf[Numeric[Any]]
+    } else {
+      t.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]]
+    }
+  }
 
   def getInterpretedOrdering(t: DataType): Ordering[Any] = {
     t match {
@@ -73,11 +79,12 @@ object TypeUtils {
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
-    for (i <- 0 until x.length; if i < y.length) {
-      val v1 = x(i) & 0xff
-      val v2 = y(i) & 0xff
-      val res = v1 - v2
+    val limit = if (x.length <= y.length) x.length else y.length
+    var i = 0
+    while (i < limit) {
+      val res = (x(i) & 0xff) - (y(i) & 0xff)
       if (res != 0) return res
+      i += 1
     }
     x.length - y.length
   }
@@ -91,5 +98,19 @@ object TypeUtils {
     case BinaryType => false
     case _: AtomicType => true
     case _ => false
+  }
+
+  def failWithIntervalType(dataType: DataType): Unit = {
+    dataType match {
+      case CalendarIntervalType =>
+        throw new AnalysisException("Cannot use interval type in the table schema.")
+      case ArrayType(et, _) => failWithIntervalType(et)
+      case MapType(kt, vt, _) =>
+        failWithIntervalType(kt)
+        failWithIntervalType(vt)
+      case s: StructType => s.foreach(f => failWithIntervalType(f.dataType))
+      case u: UserDefinedType[_] => failWithIntervalType(u.sqlType)
+      case _ =>
+    }
   }
 }

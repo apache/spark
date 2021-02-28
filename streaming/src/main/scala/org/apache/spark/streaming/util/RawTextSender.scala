@@ -26,7 +26,7 @@ import scala.io.Source
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.util.IntParam
+import org.apache.spark.util.{IntParam, Utils}
 
 /**
  * A helper program that sends blocks of Kryo-serialized text strings out on a socket at a
@@ -34,7 +34,7 @@ import org.apache.spark.util.IntParam
  */
 private[streaming]
 object RawTextSender extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     if (args.length != 4) {
       // scalastyle:off println
       System.err.println("Usage: RawTextSender <port> <file> <blockSize> <bytesPerSec>")
@@ -45,7 +45,7 @@ object RawTextSender extends Logging {
     val Array(IntParam(port), file, IntParam(blockSize), IntParam(bytesPerSec)) = args
 
     // Repeat the input data multiple times to fill in a buffer
-    val lines = Source.fromFile(file).getLines().toArray
+    val lines = Utils.tryWithResource(Source.fromFile(file))(_.getLines().toArray)
     val bufferStream = new ByteArrayOutputStream(blockSize + 1000)
     val ser = new KryoSerializer(new SparkConf()).newInstance()
     val serStream = ser.serializeStream(bufferStream)

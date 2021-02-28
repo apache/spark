@@ -175,8 +175,8 @@ public class RpcIntegrationSuite {
     final Semaphore sem = new Semaphore(0);
 
     final RpcResult res = new RpcResult();
-    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
-    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.successMessages = Collections.synchronizedSet(new HashSet<>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<>());
 
     RpcResponseCallback callback = new RpcResponseCallback() {
       @Override
@@ -208,8 +208,8 @@ public class RpcIntegrationSuite {
     TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
     final Semaphore sem = new Semaphore(0);
     RpcResult res = new RpcResult();
-    res.successMessages = Collections.synchronizedSet(new HashSet<String>());
-    res.errorMessages = Collections.synchronizedSet(new HashSet<String>());
+    res.successMessages = Collections.synchronizedSet(new HashSet<>());
+    res.errorMessages = Collections.synchronizedSet(new HashSet<>());
 
     for (String stream : streams) {
       int idx = stream.lastIndexOf('/');
@@ -260,14 +260,14 @@ public class RpcIntegrationSuite {
   @Test
   public void singleRPC() throws Exception {
     RpcResult res = sendRPC("hello/Aaron");
-    assertEquals(res.successMessages, Sets.newHashSet("Hello, Aaron!"));
+    assertEquals(Sets.newHashSet("Hello, Aaron!"), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
   @Test
   public void doubleRPC() throws Exception {
     RpcResult res = sendRPC("hello/Aaron", "hello/Reynold");
-    assertEquals(res.successMessages, Sets.newHashSet("Hello, Aaron!", "Hello, Reynold!"));
+    assertEquals(Sets.newHashSet("Hello, Aaron!", "Hello, Reynold!"), res.successMessages);
     assertTrue(res.errorMessages.isEmpty());
   }
 
@@ -295,7 +295,7 @@ public class RpcIntegrationSuite {
   @Test
   public void sendSuccessAndFailure() throws Exception {
     RpcResult res = sendRPC("hello/Bob", "throw error/the", "hello/Builder", "return error/!");
-    assertEquals(res.successMessages, Sets.newHashSet("Hello, Bob!", "Hello, Builder!"));
+    assertEquals(Sets.newHashSet("Hello, Bob!", "Hello, Builder!"), res.successMessages);
     assertErrorsContain(res.errorMessages, Sets.newHashSet("Thrown: the", "Returned: !"));
   }
 

@@ -28,12 +28,13 @@ import org.mockito.ArgumentMatchers.{any, anyInt, anyLong, anyString, eq => meq}
 import org.mockito.Mockito.{times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mockito.MockitoSugar
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.mesos.{config => mesosConfig}
 import org.apache.spark.internal.config._
-import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
+import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor}
@@ -49,7 +50,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private var driver: SchedulerDriver = _
   private var taskScheduler: TaskSchedulerImpl = _
   private var backend: MesosCoarseGrainedSchedulerBackend = _
-  private var externalShuffleClient: MesosExternalShuffleClient = _
+  private var externalShuffleClient: MesosExternalBlockStoreClient = _
   private var driverEndpoint: RpcEndpointRef = _
   @volatile private var stopCalled = false
 
@@ -70,8 +71,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResources(offers)
     verifyTaskLaunched(driver, "o1")
 
+    val totalExecs = Map(ResourceProfile.getOrCreateDefaultProfile(sparkConf) -> 0)
     // kills executors
-    assert(backend.doRequestTotalExecutors(0).futureValue)
+    val defaultResourceProfile = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    assert(backend.doRequestTotalExecutors(Map(defaultResourceProfile -> 0)).futureValue)
     assert(backend.doKillExecutors(Seq("0")).futureValue)
     val taskID0 = createTaskId("0")
     verify(driver, times(1)).killTask(taskID0)
@@ -81,7 +84,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o2"))
 
     // Launches a new task when requested executors is positive
-    backend.doRequestTotalExecutors(2)
+    backend.doRequestTotalExecutors(Map(defaultResourceProfile -> 2))
     offerResources(offers, 2)
     verifyTaskLaunched(driver, "o2")
   }
@@ -102,7 +105,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.statusUpdate(driver, status)
     verify(driver, times(1)).reviveOffers()
 
-    // Launches a new task on a valid offer from the same slave
+    // Launches a new task on a valid offer from the same agent
     offerResources(List(offer2))
     verifyTaskLaunched(driver, "o2")
   }
@@ -247,7 +250,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o2")
   }
 
-  test("mesos creates multiple executors on a single slave") {
+  test("mesos creates multiple executors on a single agent") {
     val executorCores = 4
     setBackend(Map(EXECUTOR_CORES.key -> executorCores.toString))
 
@@ -587,6 +590,30 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
+  test("SPARK-28778 '--hostname' shouldn't be set for executor when virtual network is enabled") {
+    setBackend()
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+    val offer = createOffer("o1", "s1", mem, cpu)
+
+    assert(backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map("spark.executor.uri" -> "hdfs://test/executor.jar"))
+    assert(backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map("spark.mesos.network.name" -> "test"))
+    assert(!backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+
+    setBackend(Map(
+      "spark.mesos.network.name" -> "test",
+      "spark.executor.uri" -> "hdfs://test/executor.jar"
+    ))
+    assert(!backend.createCommand(offer, cpu, "test").getValue.contains("--hostname"))
+    sc.stop()
+  }
+
   test("supports spark.scheduler.minRegisteredResourcesRatio") {
     val expectedCores = 1
     setBackend(Map(
@@ -610,7 +637,12 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     assert(backend.getExecutorIds().isEmpty)
 
-    backend.requestTotalExecutors(2, 2, Map("hosts10" -> 1, "hosts11" -> 1))
+    val defaultProfileId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    val defaultProf = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+    backend.requestTotalExecutors(
+      Map(defaultProfileId -> 2),
+      Map(defaultProfileId -> 2),
+      Map(defaultProfileId -> Map("hosts10" -> 1, "hosts11" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(1, false)
@@ -626,7 +658,11 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     offerResourcesAndVerify(1, true)
 
     // Update total executors
-    backend.requestTotalExecutors(3, 3, Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1))
+    backend.requestTotalExecutors(
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 3),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 2),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+        Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -635,8 +671,11 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     Thread.sleep(2000)
 
     // Update total executors
-    backend.requestTotalExecutors(4, 4, Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1,
-      "hosts13" -> 1))
+    backend.requestTotalExecutors(
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID -> 4),
+      Map(ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID ->
+            Map("hosts10" -> 1, "hosts11" -> 1, "hosts12" -> 1, "hosts13" -> 1)))
 
     // Offer non-local resources, which should be rejected
     offerResourcesAndVerify(3, false)
@@ -688,11 +727,11 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)
 
-  private def registerMockExecutor(executorId: String, slaveId: String, cores: Integer) = {
+  private def registerMockExecutor(executorId: String, agentId: String, cores: Integer) = {
     val mockEndpointRef = mock[RpcEndpointRef]
     val mockAddress = mock[RpcAddress]
-    val message = RegisterExecutor(executorId, mockEndpointRef, slaveId, cores, Map.empty,
-      Map.empty)
+    val message = RegisterExecutor(executorId, mockEndpointRef, agentId, cores, Map.empty,
+      Map.empty, Map.empty, ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID)
 
     backend.driverEndpoint.askSync[Boolean](message)
   }
@@ -727,10 +766,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def createTaskStatus(taskId: String, slaveId: String, state: TaskState): TaskStatus = {
+  private def createTaskStatus(taskId: String, agentId: String, state: TaskState): TaskStatus = {
     TaskStatus.newBuilder()
       .setTaskId(TaskID.newBuilder().setValue(taskId).build())
-      .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
+      .setSlaveId(SlaveID.newBuilder().setValue(agentId).build())
       .setState(state)
       .build
   }
@@ -738,7 +777,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   private def createSchedulerBackend(
       taskScheduler: TaskSchedulerImpl,
       driver: SchedulerDriver,
-      shuffleClient: MesosExternalShuffleClient) = {
+      shuffleClient: MesosExternalBlockStoreClient) = {
     val securityManager = mock[SecurityManager]
 
     val backend = new MesosCoarseGrainedSchedulerBackend(
@@ -754,7 +793,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
           failoverTimeout: Option[Double] = None,
           frameworkId: Option[String] = None): SchedulerDriver = driver
 
-      override protected def getShuffleClient(): MesosExternalShuffleClient = shuffleClient
+      override protected def getShuffleClient(): MesosExternalBlockStoreClient = shuffleClient
 
       // override to avoid race condition with the driver thread on `mesosDriver`
       override def startScheduler(newDriver: SchedulerDriver): Unit = {}
@@ -785,7 +824,8 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     }
   }
 
-  private def setBackend(sparkConfVars: Map[String, String] = null, home: String = "/path") {
+  private def setBackend(sparkConfVars: Map[String, String] = null,
+      home: String = "/path"): Unit = {
     initializeSparkConf(sparkConfVars, home)
     sc = new SparkContext(sparkConf)
 
@@ -793,10 +833,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
     taskScheduler = mock[TaskSchedulerImpl]
-    when(taskScheduler.nodeBlacklist).thenReturn(Set[String]())
+    when(taskScheduler.excludedNodes).thenReturn(Set[String]())
     when(taskScheduler.sc).thenReturn(sc)
 
-    externalShuffleClient = mock[MesosExternalShuffleClient]
+    externalShuffleClient = mock[MesosExternalBlockStoreClient]
 
     backend = createSchedulerBackend(taskScheduler, driver, externalShuffleClient)
   }

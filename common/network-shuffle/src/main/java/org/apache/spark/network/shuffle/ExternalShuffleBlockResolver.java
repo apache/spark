@@ -24,14 +24,15 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Objects;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -69,8 +70,6 @@ public class ExternalShuffleBlockResolver {
   private static final String APP_KEY_PREFIX = "AppExecShuffleInfo";
   private static final StoreVersion CURRENT_VERSION = new StoreVersion(1, 0);
 
-  private static final Pattern MULTIPLE_SEPARATORS = Pattern.compile(File.separator + "{2,}");
-
   // Map containing all registered executors' metadata.
   @VisibleForTesting
   final ConcurrentMap<AppExecId, ExecutorShuffleInfo> executors;
@@ -86,14 +85,12 @@ public class ExternalShuffleBlockResolver {
 
   private final TransportConf conf;
 
+  private final boolean rddFetchEnabled;
+
   @VisibleForTesting
   final File registeredExecutorFile;
   @VisibleForTesting
   final DB db;
-
-  private final List<String> knownManagers = Arrays.asList(
-    "org.apache.spark.shuffle.sort.SortShuffleManager",
-    "org.apache.spark.shuffle.unsafe.UnsafeShuffleManager");
 
   public ExternalShuffleBlockResolver(TransportConf conf, File registeredExecutorFile)
       throws IOException {
@@ -109,6 +106,8 @@ public class ExternalShuffleBlockResolver {
       File registeredExecutorFile,
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
+    this.rddFetchEnabled =
+      Boolean.valueOf(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
@@ -145,10 +144,6 @@ public class ExternalShuffleBlockResolver {
       ExecutorShuffleInfo executorInfo) {
     AppExecId fullId = new AppExecId(appId, execId);
     logger.info("Registered executor {} with {}", fullId, executorInfo);
-    if (!knownManagers.contains(executorInfo.shuffleManager)) {
-      throw new UnsupportedOperationException(
-        "Unsupported shuffle manager of executor: " + executorInfo);
-    }
     try {
       if (db != null) {
         byte[] key = dbAppExecKey(fullId);
@@ -162,23 +157,48 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
-   * about how the hash and sort based shuffles store their data.
+   * Obtains a FileSegmentManagedBuffer from a single block (shuffleId, mapId, reduceId).
    */
   public ManagedBuffer getBlockData(
       String appId,
       String execId,
       int shuffleId,
-      int mapId,
+      long mapId,
       int reduceId) {
+    return getContinuousBlocksData(appId, execId, shuffleId, mapId, reduceId, reduceId + 1);
+  }
+
+  /**
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, [startReduceId, endReduceId)).
+   * We make assumptions about how the hash and sort based shuffles store their data.
+   */
+  public ManagedBuffer getContinuousBlocksData(
+      String appId,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int startReduceId,
+      int endReduceId) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
+    return getSortBasedShuffleBlockData(executor, shuffleId, mapId, startReduceId, endReduceId);
   }
 
+  public ManagedBuffer getRddBlockData(
+      String appId,
+      String execId,
+      int rddId,
+      int splitIndex) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    if (executor == null) {
+      throw new RuntimeException(
+        String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
+    }
+    return getDiskPersistedRddBlockData(executor, rddId, splitIndex);
+  }
   /**
    * Removes our metadata of all executors registered for the given application, and optionally
    * also deletes the local directories associated with the executors of that application in a
@@ -217,22 +237,23 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Removes all the non-shuffle files in any local directories associated with the finished
-   * executor.
+   * Removes all the files which cannot be served by the external shuffle service (non-shuffle and
+   * non-RDD files) in any local directories associated with the finished executor.
    */
   public void executorRemoved(String executorId, String appId) {
-    logger.info("Clean up non-shuffle files associated with the finished executor {}", executorId);
+    logger.info("Clean up non-shuffle and non-RDD files associated with the finished executor {}",
+      executorId);
     AppExecId fullId = new AppExecId(appId, executorId);
     final ExecutorShuffleInfo executor = executors.get(fullId);
     if (executor == null) {
       // Executor not registered, skip clean up of the local directories.
       logger.info("Executor is not registered (appId={}, execId={})", appId, executorId);
     } else {
-      logger.info("Cleaning up non-shuffle files in executor {}'s {} local dirs", fullId,
-              executor.localDirs.length);
+      logger.info("Cleaning up non-shuffle and non-RDD files in executor {}'s {} local dirs",
+        fullId, executor.localDirs.length);
 
       // Execute the actual deletion in a different thread, as it may take some time.
-      directoryCleaner.execute(() -> deleteNonShuffleFiles(executor.localDirs));
+      directoryCleaner.execute(() -> deleteNonShuffleServiceServedFiles(executor.localDirs));
     }
   }
 
@@ -252,24 +273,24 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Synchronously deletes non-shuffle files in each directory recursively.
+   * Synchronously deletes files not served by shuffle service in each directory recursively.
    * Should be executed in its own thread, as this may take a long time.
    */
-  private void deleteNonShuffleFiles(String[] dirs) {
-    FilenameFilter filter = new FilenameFilter() {
-      @Override
-      public boolean accept(File dir, String name) {
-        // Don't delete shuffle data or shuffle index files.
-        return !name.endsWith(".index") && !name.endsWith(".data");
-      }
+  private void deleteNonShuffleServiceServedFiles(String[] dirs) {
+    FilenameFilter filter = (dir, name) -> {
+      // Don't delete shuffle data, shuffle index files or cached RDD files.
+      return !name.endsWith(".index") && !name.endsWith(".data")
+        && (!rddFetchEnabled || !name.startsWith("rdd_"));
     };
 
     for (String localDir : dirs) {
       try {
         JavaUtils.deleteRecursively(new File(localDir), filter);
-        logger.debug("Successfully cleaned up non-shuffle files in directory: {}", localDir);
+        logger.debug("Successfully cleaned up files not served by shuffle service in directory: {}",
+          localDir);
       } catch (Exception e) {
-        logger.error("Failed to delete non-shuffle files in directory: " + localDir, e);
+        logger.error("Failed to delete files not served by shuffle service in directory: "
+          + localDir, e);
       }
     }
   }
@@ -280,16 +301,17 @@ public class ExternalShuffleBlockResolver {
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId) {
-    File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
+    ExecutorShuffleInfo executor, int shuffleId, long mapId, int startReduceId, int endReduceId) {
+    File indexFile = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
-      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId);
+      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(
+        startReduceId, endReduceId);
       return new FileSegmentManagedBuffer(
         conf,
-        getFile(executor.localDirs, executor.subDirsPerLocalDir,
+        ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
@@ -298,17 +320,16 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  /**
-   * Hashes a filename into the corresponding local directory, in a manner consistent with
-   * Spark's DiskBlockManager.getFile().
-   */
-  @VisibleForTesting
-  static File getFile(String[] localDirs, int subDirsPerLocalDir, String filename) {
-    int hash = JavaUtils.nonNegativeHash(filename);
-    String localDir = localDirs[hash % localDirs.length];
-    int subDirId = (hash / localDirs.length) % subDirsPerLocalDir;
-    return new File(createNormalizedInternedPathname(
-        localDir, String.format("%02x", subDirId), filename));
+  public ManagedBuffer getDiskPersistedRddBlockData(
+      ExecutorShuffleInfo executor, int rddId, int splitIndex) {
+    File file = ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir,
+      "rdd_" + rddId + "_" + splitIndex);
+    long fileLength = file.length();
+    ManagedBuffer res = null;
+    if (file.exists()) {
+      res = new FileSegmentManagedBuffer(conf, file, 0, fileLength);
+    }
+    return res;
   }
 
   void close() {
@@ -321,26 +342,36 @@ public class ExternalShuffleBlockResolver {
     }
   }
 
-  /**
-   * This method is needed to avoid the situation when multiple File instances for the
-   * same pathname "foo/bar" are created, each with a separate copy of the "foo/bar" String.
-   * According to measurements, in some scenarios such duplicate strings may waste a lot
-   * of memory (~ 10% of the heap). To avoid that, we intern the pathname, and before that
-   * we make sure that it's in a normalized form (contains no "//", "///" etc.) Otherwise,
-   * the internal code in java.io.File would normalize it later, creating a new "foo/bar"
-   * String copy. Unfortunately, we cannot just reuse the normalization code that java.io.File
-   * uses, since it is in the package-private class java.io.FileSystem.
-   */
-  @VisibleForTesting
-  static String createNormalizedInternedPathname(String dir1, String dir2, String fname) {
-    String pathname = dir1 + File.separator + dir2 + File.separator + fname;
-    Matcher m = MULTIPLE_SEPARATORS.matcher(pathname);
-    pathname = m.replaceAll("/");
-    // A single trailing slash needs to be taken care of separately
-    if (pathname.length() > 1 && pathname.endsWith("/")) {
-      pathname = pathname.substring(0, pathname.length() - 1);
+  public int removeBlocks(String appId, String execId, String[] blockIds) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    if (executor == null) {
+      throw new RuntimeException(
+        String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-    return pathname.intern();
+    int numRemovedBlocks = 0;
+    for (String blockId : blockIds) {
+      File file =
+        ExecutorDiskUtils.getFile(executor.localDirs, executor.subDirsPerLocalDir, blockId);
+      if (file.delete()) {
+        numRemovedBlocks++;
+      } else {
+        logger.warn("Failed to delete block: " + file.getAbsolutePath());
+      }
+    }
+    return numRemovedBlocks;
+  }
+
+  public Map<String, String[]> getLocalDirs(String appId, String[] execIds) {
+    return Arrays.stream(execIds)
+      .map(exec -> {
+        ExecutorShuffleInfo info = executors.get(new AppExecId(appId, exec));
+        if (info == null) {
+          throw new RuntimeException(
+            String.format("Executor is not registered (appId=%s, execId=%s)", appId, exec));
+        }
+        return Pair.of(exec, info.localDirs);
+      })
+      .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
@@ -360,19 +391,19 @@ public class ExternalShuffleBlockResolver {
       if (o == null || getClass() != o.getClass()) return false;
 
       AppExecId appExecId = (AppExecId) o;
-      return Objects.equal(appId, appExecId.appId) && Objects.equal(execId, appExecId.execId);
+      return Objects.equals(appId, appExecId.appId) && Objects.equals(execId, appExecId.execId);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(appId, execId);
+      return Objects.hash(appId, execId);
     }
 
     @Override
     public String toString() {
-      return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .add("execId", execId)
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+        .append("appId", appId)
+        .append("execId", execId)
         .toString();
     }
   }

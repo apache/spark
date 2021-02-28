@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.io.IOException
 import java.util.UUID
 
 import scala.collection.JavaConverters._
@@ -27,38 +26,25 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 
 import org.apache.spark.internal.io.FileCommitProtocol
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.connector.write.{BatchWrite, LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, DataSource, OutputWriterFactory, WriteJobDescription}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.writer.{BatchWrite, SupportsSaveMode, WriteBuilder}
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.SerializableConfiguration
 
-abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
-  extends WriteBuilder with SupportsSaveMode {
-  private var schema: StructType = _
-  private var queryId: String = _
-  private var mode: SaveMode = _
-
-  override def withInputDataSchema(schema: StructType): WriteBuilder = {
-    this.schema = schema
-    this
-  }
-
-  override def withQueryId(queryId: String): WriteBuilder = {
-    this.queryId = queryId
-    this
-  }
-
-  override def mode(mode: SaveMode): WriteBuilder = {
-    this.mode = mode
-    this
-  }
+abstract class FileWriteBuilder(
+    paths: Seq[String],
+    formatName: String,
+    supportsDataType: DataType => Boolean,
+    info: LogicalWriteInfo) extends WriteBuilder {
+  private val schema = info.schema()
+  private val queryId = info.queryId()
+  private val options = info.options()
 
   override def buildForBatch(): BatchWrite = {
     val sparkSession = SparkSession.active
@@ -75,26 +61,8 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
     lazy val description =
       createWriteJobDescription(sparkSession, hadoopConf, job, paths.head, options.asScala.toMap)
 
-    val fs = path.getFileSystem(hadoopConf)
-    mode match {
-      case SaveMode.ErrorIfExists if fs.exists(path) =>
-        val qualifiedOutputPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        throw new AnalysisException(s"path $qualifiedOutputPath already exists.")
-
-      case SaveMode.Ignore if fs.exists(path) =>
-        null
-
-      case SaveMode.Overwrite =>
-        if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
-          throw new IOException(s"Unable to clear directory $path prior to writing to it")
-        }
-        committer.setupJob(job)
-        new FileBatchWrite(job, description, committer)
-
-      case _ =>
-        committer.setupJob(job)
-        new FileBatchWrite(job, description, committer)
-    }
+    committer.setupJob(job)
+    new FileBatchWrite(job, description, committer)
   }
 
   /**
@@ -108,26 +76,9 @@ abstract class FileWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[St
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
 
-  /**
-   * Returns whether this format supports the given [[DataType]] in write path.
-   * By default all data types are supported.
-   */
-  def supportsDataType(dataType: DataType): Boolean = true
-
-  /**
-   * The string that represents the format that this data source provider uses. This is
-   * overridden by children to provide a nice alias for the data source. For example:
-   *
-   * {{{
-   *   override def formatName(): String = "ORC"
-   * }}}
-   */
-  def formatName: String
-
   private def validateInputs(caseSensitiveAnalysis: Boolean): Unit = {
     assert(schema != null, "Missing input data schema")
     assert(queryId != null, "Missing query ID")
-    assert(mode != null, "Missing save mode")
 
     if (paths.length != 1) {
       throw new IllegalArgumentException("Expected exactly one path to be specified, but " +

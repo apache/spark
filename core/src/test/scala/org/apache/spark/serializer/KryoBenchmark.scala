@@ -125,7 +125,7 @@ object KryoBenchmark extends BenchmarkBase {
   def createSerializer(useUnsafe: Boolean): SerializerInstance = {
     val conf = new SparkConf()
     conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
-    conf.set(KRYO_USER_REGISTRATORS, classOf[MyRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[MyRegistrator].getName))
     conf.set(KRYO_USE_UNSAFE, useUnsafe)
 
     new KryoSerializer(conf).newInstance()

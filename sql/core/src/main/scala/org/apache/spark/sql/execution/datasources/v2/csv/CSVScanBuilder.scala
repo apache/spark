@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.datasources.v2.csv
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.StructFilters
+import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
-import org.apache.spark.sql.sources.v2.reader.Scan
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -29,9 +31,28 @@ case class CSVScanBuilder(
     fileIndex: PartitioningAwareFileIndex,
     schema: StructType,
     dataSchema: StructType,
-    options: CaseInsensitiveStringMap) extends FileScanBuilder(schema) {
+    options: CaseInsensitiveStringMap)
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
 
   override def build(): Scan = {
-    CSVScan(sparkSession, fileIndex, dataSchema, readSchema, options)
+    CSVScan(
+      sparkSession,
+      fileIndex,
+      dataSchema,
+      readDataSchema(),
+      readPartitionSchema(),
+      options,
+      pushedFilters())
   }
+
+  private var _pushedFilters: Array[Filter] = Array.empty
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    if (sparkSession.sessionState.conf.csvFilterPushDown) {
+      _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
+    }
+    filters
+  }
+
+  override def pushedFilters(): Array[Filter] = _pushedFilters
 }

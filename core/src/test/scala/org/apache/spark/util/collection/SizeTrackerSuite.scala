@@ -71,7 +71,7 @@ class SizeTrackerSuite extends SparkFunSuite {
     testMap[String, Int](10000, i => (randString(0, 10000), i))
   }
 
-  def testVector[T: ClassTag](numElements: Int, makeElement: Int => T) {
+  def testVector[T: ClassTag](numElements: Int, makeElement: Int => T): Unit = {
     val vector = new SizeTrackingVector[T]
     for (i <- 0 until numElements) {
       val item = makeElement(i)
@@ -80,7 +80,7 @@ class SizeTrackerSuite extends SparkFunSuite {
     }
   }
 
-  def testMap[K, V](numElements: Int, makeElement: (Int) => (K, V)) {
+  def testMap[K, V](numElements: Int, makeElement: (Int) => (K, V)): Unit = {
     val map = new SizeTrackingAppendOnlyMap[K, V]
     for (i <- 0 until numElements) {
       val (k, v) = makeElement(i)
@@ -89,7 +89,7 @@ class SizeTrackerSuite extends SparkFunSuite {
     }
   }
 
-  def expectWithinError(obj: AnyRef, estimatedSize: Long, error: Double) {
+  def expectWithinError(obj: AnyRef, estimatedSize: Long, error: Double): Unit = {
     val betterEstimatedSize = SizeEstimator.estimate(obj)
     assert(betterEstimatedSize * (1 - error) < estimatedSize,
       s"Estimated size $estimatedSize was less than expected size $betterEstimatedSize")

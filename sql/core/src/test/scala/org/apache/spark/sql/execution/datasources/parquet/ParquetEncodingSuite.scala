@@ -22,11 +22,11 @@ import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
 // TODO: this needs a lot more testing but it's currently not easy to test with the parquet
 // writer abstractions. Revisit.
-class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContext {
+class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSession {
   import testImplicits._
 
   val ROW = ((1).toByte, 2, 3L, "abc")
@@ -44,10 +44,14 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null,
           TimeZone.getDefault,
           conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -74,10 +78,14 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null,
           TimeZone.getDefault,
           conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -108,10 +116,14 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSQLContex
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null,
           TimeZone.getDefault,
           conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         reader.initialize(file, null /* set columns to null to project all columns */)
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())

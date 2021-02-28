@@ -41,7 +41,7 @@ private[hive] trait HiveClient {
 
   /**
    * Return the associated Hive SessionState of this [[HiveClientImpl]]
-   * @return [[Any]] not SessionState to avoid linkage error
+   * @return `Any` not SessionState to avoid linkage error
    */
   def getState: Any
 
@@ -61,6 +61,15 @@ private[hive] trait HiveClient {
   /** Returns the names of tables in the given database that matches the given pattern. */
   def listTables(dbName: String, pattern: String): Seq[String]
 
+  /**
+   * Returns the names of tables with specific tableType in the given database that matches
+   * the given pattern.
+   */
+  def listTablesByType(
+      dbName: String,
+      pattern: String,
+      tableType: CatalogTableType): Seq[String]
+
   /** Sets the name of current database. */
   def setCurrentDatabase(databaseName: String): Unit
 
@@ -76,13 +85,16 @@ private[hive] trait HiveClient {
   /** Return whether a table/view with the specified name exists. */
   def tableExists(dbName: String, tableName: String): Boolean
 
-  /** Returns the specified table, or throws [[NoSuchTableException]]. */
+  /** Returns the specified table, or throws `NoSuchTableException`. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
     getTableOption(dbName, tableName).getOrElse(throw new NoSuchTableException(dbName, tableName))
   }
 
   /** Returns the metadata for the specified table or None if it doesn't exist. */
   def getTableOption(dbName: String, tableName: String): Option[CatalogTable]
+
+  /** Returns metadata of existing permanent tables/views for given names. */
+  def getTablesByName(dbName: String, tableNames: Seq[String]): Seq[CatalogTable]
 
   /** Creates a table with the given metadata. */
   def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit
@@ -108,8 +120,8 @@ private[hive] trait HiveClient {
    * TODO(cloud-fan): it's a little hacky to introduce the schema table properties here in
    * `HiveClient`, but we don't have a cleaner solution now.
    */
-  def alterTableDataSchema(
-    dbName: String, tableName: String, newDataSchema: StructType, schemaProps: Map[String, String])
+  def alterTableDataSchema(dbName: String, tableName: String, newDataSchema: StructType,
+    schemaProps: Map[String, String]): Unit
 
   /** Creates a new database with the given name. */
   def createDatabase(database: CatalogDatabase, ignoreIfExists: Boolean): Unit
@@ -166,7 +178,7 @@ private[hive] trait HiveClient {
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit
 
-  /** Returns the specified partition, or throws [[NoSuchPartitionException]]. */
+  /** Returns the specified partition, or throws `NoSuchPartitionException`. */
   final def getPartition(
       dbName: String,
       tableName: String,
@@ -221,7 +233,8 @@ private[hive] trait HiveClient {
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
       catalogTable: CatalogTable,
-      predicates: Seq[Expression]): Seq[CatalogTablePartition]
+      predicates: Seq[Expression],
+      timeZoneId: String): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */
   def loadPartition(
@@ -289,4 +302,6 @@ private[hive] trait HiveClient {
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
 
+  /** Returns the user name which is used as owner for Hive table. */
+  def userName: String
 }

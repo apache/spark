@@ -58,11 +58,11 @@ private[spark] abstract class WebUI(
   private val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
-  def getTabs: Seq[WebUITab] = tabs
-  def getHandlers: Seq[ServletContextHandler] = handlers
+  def getTabs: Seq[WebUITab] = tabs.toSeq
+  def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
 
   def getDelegatingHandlers: Seq[DelegatingServletContextHandler] = {
-    handlers.map(new DelegatingServletContextHandler(_))
+    handlers.map(new DelegatingServletContextHandler(_)).toSeq
   }
 
   /** Attaches a tab to this UI, along with all of its attached pages. */
@@ -93,6 +93,7 @@ private[spark] abstract class WebUI(
     attachHandler(renderJsonHandler)
     val handlers = pageToHandlers.getOrElseUpdate(page, ArrayBuffer[ServletContextHandler]())
     handlers += renderHandler
+    handlers += renderJsonHandler
   }
 
   /** Attaches a handler to this UI. */
@@ -183,7 +184,7 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
   val name = prefix.capitalize
 
   /** Attach a page to this tab. This prepends the page's prefix with the tab's own prefix. */
-  def attachPage(page: WebUIPage) {
+  def attachPage(page: WebUIPage): Unit = {
     page.prefix = (prefix + "/" + page.prefix).stripSuffix("/")
     pages += page
   }
@@ -234,5 +235,9 @@ private[spark] class DelegatingServletContextHandler(handler: ServletContextHand
 
   def filterCount(): Int = {
     handler.getServletHandler.getFilters.length
+  }
+
+  def getContextPath(): String = {
+    handler.getContextPath
   }
 }

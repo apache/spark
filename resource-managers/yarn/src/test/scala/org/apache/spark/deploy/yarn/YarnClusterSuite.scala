@@ -18,24 +18,22 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.io.Source
-import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.HadoopIllegalArgumentException
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -53,6 +51,13 @@ import org.apache.spark.util.{Utils, YarnContainerInfoHelper}
  */
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
+
+  private val pythonExecutablePath = {
+    // To make sure to use the same Python executable.
+    val maybePath = TestUtils.getAbsolutePathFromExecutable("python3")
+    assert(maybePath.isDefined)
+    maybePath.get
+  }
 
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
 
@@ -177,9 +182,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       clientMode = false,
       extraConf = Map(
         "spark.yarn.appMasterEnv.PYSPARK_DRIVER_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", "python"),
+          -> sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", pythonExecutablePath),
         "spark.yarn.appMasterEnv.PYSPARK_PYTHON"
-          -> sys.env.getOrElse("PYSPARK_PYTHON", "python")),
+          -> sys.env.getOrElse("PYSPARK_PYTHON", pythonExecutablePath)),
       extraEnv = Map(
         "PYSPARK_DRIVER_PYTHON" -> "not python",
         "PYSPARK_PYTHON" -> "not python"))
@@ -209,7 +214,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .startApplication()
 
     try {
-      eventually(timeout(30 seconds), interval(100 millis)) {
+      eventually(timeout(3.minutes), interval(100.milliseconds)) {
         handle.getState() should be (SparkAppHandle.State.RUNNING)
       }
 
@@ -217,12 +222,43 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       handle.getAppId() should startWith ("application_")
       handle.stop()
 
-      eventually(timeout(30 seconds), interval(100 millis)) {
+      eventually(timeout(3.minutes), interval(100.milliseconds)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
     } finally {
       handle.kill()
     }
+  }
+
+  test("running Spark in yarn-cluster mode displays driver log links") {
+    val log4jConf = new File(tempDir, "log4j.properties")
+    val logOutFile = new File(tempDir, "logs")
+    Files.write(
+      s"""log4j.rootCategory=DEBUG,file
+         |log4j.appender.file=org.apache.log4j.FileAppender
+         |log4j.appender.file.file=$logOutFile
+         |log4j.appender.file.layout=org.apache.log4j.PatternLayout
+         |""".stripMargin,
+      log4jConf, StandardCharsets.UTF_8)
+    // Since this test is trying to extract log output from the SparkSubmit process itself,
+    // standard options to the Spark process don't take effect. Leverage the java-opts file which
+    // will get picked up for the SparkSubmit process.
+    val confDir = new File(tempDir, "conf")
+    confDir.mkdir()
+    val javaOptsFile = new File(confDir, "java-opts")
+    Files.write(s"-Dlog4j.configuration=file://$log4jConf\n", javaOptsFile, StandardCharsets.UTF_8)
+
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(clientMode = false,
+      mainClassName(YarnClusterDriver.getClass),
+      appArgs = Seq(result.getAbsolutePath),
+      extraEnv = Map("SPARK_CONF_DIR" -> confDir.getAbsolutePath),
+      extraConf = Map(CLIENT_INCLUDE_DRIVER_LOGS_LINK.key -> true.toString))
+    checkResult(finalState, result)
+    val logOutput = Files.toString(logOutFile, StandardCharsets.UTF_8)
+    val logFilePattern = raw"""(?s).+\sDriver Logs \(<NAME>\): https?://.+/<NAME>(\?\S+)?\s.+"""
+    logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stdout")
+    logOutput should fullyMatch regex logFilePattern.replace("<NAME>", "stderr")
   }
 
   test("timeout to get SparkContext in cluster mode triggers failure") {
@@ -273,11 +309,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.10.8.1-src.zip",
+        s"$sparkHome/python/lib/${PythonUtils.PY4J_ZIP_NAME}",
         s"$sparkHome/python")
     val extraEnvVars = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),
-      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator)) ++ extraEnv
+      "PYTHONPATH" -> pythonPath.mkString(File.pathSeparator),
+      "PYSPARK_DRIVER_PYTHON" -> pythonExecutablePath,
+      "PYSPARK_PYTHON" -> pythonExecutablePath
+    ) ++ extraEnv
 
     val moduleDir = {
       val subdir = new File(tempDir, "pyModules")
@@ -336,7 +375,7 @@ private[spark] class SaveExecutorInfo extends SparkListener {
   var driverLogs: Option[collection.Map[String, String]] = None
   var driverAttributes: Option[collection.Map[String, String]] = None
 
-  override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+  override def onExecutorAdded(executor: SparkListenerExecutorAdded): Unit = {
     addedExecutorInfos(executor.executorId) = executor.executorInfo
   }
 
@@ -441,7 +480,7 @@ private object YarnClusterDriver extends Logging with Matchers {
       executorInfos.foreach { info =>
         assert(info.logUrlMap.nonEmpty)
         info.logUrlMap.values.foreach { url =>
-          val log = Source.fromURL(url).mkString
+          val log = Utils.tryWithResource(Source.fromURL(url))(_.mkString)
           assert(
             !log.contains(SECRET_PASSWORD),
             s"Executor logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
@@ -460,7 +499,7 @@ private object YarnClusterDriver extends Logging with Matchers {
         assert(driverLogs.contains("stdout"))
         val urlStr = driverLogs("stderr")
         driverLogs.foreach { kv =>
-          val log = Source.fromURL(kv._2).mkString
+          val log = Utils.tryWithResource(Source.fromURL(kv._2))(_.mkString)
           assert(
             !log.contains(SECRET_PASSWORD),
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "

@@ -24,7 +24,7 @@ object SQLDataSourceExample {
 
   case class Person(name: String, age: Long)
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("Spark SQL data sources example")
@@ -32,12 +32,76 @@ object SQLDataSourceExample {
       .getOrCreate()
 
     runBasicDataSourceExample(spark)
+    runGenericFileSourceOptionsExample(spark)
     runBasicParquetExample(spark)
     runParquetSchemaMergingExample(spark)
     runJsonDatasetExample(spark)
     runJdbcDatasetExample(spark)
 
     spark.stop()
+  }
+
+  private def runGenericFileSourceOptionsExample(spark: SparkSession): Unit = {
+    // $example on:ignore_corrupt_files$
+    // enable ignore corrupt files
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=true")
+    // dir1/file3.json is corrupt from parquet's view
+    val testCorruptDF = spark.read.parquet(
+      "examples/src/main/resources/dir1/",
+      "examples/src/main/resources/dir1/dir2/")
+    testCorruptDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:ignore_corrupt_files$
+    // $example on:recursive_file_lookup$
+    val recursiveLoadedDF = spark.read.format("parquet")
+      .option("recursiveFileLookup", "true")
+      .load("examples/src/main/resources/dir1")
+    recursiveLoadedDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // |file2.parquet|
+    // +-------------+
+    // $example off:recursive_file_lookup$
+    spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
+    // $example on:load_with_path_glob_filter$
+    val testGlobFilterDF = spark.read.format("parquet")
+      .option("pathGlobFilter", "*.parquet") // json file should be filtered out
+      .load("examples/src/main/resources/dir1")
+    testGlobFilterDF.show()
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    // $example off:load_with_path_glob_filter$
+    // $example on:load_with_modified_time_filter$
+    val beforeFilterDF = spark.read.format("parquet")
+      // Files modified before 07/01/2020 at 05:30 are allowed
+      .option("modifiedBefore", "2020-07-01T05:30:00")
+      .load("examples/src/main/resources/dir1");
+    beforeFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    val afterFilterDF = spark.read.format("parquet")
+       // Files modified after 06/01/2020 at 05:30 are allowed
+      .option("modifiedAfter", "2020-06-01T05:30:00")
+      .load("examples/src/main/resources/dir1");
+    afterFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // +-------------+
+    // $example off:load_with_modified_time_filter$
   }
 
   private def runBasicDataSourceExample(spark: SparkSession): Unit = {

@@ -201,12 +201,10 @@ private[spark] object ExecutorMetricType {
     GarbageCollectionMetrics
   )
 
-
   val (metricToOffset, numMetrics) = {
     var numberOfMetrics = 0
     val definedMetricsAndOffset = mutable.LinkedHashMap.empty[String, Int]
     metricGetters.foreach { m =>
-      var metricInSet = 0
       (0 until m.names.length).foreach { idx =>
         definedMetricsAndOffset += (m.names(idx) -> (idx + numberOfMetrics))
       }

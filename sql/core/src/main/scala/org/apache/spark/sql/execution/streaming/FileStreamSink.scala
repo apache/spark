@@ -29,7 +29,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, FileFormat, FileFormatWriter}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 object FileStreamSink extends Logging {
   // The name of the subdirectory that is used to store metadata about which files are valid.
@@ -45,14 +45,19 @@ object FileStreamSink extends Logging {
         val hdfsPath = new Path(singlePath)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         if (fs.isDirectory(hdfsPath)) {
-          val metadataPath = new Path(hdfsPath, metadataDir)
-          checkEscapedMetadataPath(fs, metadataPath, sqlConf)
+          val metadataPath = getMetadataLogPath(fs, hdfsPath, sqlConf)
           fs.exists(metadataPath)
         } else {
           false
         }
       case _ => false
     }
+  }
+
+  def getMetadataLogPath(fs: FileSystem, path: Path, sqlConf: SQLConf): Path = {
+    val metadataDir = new Path(path, FileStreamSink.metadataDir)
+    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sqlConf)
+    metadataDir
   }
 
   def checkEscapedMetadataPath(fs: FileSystem, metadataPath: Path, sqlConf: SQLConf): Unit = {
@@ -125,16 +130,15 @@ class FileStreamSink(
     partitionColumnNames: Seq[String],
     options: Map[String, String]) extends Sink with Logging {
 
+  import FileStreamSink._
+
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
   private val basePath = new Path(path)
-  private val logPath = {
-    val metadataDir = new Path(basePath, FileStreamSink.metadataDir)
-    val fs = metadataDir.getFileSystem(hadoopConf)
-    FileStreamSink.checkEscapedMetadataPath(fs, metadataDir, sparkSession.sessionState.conf)
-    metadataDir
-  }
-  private val fileLog =
-    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toString)
+  private val logPath = getMetadataLogPath(basePath.getFileSystem(hadoopConf), basePath,
+    sparkSession.sessionState.conf)
+  private val retention = options.get("retention").map(Utils.timeStringAsMs)
+  private val fileLog = new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession,
+    logPath.toString, retention)
 
   private def basicWriteJobStatsTracker: BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
@@ -142,7 +146,7 @@ class FileStreamSink(
   }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
+    if (batchId <= fileLog.getLatestBatchId().getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
       val committer = FileCommitProtocol.instantiate(

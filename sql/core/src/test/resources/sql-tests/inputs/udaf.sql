@@ -1,3 +1,8 @@
+-- Test aggregate operator and UDAF with codegen on and off.
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=true
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
+--CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
+
 CREATE OR REPLACE TEMPORARY VIEW t1 AS SELECT * FROM VALUES
 (1), (2), (3), (4)
 as t1(int_col1);

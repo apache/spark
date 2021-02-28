@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Comparator
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
 
@@ -37,12 +40,12 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def name: String =
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
-  override def exprId: ExprId = throw new UnresolvedException(this, "exprId")
-  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
-  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
-  override def qualifier: Seq[String] = throw new UnresolvedException(this, "qualifier")
-  override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
-  override def newInstance(): NamedExpression = throw new UnresolvedException(this, "newInstance")
+  override def exprId: ExprId = throw new UnresolvedException("exprId")
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
+  override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
+  override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override lazy val resolved = false
 
   override def toString: String = s"lambda '$name"
@@ -126,7 +129,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
   def argumentTypes: Seq[AbstractDataType]
 
   /**
-   * All arguments have been resolved. This means that the types and nullabilty of (most of) the
+   * All arguments have been resolved. This means that the types and nullability of (most of) the
    * lambda function arguments is known, and that we can start binding the lambda functions.
    */
   lazy val argumentsResolved: Boolean = arguments.forall(_.resolved)
@@ -237,7 +240,8 @@ trait MapBasedSimpleHigherOrderFunction extends SimpleHigherOrderFunction {
       > SELECT _FUNC_(array(1, 2, 3), (x, i) -> x + i);
        [1,3,5]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 case class ArrayTransform(
     argument: Expression,
     function: Expression)
@@ -285,6 +289,114 @@ case class ArrayTransform(
 }
 
 /**
+ * Sorts elements in an array using a comparator function.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """_FUNC_(expr, func) - Sorts the input array. If func is omitted, sort
+    in ascending order. The elements of the input array must be orderable. Null elements
+    will be placed at the end of the returned array. Since 3.0.0 this function also sorts
+    and returns the array based on the given comparator function. The comparator will
+    take two arguments representing two elements of the array.
+    It returns -1, 0, or 1 as the first element is less than, equal to, or greater
+    than the second element. If the comparator function returns other
+    values (including null), the function will fail and raise an error.
+    """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(5, 6, 1), (left, right) -> case when left < right then -1 when left > right then 1 else 0 end);
+       [1,5,6]
+      > SELECT _FUNC_(array('bc', 'ab', 'dc'), (left, right) -> case when left is null and right is null then 0 when left is null then -1 when right is null then 1 when left < right then 1 when left > right then -1 else 0 end);
+       ["dc","bc","ab"]
+      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
+       ["a","b","c","d",null]
+  """,
+  since = "2.4.0",
+  group = "lambda_funcs")
+// scalastyle:on line.size.limit
+case class ArraySort(
+    argument: Expression,
+    function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  def this(argument: Expression) = this(argument, ArraySort.defaultComparator)
+
+  @transient lazy val elementType: DataType =
+    argument.dataType.asInstanceOf[ArrayType].elementType
+
+  override def dataType: ArrayType = argument.dataType.asInstanceOf[ArrayType]
+  override def checkInputDataTypes(): TypeCheckResult = {
+    checkArgumentDataTypes() match {
+      case TypeCheckResult.TypeCheckSuccess =>
+        argument.dataType match {
+          case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+            if (function.dataType == IntegerType) {
+              TypeCheckResult.TypeCheckSuccess
+            } else {
+              TypeCheckResult.TypeCheckFailure("Return type of the given function has to be " +
+                "IntegerType")
+            }
+          case ArrayType(dt, _) =>
+            val dtSimple = dt.catalogString
+            TypeCheckResult.TypeCheckFailure(
+              s"$prettyName does not support sorting array of type $dtSimple which is not " +
+                "orderable")
+          case _ =>
+            TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
+        }
+      case failure => failure
+    }
+  }
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArraySort = {
+    val ArrayType(elementType, containsNull) = argument.dataType
+        copy(function =
+          f(function, (elementType, containsNull) :: (elementType, containsNull) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_,
+    Seq(firstElemVar: NamedLambdaVariable, secondElemVar: NamedLambdaVariable), _) = function
+
+  def comparator(inputRow: InternalRow): Comparator[Any] = {
+    val f = functionForEval
+    (o1: Any, o2: Any) => {
+      firstElemVar.value.set(o1)
+      secondElemVar.value.set(o2)
+      f.eval(inputRow).asInstanceOf[Int]
+    }
+  }
+
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData].toArray[AnyRef](elementType)
+    if (elementType != NullType) {
+      java.util.Arrays.sort(arr, comparator(inputRow))
+    }
+    new GenericArrayData(arr.asInstanceOf[Array[Any]])
+  }
+
+  override def prettyName: String = "array_sort"
+}
+
+object ArraySort {
+
+  def comparator(left: Expression, right: Expression): Expression = {
+    val lit0 = Literal(0)
+    val lit1 = Literal(1)
+    val litm1 = Literal(-1)
+
+    If(And(IsNull(left), IsNull(right)), lit0,
+      If(IsNull(left), lit1, If(IsNull(right), litm1,
+        If(LessThan(left, right), litm1, If(GreaterThan(left, right), lit1, lit0)))))
+  }
+
+  val defaultComparator: LambdaFunction = {
+    val left = UnresolvedNamedLambdaVariable(Seq("left"))
+    val right = UnresolvedNamedLambdaVariable(Seq("right"))
+    LambdaFunction(comparator(left, right), Seq(left, right))
+  }
+}
+
+/**
  * Filters entries in a map using the provided function.
  */
 @ExpressionDescription(
@@ -294,7 +406,8 @@ case class ArrayTransform(
       > SELECT _FUNC_(map(1, 0, 2, 2, 3, -1), (k, v) -> k > v);
        {1:0,3:-1}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class MapFilter(
     argument: Expression,
     function: Expression)
@@ -343,8 +456,16 @@ case class MapFilter(
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 1);
        [1,3]
+      > SELECT _FUNC_(array(0, 2, 3), (x, i) -> x > i);
+       [2,3]
+      > SELECT _FUNC_(array(0, null, 2, 3, null), x -> x IS NOT NULL);
+       [0,2,3]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs",
+  note = """
+    The inner function may use the index argument since 3.0.0.
+  """)
 case class ArrayFilter(
     argument: Expression,
     function: Expression)
@@ -356,10 +477,19 @@ case class ArrayFilter(
 
   override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayFilter = {
     val ArrayType(elementType, containsNull) = argument.dataType
-    copy(function = f(function, (elementType, containsNull) :: Nil))
+    function match {
+      case LambdaFunction(_, arguments, _) if arguments.size == 2 =>
+        copy(function = f(function, (elementType, containsNull) :: (IntegerType, false) :: Nil))
+      case _ =>
+        copy(function = f(function, (elementType, containsNull) :: Nil))
+    }
   }
 
-  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+  @transient lazy val (elementVar, indexVar) = {
+    val LambdaFunction(_, (elementVar: NamedLambdaVariable) +: tail, _) = function
+    val indexVar = tail.headOption.map(_.asInstanceOf[NamedLambdaVariable])
+    (elementVar, indexVar)
+  }
 
   override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
     val arr = argumentValue.asInstanceOf[ArrayData]
@@ -368,12 +498,15 @@ case class ArrayFilter(
     var i = 0
     while (i < arr.numElements) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
+      if (indexVar.isDefined) {
+        indexVar.get.value.set(i)
+      }
       if (f.eval(inputRow).asInstanceOf[Boolean]) {
         buffer += elementVar.value.get
       }
       i += 1
     }
-    new GenericArrayData(buffer)
+    new GenericArrayData(buffer.toSeq)
   }
 
   override def prettyName: String = "filter"
@@ -388,12 +521,38 @@ case class ArrayFilter(
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
        true
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 10);
+       false
+      > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
+       NULL
+      > SELECT _FUNC_(array(0, null, 2, 3, null), x -> x IS NULL);
+       true
+      > SELECT _FUNC_(array(1, 2, 3), x -> x IS NULL);
+       false
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 case class ArrayExists(
     argument: Expression,
-    function: Expression)
+    function: Expression,
+    followThreeValuedLogic: Boolean)
   extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  def this(argument: Expression, function: Expression) = {
+    this(
+      argument,
+      function,
+      SQLConf.get.getConf(SQLConf.LEGACY_ARRAY_EXISTS_FOLLOWS_THREE_VALUED_LOGIC))
+  }
+
+  override def stringArgs: Iterator[Any] = super.stringArgs.take(2)
+
+  override def nullable: Boolean =
+    if (followThreeValuedLogic) {
+      super.nullable || function.nullable
+    } else {
+      super.nullable
+    }
 
   override def dataType: DataType = BooleanType
 
@@ -410,18 +569,104 @@ case class ArrayExists(
     val arr = argumentValue.asInstanceOf[ArrayData]
     val f = functionForEval
     var exists = false
+    var foundNull = false
     var i = 0
     while (i < arr.numElements && !exists) {
       elementVar.value.set(arr.get(i, elementVar.dataType))
-      if (f.eval(inputRow).asInstanceOf[Boolean]) {
+      val ret = f.eval(inputRow)
+      if (ret == null) {
+        foundNull = true
+      } else if (ret.asInstanceOf[Boolean]) {
         exists = true
       }
       i += 1
     }
-    exists
+    if (exists) {
+      true
+    } else if (followThreeValuedLogic && foundNull) {
+      null
+    } else {
+      false
+    }
   }
 
   override def prettyName: String = "exists"
+}
+
+object ArrayExists {
+  def apply(argument: Expression, function: Expression): ArrayExists = {
+    new ArrayExists(argument, function)
+  }
+}
+
+/**
+ * Tests whether a predicate holds for all elements in the array.
+ */
+@ExpressionDescription(usage =
+  "_FUNC_(expr, pred) - Tests whether a predicate holds for all elements in the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), x -> x % 2 == 0);
+       false
+      > SELECT _FUNC_(array(2, 4, 8), x -> x % 2 == 0);
+       true
+      > SELECT _FUNC_(array(1, null, 3), x -> x % 2 == 0);
+       false
+      > SELECT _FUNC_(array(2, null, 8), x -> x % 2 == 0);
+       NULL
+  """,
+  since = "3.0.0",
+  group = "lambda_funcs")
+case class ArrayForAll(
+    argument: Expression,
+    function: Expression)
+  extends ArrayBasedSimpleHigherOrderFunction with CodegenFallback {
+
+  override def nullable: Boolean =
+      super.nullable || function.nullable
+
+  override def dataType: DataType = BooleanType
+
+  override def functionType: AbstractDataType = BooleanType
+
+  override def bind(f: (Expression, Seq[(DataType, Boolean)]) => LambdaFunction): ArrayForAll = {
+    val ArrayType(elementType, containsNull) = argument.dataType
+    copy(function = f(function, (elementType, containsNull) :: Nil))
+  }
+
+  @transient lazy val LambdaFunction(_, Seq(elementVar: NamedLambdaVariable), _) = function
+
+  /*
+   * true for all non null elements foundNull      result
+   *    F                              F             F
+   *    F                              T             F
+   *    T                              F             T
+   *    T                              T             N
+   */
+  override def nullSafeEval(inputRow: InternalRow, argumentValue: Any): Any = {
+    val arr = argumentValue.asInstanceOf[ArrayData]
+    val f = functionForEval
+    var forall = true
+    var foundNull = false
+    var i = 0
+    while (i < arr.numElements && forall) {
+      elementVar.value.set(arr.get(i, elementVar.dataType))
+      val ret = f.eval(inputRow)
+      if (ret == null) {
+        foundNull = true
+      } else if (!ret.asInstanceOf[Boolean]) {
+        forall = false
+      }
+      i += 1
+    }
+    if (foundNull && forall) {
+      null
+    } else {
+      forall
+    }
+  }
+
+  override def prettyName: String = "forall"
 }
 
 /**
@@ -441,7 +686,8 @@ case class ArrayExists(
       > SELECT _FUNC_(array(1, 2, 3), 0, (acc, x) -> acc + x, acc -> acc * 10);
        60
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 case class ArrayAggregate(
     argument: Expression,
     zero: Expression,
@@ -528,7 +774,8 @@ case class ArrayAggregate(
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        {2:1,4:2,6:3}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class TransformKeys(
     argument: Expression,
     function: Expression)
@@ -580,7 +827,8 @@ case class TransformKeys(
       > SELECT _FUNC_(map_from_arrays(array(1, 2, 3), array(1, 2, 3)), (k, v) -> k + v);
        {1:2,2:4,3:6}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class TransformValues(
     argument: Expression,
     function: Expression)
@@ -631,7 +879,8 @@ case class TransformValues(
       > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(1, 'x', 2, 'y'), (k, v1, v2) -> concat(v1, v2));
        {1:"ax",2:"by"}
   """,
-  since = "3.0.0")
+  since = "3.0.0",
+  group = "lambda_funcs")
 case class MapZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {
 
@@ -713,9 +962,7 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
 
   private def assertSizeOfArrayBuffer(size: Int): Unit = {
     if (size > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new RuntimeException(s"Unsuccessful try to zip maps with $size " +
-        s"unique keys due to exceeding the array size limit " +
-        s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
+      throw QueryExecutionErrors.mapSizeExceedArraySizeWhenZipMapError(size)
     }
   }
 
@@ -809,7 +1056,8 @@ case class MapZipWith(left: Expression, right: Expression, function: Expression)
       > SELECT _FUNC_(array('a', 'b', 'c'), array('d', 'e', 'f'), (x, y) -> concat(x, y));
        ["ad","be","cf"]
   """,
-  since = "2.4.0")
+  since = "2.4.0",
+  group = "lambda_funcs")
 // scalastyle:on line.size.limit
 case class ZipWith(left: Expression, right: Expression, function: Expression)
   extends HigherOrderFunction with CodegenFallback {

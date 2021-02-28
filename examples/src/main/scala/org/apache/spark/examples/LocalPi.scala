@@ -21,7 +21,7 @@ package org.apache.spark.examples
 import scala.math.random
 
 object LocalPi {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     var count = 0
     for (i <- 1 to 100000) {
       val x = random * 2 - 1

@@ -42,7 +42,7 @@ object CatalystTypeConverters {
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
 
-  private def isPrimitive(dataType: DataType): Boolean = {
+  private[sql] def isPrimitive(dataType: DataType): Boolean = {
     dataType match {
       case BooleanType => true
       case ByteType => true
@@ -164,7 +164,7 @@ object CatalystTypeConverters {
       scalaValue match {
         case a: Array[_] =>
           new GenericArrayData(a.map(elementConverter.toCatalyst))
-        case s: Seq[_] =>
+        case s: scala.collection.Seq[_] =>
           new GenericArrayData(s.map(elementConverter.toCatalyst).toArray)
         case i: JavaIterable[_] =>
           val iter = i.iterator
@@ -291,6 +291,7 @@ object CatalystTypeConverters {
       case str: String => UTF8String.fromString(str)
       case utf8: UTF8String => utf8
       case chr: Char => UTF8String.fromString(chr.toString)
+      case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
           + s"cannot be converted to the string type")
@@ -343,6 +344,9 @@ object CatalystTypeConverters {
 
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+
+    private val nullOnOverflow = !SQLConf.get.ansiEnabled
+
     override def toCatalystImpl(scalaValue: Any): Decimal = {
       val decimal = scalaValue match {
         case d: BigDecimal => Decimal(d)
@@ -353,7 +357,7 @@ object CatalystTypeConverters {
           s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
             + s"cannot be converted to ${dataType.catalogString}")
       }
-      decimal.toPrecision(dataType.precision, dataType.scale)
+      decimal.toPrecision(dataType.precision, dataType.scale, Decimal.ROUND_HALF_UP, nullOnOverflow)
     }
     override def toScala(catalystValue: Decimal): JavaBigDecimal = {
       if (catalystValue == null) null
@@ -453,7 +457,9 @@ object CatalystTypeConverters {
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
-    case arr: Array[Any] => new GenericArrayData(arr.map(convertToCatalyst))
+    case arr: Array[Byte] => arr
+    case arr: Array[Char] => StringConverter.toCatalyst(arr)
+    case arr: Array[_] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>
       ArrayBasedMapData(
         map,

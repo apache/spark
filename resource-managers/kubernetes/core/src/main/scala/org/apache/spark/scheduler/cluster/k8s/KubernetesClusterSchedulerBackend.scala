@@ -16,36 +16,36 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
-import java.util.concurrent.ExecutorService
+import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{ExecutorLossReason, TaskSchedulerImpl}
+import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
+import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     kubernetesClient: KubernetesClient,
-    requestExecutorsService: ExecutorService,
+    executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: ExecutorPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
-
-  private implicit val requestExecutorContext =
-    ExecutionContext.fromExecutorService(requestExecutorsService)
 
   protected override val minRegisteredRatio =
     if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
@@ -58,9 +58,23 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val shouldDeleteExecutors = conf.get(KUBERNETES_DELETE_EXECUTORS)
 
+  private val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
+
   // Allow removeExecutor to be accessible by ExecutorPodsLifecycleEventHandler
   private[k8s] def doRemoveExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
-    removeExecutor(executorId, reason)
+    if (isExecutorActive(executorId)) {
+      removeExecutor(executorId, reason)
+    }
+  }
+
+  private def setUpExecutorConfigMap(): Unit = {
+    val configMapName = KubernetesClientUtils.configMapNameExecutor
+    val confFilesMap = KubernetesClientUtils
+      .buildSparkConfDirFilesMap(configMapName, conf, Map.empty)
+    val labels =
+      Map(SPARK_APP_ID_LABEL -> applicationId(), SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
+    val configMap = KubernetesClientUtils.buildConfigMap(configMapName, confFilesMap, labels)
+    kubernetesClient.configMaps().create(configMap)
   }
 
   /**
@@ -76,17 +90,23 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
-    if (!Utils.isDynamicAllocationEnabled(conf)) {
-      podAllocator.setTotalExpectedExecutors(initialExecutors)
-    }
+    val initExecs = Map(defaultProfile -> initialExecutors)
+    podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleEventHandler.start(this)
     podAllocator.start(applicationId())
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
+    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      setUpExecutorConfigMap()
+    }
   }
 
   override def stop(): Unit = {
-    super.stop()
+    // When `CoarseGrainedSchedulerBackend.stop` throws `SparkException`,
+    // K8s cluster scheduler should log and proceed in order to delete the K8s cluster resources.
+    Utils.tryLogNonFatalError {
+      super.stop()
+    }
 
     Utils.tryLogNonFatalError {
       snapshotsStore.stop()
@@ -108,10 +128,19 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
           .delete()
       }
+      if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .configMaps()
+            .withLabel(SPARK_APP_ID_LABEL, applicationId())
+            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+            .delete()
+        }
+      }
     }
 
     Utils.tryLogNonFatalError {
-      ThreadUtils.shutdown(requestExecutorsService)
+      ThreadUtils.shutdown(executorService)
     }
 
     Utils.tryLogNonFatalError {
@@ -119,11 +148,10 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
   }
 
-  override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = Future[Boolean] {
-    // TODO when we support dynamic allocation, the pod allocator should be told to process the
-    // current snapshot in order to decrease/increase the number of executors accordingly.
-    podAllocator.setTotalExpectedExecutors(requestedTotal)
-    true
+  override def doRequestTotalExecutors(
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
+    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs)
+    Future.successful(true)
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -134,14 +162,48 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.getExecutorIds()
   }
 
-  override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = Future[Boolean] {
-    kubernetesClient
-      .pods()
-      .withLabel(SPARK_APP_ID_LABEL, applicationId())
-      .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-      .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
-      .delete()
-    // Don't do anything else - let event handling from the Kubernetes API do the Spark changes
+  override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
+    executorIds.foreach { id =>
+      removeExecutor(id, ExecutorKilled)
+    }
+
+    // Give some time for the executors to shut themselves down, then forcefully kill any
+    // remaining ones. This intentionally ignores the configuration about whether pods
+    // should be deleted; only executors that shut down gracefully (and are then collected
+    // by the ExecutorPodsLifecycleManager) will respect that configuration.
+    val killTask = new Runnable() {
+      override def run(): Unit = Utils.tryLogNonFatalError {
+        val running = kubernetesClient
+          .pods()
+          .withField("status.phase", "Running")
+          .withLabel(SPARK_APP_ID_LABEL, applicationId())
+          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+          .withLabelIn(SPARK_EXECUTOR_ID_LABEL, executorIds: _*)
+
+        if (!running.list().getItems().isEmpty()) {
+          logInfo(s"Forcefully deleting ${running.list().getItems().size()} pods " +
+            s"(out of ${executorIds.size}) that are still running after graceful shutdown period.")
+          running.delete()
+        }
+      }
+    }
+    executorService.schedule(killTask, conf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD),
+      TimeUnit.MILLISECONDS)
+
+    // Return an immediate success, since we can't confirm or deny that executors have been
+    // actually shut down without waiting too long and blocking the allocation thread, which
+    // waits on this future to complete, blocking further allocations / deallocations.
+    //
+    // This relies a lot on the guarantees of Spark's RPC system, that a message will be
+    // delivered to the destination unless there's an issue with the connection, in which
+    // case the executor will shut itself down (and the driver, separately, will just declare
+    // it as "lost"). Coupled with the allocation manager keeping track of which executors are
+    // pending release, returning "true" here means that eventually all the requested executors
+    // will be removed.
+    //
+    // The cleanup timer above is just an optimization to make sure that stuck executors don't
+    // stick around in the k8s server. Normally it should never delete any pods at all.
+    Future.successful(true)
   }
 
   override def createDriverEndpoint(): DriverEndpoint = {
@@ -152,7 +214,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
     Some(new HadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint))
   }
 
+  override protected def isExecutorExcluded(executorId: String, hostname: String): Boolean = {
+    podAllocator.isDeleted(executorId)
+  }
+
   private class KubernetesDriverEndpoint extends DriverEndpoint {
+    private def ignoreRegisterExecutorAtStoppedContext: PartialFunction[Any, Unit] = {
+      case _: RegisterExecutor if sc.isStopped => // No-op
+    }
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] =
+      ignoreRegisterExecutorAtStoppedContext.orElse(super.receiveAndReply(context))
 
     override def onDisconnected(rpcAddress: RpcAddress): Unit = {
       // Don't do anything besides disabling the executor - allow the Kubernetes API events to

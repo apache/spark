@@ -30,6 +30,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.util.Utils
 
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
@@ -83,7 +84,7 @@ private[spark] class YarnRMClient extends Logging {
       localResources: Map[String, LocalResource]): YarnAllocator = {
     require(registered, "Must register AM before creating allocator.")
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, appAttemptId, securityMgr,
-      localResources, new SparkRackResolver())
+      localResources, SparkRackResolver.get(conf))
   }
 
   /**
@@ -107,7 +108,7 @@ private[spark] class YarnRMClient extends Logging {
     // so not all stable releases have it.
     val prefix = WebAppUtils.getHttpSchemePrefix(conf)
     val proxies = WebAppUtils.getProxyHostsAndPortsForAmFilter(conf)
-    val hosts = proxies.asScala.map(_.split(":").head)
+    val hosts = proxies.asScala.map(proxy => Utils.parseHostPort(proxy)._1)
     val uriBases = proxies.asScala.map { proxy => prefix + proxy + proxyBase }
     val params =
       Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))

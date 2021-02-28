@@ -42,19 +42,19 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   private val sparkConf = new SparkConf().setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
     // Set a timeout of 10 seconds that's going to be used to fetch topics/partitions from kafka.
-    // Othewise the poll timeout defaults to 2 minutes and causes test cases to run longer.
+    // Otherwise the poll timeout defaults to 2 minutes and causes test cases to run longer.
     .set("spark.streaming.kafka.consumer.poll.ms", "10000")
 
   private var sc: SparkContext = _
 
-  override def beforeAll {
+  override def beforeAll: Unit = {
     super.beforeAll()
     sc = new SparkContext(sparkConf)
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
   }
 
-  override def afterAll {
+  override def afterAll: Unit = {
     try {
       try {
         if (sc != null) {
@@ -81,7 +81,8 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private val preferredHosts = LocationStrategies.PreferConsistent
 
-  private def compactLogs(topic: String, partition: Int, messages: Array[(String, String)]) {
+  private def compactLogs(topic: String, partition: Int,
+      messages: Array[(String, String)]): Unit = {
     val mockTime = new MockTime()
     val logs = new Pool[TopicPartition, Log]()
     val logDir = kafkaTestUtils.brokerLogDir
@@ -235,7 +236,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     // this is the "lots of messages" case
     kafkaTestUtils.sendMessages(topic, sent)
-    var sentCount = sent.values.sum
+    val sentCount = sent.values.sum
 
     val rdd = KafkaUtils.createRDD[String, String](sc, kafkaParams,
       Array(OffsetRange(topic, 0, 0, sentCount)), preferredHosts)

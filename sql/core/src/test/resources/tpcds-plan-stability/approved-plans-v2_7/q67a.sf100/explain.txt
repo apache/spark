@@ -1,0 +1,463 @@
+== Physical Plan ==
+TakeOrderedAndProject (74)
++- * Filter (73)
+   +- Window (72)
+      +- * Sort (71)
+         +- Exchange (70)
+            +- Union (69)
+               :- * HashAggregate (28)
+               :  +- Exchange (27)
+               :     +- * HashAggregate (26)
+               :        +- * Project (25)
+               :           +- * SortMergeJoin Inner (24)
+               :              :- * Sort (18)
+               :              :  +- Exchange (17)
+               :              :     +- * Project (16)
+               :              :        +- * BroadcastHashJoin Inner BuildRight (15)
+               :              :           :- * Project (10)
+               :              :           :  +- * BroadcastHashJoin Inner BuildRight (9)
+               :              :           :     :- * Filter (3)
+               :              :           :     :  +- * ColumnarToRow (2)
+               :              :           :     :     +- Scan parquet default.store_sales (1)
+               :              :           :     +- BroadcastExchange (8)
+               :              :           :        +- * Project (7)
+               :              :           :           +- * Filter (6)
+               :              :           :              +- * ColumnarToRow (5)
+               :              :           :                 +- Scan parquet default.date_dim (4)
+               :              :           +- BroadcastExchange (14)
+               :              :              +- * Filter (13)
+               :              :                 +- * ColumnarToRow (12)
+               :              :                    +- Scan parquet default.store (11)
+               :              +- * Sort (23)
+               :                 +- Exchange (22)
+               :                    +- * Filter (21)
+               :                       +- * ColumnarToRow (20)
+               :                          +- Scan parquet default.item (19)
+               :- * HashAggregate (33)
+               :  +- Exchange (32)
+               :     +- * HashAggregate (31)
+               :        +- * HashAggregate (30)
+               :           +- ReusedExchange (29)
+               :- * HashAggregate (38)
+               :  +- Exchange (37)
+               :     +- * HashAggregate (36)
+               :        +- * HashAggregate (35)
+               :           +- ReusedExchange (34)
+               :- * HashAggregate (43)
+               :  +- Exchange (42)
+               :     +- * HashAggregate (41)
+               :        +- * HashAggregate (40)
+               :           +- ReusedExchange (39)
+               :- * HashAggregate (48)
+               :  +- Exchange (47)
+               :     +- * HashAggregate (46)
+               :        +- * HashAggregate (45)
+               :           +- ReusedExchange (44)
+               :- * HashAggregate (53)
+               :  +- Exchange (52)
+               :     +- * HashAggregate (51)
+               :        +- * HashAggregate (50)
+               :           +- ReusedExchange (49)
+               :- * HashAggregate (58)
+               :  +- Exchange (57)
+               :     +- * HashAggregate (56)
+               :        +- * HashAggregate (55)
+               :           +- ReusedExchange (54)
+               :- * HashAggregate (63)
+               :  +- Exchange (62)
+               :     +- * HashAggregate (61)
+               :        +- * HashAggregate (60)
+               :           +- ReusedExchange (59)
+               +- * HashAggregate (68)
+                  +- Exchange (67)
+                     +- * HashAggregate (66)
+                        +- * HashAggregate (65)
+                           +- ReusedExchange (64)
+
+
+(1) Scan parquet default.store_sales
+Output [5]: [ss_item_sk#1, ss_store_sk#2, ss_quantity#3, ss_sales_price#4, ss_sold_date_sk#5]
+Batched: true
+Location: InMemoryFileIndex []
+PartitionFilters: [isnotnull(ss_sold_date_sk#5), dynamicpruningexpression(ss_sold_date_sk#5 IN dynamicpruning#6)]
+PushedFilters: [IsNotNull(ss_store_sk), IsNotNull(ss_item_sk)]
+ReadSchema: struct<ss_item_sk:int,ss_store_sk:int,ss_quantity:int,ss_sales_price:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [5]: [ss_item_sk#1, ss_store_sk#2, ss_quantity#3, ss_sales_price#4, ss_sold_date_sk#5]
+
+(3) Filter [codegen id : 3]
+Input [5]: [ss_item_sk#1, ss_store_sk#2, ss_quantity#3, ss_sales_price#4, ss_sold_date_sk#5]
+Condition : (isnotnull(ss_store_sk#2) AND isnotnull(ss_item_sk#1))
+
+(4) Scan parquet default.date_dim
+Output [5]: [d_date_sk#7, d_month_seq#8, d_year#9, d_moy#10, d_qoy#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_month_seq), GreaterThanOrEqual(d_month_seq,1212), LessThanOrEqual(d_month_seq,1223), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_month_seq:int,d_year:int,d_moy:int,d_qoy:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [5]: [d_date_sk#7, d_month_seq#8, d_year#9, d_moy#10, d_qoy#11]
+
+(6) Filter [codegen id : 1]
+Input [5]: [d_date_sk#7, d_month_seq#8, d_year#9, d_moy#10, d_qoy#11]
+Condition : (((isnotnull(d_month_seq#8) AND (d_month_seq#8 >= 1212)) AND (d_month_seq#8 <= 1223)) AND isnotnull(d_date_sk#7))
+
+(7) Project [codegen id : 1]
+Output [4]: [d_date_sk#7, d_year#9, d_moy#10, d_qoy#11]
+Input [5]: [d_date_sk#7, d_month_seq#8, d_year#9, d_moy#10, d_qoy#11]
+
+(8) BroadcastExchange
+Input [4]: [d_date_sk#7, d_year#9, d_moy#10, d_qoy#11]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+
+(9) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_sold_date_sk#5]
+Right keys [1]: [d_date_sk#7]
+Join condition: None
+
+(10) Project [codegen id : 3]
+Output [7]: [ss_item_sk#1, ss_store_sk#2, ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11]
+Input [9]: [ss_item_sk#1, ss_store_sk#2, ss_quantity#3, ss_sales_price#4, ss_sold_date_sk#5, d_date_sk#7, d_year#9, d_moy#10, d_qoy#11]
+
+(11) Scan parquet default.store
+Output [2]: [s_store_sk#13, s_store_id#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_id:string>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [2]: [s_store_sk#13, s_store_id#14]
+
+(13) Filter [codegen id : 2]
+Input [2]: [s_store_sk#13, s_store_id#14]
+Condition : isnotnull(s_store_sk#13)
+
+(14) BroadcastExchange
+Input [2]: [s_store_sk#13, s_store_id#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#15]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_store_sk#2]
+Right keys [1]: [s_store_sk#13]
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [7]: [ss_item_sk#1, ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_id#14]
+Input [9]: [ss_item_sk#1, ss_store_sk#2, ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_sk#13, s_store_id#14]
+
+(17) Exchange
+Input [7]: [ss_item_sk#1, ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_id#14]
+Arguments: hashpartitioning(ss_item_sk#1, 5), ENSURE_REQUIREMENTS, [id=#16]
+
+(18) Sort [codegen id : 4]
+Input [7]: [ss_item_sk#1, ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_id#14]
+Arguments: [ss_item_sk#1 ASC NULLS FIRST], false, 0
+
+(19) Scan parquet default.item
+Output [5]: [i_item_sk#17, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/item]
+PushedFilters: [IsNotNull(i_item_sk)]
+ReadSchema: struct<i_item_sk:int,i_brand:string,i_class:string,i_category:string,i_product_name:string>
+
+(20) ColumnarToRow [codegen id : 5]
+Input [5]: [i_item_sk#17, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+
+(21) Filter [codegen id : 5]
+Input [5]: [i_item_sk#17, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+Condition : isnotnull(i_item_sk#17)
+
+(22) Exchange
+Input [5]: [i_item_sk#17, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+Arguments: hashpartitioning(i_item_sk#17, 5), ENSURE_REQUIREMENTS, [id=#22]
+
+(23) Sort [codegen id : 6]
+Input [5]: [i_item_sk#17, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+Arguments: [i_item_sk#17 ASC NULLS FIRST], false, 0
+
+(24) SortMergeJoin [codegen id : 7]
+Left keys [1]: [ss_item_sk#1]
+Right keys [1]: [i_item_sk#17]
+Join condition: None
+
+(25) Project [codegen id : 7]
+Output [10]: [ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_id#14, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+Input [12]: [ss_item_sk#1, ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_id#14, i_item_sk#17, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+
+(26) HashAggregate [codegen id : 7]
+Input [10]: [ss_quantity#3, ss_sales_price#4, d_year#9, d_moy#10, d_qoy#11, s_store_id#14, i_brand#18, i_class#19, i_category#20, i_product_name#21]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [partial_sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [2]: [sum#23, isEmpty#24]
+Results [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#25, isEmpty#26]
+
+(27) Exchange
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#25, isEmpty#26]
+Arguments: hashpartitioning(i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, 5), ENSURE_REQUIREMENTS, [id=#27]
+
+(28) HashAggregate [codegen id : 8]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#25, isEmpty#26]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#28]
+Results [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, cast(sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#28 as decimal(38,2)) AS sumsales#29]
+
+(29) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#30, isEmpty#31]
+
+(30) HashAggregate [codegen id : 16]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#30, isEmpty#31]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#32]
+Results [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#32 AS sumsales#33]
+
+(31) HashAggregate [codegen id : 16]
+Input [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, sumsales#33]
+Keys [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#34, isEmpty#35]
+Results [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, sum#36, isEmpty#37]
+
+(32) Exchange
+Input [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, sum#36, isEmpty#37]
+Arguments: hashpartitioning(i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, 5), ENSURE_REQUIREMENTS, [id=#38]
+
+(33) HashAggregate [codegen id : 17]
+Input [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, sum#36, isEmpty#37]
+Keys [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#39]
+Results [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, null AS s_store_id#40, sum(sumsales#33)#39 AS sumsales#41]
+
+(34) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#42, isEmpty#43]
+
+(35) HashAggregate [codegen id : 25]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#42, isEmpty#43]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#44]
+Results [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#44 AS sumsales#33]
+
+(36) HashAggregate [codegen id : 25]
+Input [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, sumsales#33]
+Keys [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#45, isEmpty#46]
+Results [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, sum#47, isEmpty#48]
+
+(37) Exchange
+Input [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, sum#47, isEmpty#48]
+Arguments: hashpartitioning(i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, 5), ENSURE_REQUIREMENTS, [id=#49]
+
+(38) HashAggregate [codegen id : 26]
+Input [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, sum#47, isEmpty#48]
+Keys [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#50]
+Results [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, null AS d_moy#51, null AS s_store_id#52, sum(sumsales#33)#50 AS sumsales#53]
+
+(39) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#54, isEmpty#55]
+
+(40) HashAggregate [codegen id : 34]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#54, isEmpty#55]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#56]
+Results [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#56 AS sumsales#33]
+
+(41) HashAggregate [codegen id : 34]
+Input [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, sumsales#33]
+Keys [5]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#57, isEmpty#58]
+Results [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, sum#59, isEmpty#60]
+
+(42) Exchange
+Input [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, sum#59, isEmpty#60]
+Arguments: hashpartitioning(i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, 5), ENSURE_REQUIREMENTS, [id=#61]
+
+(43) HashAggregate [codegen id : 35]
+Input [7]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, sum#59, isEmpty#60]
+Keys [5]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#62]
+Results [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, null AS d_qoy#63, null AS d_moy#64, null AS s_store_id#65, sum(sumsales#33)#62 AS sumsales#66]
+
+(44) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#67, isEmpty#68]
+
+(45) HashAggregate [codegen id : 43]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#67, isEmpty#68]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#69]
+Results [5]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#69 AS sumsales#33]
+
+(46) HashAggregate [codegen id : 43]
+Input [5]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, sumsales#33]
+Keys [4]: [i_category#20, i_class#19, i_brand#18, i_product_name#21]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#70, isEmpty#71]
+Results [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, sum#72, isEmpty#73]
+
+(47) Exchange
+Input [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, sum#72, isEmpty#73]
+Arguments: hashpartitioning(i_category#20, i_class#19, i_brand#18, i_product_name#21, 5), ENSURE_REQUIREMENTS, [id=#74]
+
+(48) HashAggregate [codegen id : 44]
+Input [6]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, sum#72, isEmpty#73]
+Keys [4]: [i_category#20, i_class#19, i_brand#18, i_product_name#21]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#75]
+Results [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, null AS d_year#76, null AS d_qoy#77, null AS d_moy#78, null AS s_store_id#79, sum(sumsales#33)#75 AS sumsales#80]
+
+(49) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#81, isEmpty#82]
+
+(50) HashAggregate [codegen id : 52]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#81, isEmpty#82]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#83]
+Results [4]: [i_category#20, i_class#19, i_brand#18, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#83 AS sumsales#33]
+
+(51) HashAggregate [codegen id : 52]
+Input [4]: [i_category#20, i_class#19, i_brand#18, sumsales#33]
+Keys [3]: [i_category#20, i_class#19, i_brand#18]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#84, isEmpty#85]
+Results [5]: [i_category#20, i_class#19, i_brand#18, sum#86, isEmpty#87]
+
+(52) Exchange
+Input [5]: [i_category#20, i_class#19, i_brand#18, sum#86, isEmpty#87]
+Arguments: hashpartitioning(i_category#20, i_class#19, i_brand#18, 5), ENSURE_REQUIREMENTS, [id=#88]
+
+(53) HashAggregate [codegen id : 53]
+Input [5]: [i_category#20, i_class#19, i_brand#18, sum#86, isEmpty#87]
+Keys [3]: [i_category#20, i_class#19, i_brand#18]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#89]
+Results [9]: [i_category#20, i_class#19, i_brand#18, null AS i_product_name#90, null AS d_year#91, null AS d_qoy#92, null AS d_moy#93, null AS s_store_id#94, sum(sumsales#33)#89 AS sumsales#95]
+
+(54) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#96, isEmpty#97]
+
+(55) HashAggregate [codegen id : 61]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#96, isEmpty#97]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#98]
+Results [3]: [i_category#20, i_class#19, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#98 AS sumsales#33]
+
+(56) HashAggregate [codegen id : 61]
+Input [3]: [i_category#20, i_class#19, sumsales#33]
+Keys [2]: [i_category#20, i_class#19]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#99, isEmpty#100]
+Results [4]: [i_category#20, i_class#19, sum#101, isEmpty#102]
+
+(57) Exchange
+Input [4]: [i_category#20, i_class#19, sum#101, isEmpty#102]
+Arguments: hashpartitioning(i_category#20, i_class#19, 5), ENSURE_REQUIREMENTS, [id=#103]
+
+(58) HashAggregate [codegen id : 62]
+Input [4]: [i_category#20, i_class#19, sum#101, isEmpty#102]
+Keys [2]: [i_category#20, i_class#19]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#104]
+Results [9]: [i_category#20, i_class#19, null AS i_brand#105, null AS i_product_name#106, null AS d_year#107, null AS d_qoy#108, null AS d_moy#109, null AS s_store_id#110, sum(sumsales#33)#104 AS sumsales#111]
+
+(59) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#112, isEmpty#113]
+
+(60) HashAggregate [codegen id : 70]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#112, isEmpty#113]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#114]
+Results [2]: [i_category#20, sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#114 AS sumsales#33]
+
+(61) HashAggregate [codegen id : 70]
+Input [2]: [i_category#20, sumsales#33]
+Keys [1]: [i_category#20]
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#115, isEmpty#116]
+Results [3]: [i_category#20, sum#117, isEmpty#118]
+
+(62) Exchange
+Input [3]: [i_category#20, sum#117, isEmpty#118]
+Arguments: hashpartitioning(i_category#20, 5), ENSURE_REQUIREMENTS, [id=#119]
+
+(63) HashAggregate [codegen id : 71]
+Input [3]: [i_category#20, sum#117, isEmpty#118]
+Keys [1]: [i_category#20]
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#120]
+Results [9]: [i_category#20, null AS i_class#121, null AS i_brand#122, null AS i_product_name#123, null AS d_year#124, null AS d_qoy#125, null AS d_moy#126, null AS s_store_id#127, sum(sumsales#33)#120 AS sumsales#128]
+
+(64) ReusedExchange [Reuses operator id: unknown]
+Output [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#129, isEmpty#130]
+
+(65) HashAggregate [codegen id : 79]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sum#129, isEmpty#130]
+Keys [8]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14]
+Functions [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))]
+Aggregate Attributes [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#131]
+Results [1]: [sum(coalesce(CheckOverflow((promote_precision(cast(ss_sales_price#4 as decimal(12,2))) * promote_precision(cast(cast(ss_quantity#3 as decimal(10,0)) as decimal(12,2)))), DecimalType(18,2), true), 0.00))#131 AS sumsales#33]
+
+(66) HashAggregate [codegen id : 79]
+Input [1]: [sumsales#33]
+Keys: []
+Functions [1]: [partial_sum(sumsales#33)]
+Aggregate Attributes [2]: [sum#132, isEmpty#133]
+Results [2]: [sum#134, isEmpty#135]
+
+(67) Exchange
+Input [2]: [sum#134, isEmpty#135]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#136]
+
+(68) HashAggregate [codegen id : 80]
+Input [2]: [sum#134, isEmpty#135]
+Keys: []
+Functions [1]: [sum(sumsales#33)]
+Aggregate Attributes [1]: [sum(sumsales#33)#137]
+Results [9]: [null AS i_category#138, null AS i_class#139, null AS i_brand#140, null AS i_product_name#141, null AS d_year#142, null AS d_qoy#143, null AS d_moy#144, null AS s_store_id#145, sum(sumsales#33)#137 AS sumsales#146]
+
+(69) Union
+
+(70) Exchange
+Input [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sumsales#29]
+Arguments: hashpartitioning(i_category#20, 5), ENSURE_REQUIREMENTS, [id=#147]
+
+(71) Sort [codegen id : 81]
+Input [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sumsales#29]
+Arguments: [i_category#20 ASC NULLS FIRST, sumsales#29 DESC NULLS LAST], false, 0
+
+(72) Window
+Input [9]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sumsales#29]
+Arguments: [rank(sumsales#29) windowspecdefinition(i_category#20, sumsales#29 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rk#148], [i_category#20], [sumsales#29 DESC NULLS LAST]
+
+(73) Filter [codegen id : 82]
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sumsales#29, rk#148]
+Condition : (isnotnull(rk#148) AND (rk#148 <= 100))
+
+(74) TakeOrderedAndProject
+Input [10]: [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sumsales#29, rk#148]
+Arguments: 100, [i_category#20 ASC NULLS FIRST, i_class#19 ASC NULLS FIRST, i_brand#18 ASC NULLS FIRST, i_product_name#21 ASC NULLS FIRST, d_year#9 ASC NULLS FIRST, d_qoy#11 ASC NULLS FIRST, d_moy#10 ASC NULLS FIRST, s_store_id#14 ASC NULLS FIRST, sumsales#29 ASC NULLS FIRST, rk#148 ASC NULLS FIRST], [i_category#20, i_class#19, i_brand#18, i_product_name#21, d_year#9, d_qoy#11, d_moy#10, s_store_id#14, sumsales#29, rk#148]
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#5 IN dynamicpruning#6
+ReusedExchange (75)
+
+
+(75) ReusedExchange [Reuses operator id: 8]
+Output [4]: [d_date_sk#7, d_year#9, d_moy#10, d_qoy#11]
+
+

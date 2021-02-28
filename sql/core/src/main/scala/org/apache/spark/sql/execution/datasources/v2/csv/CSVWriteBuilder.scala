@@ -20,15 +20,19 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
+import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.execution.datasources.{CodecStreams, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.csv.CsvOutputWriter
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class CSVWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
-  extends FileWriteBuilder(options, paths) {
+class CSVWriteBuilder(
+    paths: Seq[String],
+    formatName: String,
+    supportsDataType: DataType => Boolean,
+    info: LogicalWriteInfo)
+  extends FileWriteBuilder(paths, formatName, supportsDataType, info) {
   override def prepareWrite(
       sqlConf: SQLConf,
       job: Job,
@@ -56,10 +60,4 @@ class CSVWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
       }
     }
   }
-
-  override def supportsDataType(dataType: DataType): Boolean = {
-    CSVDataSourceV2.supportsDataType(dataType)
-  }
-
-  override def formatName: String = "CSV"
 }

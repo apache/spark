@@ -24,30 +24,36 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
  * Tests of [[RandomDataGenerator]].
  */
-class RandomDataGeneratorSuite extends SparkFunSuite {
+class RandomDataGeneratorSuite extends SparkFunSuite with SQLHelper {
 
   /**
    * Tests random data generation for the given type by using it to generate random values then
    * converting those values into their Catalyst equivalents using CatalystTypeConverters.
    */
   def testRandomDataGeneration(dataType: DataType, nullable: Boolean = true): Unit = {
-    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
-    val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
-      fail(s"Random data generator was not defined for $dataType")
-    }
-    if (nullable) {
-      assert(Iterator.fill(100)(generator()).contains(null))
-    } else {
-      assert(!Iterator.fill(100)(generator()).contains(null))
-    }
-    for (_ <- 1 to 10) {
-      val generatedValue = generator()
-      toCatalyst(generatedValue)
+    Seq(false, true).foreach { java8Api =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
+        val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
+          fail(s"Random data generator was not defined for $dataType")
+        }
+        if (nullable) {
+          assert(Iterator.fill(100)(generator()).contains(null))
+        } else {
+          assert(!Iterator.fill(100)(generator()).contains(null))
+        }
+        for (_ <- 1 to 10) {
+          val generatedValue = generator()
+          toCatalyst(generatedValue)
+        }
+      }
     }
   }
 

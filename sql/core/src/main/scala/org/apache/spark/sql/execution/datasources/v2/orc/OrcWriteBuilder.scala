@@ -21,15 +21,19 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.orc.OrcConf.{COMPRESS, MAPRED_OUTPUT_SCHEMA}
 import org.apache.orc.mapred.OrcStruct
 
+import org.apache.spark.sql.connector.write.LogicalWriteInfo
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.execution.datasources.orc.{OrcFileFormat, OrcOptions, OrcOutputWriter, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2.FileWriteBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class OrcWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
-  extends FileWriteBuilder(options, paths) {
+class OrcWriteBuilder(
+    paths: Seq[String],
+    formatName: String,
+    supportsDataType: DataType => Boolean,
+    info: LogicalWriteInfo)
+  extends FileWriteBuilder(paths, formatName, supportsDataType, info) {
 
   override def prepareWrite(
       sqlConf: SQLConf,
@@ -65,10 +69,4 @@ class OrcWriteBuilder(options: CaseInsensitiveStringMap, paths: Seq[String])
       }
     }
   }
-
-  override def supportsDataType(dataType: DataType): Boolean = {
-    OrcDataSourceV2.supportsDataType(dataType)
-  }
-
-  override def formatName: String = "ORC"
 }

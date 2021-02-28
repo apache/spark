@@ -19,7 +19,6 @@ package org.apache.spark.api.r
 
 import java.io._
 
-import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 
 /**
@@ -125,10 +124,7 @@ private[spark] class RRunner[IN, OUT](
               eos = true
               null.asInstanceOf[OUT]
           }
-        } catch {
-          case eof: EOFException =>
-            throw new SparkException("R worker exited unexpectedly (cranshed)", eof)
-        }
+        } catch handleException
       }
     }
   }

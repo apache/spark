@@ -1,6 +1,21 @@
 ---
 layout: global
 title: Spark Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or higher)
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 The Spark Streaming integration for Kafka 0.10 provides simple parallelism, 1:1 correspondence between Kafka 
@@ -218,7 +233,7 @@ For data stores that support transactions, saving offsets in the same transactio
 {% highlight scala %}
 // The details depend on your data store, but the general idea looks like this
 
-// begin from the the offsets committed to the database
+// begin from the offsets committed to the database
 val fromOffsets = selectOffsetsFromYourDatabase.map { resultSet =>
   new TopicPartition(resultSet.string("topic"), resultSet.int("partition")) -> resultSet.long("offset")
 }.toMap
@@ -248,7 +263,7 @@ stream.foreachRDD { rdd =>
 {% highlight java %}
 // The details depend on your data store, but the general idea looks like this
 
-// begin from the the offsets committed to the database
+// begin from the offsets committed to the database
 Map<TopicPartition, Long> fromOffsets = new HashMap<>();
 for (resultSet : selectOffsetsFromYourDatabase)
   fromOffsets.put(new TopicPartition(resultSet.string("topic"), resultSet.int("partition")), resultSet.long("offset"));

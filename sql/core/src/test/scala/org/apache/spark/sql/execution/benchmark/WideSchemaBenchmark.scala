@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
+import org.scalatest.Assertions._
+
 import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.util.Utils
@@ -68,14 +70,14 @@ object WideSchemaBenchmark extends SqlBasedBenchmark {
       desc: String,
       selector: String): Unit = {
     benchmark.addCase(desc + " (read in-mem)") { iter =>
-      df.selectExpr(s"sum($selector)").collect()
+      df.selectExpr(s"sum($selector)").noop()
     }
     benchmark.addCase(desc + " (exec in-mem)") { iter =>
-      df.selectExpr("*", s"hash($selector) as f").selectExpr(s"sum($selector)", "sum(f)").collect()
+      df.selectExpr("*", s"hash($selector) as f").selectExpr(s"sum($selector)", "sum(f)").noop()
     }
     val parquet = saveAsParquet(df)
     benchmark.addCase(desc + " (read parquet)") { iter =>
-      parquet.selectExpr(s"sum($selector) as f").collect()
+      parquet.selectExpr(s"sum($selector) as f").noop()
     }
     benchmark.addCase(desc + " (write parquet)") { iter =>
       saveAsParquet(df.selectExpr(s"sum($selector) as f"))

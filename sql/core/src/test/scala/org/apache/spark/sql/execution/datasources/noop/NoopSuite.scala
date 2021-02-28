@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.noop
 
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 
-class NoopSuite extends SharedSQLContext {
+class NoopSuite extends SharedSparkSession {
   import testImplicits._
 
   test("materialisation of all rows") {
@@ -32,6 +32,7 @@ class NoopSuite extends SharedSQLContext {
       }
       .write
       .format("noop")
+      .mode("append")
       .save()
     assert(accum.value == numElems)
   }
@@ -54,7 +55,7 @@ class NoopSuite extends SharedSQLContext {
           accum.add(1)
           x
         }
-        .write.format("noop").save()
+        .write.mode("append").format("noop").save()
       assert(accum.value == numElems)
     }
   }

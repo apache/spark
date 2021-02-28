@@ -20,7 +20,8 @@ package org.apache.spark
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService}
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.internal.config
@@ -31,7 +32,7 @@ import org.apache.spark.scheduler.{MapStatus, MyRDD, SparkListener, SparkListene
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
-import org.apache.spark.util.{MutablePair, Utils}
+import org.apache.spark.util.MutablePair
 
 abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
 
@@ -44,7 +45,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
   test("groupByKey without compression") {
     val myConf = conf.clone().set(config.SHUFFLE_COMPRESS, false)
     sc = new SparkContext("local", "test", myConf)
-    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
+    val pairs = sc.parallelize(Seq((1, 1), (1, 2), (1, 3), (2, 1)), 4)
     val groups = pairs.groupByKey(4).collect()
     assert(groups.size === 2)
     val valuesFor1 = groups.find(_._1 == 1).get._2
@@ -182,7 +183,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val pairs1: RDD[MutablePair[Int, Int]] = sc.parallelize(data1, 2)
     val pairs2: RDD[MutablePair[Int, String]] = sc.parallelize(data2, 2)
     val results = new CoGroupedRDD[Int](Seq(pairs1, pairs2), new HashPartitioner(2))
-      .map(p => (p._1, p._2.map(_.toArray)))
+      .map(p => (p._1, p._2.map(_.toSeq)))
       .collectAsMap()
 
     assert(results(1)(0).length === 3)
@@ -360,7 +361,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     val metricsSystem = sc.env.metricsSystem
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
-    val shuffleHandle = manager.registerShuffle(0, 1, shuffleDep)
+    val shuffleHandle = manager.registerShuffle(0, shuffleDep)
     mapTrackerMaster.registerShuffle(0, 1)
 
     // first attempt -- its successful
@@ -383,13 +384,18 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     // simultaneously, and everything is still OK
 
     def writeAndClose(
-      writer: ShuffleWriter[Int, Int])(
-      iter: Iterator[(Int, Int)]): Option[MapStatus] = {
-      val files = writer.write(iter)
-      writer.stop(true)
+        writer: ShuffleWriter[Int, Int],
+        taskContext: TaskContext)(
+        iter: Iterator[(Int, Int)]): Option[MapStatus] = {
+      try {
+        val files = writer.write(iter)
+        writer.stop(true)
+      } finally {
+        TaskContext.unset()
+      }
     }
     val interleaver = new InterleaveIterators(
-      data1, writeAndClose(writer1), data2, writeAndClose(writer2))
+      data1, writeAndClose(writer1, context1), data2, writeAndClose(writer2, context2))
     val (mapOutput1, mapOutput2) = interleaver.run()
 
     // check that we can read the map output and it has the right data
@@ -407,6 +413,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
       1, 0, 0, 2L, 0, taskMemoryManager, new Properties, metricsSystem)
     val metrics = taskContext.taskMetrics.createTempShuffleReadMetrics()
     val reader = manager.getReader[Int, Int](shuffleHandle, 0, 1, taskContext, metrics)
+    TaskContext.unset()
     val readData = reader.read().toIndexedSeq
     assert(readData === data1.toIndexedSeq || readData === data2.toIndexedSeq)
 
@@ -481,7 +488,7 @@ object ShuffleSuite {
     @volatile var bytesWritten: Long = 0
     @volatile var bytesRead: Long = 0
     val listener = new SparkListener {
-      override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
         recordsWritten += taskEnd.taskMetrics.shuffleWriteMetrics.recordsWritten
         bytesWritten += taskEnd.taskMetrics.shuffleWriteMetrics.bytesWritten
         recordsRead += taskEnd.taskMetrics.shuffleReadMetrics.recordsRead
@@ -492,7 +499,7 @@ object ShuffleSuite {
 
     job
 
-    sc.listenerBus.waitUntilEmpty(500)
+    sc.listenerBus.waitUntilEmpty()
     AggregatedShuffleMetrics(recordsWritten, recordsRead, bytesWritten, bytesRead)
   }
 }

@@ -26,27 +26,27 @@ import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SparkConf, SparkEnv, TaskState}
-import org.apache.spark.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.EXECUTOR_ID
+import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.TaskDescription
-import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerUtils
+import org.apache.spark.scheduler.cluster.mesos.MesosSchedulerBackendUtil
 import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
-  with MesosSchedulerUtils // TODO: fix
   with ExecutorBackend
   with Logging {
 
   var executor: Executor = null
   var driver: ExecutorDriver = null
 
-  override def statusUpdate(taskId: Long, state: TaskState.TaskState, data: ByteBuffer) {
+  override def statusUpdate(taskId: Long, state: TaskState.TaskState, data: ByteBuffer): Unit = {
     val mesosTaskId = TaskID.newBuilder().setValue(taskId.toString).build()
     driver.sendStatusUpdate(MesosTaskStatus.newBuilder()
       .setTaskId(mesosTaskId)
-      .setState(taskStateToMesos(state))
+      .setState(MesosSchedulerBackendUtil.taskStateToMesos(state))
       .setData(ByteString.copyFrom(data))
       .build())
   }
@@ -55,7 +55,7 @@ private[spark] class MesosExecutorBackend
       driver: ExecutorDriver,
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
-      slaveInfo: SlaveInfo) {
+      agentInfo: SlaveInfo): Unit = {
 
     // Get num cores for this task from ExecutorInfo, created in MesosSchedulerBackend.
     val cpusPerTask = executorInfo.getResourcesList.asScala
@@ -74,16 +74,18 @@ private[spark] class MesosExecutorBackend
     val properties = Utils.deserialize[Array[(String, String)]](executorInfo.getData.toByteArray) ++
       Seq[(String, String)](("spark.app.id", frameworkInfo.getId.getValue))
     val conf = new SparkConf(loadDefaults = true).setAll(properties)
+    conf.set(EXECUTOR_ID, executorId)
     val env = SparkEnv.createExecutorEnv(
-      conf, executorId, slaveInfo.getHostname, cpusPerTask, None, isLocal = false)
+      conf, executorId, agentInfo.getHostname, cpusPerTask, None, isLocal = false)
 
     executor = new Executor(
       executorId,
-      slaveInfo.getHostname,
-      env)
+      agentInfo.getHostname,
+      env,
+      resources = Map.empty[String, ResourceInformation])
   }
 
-  override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
+  override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo): Unit = {
     val taskDescription = TaskDescription.decode(taskInfo.getData.asReadOnlyByteBuffer())
     if (executor == null) {
       logError("Received launchTask but executor was null")
@@ -94,11 +96,11 @@ private[spark] class MesosExecutorBackend
     }
   }
 
-  override def error(d: ExecutorDriver, message: String) {
+  override def error(d: ExecutorDriver, message: String): Unit = {
     logError("Error from Mesos: " + message)
   }
 
-  override def killTask(d: ExecutorDriver, t: TaskID) {
+  override def killTask(d: ExecutorDriver, t: TaskID): Unit = {
     if (executor == null) {
       logError("Received KillTask but executor was null")
     } else {
@@ -108,20 +110,20 @@ private[spark] class MesosExecutorBackend
     }
   }
 
-  override def reregistered(d: ExecutorDriver, p2: SlaveInfo) {}
+  override def reregistered(d: ExecutorDriver, p2: SlaveInfo): Unit = {}
 
-  override def disconnected(d: ExecutorDriver) {}
+  override def disconnected(d: ExecutorDriver): Unit = {}
 
-  override def frameworkMessage(d: ExecutorDriver, data: Array[Byte]) {}
+  override def frameworkMessage(d: ExecutorDriver, data: Array[Byte]): Unit = {}
 
-  override def shutdown(d: ExecutorDriver) {}
+  override def shutdown(d: ExecutorDriver): Unit = {}
 }
 
 /**
  * Entry point for Mesos executor.
  */
 private[spark] object MesosExecutorBackend extends Logging {
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     Utils.initDaemon(log)
     // Create a new Executor and start it running
     val runner = new MesosExecutorBackend()

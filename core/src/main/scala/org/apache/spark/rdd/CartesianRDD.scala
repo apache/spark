@@ -85,7 +85,7 @@ class CartesianRDD[T: ClassTag, U: ClassTag](
     }
   )
 
-  override def clearDependencies() {
+  override def clearDependencies(): Unit = {
     super.clearDependencies()
     rdd1 = null
     rdd2 = null

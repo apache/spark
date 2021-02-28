@@ -29,18 +29,16 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hive.common.LogUtils;
-import org.apache.hadoop.hive.common.LogUtils.LogInitializationException;
+import org.apache.hadoop.hive.common.JvmPauseMonitor;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.spark.util.ShutdownHookManager;
 
@@ -49,7 +47,7 @@ import org.apache.spark.util.ShutdownHookManager;
  *
  */
 public class HiveServer2 extends CompositeService {
-  private static final Log LOG = LogFactory.getLog(HiveServer2.class);
+  private static final Logger LOG = LoggerFactory.getLogger(HiveServer2.class);
 
   private CLIService cliService;
   private ThriftCLIService thriftCLIService;
@@ -124,7 +122,12 @@ public class HiveServer2 extends CompositeService {
         server = new HiveServer2();
         server.init(hiveConf);
         server.start();
-        ShimLoader.getHadoopShims().startPauseMonitor(hiveConf);
+        try {
+          JvmPauseMonitor pauseMonitor = new JvmPauseMonitor(hiveConf);
+          pauseMonitor.start();
+        } catch (Throwable t) {
+          LOG.warn("Could not initiate the JvmPauseMonitor thread.", t);
+        }
         break;
       } catch (Throwable throwable) {
         if (server != null) {
@@ -153,25 +156,13 @@ public class HiveServer2 extends CompositeService {
 
   public static void main(String[] args) {
     HiveConf.setLoadHiveServer2Config(true);
-    try {
-      ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
-      ServerOptionsProcessorResponse oprocResponse = oproc.parse(args);
+    ServerOptionsProcessor oproc = new ServerOptionsProcessor("hiveserver2");
+    ServerOptionsProcessorResponse oprocResponse = oproc.parse(args);
 
-      // NOTE: It is critical to do this here so that log4j is reinitialized
-      // before any of the other core hive classes are loaded
-      String initLog4jMessage = LogUtils.initHiveLog4j();
-      LOG.debug(initLog4jMessage);
-      HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
+    HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
 
-      // Log debug message from "oproc" after log4j initialize properly
-      LOG.debug(oproc.getDebugMessage().toString());
-
-      // Call the executor which will execute the appropriate command based on the parsed options
-      oprocResponse.getServerOptionsExecutor().execute();
-    } catch (LogInitializationException e) {
-      LOG.error("Error initializing log: " + e.getMessage(), e);
-      System.exit(-1);
-    }
+    // Call the executor which will execute the appropriate command based on the parsed options
+    oprocResponse.getServerOptionsExecutor().execute();
   }
 
   /**
@@ -283,7 +274,7 @@ public class HiveServer2 extends CompositeService {
       try {
         startHiveServer2();
       } catch (Throwable t) {
-        LOG.fatal("Error starting HiveServer2", t);
+        LOG.error("Error starting HiveServer2", t);
         System.exit(-1);
       }
     }

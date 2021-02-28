@@ -19,7 +19,7 @@ package org.apache.spark.mllib.regression
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
@@ -27,7 +27,6 @@ import org.apache.spark.streaming.api.java.{JavaDStream, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 
 /**
- * :: DeveloperApi ::
  * StreamingLinearAlgorithm implements methods for continuously
  * training a generalized linear model on streaming data,
  * and using it for prediction on (possibly different) streaming data.
@@ -56,7 +55,6 @@ import org.apache.spark.streaming.dstream.DStream
  *
  */
 @Since("1.1.0")
-@DeveloperApi
 abstract class StreamingLinearAlgorithm[
     M <: GeneralizedLinearModel,
     A <: GeneralizedLinearAlgorithm[M]] extends Logging {

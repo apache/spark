@@ -63,7 +63,8 @@ private[deploy] class HadoopFSDelegationTokenProvider
             val identifier = token
               .decodeIdentifier()
               .asInstanceOf[AbstractDelegationTokenIdentifier]
-            identifier.getIssueDate + interval
+            val tokenKind = token.getKind.toString
+            getIssueDate(tokenKind, identifier) + interval
           }
         if (nextRenewalDates.isEmpty) None else Some(nextRenewalDates.min)
       }
@@ -126,12 +127,32 @@ private[deploy] class HadoopFSDelegationTokenProvider
       Try {
         val newExpiration = token.renew(hadoopConf)
         val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
-        val interval = newExpiration - identifier.getIssueDate
-        logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
+        val tokenKind = token.getKind.toString
+        val interval = newExpiration - getIssueDate(tokenKind, identifier)
+        logInfo(s"Renewal interval is $interval for token $tokenKind")
         interval
       }.toOption
     }
     if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
+  }
+
+  private def getIssueDate(kind: String, identifier: AbstractDelegationTokenIdentifier): Long = {
+    val now = System.currentTimeMillis()
+    val issueDate = identifier.getIssueDate
+    if (issueDate > now) {
+      logWarning(s"Token $kind has set up issue date later than current time. (provided: " +
+        s"$issueDate / current timestamp: $now) Please make sure clocks are in sync between " +
+        "machines. If the issue is not a clock mismatch, consult token implementor to check " +
+        "whether issue date is valid.")
+      issueDate
+    } else if (issueDate > 0L) {
+      issueDate
+    } else {
+      logWarning(s"Token $kind has not set up issue date properly. (provided: $issueDate) " +
+        s"Using current timestamp ($now) as issue date instead. Consult token implementor to fix " +
+        "the behavior.")
+      now
+    }
   }
 }
 
@@ -139,9 +160,14 @@ private[deploy] object HadoopFSDelegationTokenProvider {
   def hadoopFSsToAccess(
       sparkConf: SparkConf,
       hadoopConf: Configuration): Set[FileSystem] = {
-    val filesystemsToAccess = sparkConf.get(KERBEROS_FILESYSTEMS_TO_ACCESS)
-
+    // scalastyle:off FileSystemGet
     val defaultFS = FileSystem.get(hadoopConf)
+    // scalastyle:on FileSystemGet
+
+    val filesystemsToAccess = sparkConf.get(KERBEROS_FILESYSTEMS_TO_ACCESS)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .toSet
+
     val master = sparkConf.get("spark.master", null)
     val stagingFS = if (master != null && master.contains("yarn")) {
       sparkConf.get(STAGING_DIR).map(new Path(_).getFileSystem(hadoopConf))
@@ -149,29 +175,6 @@ private[deploy] object HadoopFSDelegationTokenProvider {
       None
     }
 
-    // Add the list of available namenodes for all namespaces in HDFS federation.
-    // If ViewFS is enabled, this is skipped as ViewFS already handles delegation tokens for its
-    // namespaces.
-    val hadoopFilesystems = if (!filesystemsToAccess.isEmpty || defaultFS.getScheme == "viewfs" ||
-      (stagingFS.isDefined && stagingFS.get.getScheme == "viewfs")) {
-      filesystemsToAccess.map(new Path(_).getFileSystem(hadoopConf)).toSet
-    } else {
-      val nameservices = hadoopConf.getTrimmedStrings("dfs.nameservices")
-      // Retrieving the filesystem for the nameservices where HA is not enabled
-      val filesystemsWithoutHA = nameservices.flatMap { ns =>
-        Option(hadoopConf.get(s"dfs.namenode.rpc-address.$ns")).map { nameNode =>
-          new Path(s"hdfs://$nameNode").getFileSystem(hadoopConf)
-        }
-      }
-      // Retrieving the filesystem for the nameservices where HA is enabled
-      val filesystemsWithHA = nameservices.flatMap { ns =>
-        Option(hadoopConf.get(s"dfs.ha.namenodes.$ns")).map { _ =>
-          new Path(s"hdfs://$ns").getFileSystem(hadoopConf)
-        }
-      }
-      (filesystemsWithoutHA ++ filesystemsWithHA).toSet
-    }
-
-    hadoopFilesystems ++ stagingFS + defaultFS
+    filesystemsToAccess ++ stagingFS + defaultFS
   }
 }

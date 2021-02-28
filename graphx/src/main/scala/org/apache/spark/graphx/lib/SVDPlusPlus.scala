@@ -98,7 +98,7 @@ object SVDPlusPlus {
         (ctx: EdgeContext[
           (Array[Double], Array[Double], Double, Double),
           Double,
-          (Array[Double], Array[Double], Double)]) {
+          (Array[Double], Array[Double], Double)]): Unit = {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       val rank = p.length
@@ -177,7 +177,7 @@ object SVDPlusPlus {
 
     // calculate error on training set
     def sendMsgTestF(conf: Conf, u: Double)
-        (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]) {
+        (ctx: EdgeContext[(Array[Double], Array[Double], Double, Double), Double, Double]): Unit = {
       val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + blas.ddot(q.length, q, 1, usr._2, 1)
@@ -198,7 +198,7 @@ object SVDPlusPlus {
     g = gJoinT3
 
     // Convert DoubleMatrix to Array[Double]:
-    val newVertices = g.vertices.mapValues(v => (v._1.toArray, v._2.toArray, v._3, v._4))
+    val newVertices = g.vertices.mapValues(v => (v._1, v._2, v._3, v._4))
     (Graph(newVertices, g.edges), u)
   }
 

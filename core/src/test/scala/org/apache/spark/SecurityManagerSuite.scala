@@ -226,6 +226,8 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setAdminAcls(Seq("user6"))
     securityManager.setViewAcls(Set[String]("user8"), Seq("user9"))
     securityManager.setModifyAcls(Set("user11"), Seq("user9"))
+    assert(securityManager.checkAdminPermissions("user6"))
+    assert(!securityManager.checkAdminPermissions("user8"))
     assert(securityManager.checkModifyPermissions("user6"))
     assert(securityManager.checkModifyPermissions("user11"))
     assert(securityManager.checkModifyPermissions("user9"))
@@ -252,6 +254,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(securityManager.aclsEnabled())
 
     // group1,group2,group3 match
+    assert(securityManager.checkAdminPermissions("user1"))
     assert(securityManager.checkModifyPermissions("user1"))
     assert(securityManager.checkUIViewPermissions("user1"))
 
@@ -261,8 +264,9 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     securityManager.setViewAclsGroups(Nil)
     securityManager.setModifyAclsGroups(Nil)
 
-    assert(securityManager.checkModifyPermissions("user1") === false)
-    assert(securityManager.checkUIViewPermissions("user1") === false)
+    assert(!securityManager.checkAdminPermissions("user1"))
+    assert(!securityManager.checkModifyPermissions("user1"))
+    assert(!securityManager.checkUIViewPermissions("user1"))
 
     // change modify groups so they match
     securityManager.setModifyAclsGroups(Seq("group3"))

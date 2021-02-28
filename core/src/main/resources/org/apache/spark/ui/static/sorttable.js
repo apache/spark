@@ -97,9 +97,14 @@ sorttable = {
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted',
                                                     'sorttable_sorted_reverse');
-            this.removeChild(document.getElementById('sorttable_sortfwdind'));
+            rowlists = this.parentNode.getElementsByTagName("span");
+            for (var j=0; j < rowlists.length; j++) {
+                if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1) {
+                    rowlists[j].parentNode.removeChild(rowlists[j]);
+                }
+            }
             sortrevind = document.createElement('span');
-            sortrevind.id = "sorttable_sortrevind";
+            sortrevind.className = "sorttable_sortrevind";
             sortrevind.innerHTML = stIsIE ? '&nbsp<font face="webdings">5</font>' : '&nbsp;&#x25BE;';
             this.appendChild(sortrevind);
             return;
@@ -110,9 +115,14 @@ sorttable = {
             sorttable.reverse(this.sorttable_tbody);
             this.className = this.className.replace('sorttable_sorted_reverse',
                                                   'sorttable_sorted');
-            this.removeChild(document.getElementById('sorttable_sortrevind'));
+            rowlists = this.parentNode.getElementsByTagName("span");
+            for (var j=0; j < rowlists.length; j++) {
+                if (rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
+                    rowlists[j].parentNode.removeChild(rowlists[j]);
+                }
+            }
             sortfwdind = document.createElement('span');
-            sortfwdind.id = "sorttable_sortfwdind";
+            sortfwdind.className = "sorttable_sortfwdind";
             sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25B4;';
             this.appendChild(sortfwdind);
             return;
@@ -126,14 +136,17 @@ sorttable = {
               cell.className = cell.className.replace('sorttable_sorted','');
             }
           });
-          sortfwdind = document.getElementById('sorttable_sortfwdind');
-          if (sortfwdind) { sortfwdind.parentNode.removeChild(sortfwdind); }
-          sortrevind = document.getElementById('sorttable_sortrevind');
-          if (sortrevind) { sortrevind.parentNode.removeChild(sortrevind); }
+          rowlists = this.parentNode.getElementsByTagName("span");
+          for (var j=0; j < rowlists.length; j++) {
+              if (rowlists[j].className.search(/\bsorttable_sortfwdind\b/) != -1
+                  || rowlists[j].className.search(/\bsorttable_sortrevind\b/) != -1) {
+                  rowlists[j].parentNode.removeChild(rowlists[j]);
+              }
+          }
 
           this.className += ' sorttable_sorted';
           sortfwdind = document.createElement('span');
-          sortfwdind.id = "sorttable_sortfwdind";
+          sortfwdind.className = "sorttable_sortfwdind";
           sortfwdind.innerHTML = stIsIE ? '&nbsp<font face="webdings">6</font>' : '&nbsp;&#x25B4;';
           this.appendChild(sortfwdind);
 

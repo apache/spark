@@ -28,10 +28,10 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
+abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
 
   /**
    * Checks whether the reflected Parquet message type for product type `T` conforms `messageType`.
@@ -251,8 +251,27 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """
       |message root {
       |  optional group _1 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |    repeated group key_value (MAP_KEY_VALUE) {
       |      required int32 key;
+      |      optional binary value (UTF8);
+      |    }
+      |  }
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = true)
+
+  testSchemaInference[Tuple1[Map[(String, String), String]]](
+    "map - group type key",
+    """
+      |message root {
+      |  optional group _1 (MAP) {
+      |    repeated group key_value (MAP_KEY_VALUE) {
+      |      required group key {
+      |        optional binary _1 (UTF8);
+      |        optional binary _2 (UTF8);
+      |      }
       |      optional binary value (UTF8);
       |    }
       |  }
@@ -281,7 +300,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     """
       |message root {
       |  optional group _1 (MAP_KEY_VALUE) {
-      |    repeated group map {
+      |    repeated group key_value {
       |      required int32 key;
       |      optional group value {
       |        optional binary _1 (UTF8);
@@ -721,7 +740,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (MAP_KEY_VALUE) {
-      |    repeated group map {
+      |    repeated group key_value {
       |      required int32 num;
       |      required binary str (UTF8);
       |    }
@@ -740,7 +759,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |    repeated group key_value (MAP_KEY_VALUE) {
       |      required int32 key;
       |      required binary value (UTF8);
       |    }
@@ -778,7 +797,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (MAP_KEY_VALUE) {
-      |    repeated group map {
+      |    repeated group key_value {
       |      required int32 num;
       |      optional binary str (UTF8);
       |    }
@@ -797,7 +816,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |    repeated group key_value (MAP_KEY_VALUE) {
       |      required int32 key;
       |      optional binary value (UTF8);
       |    }
@@ -838,7 +857,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |    repeated group key_value (MAP_KEY_VALUE) {
       |      required int32 key;
       |      required binary value (UTF8);
       |    }
@@ -874,7 +893,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         nullable = true))),
     """message root {
       |  optional group f1 (MAP) {
-      |    repeated group map (MAP_KEY_VALUE) {
+      |    repeated group key_value (MAP_KEY_VALUE) {
       |      required int32 key;
       |      optional binary value (UTF8);
       |    }
@@ -1428,7 +1447,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     parquetSchema =
       """message root {
         |  required group f0 (MAP) {
-        |    repeated group map (MAP_KEY_VALUE) {
+        |    repeated group key_value (MAP_KEY_VALUE) {
         |      required int32 key;
         |      required group value {
         |        required int32 value_f0;
@@ -1453,7 +1472,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     expectedSchema =
       """message root {
         |  required group f0 (MAP) {
-        |    repeated group map (MAP_KEY_VALUE) {
+        |    repeated group key_value (MAP_KEY_VALUE) {
         |      required int32 key;
         |      required group value {
         |        required int64 value_f1;

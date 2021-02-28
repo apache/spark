@@ -2,6 +2,21 @@
 layout: global
 title: Data Sources
 displayTitle: Data Sources
+license: |
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+ 
+     http://www.apache.org/licenses/LICENSE-2.0
+ 
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
 ---
 
 
@@ -18,6 +33,11 @@ goes into specific options that are available for the built-in data sources.
   * [Save Modes](sql-data-sources-load-save-functions.html#save-modes)
   * [Saving to Persistent Tables](sql-data-sources-load-save-functions.html#saving-to-persistent-tables)
   * [Bucketing, Sorting and Partitioning](sql-data-sources-load-save-functions.html#bucketing-sorting-and-partitioning)
+* [Generic File Source Options](sql-data-sources-generic-options.html)
+  * [Ignore Corrupt Files](sql-data-sources-generic-options.html#ignore-corrupt-iles)
+  * [Ignore Missing Files](sql-data-sources-generic-options.html#ignore-missing-iles)
+  * [Path Global Filter](sql-data-sources-generic-options.html#path-global-filter)
+  * [Recursive File Lookup](sql-data-sources-generic-options.html#recursive-file-lookup)
 * [Parquet Files](sql-data-sources-parquet.html)
   * [Loading Data Programmatically](sql-data-sources-parquet.html#loading-data-programmatically)
   * [Partition Discovery](sql-data-sources-parquet.html#partition-discovery)
@@ -39,4 +59,5 @@ goes into specific options that are available for the built-in data sources.
   * [Compatibility with Databricks spark-avro](sql-data-sources-avro.html#compatibility-with-databricks-spark-avro)
   * [Supported types for Avro -> Spark SQL conversion](sql-data-sources-avro.html#supported-types-for-avro---spark-sql-conversion)
   * [Supported types for Spark SQL -> Avro conversion](sql-data-sources-avro.html#supported-types-for-spark-sql---avro-conversion)
+* [Whole Binary Files](sql-data-sources-binaryFile.html)
 * [Troubleshooting](sql-data-sources-troubleshooting.html)

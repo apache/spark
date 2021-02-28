@@ -27,7 +27,6 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.parquet.HadoopReadOptions
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.example.data.{Group, GroupWriter}
 import org.apache.parquet.example.data.simple.SimpleGroup
@@ -35,7 +34,6 @@ import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.api.WriteSupport
 import org.apache.parquet.hadoop.api.WriteSupport.WriteContext
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.io.api.RecordConsumer
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
@@ -47,7 +45,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,7 +64,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
     new WriteContext(schema, new java.util.HashMap[String, String]())
   }
 
-  override def write(record: Group) {
+  override def write(record: Group): Unit = {
     groupWriter.write(record)
   }
 }
@@ -74,7 +72,7 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
 /**
  * A test suite that tests basic Parquet I/O.
  */
-class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
+class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession {
   import testImplicits._
 
   /**
@@ -204,6 +202,42 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
+  testStandardAndLegacyModes("array of struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(s"1st_val_$i"),
+          Tuple1(s"2nd_val_$i")
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map(struct => Row(struct.productIterator.toSeq: _*)))
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("array of nested struct") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Seq(
+          Tuple1(
+            Tuple1(s"1st_val_$i")),
+          Tuple1(
+            Tuple1(s"2nd_val_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(array) =>
+        Row(array.map { case Tuple1(Tuple1(str)) => Row(Row(str))})
+      })
+    }
+  }
+
   testStandardAndLegacyModes("nested struct with array of array as field") {
     val data = (1 to 4).map(i => Tuple1((i, Seq(Seq(s"val_$i")))))
     withParquetDataFrame(data) { df =>
@@ -214,9 +248,34 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
   }
 
-  testStandardAndLegacyModes("nested map with struct as value type") {
-    val data = (1 to 4).map(i => Tuple1(Map(i -> ((i, s"val_$i")))))
+  testStandardAndLegacyModes("nested map with struct as key type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          (i, s"kA_$i") -> s"vA_$i",
+          (i, s"kB_$i") -> s"vB_$i"
+        )
+      )
+    }
     withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
+      checkAnswer(df, data.map { case Tuple1(m) =>
+        Row(m.map { case (k, v) => Row(k.productIterator.toSeq: _*) -> v })
+      })
+    }
+  }
+
+  testStandardAndLegacyModes("nested map with struct as value type") {
+    val data = (1 to 4).map { i =>
+      Tuple1(
+        Map(
+          s"kA_$i" -> ((i, s"vA_$i")),
+          s"kB_$i" -> ((i, s"vB_$i"))
+        )
+      )
+    }
+    withParquetDataFrame(data) { df =>
+      // Structs are converted to `Row`s
       checkAnswer(df, data.map { case Tuple1(m) =>
         Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
@@ -475,7 +534,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         classOf[SQLHadoopMapReduceCommitProtocol].getCanonicalName) {
       val extraOptions = Map(
         SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
       )
       withTempPath { dir =>
@@ -505,7 +564,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       // Using a output committer that always fail when committing a task, so that both
       // `commitTask()` and `abortTask()` are invoked.
       val extraOptions = Map[String, String](
-        "spark.sql.parquet.output.committer.class" ->
+        SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key ->
           classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
       )
 
@@ -583,47 +642,39 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("read dictionary encoded decimals written as INT32") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("test-data/dec-in-i32.parquet"),
-          spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // Decimal column in this file is encoded using plain dictionary
+        readResourceParquetFile("test-data/dec-in-i32.parquet"),
+        spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
     }
   }
 
   test("read dictionary encoded decimals written as INT64") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("test-data/dec-in-i64.parquet"),
-          spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // Decimal column in this file is encoded using plain dictionary
+        readResourceParquetFile("test-data/dec-in-i64.parquet"),
+        spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
     }
   }
 
   test("read dictionary encoded decimals written as FIXED_LEN_BYTE_ARRAY") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // Decimal column in this file is encoded using plain dictionary
-          readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
-          spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // Decimal column in this file is encoded using plain dictionary
+        readResourceParquetFile("test-data/dec-in-fixed-len.parquet"),
+        spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
     }
   }
 
   test("read dictionary and plain encoded timestamp_millis written as INT64") {
-    ("true" :: "false" :: Nil).foreach { vectorized =>
-      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
-        checkAnswer(
-          // timestamp column in this file is encoded using combination of plain
-          // and dictionary encodings.
-          readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
-          (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
-      }
+    withAllParquetReaders {
+      checkAnswer(
+        // timestamp column in this file is encoded using combination of plain
+        // and dictionary encodings.
+        readResourceParquetFile("test-data/timemillis-in-i64.parquet"),
+        (1 to 3).map(i => Row(new java.sql.Timestamp(10))))
     }
   }
 
@@ -658,8 +709,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -678,8 +733,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -697,8 +756,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -717,8 +780,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       {
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -738,7 +805,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       Seq(1).toDF().repartition(1).write.parquet(dir.getCanonicalPath)
 
       val dataTypes =
-        Seq(StringType, BooleanType, ByteType, ShortType, IntegerType, LongType,
+        Seq(StringType, BooleanType, ByteType, BinaryType, ShortType, IntegerType, LongType,
           FloatType, DoubleType, DecimalType(25, 5), DateType, TimestampType)
 
       val constantValues =
@@ -746,6 +813,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           UTF8String.fromString("a string"),
           true,
           1.toByte,
+          "Spark SQL".getBytes,
           2.toShort,
           3,
           Long.MaxValue,
@@ -759,8 +827,12 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         val schema = StructType(StructField("pcol", dt) :: Nil)
         val conf = sqlContext.conf
         val vectorizedReader = new VectorizedParquetRecordReader(
+<<<<<<< HEAD
           null, TimeZone.getDefault, conf.offHeapColumnVectorEnabled,
           conf.parquetVectorizedReaderBatchSize)
+=======
+          conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
+>>>>>>> upstream/master
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 
@@ -774,7 +846,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
           // in order to use get(...) method which is not implemented in `ColumnarBatch`.
           val actual = row.copy().get(1, dt)
           val expected = v
-          assert(actual == expected)
+          if (dt.isInstanceOf[BinaryType]) {
+            assert(actual.asInstanceOf[Array[Byte]] sameElements expected.asInstanceOf[Array[Byte]])
+          } else {
+            assert(actual == expected)
+          }
         } finally {
           vectorizedReader.close()
         }
@@ -809,18 +885,44 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   test("Write Spark version into Parquet metadata") {
     withTempPath { dir =>
-      val path = dir.getAbsolutePath
-      spark.range(1).repartition(1).write.parquet(path)
-      val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+      spark.range(1).repartition(1).write.parquet(dir.getAbsolutePath)
+      assert(getMetaData(dir)(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+    }
+  }
 
-      val conf = new Configuration()
-      val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
-      val parquetReadOptions = HadoopReadOptions.builder(conf).build()
-      val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
-      val metaData = m.getFileMetaData.getKeyValueMetaData
-      m.close()
+  Seq(true, false).foreach { vec =>
+    test(s"SPARK-34167: read LongDecimals with precision < 10, VectorizedReader $vec") {
+      // decimal32-written-as-64-bit.snappy.parquet was generated using a 3rd-party library. It has
+      // 10 rows of Decimal(9, 1) written as LongDecimal instead of an IntDecimal
+      readParquetFile(testFile("test-data/decimal32-written-as-64-bit.snappy.parquet"), vec) {
+        df =>
+          assert(10 == df.collect().length)
+          val first10Df = df.head(10)
+          assert(
+            Seq(792059492, 986842987, 540247998, null, 357991078,
+              494131059, 92536396, 426847157, -999999999, 204486094)
+              .zip(first10Df).forall(d =>
+              d._2.isNullAt(0) && d._1 == null ||
+                d._1 == d._2.getDecimal(0).unscaledValue().intValue()
+            ))
+      }
+      // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
+      // has 2048 rows of Decimal(3, 1) written as LongDecimal instead of an IntDecimal
+      readParquetFile(
+        testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), vec) {
+        df =>
+          assert(2048 == df.collect().length)
+          val first10Df = df.head(10)
+          assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
+            .zip(first10Df).forall(d =>
+            d._2.isNullAt(0) && d._1 == null ||
+              d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
 
-      assert(metaData.get(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
+          val last10Df = df.tail(10)
+          assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
+            .zip(last10Df).forall(d =>
+            d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+      }
     }
   }
 }

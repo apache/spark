@@ -20,7 +20,7 @@ import sys
 from pyspark import since
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.sql import SQLContext
-from pyspark.sql.types import StructField, StructType, DoubleType
+from pyspark.sql.types import ArrayType, StructField, StructType, DoubleType
 
 __all__ = ['BinaryClassificationMetrics', 'RegressionMetrics',
            'MulticlassMetrics', 'RankingMetrics']
@@ -30,8 +30,15 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     """
     Evaluator for binary classification.
 
-    :param scoreAndLabels: an RDD of score, label and optional weight.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    scoreAndLabels : :py:class:`pyspark.RDD`
+        an RDD of score, label and optional weight.
+
+    Examples
+    --------
     >>> scoreAndLabels = sc.parallelize([
     ...     (0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)], 2)
     >>> metrics = BinaryClassificationMetrics(scoreAndLabels)
@@ -48,8 +55,6 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     0.79...
     >>> metrics.areaUnderPR
     0.88...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, scoreAndLabels):
@@ -95,9 +100,15 @@ class RegressionMetrics(JavaModelWrapper):
     """
     Evaluator for regression.
 
-    :param predictionAndObservations: an RDD of (prediction,
-                                      observation) pairs.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndObservations : :py:class:`pyspark.RDD`
+        an RDD of prediction, observation and optional weight.
+
+    Examples
+    --------
     >>> predictionAndObservations = sc.parallelize([
     ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
     >>> metrics = RegressionMetrics(predictionAndObservations)
@@ -111,16 +122,23 @@ class RegressionMetrics(JavaModelWrapper):
     0.61...
     >>> metrics.r2
     0.94...
-
-    .. versionadded:: 1.4.0
+    >>> predictionAndObservationsWithOptWeight = sc.parallelize([
+    ...     (2.5, 3.0, 0.5), (0.0, -0.5, 1.0), (2.0, 2.0, 0.3), (8.0, 7.0, 0.9)])
+    >>> metrics = RegressionMetrics(predictionAndObservationsWithOptWeight)
+    >>> metrics.rootMeanSquaredError
+    0.68...
     """
 
     def __init__(self, predictionAndObservations):
         sc = predictionAndObservations.ctx
         sql_ctx = SQLContext.getOrCreate(sc)
-        df = sql_ctx.createDataFrame(predictionAndObservations, schema=StructType([
+        numCol = len(predictionAndObservations.first())
+        schema = StructType([
             StructField("prediction", DoubleType(), nullable=False),
-            StructField("observation", DoubleType(), nullable=False)]))
+            StructField("observation", DoubleType(), nullable=False)])
+        if numCol == 3:
+            schema.add("weight", DoubleType(), False)
+        df = sql_ctx.createDataFrame(predictionAndObservations, schema=schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.RegressionMetrics
         java_model = java_class(df._jdf)
         super(RegressionMetrics, self).__init__(java_model)
@@ -174,8 +192,15 @@ class MulticlassMetrics(JavaModelWrapper):
     """
     Evaluator for multiclass classification.
 
-    :param predictionAndLabels: an RDD of prediction, label and optional weight.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndLabels : :py:class:`pyspark.RDD`
+        an RDD of prediction, label, optional weight and optional probability.
+
+    Examples
+    --------
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
     >>> metrics = MulticlassMetrics(predictionAndLabels)
@@ -231,8 +256,12 @@ class MulticlassMetrics(JavaModelWrapper):
     0.66...
     >>> metrics.weightedFMeasure(2.0)
     0.65...
-
-    .. versionadded:: 1.4.0
+    >>> predictionAndLabelsWithProbabilities = sc.parallelize([
+    ...      (1.0, 1.0, 1.0, [0.1, 0.8, 0.1]), (0.0, 2.0, 1.0, [0.9, 0.05, 0.05]),
+    ...      (0.0, 0.0, 1.0, [0.8, 0.2, 0.0]), (1.0, 1.0, 1.0, [0.3, 0.65, 0.05])])
+    >>> metrics = MulticlassMetrics(predictionAndLabelsWithProbabilities)
+    >>> metrics.logLoss()
+    0.9682...
     """
 
     def __init__(self, predictionAndLabels):
@@ -242,8 +271,10 @@ class MulticlassMetrics(JavaModelWrapper):
         schema = StructType([
             StructField("prediction", DoubleType(), nullable=False),
             StructField("label", DoubleType(), nullable=False)])
-        if numCol == 3:
+        if numCol >= 3:
             schema.add("weight", DoubleType(), False)
+        if numCol == 4:
+            schema.add("probability", ArrayType(DoubleType(), False), False)
         df = sql_ctx.createDataFrame(predictionAndLabels, schema)
         java_class = sc._jvm.org.apache.spark.mllib.evaluation.MulticlassMetrics
         java_model = java_class(df._jdf)
@@ -348,14 +379,27 @@ class MulticlassMetrics(JavaModelWrapper):
         else:
             return self.call("weightedFMeasure", beta)
 
+    @since('3.0.0')
+    def logLoss(self, eps=1e-15):
+        """
+        Returns weighted logLoss.
+        """
+        return self.call("logLoss", eps)
+
 
 class RankingMetrics(JavaModelWrapper):
     """
     Evaluator for ranking algorithms.
 
-    :param predictionAndLabels: an RDD of (predicted ranking,
-                                ground truth set) pairs.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndLabels : :py:class:`pyspark.RDD`
+        an RDD of (predicted ranking, ground truth set) pairs.
+
+    Examples
+    --------
     >>> predictionAndLabels = sc.parallelize([
     ...     ([1, 6, 2, 7, 8, 3, 9, 10, 4, 5], [1, 2, 3, 4, 5]),
     ...     ([4, 1, 5, 6, 2, 7, 3, 8, 9, 10], [1, 2, 3]),
@@ -369,6 +413,10 @@ class RankingMetrics(JavaModelWrapper):
     0.17...
     >>> metrics.meanAveragePrecision
     0.35...
+    >>> metrics.meanAveragePrecisionAt(1)
+    0.3333333333333333...
+    >>> metrics.meanAveragePrecisionAt(2)
+    0.25...
     >>> metrics.ndcgAt(3)
     0.33...
     >>> metrics.ndcgAt(10)
@@ -379,8 +427,6 @@ class RankingMetrics(JavaModelWrapper):
     0.35...
     >>> metrics.recallAt(15)
     0.66...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, predictionAndLabels):
@@ -411,9 +457,18 @@ class RankingMetrics(JavaModelWrapper):
         """
         Returns the mean average precision (MAP) of all the queries.
         If a query has an empty ground truth set, the average precision will be zero and
-        a log warining is generated.
+        a log warning is generated.
         """
         return self.call("meanAveragePrecision")
+
+    @since('3.0.0')
+    def meanAveragePrecisionAt(self, k):
+        """
+        Returns the mean average precision (MAP) at first k ranking of all the queries.
+        If a query has an empty ground truth set, the average precision will be zero and
+        a log warning is generated.
+        """
+        return self.call("meanAveragePrecisionAt", int(k))
 
     @since('1.4.0')
     def ndcgAt(self, k):
@@ -447,10 +502,16 @@ class MultilabelMetrics(JavaModelWrapper):
     """
     Evaluator for multilabel classification.
 
-    :param predictionAndLabels: an RDD of (predictions, labels) pairs,
-                                both are non-null Arrays, each with
-                                unique elements.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndLabels : :py:class:`pyspark.RDD`
+        an RDD of (predictions, labels) pairs,
+        both are non-null Arrays, each with unique elements.
+
+    Examples
+    --------
     >>> predictionAndLabels = sc.parallelize([([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
     ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
     ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])])
@@ -479,8 +540,6 @@ class MultilabelMetrics(JavaModelWrapper):
     0.28...
     >>> metrics.accuracy
     0.54...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, predictionAndLabels):

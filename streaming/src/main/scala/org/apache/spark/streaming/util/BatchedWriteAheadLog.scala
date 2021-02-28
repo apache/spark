@@ -135,18 +135,16 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
 
   /** Start the actual log writer on a separate thread. */
   private def startBatchedWriterThread(): Thread = {
-    val thread = new Thread(new Runnable {
-      override def run(): Unit = {
-        while (active.get()) {
-          try {
-            flushRecords()
-          } catch {
-            case NonFatal(e) =>
-              logWarning("Encountered exception in Batched Writer Thread.", e)
-          }
+    val thread = new Thread(() => {
+      while (active.get()) {
+        try {
+          flushRecords()
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Encountered exception in Batched Writer Thread.", e)
         }
-        logInfo("BatchedWriteAheadLog Writer thread exiting.")
       }
+      logInfo("BatchedWriteAheadLog Writer thread exiting.")
     }, "BatchedWriteAheadLog Writer")
     thread.setDaemon(true)
     thread.start()
@@ -172,7 +170,7 @@ private[util] class BatchedWriteAheadLog(val wrappedLog: WriteAheadLog, conf: Sp
         // We take the latest record for the timestamp. Please refer to the class Javadoc for
         // detailed explanation
         val time = sortedByTime.last.time
-        segment = wrappedLog.write(aggregate(sortedByTime), time)
+        segment = wrappedLog.write(aggregate(sortedByTime.toSeq), time)
       }
       buffer.foreach(_.promise.success(segment))
     } catch {

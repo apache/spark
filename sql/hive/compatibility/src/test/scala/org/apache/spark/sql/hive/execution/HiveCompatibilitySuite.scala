@@ -18,62 +18,61 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io.File
-import java.util.{Locale, TimeZone}
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.tags.SlowHiveTest
 
 /**
  * Runs the test cases that are included in the hive distribution.
  */
+@SlowHiveTest
 class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   // TODO: bundle in jar files... get from classpath
   private lazy val hiveQueryDir = TestHive.getHiveFile(
     "ql/src/test/queries/clientpositive".split("/").mkString(File.separator))
 
-  private val originalTimeZone = TimeZone.getDefault
-  private val originalLocale = Locale.getDefault
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
   private val originalSessionLocalTimeZone = TestHive.conf.sessionLocalTimeZone
+  private val originalCreateHiveTable =
+    TestHive.conf.getConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT)
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
   }
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     TestHive.setCacheTables(true)
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
-    // Add Locale setting
-    Locale.setDefault(Locale.US)
     // Set a relatively small column batch size for testing purposes
     TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, 5)
     // Enable in-memory partition pruning for testing purposes
     TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
     // Ensures that cross joins are enabled so that we can test them
     TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
+    // Ensures that the table insertion behavior is consistent with Hive
+    TestHive.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, StoreAssignmentPolicy.LEGACY.toString)
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
+    TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT, true)
     RuleExecutor.resetMetrics()
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
       TestHive.setCacheTables(false)
-      TimeZone.setDefault(originalTimeZone)
-      Locale.setDefault(originalLocale)
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
+      TestHive.setConf(SQLConf.LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT, originalCreateHiveTable)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
@@ -83,7 +82,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   }
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */
-  override def blackList: Seq[String] = Seq(
+  override def excludeList: Seq[String] = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
     "hook_context_cs",
@@ -306,7 +305,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Unsupported underscore syntax.
     "inputddl5",
 
-    // Thift is broken...
+    // Thrift is broken...
     "inputddl8",
 
     // Hive changed ordering of ddl:
@@ -497,7 +496,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_partitions_filter2",
     "drop_partitions_filter3",
 
-    // The following failes due to truncate table
+    // The following fails due to truncate table
     "truncate_table",
 
     // We do not support DFS command.
@@ -514,7 +513,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // This test uses CREATE EXTERNAL TABLE without specifying LOCATION
     "alter2",
 
-    // [SPARK-16248][SQL] Whitelist the list of Hive fallback functions
+    // [SPARK-16248][SQL] Include the list of Hive fallback functions
     "udf_field",
     "udf_reflect2",
     "udf_xpath",
@@ -525,6 +524,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_xpath_long",
     "udf_xpath_short",
     "udf_xpath_string",
+
+    // [SPARK-33428][SQL] CONV UDF use BigInt to avoid Long value overflow
+    "udf_conv",
 
     // These tests DROP TABLE that don't exist (but do not specify IF EXISTS)
     "alter_rename_partition1",
@@ -597,14 +599,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "correlationoptimizer4",
     "multiMapJoin1",
     "orc_dictionary_threshold",
-    "udf_hash"
+    "udf_hash",
+    // Moved to HiveQuerySuite
+    "udf_radians"
   )
 
-  /**
-   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
-   * blacklist are implicitly marked as ignored.
-   */
-  override def whiteList: Seq[String] = Seq(
+  private def commonIncludeList = Seq(
     "add_part_exist",
     "add_part_multiple",
     "add_partition_no_whitelist",
@@ -719,7 +719,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_multi_insert_common_distinct",
     "groupby_multi_single_reducer2",
     "groupby_multi_single_reducer3",
-    "groupby_mutli_insert_common_distinct",
+    "groupby_multi_insert_common_distinct",
     "groupby_neg_float",
     "groupby_ppd",
     "groupby_ppr",
@@ -961,8 +961,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "subq2",
     "subquery_exists",
     "subquery_exists_having",
-    "subquery_notexists",
-    "subquery_notexists_having",
+    "subquery_nonexistent",
+    "subquery_nonexistent_having",
     "subquery_in_having",
     "tablename_with_select",
     "timestamp_comparison",
@@ -1006,7 +1006,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_concat_insert1",
     "udf_concat_insert2",
     "udf_concat_ws",
-    "udf_conv",
     "udf_cos",
     "udf_count",
     "udf_date_add",
@@ -1061,7 +1060,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_positive",
     "udf_pow",
     "udf_power",
-    "udf_radians",
     "udf_rand",
     "udf_regexp",
     "udf_regexp_extract",
@@ -1141,4 +1139,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "view_cast",
     "view_inputs"
   )
+
+  /**
+   * The set of tests that are believed to be working in catalyst. Tests not on includeList or
+   * excludeList are implicitly marked as ignored.
+   */
+  override def includeList: Seq[String] =
+    commonIncludeList ++ Seq(
+      "decimal_1_1"
+    )
 }

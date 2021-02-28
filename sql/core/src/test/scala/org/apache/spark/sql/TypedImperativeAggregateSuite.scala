@@ -26,10 +26,10 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggreg
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
+class TypedImperativeAggregateSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
@@ -147,9 +147,9 @@ class TypedImperativeAggregateSuite extends QueryTest with SharedSQLContext {
     val query = df.select(typedMax($"key"), count($"key"), typedMax($"value"),
       count($"value"))
     val maxKey = nullableData.map(_._1).filter(_ != null).max
-    val countKey = nullableData.map(_._1).filter(_ != null).size
+    val countKey = nullableData.map(_._1).count(_ != null)
     val maxValue = nullableData.map(_._2).filter(_ != null).max
-    val countValue = nullableData.map(_._2).filter(_ != null).size
+    val countValue = nullableData.map(_._2).count(_ != null)
     val expected = Seq(Row(maxKey, countKey, maxValue, countValue))
     checkAnswer(query, expected)
   }

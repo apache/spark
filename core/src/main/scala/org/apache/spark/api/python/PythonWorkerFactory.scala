@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream, OutputStreamWriter}
+import java.io.{DataInputStream, DataOutputStream, EOFException, InputStream}
 import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
@@ -189,7 +189,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     null
   }
 
-  private def startDaemon() {
+  private def startDaemon(): Unit = {
     self.synchronized {
       // Is it already running?
       if (daemon != null) {
@@ -212,8 +212,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         try {
           daemonPort = in.readInt()
         } catch {
+          case _: EOFException if daemon.isAlive =>
+            throw new SparkException("EOFException occurred while reading the port number " +
+              s"from $daemonModule's stdout")
           case _: EOFException =>
-            throw new SparkException(s"No port number in $daemonModule's stdout")
+            throw new SparkException(
+              s"EOFException occurred while reading the port number from $daemonModule's" +
+              s" stdout and terminated with code: ${daemon.exitValue}.")
         }
 
         // test that the returned port number is within a valid range.
@@ -271,7 +276,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
   /**
    * Redirect the given streams to our stderr in separate threads.
    */
-  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream) {
+  private def redirectStreamsToStderr(stdout: InputStream, stderr: InputStream): Unit = {
     try {
       new RedirectThread(stdout, System.err, "stdout reader for " + pythonExec).start()
       new RedirectThread(stderr, System.err, "stderr reader for " + pythonExec).start()
@@ -288,7 +293,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
     setDaemon(true)
 
-    override def run() {
+    override def run(): Unit = {
       while (true) {
         self.synchronized {
           if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
@@ -301,7 +306,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def cleanupIdleWorkers() {
+  private def cleanupIdleWorkers(): Unit = {
     while (idleWorkers.nonEmpty) {
       val worker = idleWorkers.dequeue()
       try {
@@ -314,7 +319,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  private def stopDaemon() {
+  private def stopDaemon(): Unit = {
     self.synchronized {
       if (useDaemon) {
         cleanupIdleWorkers()
@@ -332,11 +337,11 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     }
   }
 
-  def stop() {
+  def stop(): Unit = {
     stopDaemon()
   }
 
-  def stopWorker(worker: Socket) {
+  def stopWorker(worker: Socket): Unit = {
     self.synchronized {
       if (useDaemon) {
         if (daemon != null) {
@@ -355,7 +360,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     worker.close()
   }
 
-  def releaseWorker(worker: Socket) {
+  def releaseWorker(worker: Socket): Unit = {
     if (useDaemon) {
       self.synchronized {
         lastActivityNs = System.nanoTime()

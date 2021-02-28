@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -39,10 +38,7 @@ public class JavaDataFrameSuite {
   Dataset<Row> df;
 
   private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
-    String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
-    if (errorMessage != null) {
-      Assert.fail(errorMessage);
-    }
+    QueryTest$.MODULE$.checkAnswer(actual, expected);
   }
 
   @Before
@@ -89,7 +85,7 @@ public class JavaDataFrameSuite {
           udaf.distinct(col("value")),
           udaf.apply(col("value")),
           registeredUDAF.apply(col("value")),
-          callUDF("mydoublesum", col("value")));
+          callUDF("mydoublesum", col("value")));  // test deprecated one
 
     List<Row> expectedResult = new ArrayList<>();
     expectedResult.add(RowFactory.create(4950.0, 9900.0, 9900.0, 9900.0));

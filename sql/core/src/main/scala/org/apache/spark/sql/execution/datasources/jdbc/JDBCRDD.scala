@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, PreparedStatement, ResultSet, SQLException}
+import java.sql.{Connection, PreparedStatement, ResultSet}
 
 import scala.util.control.NonFatal
 
@@ -46,8 +46,8 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    *
    * @return A StructType giving the table's Catalyst schema.
-   * @throws SQLException if the table specification is garbage.
-   * @throws SQLException if the table contains an unsupported type.
+   * @throws java.sql.SQLException if the table specification is garbage.
+   * @throws java.sql.SQLException if the table contains an unsupported type.
    */
   def resolveTable(options: JDBCOptions): StructType = {
     val url = options.url
@@ -231,7 +231,7 @@ private[jdbc] class JDBCRDD(
     var stmt: PreparedStatement = null
     var conn: Connection = null
 
-    def close() {
+    def close(): Unit = {
       if (closed) return
       try {
         if (null != rs) {

@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * The reader schema is said to be evolved (or projected) when it changed after the data is
@@ -67,7 +67,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
  *     -> ToDecimalTypeTest
  */
 
-trait ReadSchemaTest extends QueryTest with SQLTestUtils with SharedSQLContext {
+trait ReadSchemaTest extends QueryTest with SharedSparkSession {
   val format: String
   val options: Map[String, String] = Map.empty[String, String]
 }

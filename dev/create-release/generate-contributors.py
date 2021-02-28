@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,7 +22,9 @@ import os
 import re
 import sys
 
-from releaseutils import *
+from releaseutils import tag_exists, get_commits, yesOrNoPrompt, get_date, \
+    is_valid_author, capitalize_author, JIRA, find_components, translate_issue_type, \
+    translate_component, CORE_COMPONENT, contributors_file_name, nice_join
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
@@ -31,10 +33,10 @@ PREVIOUS_RELEASE_TAG = os.environ.get("PREVIOUS_RELEASE_TAG", "v1.1.0")
 
 # If the release tags are not provided, prompt the user to provide them
 while not tag_exists(RELEASE_TAG):
-    RELEASE_TAG = raw_input("Please provide a valid release tag: ")
+    RELEASE_TAG = input("Please provide a valid release tag: ")
 while not tag_exists(PREVIOUS_RELEASE_TAG):
     print("Please specify the previous release tag.")
-    PREVIOUS_RELEASE_TAG = raw_input(
+    PREVIOUS_RELEASE_TAG = input(
         "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
 
 # Gather commits found in the new tag but not in the old tag.
@@ -234,7 +236,7 @@ print("=========================================================================
 # e.g. * Andrew Or -- Bug fixes in Windows, Core, and Web UI; improvements in Core
 # e.g. * Tathagata Das -- Bug fixes and new features in Streaming
 contributors_file = open(contributors_file_name, "w")
-authors = author_info.keys()
+authors = list(author_info.keys())
 authors.sort()
 for author in authors:
     contribution = ""

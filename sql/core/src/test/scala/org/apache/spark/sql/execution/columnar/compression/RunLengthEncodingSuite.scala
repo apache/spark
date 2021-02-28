@@ -36,11 +36,11 @@ class RunLengthEncodingSuite extends SparkFunSuite {
   def testRunLengthEncoding[T <: AtomicType](
       columnStats: ColumnStats,
       columnType: NativeColumnType[T],
-      testDecompress: Boolean = true) {
+      testDecompress: Boolean = true): Unit = {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
-    def skeleton(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]) {
+    def skeleton(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]): Unit = {
       // -------------
       // Tests encoder
       // -------------
@@ -98,7 +98,7 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]) {
+    def skeletonForDecompress(uniqueValueCount: Int, inputRuns: Seq[(Int, Int)]): Unit = {
       if (!testDecompress) return
       val builder = TestCompressibleColumnBuilder(columnStats, columnType, RunLengthEncoding)
       val (values, rows) = makeUniqueValuesAndSingleValueRows(columnType, uniqueValueCount)

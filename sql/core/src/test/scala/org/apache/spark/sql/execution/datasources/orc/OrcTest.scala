@@ -22,10 +22,15 @@ import java.io.File
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Predicate}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.FileBasedDataSourceTest
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
 
@@ -41,7 +46,6 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> OrcPartitionDiscoverySuite
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
- *   -> HiveOrcFilterSuite
  */
 abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 
@@ -102,6 +106,62 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
       df.repartition(numRows).write.orc(file.getCanonicalPath)
       val actual = stripSparkFilter(spark.read.orc(file.getCanonicalPath).where(predicate)).count()
       assert(actual < numRows)
+    }
+  }
+
+  protected def checkNoFilterPredicate
+      (predicate: Predicate, noneSupported: Boolean = false)
+      (implicit df: DataFrame): Unit = {
+    val output = predicate.collect { case a: Attribute => a }.distinct
+    val query = df
+      .select(output.map(e => Column(e)): _*)
+      .where(Column(predicate))
+
+    query.queryExecution.optimizedPlan match {
+      case PhysicalOperation(_, filters,
+          DataSourceV2ScanRelation(_, o: OrcScan, _)) =>
+        assert(filters.nonEmpty, "No filter is analyzed from the given query")
+        if (noneSupported) {
+          assert(o.pushedFilters.isEmpty, "Unsupported filters should not show in pushed filters")
+        } else {
+          assert(o.pushedFilters.nonEmpty, "No filter is pushed down")
+          val maybeFilter = OrcFilters.createFilter(query.schema, o.pushedFilters)
+          assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for ${o.pushedFilters}")
+        }
+
+      case _ =>
+        throw new AnalysisException("Can not match OrcTable in the query.")
+    }
+  }
+
+  protected def readResourceOrcFile(name: String): DataFrame = {
+    val url = Thread.currentThread().getContextClassLoader.getResource(name)
+    // Copy to avoid URISyntaxException when `sql/hive` accesses the resources in `sql/core`
+    val file = File.createTempFile("orc-test", ".orc")
+    file.deleteOnExit();
+    FileUtils.copyURLToFile(url, file)
+    spark.read.orc(file.getAbsolutePath)
+  }
+
+  /**
+   * Takes a sequence of products `data` to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with Orc datasource.
+   *
+   * This is different from [[withOrcDataFrame]] which does not
+   * test nested cases.
+   */
+  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit =
+    withNestedOrcDataFrame(spark.createDataFrame(data))(runTest)
+
+  protected def withNestedOrcDataFrame(inputDF: DataFrame)
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
+    withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
+      withTempPath { file =>
+        newDF.write.format(dataSourceName).save(file.getCanonicalPath)
+        readFile(file.getCanonicalPath, true) { df => runTest(df, colName, resultFun) }
+      }
     }
   }
 }

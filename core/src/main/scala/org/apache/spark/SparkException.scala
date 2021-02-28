@@ -37,3 +37,16 @@ private[spark] class SparkDriverExecutionException(cause: Throwable)
  */
 private[spark] case class SparkUserAppException(exitCode: Int)
   extends SparkException(s"User application exited with $exitCode")
+
+/**
+ * Exception thrown when the relative executor to access is dead.
+ */
+private[spark] case class ExecutorDeadException(message: String)
+  extends SparkException(message)
+
+/**
+ * Exception thrown when Spark returns different result after upgrading to a new version.
+ */
+private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
+  extends RuntimeException("You may get a different result due to the upgrading of Spark" +
+    s" $version: $message", cause)

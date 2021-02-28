@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class LeftSemiPushdownSuite extends PlanTest {
 
@@ -35,15 +35,16 @@ class LeftSemiPushdownSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Filter Pushdown", FixedPoint(10),
         CombineFilters,
-        PushDownPredicate,
+        PushPredicateThroughNonJoin,
         PushDownLeftSemiAntiJoin,
+        PushLeftSemiLeftAntiThroughJoin,
         BooleanSimplification,
         CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-
   val testRelation1 = LocalRelation('d.int)
+  val testRelation2 = LocalRelation('e.int)
 
   test("Project: LeftSemiAnti join pushdown") {
     val originalQuery = testRelation
@@ -60,7 +61,7 @@ class LeftSemiPushdownSuite extends PlanTest {
 
   test("Project: LeftSemiAnti join no pushdown because of non-deterministic proj exprs") {
     val originalQuery = testRelation
-      .select(Rand('a), 'b, 'c)
+      .select(Rand(1), 'b, 'c)
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd))
 
     val optimized = Optimize.execute(originalQuery.analyze)
@@ -117,7 +118,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, originalQuery.analyze)
   }
 
-  test("Aggregate: LeftSemiAnti join partial pushdown") {
+  test("Aggregate: LeftSemi join partial pushdown") {
     val originalQuery = testRelation
       .groupBy('b)('b, sum('c).as('sum))
       .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'sum === 10))
@@ -130,6 +131,15 @@ class LeftSemiPushdownSuite extends PlanTest {
       .analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("Aggregate: LeftAnti join no pushdown") {
+    val originalQuery = testRelation
+      .groupBy('b)('b, sum('c).as('sum))
+      .join(testRelation1, joinType = LeftAnti, condition = Some('b === 'd && 'sum === 10))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
   }
 
   test("LeftSemiAnti join over aggregate - no pushdown") {
@@ -174,7 +184,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Window: LeftSemiAnti partial pushdown") {
+  test("Window: LeftSemi partial pushdown") {
     // Attributes from join condition which does not refer to the window partition spec
     // are kept up in the plan as a Filter operator above Window.
     val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
@@ -192,6 +202,25 @@ class LeftSemiPushdownSuite extends PlanTest {
       .where('b > 5)
       .select('a, 'b, 'c, 'window).analyze
 
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Window: LeftAnti no pushdown") {
+    // Attributes from join condition which does not refer to the window partition spec
+    // are kept up in the plan as a Filter operator above Window.
+    val winExpr = windowExpr(count('b), windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame))
+
+    val originalQuery = testRelation
+      .select('a, 'b, 'c, winExpr.as('window))
+      .join(testRelation1, joinType = LeftAnti, condition = Some('a === 'd && 'b > 5))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = testRelation
+      .select('a, 'b, 'c)
+      .window(winExpr.as('window) :: Nil, 'a :: Nil, 'b.asc :: Nil)
+      .join(testRelation1, joinType = LeftAnti, condition = Some('a === 'd && 'b > 5))
+      .select('a, 'b, 'c, 'window).analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -251,7 +280,7 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Unary: LeftSemiAnti join pushdown - partial pushdown") {
+  test("Unary: LeftSemi join pushdown - partial pushdown") {
     val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
     val originalQuery = testRelationWithArrayType
       .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
@@ -267,6 +296,16 @@ class LeftSemiPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("Unary: LeftAnti join pushdown - no pushdown") {
+    val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode('c_arr), alias = Some("arr"), outputNames = Seq("out_col"))
+      .join(testRelation1, joinType = LeftAnti, condition = Some('b === 'd && 'b === 'out_col))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
+  }
+
   test("Unary: LeftSemiAnti join pushdown - no pushdown") {
     val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
     val originalQuery = testRelationWithArrayType
@@ -276,4 +315,157 @@ class LeftSemiPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     comparePlans(optimized, originalQuery.analyze)
   }
+
+  test("Unary: LeftSemi join push down through Expand") {
+    val expand = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)),
+      Seq('a, 'b, 'c), testRelation)
+    val originalQuery = expand
+      .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 1))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = Expand(Seq(Seq('a, 'b, "null"), Seq('a, "null", 'c)),
+      Seq('a, 'b, 'c), testRelation
+        .join(testRelation1, joinType = LeftSemi, condition = Some('b === 'd && 'b === 1)))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, LeftOuter, Cross, RightOuter).foreach { case innerJT =>
+        test(s"$outerJT pushdown empty join cond join type $innerJT join cond $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery = joinedRelation.join(testRelation, joinType = outerJT, None)
+          val optimized = Optimize.execute(originalQuery.analyze)
+
+          val correctAnswer = if (innerJT == RightOuter) {
+            val pushedDownJoin = testRelation2.join(testRelation, joinType = outerJT, None)
+            testRelation1.join(pushedDownJoin, joinType = innerJT, innerJoinCond).analyze
+          } else {
+            val pushedDownJoin = testRelation1.join(testRelation, joinType = outerJT, None)
+            pushedDownJoin.join(testRelation2, joinType = innerJT, innerJoinCond).analyze
+          }
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
+  Seq(Some('d === 'e), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, LeftOuter, Cross).foreach { case innerJT =>
+        test(s"$outerJT pushdown to left of join type: $innerJT join condition $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery =
+            joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
+          val optimized = Optimize.execute(originalQuery.analyze)
+
+          val pushedDownJoin =
+            testRelation1.join(testRelation, joinType = outerJT, condition = Some('a === 'd))
+          val correctAnswer =
+            pushedDownJoin.join(testRelation2, joinType = innerJT, innerJoinCond).analyze
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
+  Seq(Some('e === 'd), None).foreach { case innerJoinCond =>
+    Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+      Seq(Inner, RightOuter, Cross).foreach { case innerJT =>
+        test(s"$outerJT pushdown to right of join type: $innerJT join condition $innerJoinCond") {
+          val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, innerJoinCond)
+          val originalQuery =
+            joinedRelation.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
+          val optimized = Optimize.execute(originalQuery.analyze)
+
+          val pushedDownJoin =
+            testRelation2.join(testRelation, joinType = outerJT, condition = Some('a === 'e))
+          val correctAnswer =
+            testRelation1.join(pushedDownJoin, joinType = innerJT, innerJoinCond).analyze
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case jt =>
+    test(s"$jt no pushdown - join condition refers left leg - join type for RightOuter") {
+      val joinedRelation = testRelation1.join(testRelation2, joinType = RightOuter, None)
+      val originalQuery =
+        joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'd))
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case jt =>
+    test(s"$jt no pushdown - join condition refers right leg - join type for LeftOuter") {
+      val joinedRelation = testRelation1.join(testRelation2, joinType = LeftOuter, None)
+      val originalQuery =
+        joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'e))
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+    Seq(Inner, LeftOuter, RightOuter, Cross).foreach { case innerJT =>
+      test(s"$outerJT no pushdown - join condition refers both leg - join type $innerJT") {
+        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
+        val originalQuery = joinedRelation
+          .join(testRelation, joinType = outerJT, condition = Some('a === 'd && 'a === 'e))
+        val optimized = Optimize.execute(originalQuery.analyze)
+        comparePlans(optimized, originalQuery.analyze)
+      }
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case outerJT =>
+    Seq(Inner, LeftOuter, RightOuter, Cross).foreach { case innerJT =>
+      test(s"$outerJT no pushdown - join condition refers none of the leg - join type $innerJT") {
+        val joinedRelation = testRelation1.join(testRelation2, joinType = innerJT, None)
+        val originalQuery = joinedRelation
+          .join(testRelation, joinType = outerJT, condition = Some('d + 'e === 'a))
+        val optimized = Optimize.execute(originalQuery.analyze)
+        comparePlans(optimized, originalQuery.analyze)
+      }
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { case jt =>
+    test(s"$jt no pushdown when child join type is FullOuter") {
+      val joinedRelation = testRelation1.join(testRelation2, joinType = FullOuter, None)
+      val originalQuery =
+        joinedRelation.join(testRelation, joinType = jt, condition = Some('a === 'e))
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  Seq(LeftSemi, LeftAnti).foreach { jt =>
+    test(s"SPARK-34081: $jt only push down if join can be planned as broadcast join") {
+      Seq(-1, 100000).foreach { threshold =>
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> threshold.toString) {
+          val originalQuery = testRelation
+            .groupBy('b)('b)
+            .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
+
+          val optimized = Optimize.execute(originalQuery.analyze)
+          val correctAnswer = if (threshold > 0) {
+            testRelation
+              .join(testRelation1, joinType = jt, condition = Some('b <=> 'd))
+              .groupBy('b)('b)
+              .analyze
+          } else {
+            originalQuery.analyze
+          }
+
+          comparePlans(optimized, correctAnswer)
+        }
+      }
+    }
+  }
+
 }

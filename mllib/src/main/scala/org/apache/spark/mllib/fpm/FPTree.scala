@@ -33,7 +33,7 @@ private[fpm] class FPTree[T] extends Serializable {
   private val summaries: mutable.Map[T, Summary[T]] = mutable.Map.empty
 
   /** Adds a transaction with count. */
-  def add(t: Iterable[T], count: Long = 1L): this.type = {
+  def add(t: Iterable[T], count: Long = 1L): FPTree[T] = {
     require(count > 0)
     var curr = root
     curr.count += count
@@ -53,7 +53,7 @@ private[fpm] class FPTree[T] extends Serializable {
   }
 
   /** Merges another FP-Tree. */
-  def merge(other: FPTree[T]): this.type = {
+  def merge(other: FPTree[T]): FPTree[T] = {
     other.transactions.foreach { case (t, c) =>
       add(t, c)
     }

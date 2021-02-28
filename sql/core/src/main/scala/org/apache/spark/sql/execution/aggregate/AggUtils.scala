@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -27,6 +26,22 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
+
+  private def mayRemoveAggFilters(exprs: Seq[AggregateExpression]): Seq[AggregateExpression] = {
+    exprs.map { ae =>
+      if (ae.filter.isDefined) {
+        ae.mode match {
+          // Aggregate filters are applicable only in partial/complete modes;
+          // this method filters out them, otherwise.
+          case Partial | Complete => ae
+          case _ => ae.copy(filter = None)
+        }
+      } else {
+        ae
+      }
+    }
+  }
+
   private def createAggregate(
       requiredChildDistributionExpressions: Option[Seq[Expression]] = None,
       groupingExpressions: Seq[NamedExpression] = Nil,
@@ -41,7 +56,7 @@ object AggUtils {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
-        aggregateExpressions = aggregateExpressions,
+        aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
         aggregateAttributes = aggregateAttributes,
         initialInputBufferOffset = initialInputBufferOffset,
         resultExpressions = resultExpressions,
@@ -54,7 +69,7 @@ object AggUtils {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
-          aggregateExpressions = aggregateExpressions,
+          aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
           resultExpressions = resultExpressions,
@@ -63,7 +78,7 @@ object AggUtils {
         SortAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           groupingExpressions = groupingExpressions,
-          aggregateExpressions = aggregateExpressions,
+          aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
           aggregateAttributes = aggregateAttributes,
           initialInputBufferOffset = initialInputBufferOffset,
           resultExpressions = resultExpressions,
@@ -120,20 +135,12 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       functionsWithDistinct: Seq[AggregateExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
+      distinctExpressions: Seq[Expression],
+      normalizedNamedDistinctExpressions: Seq[NamedExpression],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
-    // functionsWithDistinct is guaranteed to be non-empty. Even though it may contain more than one
-    // DISTINCT aggregate function, all of those functions will have the same column expressions.
-    // For example, it would be valid for functionsWithDistinct to be
-    // [COUNT(DISTINCT foo), MAX(DISTINCT foo)], but [COUNT(DISTINCT bar), COUNT(DISTINCT foo)] is
-    // disallowed because those two distinct aggregates have different column expressions.
-    val distinctExpressions = functionsWithDistinct.head.aggregateFunction.children
-    val namedDistinctExpressions = distinctExpressions.map {
-      case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
-    }
-    val distinctAttributes = namedDistinctExpressions.map(_.toAttribute)
+    val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
     // 1. Create an Aggregate Operator for partial aggregations.
@@ -144,7 +151,7 @@ object AggUtils {
       // DISTINCT column. For example, for AVG(DISTINCT value) GROUP BY key, the grouping
       // expressions will be [key, value].
       createAggregate(
-        groupingExpressions = groupingExpressions ++ namedDistinctExpressions,
+        groupingExpressions = groupingExpressions ++ normalizedNamedDistinctExpressions,
         aggregateExpressions = aggregateExpressions,
         aggregateAttributes = aggregateAttributes,
         resultExpressions = groupingAttributes ++ distinctAttributes ++
@@ -174,7 +181,7 @@ object AggUtils {
       // Children of an AggregateFunction with DISTINCT keyword has already
       // been evaluated. At here, we need to replace original children
       // to AttributeReferences.
-      case agg @ AggregateExpression(aggregateFunction, mode, true, _) =>
+      case agg @ AggregateExpression(aggregateFunction, mode, true, _, _) =>
         aggregateFunction.transformDown(distinctColumnAttributeLookup)
           .asInstanceOf[AggregateFunction]
       case agg =>

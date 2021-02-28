@@ -128,7 +128,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     val files = testRolling(appender, testOutputStream, textToAppend, 0, isCompressed = true)
     files.foreach { file =>
       logInfo(file.toString + ": " + file.length + " bytes")
-      assert(file.length < rolloverSize)
+      assert(file.length <= rolloverSize)
     }
   }
 
@@ -337,7 +337,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     assert(generatedFiles.size > 1)
     if (isCompressed) {
       assert(
-        generatedFiles.filter(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)).size > 0)
+        generatedFiles.exists(_.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)))
     }
     val allText = generatedFiles.map { file =>
       if (file.getName.endsWith(RollingFileAppender.GZIP_LOG_SUFFIX)) {
@@ -356,7 +356,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
   }
 
   /** Delete all the generated rolled over files */
-  def cleanup() {
+  def cleanup(): Unit = {
     testFile.getParentFile.listFiles.filter { file =>
       file.getName.startsWith(testFile.getName)
     }.foreach { _.delete() }

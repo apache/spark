@@ -17,6 +17,7 @@
 
 package org.apache.spark.internal.io
 
+import java.io.IOException
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
@@ -40,13 +41,28 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
- *                                  dynamically, i.e., we first write files under a staging
- *                                  directory with partition path, e.g.
- *                                  /path/to/staging/a=1/b=1/xxx.parquet. When committing the job,
- *                                  we first clean up the corresponding partition directories at
- *                                  destination path, e.g. /path/to/destination/a=1/b=1, and move
- *                                  files from staging directory to the corresponding partition
- *                                  directories under destination path.
+ *                                  dynamically. Suppose final path is /path/to/outputPath, output
+ *                                  path of [[FileOutputCommitter]] is an intermediate path, e.g.
+ *                                  /path/to/outputPath/.spark-staging-{jobId}, which is a staging
+ *                                  directory. Task attempts firstly write files under the
+ *                                  intermediate path, e.g.
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/_temporary/
+ *                                  {appAttemptId}/_temporary/{taskAttemptId}/a=1/b=1/xxx.parquet.
+ *
+ *                                  1. When [[FileOutputCommitter]] algorithm version set to 1,
+ *                                  we firstly move task attempt output files to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/_temporary/
+ *                                  {appAttemptId}/{taskId}/a=1/b=1,
+ *                                  then move them to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
+ *                                  2. When [[FileOutputCommitter]] algorithm version set to 2,
+ *                                  committing tasks directly move task attempt output files to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
+ *
+ *                                  At the end of committing job, we move output files from
+ *                                  intermediate path to final path, e.g., move files from
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1
+ *                                  to /path/to/outputPath/a=1/b=1
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,
@@ -88,7 +104,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  private def stagingDir = new Path(path, ".spark-staging-" + jobId)
+  protected def stagingDir = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -105,13 +121,13 @@ class HadoopMapReduceCommitProtocol(
     val filename = getFilename(taskContext, ext)
 
     val stagingDir: Path = committer match {
-      case _ if dynamicPartitionOverwrite =>
-        assert(dir.isDefined,
-          "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-        partitionPaths += dir.get
-        this.stagingDir
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
+        if (dynamicPartitionOverwrite) {
+          assert(dir.isDefined,
+            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+          partitionPaths += dir.get
+        }
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
       case _ => new Path(path)
     }
@@ -136,7 +152,7 @@ class HadoopMapReduceCommitProtocol(
     tmpOutputPath
   }
 
-  private def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
+  protected def getFilename(taskContext: TaskAttemptContext, ext: String): String = {
     // The file name looks like part-00000-2dd664f9-d2c4-4ffe-878f-c6c70c1fb0cb_00003-c000.parquet
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
@@ -205,11 +221,28 @@ class HadoopMapReduceCommitProtocol(
     }
   }
 
+  /**
+   * Abort the job; log and ignore any IO exception thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
+   *
+   * @param jobContext job context
+   */
   override def abortJob(jobContext: JobContext): Unit = {
-    committer.abortJob(jobContext, JobStatus.State.FAILED)
-    if (hasValidPath) {
-      val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
-      fs.delete(stagingDir, true)
+    try {
+      committer.abortJob(jobContext, JobStatus.State.FAILED)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
+    }
+    try {
+      if (hasValidPath) {
+        val fs = stagingDir.getFileSystem(jobContext.getConfiguration)
+        fs.delete(stagingDir, true)
+      }
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${jobContext.getJobID}", e)
     }
   }
 
@@ -222,17 +255,35 @@ class HadoopMapReduceCommitProtocol(
 
   override def commitTask(taskContext: TaskAttemptContext): TaskCommitMessage = {
     val attemptId = taskContext.getTaskAttemptID
+    logTrace(s"Commit task ${attemptId}")
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
     new TaskCommitMessage(addedAbsPathFiles.toMap -> partitionPaths.toSet)
   }
 
+  /**
+   * Abort the task; log and ignore any failure thrown.
+   * This is invariably invoked in an exception handler; raising
+   * an exception here will lose the root cause of the failure.
+   *
+   * @param taskContext context
+   */
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
-    committer.abortTask(taskContext)
+    try {
+      committer.abortTask(taskContext)
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
+    }
     // best effort cleanup of other staged files
-    for ((src, _) <- addedAbsPathFiles) {
-      val tmp = new Path(src)
-      tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+    try {
+      for ((src, _) <- addedAbsPathFiles) {
+        val tmp = new Path(src)
+        tmp.getFileSystem(taskContext.getConfiguration).delete(tmp, false)
+      }
+    } catch {
+      case e: IOException =>
+        logWarning(s"Exception while aborting ${taskContext.getTaskAttemptID}", e)
     }
   }
 }

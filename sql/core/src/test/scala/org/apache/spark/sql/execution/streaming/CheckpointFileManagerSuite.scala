@@ -78,6 +78,22 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite with SQLHelper {
       assert(fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = true).close()  // should not throw exception
 
+      // crc file should not be leaked when origin file doesn't exist.
+      // The implementation of Hadoop filesystem may filter out checksum file, so
+      // listing files from local filesystem.
+      val fileNames = new File(path.getParent.toString).listFiles().toSeq
+        .filter(p => p.isFile).map(p => p.getName)
+      val crcFiles = fileNames.filter(n => n.startsWith(".") && n.endsWith(".crc"))
+      val originFileNamesForExistingCrcFiles = crcFiles.map { name =>
+        // remove first "." and last ".crc"
+        name.substring(1, name.length - 4)
+      }
+
+      // Check all origin files exist for all crc files.
+      assert(originFileNamesForExistingCrcFiles.toSet.subsetOf(fileNames.toSet),
+        s"Some of origin files for crc files don't exist - crc files: $crcFiles / " +
+          s"expected origin files: $originFileNamesForExistingCrcFiles / actual files: $fileNames")
+
       // Open and delete
       fm.open(path).close()
       fm.delete(path)
@@ -90,7 +106,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite with SQLHelper {
   }
 }
 
-class CheckpointFileManagerSuite extends SparkFunSuite with SharedSparkSession {
+class CheckpointFileManagerSuite extends SharedSparkSession {
 
   test("CheckpointFileManager.create() should pick up user-specified class from conf") {
     withSQLConf(

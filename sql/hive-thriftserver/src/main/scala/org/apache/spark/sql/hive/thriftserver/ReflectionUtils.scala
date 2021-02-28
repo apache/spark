@@ -18,11 +18,11 @@
 package org.apache.spark.sql.hive.thriftserver
 
 private[hive] object ReflectionUtils {
-  def setSuperField(obj : Object, fieldName: String, fieldValue: Object) {
+  def setSuperField(obj : Object, fieldName: String, fieldValue: Object): Unit = {
     setAncestorField(obj, 1, fieldName, fieldValue)
   }
 
-  def setAncestorField(obj: AnyRef, level: Int, fieldName: String, fieldValue: AnyRef) {
+  def setAncestorField(obj: AnyRef, level: Int, fieldName: String, fieldValue: AnyRef): Unit = {
     val ancestor = Iterator.iterate[Class[_]](obj.getClass)(_.getSuperclass).drop(level).next()
     val field = ancestor.getDeclaredField(fieldName)
     field.setAccessible(true)
@@ -53,6 +53,6 @@ private[hive] object ReflectionUtils {
     val (types, values) = args.unzip
     val method = clazz.getDeclaredMethod(methodName, types: _*)
     method.setAccessible(true)
-    method.invoke(obj, values.toSeq: _*)
+    method.invoke(obj, values: _*)
   }
 }

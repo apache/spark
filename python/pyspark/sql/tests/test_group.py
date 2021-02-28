@@ -31,16 +31,17 @@ class GroupTests(ReusedSQLTestCase):
         self.assertEqual((0, u'99'),
                          tuple(g.agg(functions.first(df.key), functions.last(df.value)).first()))
         self.assertTrue(95 < g.agg(functions.approx_count_distinct(df.key)).first()[0])
+        # test deprecated countDistinct
         self.assertEqual(100, g.agg(functions.countDistinct(df.value)).first()[0])
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_group import *
+    from pyspark.sql.tests.test_group import *  # noqa: F401
 
     try:
-        import xmlrunner
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports')
+        import xmlrunner  # type: ignore[import]
+        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

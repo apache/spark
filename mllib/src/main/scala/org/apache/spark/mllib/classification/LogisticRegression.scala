@@ -30,7 +30,6 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, Loader, Saveable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.storage.StorageLevel
 
 /**
  * Classification model trained using Multinomial/Binary Logistic Regression.
@@ -141,8 +140,8 @@ class LogisticRegressionModel @Since("1.3.0") (
       val withBias = dataMatrix.size + 1 == dataWithBiasSize
       (0 until numClasses - 1).foreach { i =>
         var margin = 0.0
-        dataMatrix.foreachActive { (index, value) =>
-          if (value != 0.0) margin += value * weightsArray((i * dataWithBiasSize) + index)
+        dataMatrix.foreachNonZero { (index, value) =>
+          margin += value * weightsArray((i * dataWithBiasSize) + index)
         }
         // Intercept is required to be added into margin.
         if (withBias) {
@@ -224,114 +223,8 @@ class LogisticRegressionWithSGD private[mllib] (
     .setMiniBatchFraction(miniBatchFraction)
   override protected val validators = List(DataValidators.binaryLabelValidator)
 
-  /**
-   * Construct a LogisticRegression object with default parameters: {stepSize: 1.0,
-   * numIterations: 100, regParm: 0.01, miniBatchFraction: 1.0}.
-   */
-  @Since("0.8.0")
-  @deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
-  def this() = this(1.0, 100, 0.01, 1.0)
-
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)
-  }
-}
-
-/**
- * Top-level methods for calling Logistic Regression using Stochastic Gradient Descent.
- *
- * @note Labels used in Logistic Regression should be {0, 1}
- */
-@Since("0.8.0")
-@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
-object LogisticRegressionWithSGD {
-  // NOTE(shivaram): We use multiple train methods instead of default arguments to support
-  // Java programs.
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
-   * number of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
-   * gradient descent are initialized using the initial weights provided.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
-   *        the number of features in the data.
-   *
-   * @note Labels used in Logistic Regression should be {0, 1}
-   */
-  @Since("1.0.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      miniBatchFraction: Double,
-      initialWeights: Vector): LogisticRegressionModel = {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
-      .run(input, initialWeights)
-  }
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
-   * number of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @param stepSize Step size to be used for each iteration of gradient descent.
-   * @param miniBatchFraction Fraction of data to be used per iteration.
-   *
-   * @note Labels used in Logistic Regression should be {0, 1}
-   */
-  @Since("1.0.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double,
-      miniBatchFraction: Double): LogisticRegressionModel = {
-    new LogisticRegressionWithSGD(stepSize, numIterations, 0.0, miniBatchFraction)
-      .run(input)
-  }
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
-   * number of iterations of gradient descent using the specified step size. We use the entire data
-   * set to update the gradient in each iteration.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param stepSize Step size to be used for each iteration of Gradient Descent.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @return a LogisticRegressionModel which has the weights and offset from training.
-   *
-   * @note Labels used in Logistic Regression should be {0, 1}
-   */
-  @Since("1.0.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int,
-      stepSize: Double): LogisticRegressionModel = {
-    train(input, numIterations, stepSize, 1.0)
-  }
-
-  /**
-   * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
-   * number of iterations of gradient descent using a step size of 1.0. We use the entire data set
-   * to update the gradient in each iteration.
-   *
-   * @param input RDD of (label, array of features) pairs.
-   * @param numIterations Number of iterations of gradient descent to run.
-   * @return a LogisticRegressionModel which has the weights and offset from training.
-   *
-   * @note Labels used in Logistic Regression should be {0, 1}
-   */
-  @Since("1.0.0")
-  def train(
-      input: RDD[LabeledPoint],
-      numIterations: Int): LogisticRegressionModel = {
-    train(input, numIterations, 1.0, 1.0)
   }
 }
 
@@ -445,10 +338,8 @@ class LogisticRegressionWithLBFGS
         // Convert our input into a DataFrame
         val spark = SparkSession.builder().sparkContext(input.context).getOrCreate()
         val df = spark.createDataFrame(input.map(_.asML))
-        // Determine if we should cache the DF
-        val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model
-        val mlLogisticRegressionModel = lr.train(df, handlePersistence)
+        val mlLogisticRegressionModel = lr.train(df)
         // convert the model
         val weights = Vectors.dense(mlLogisticRegressionModel.coefficients.toArray)
         createModel(weights, mlLogisticRegressionModel.intercept)

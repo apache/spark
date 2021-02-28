@@ -20,7 +20,6 @@ package org.apache.hive.service.cli.operation;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
 import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -30,21 +29,23 @@ import java.util.Properties;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.CommandNeedRetryException;
 import org.apache.hadoop.hive.ql.Driver;
+import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.ExplainTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.parse.VariableSubstitution;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
-import org.apache.hadoop.hive.serde2.SerDe;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
@@ -73,25 +74,25 @@ public class SQLOperation extends ExecuteStatementOperation {
   private CommandProcessorResponse response;
   private TableSchema resultSchema = null;
   private Schema mResultSchema = null;
-  private SerDe serde = null;
+  private AbstractSerDe serde = null;
   private boolean fetchStarted = false;
 
-  public SQLOperation(HiveSession parentSession, String statement, Map<String,
-      String> confOverlay, boolean runInBackground) {
+  public SQLOperation(HiveSession parentSession, String statement, Map<String, String> confOverlay,
+      boolean runInBackground, long queryTimeout) {
     // TODO: call setRemoteUser in ExecuteStatementOperation or higher.
     super(parentSession, statement, confOverlay, runInBackground);
   }
 
   /***
    * Compile the query and extract metadata
-   * @param sqlOperationConf
+   * @param queryState
    * @throws HiveSQLException
    */
-  public void prepare(HiveConf sqlOperationConf) throws HiveSQLException {
+  public void prepare(QueryState queryState) throws HiveSQLException {
     setState(OperationState.RUNNING);
 
     try {
-      driver = new Driver(sqlOperationConf, getParentSession().getUserName());
+      driver = new Driver(queryState, getParentSession().getUserName());
 
       // set the operation handle information in Driver, so that thrift API users
       // can use the operation handle they receive, to lookup query information in
@@ -105,8 +106,7 @@ public class SQLOperation extends ExecuteStatementOperation {
       // For now, we disable the test attempts.
       driver.setTryCount(Integer.MAX_VALUE);
 
-      String subStatement = new VariableSubstitution().substitute(sqlOperationConf, statement);
-      response = driver.compileAndRespond(subStatement);
+      response = driver.compileAndRespond(statement);
       if (0 != response.getResponseCode()) {
         throw toSQLException("Error while compiling statement", response);
       }
@@ -155,11 +155,12 @@ public class SQLOperation extends ExecuteStatementOperation {
         throw toSQLException("Error while processing statement", response);
       }
     } catch (HiveSQLException e) {
-      // If the operation was cancelled by another thread,
+      // If the operation was cancelled by another thread or timed out,
       // Driver#run will return a non-zero response code.
-      // We will simply return if the operation state is CANCELED,
+      // We will simply return if the operation state is CANCELED or TIMEDOUT,
       // otherwise throw an exception
-      if (getStatus().getState() == OperationState.CANCELED) {
+      if (getStatus().getState() == OperationState.CANCELED ||
+          getStatus().getState() == OperationState.TIMEDOUT) {
         return;
       }
       else {
@@ -177,7 +178,7 @@ public class SQLOperation extends ExecuteStatementOperation {
   public void runInternal() throws HiveSQLException {
     setState(OperationState.PENDING);
     final HiveConf opConfig = getConfigForOperation();
-    prepare(opConfig);
+    prepare(queryState);
     if (!shouldRunAsync()) {
       runQuery(opConfig);
     } else {
@@ -320,7 +321,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     validateDefaultFetchOrientation(orientation);
     assertState(OperationState.FINISHED);
 
-    RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion());
+    RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion(), false);
 
     try {
       /* if client is requesting fetch-from-start and its not the first time reading from this operation
@@ -373,11 +374,7 @@ public class SQLOperation extends ExecuteStatementOperation {
 
     int protocol = getProtocolVersion().getValue();
     for (Object rowString : rows) {
-      try {
-        rowObj = serde.deserialize(new BytesWritable(((String)rowString).getBytes("UTF-8")));
-      } catch (UnsupportedEncodingException e) {
-        throw new SerDeException(e);
-      }
+      rowObj = serde.deserialize(new BytesWritable(((String)rowString).getBytes(UTF_8)));
       for (int i = 0; i < fieldRefs.size(); i++) {
         StructField fieldRef = fieldRefs.get(i);
         fieldOI = fieldRef.getFieldObjectInspector();
@@ -389,7 +386,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     return rowSet;
   }
 
-  private SerDe getSerDe() throws SQLException {
+  private AbstractSerDe getSerDe() throws SQLException {
     if (serde != null) {
       return serde;
     }

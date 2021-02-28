@@ -46,7 +46,7 @@ class SparkContextSchedulerCreationSuite
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
     sc = new SparkContext("local", "test", conf)
     val createTaskSchedulerMethod =
-      PrivateMethod[Tuple2[SchedulerBackend, TaskScheduler]]('createTaskScheduler)
+      PrivateMethod[Tuple2[SchedulerBackend, TaskScheduler]](Symbol("createTaskScheduler"))
     val (_, sched) =
       SparkContext invokePrivate createTaskSchedulerMethod(sc, master, deployMode)
     try {

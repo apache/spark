@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.TypeUtils
@@ -32,10 +32,11 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(col) FROM VALUES (1), (2), (NULL) AS tab(col);
        1.5
   """,
+  group = "agg_funcs",
   since = "1.0.0")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
-  override def prettyName: String = "avg"
+  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -66,7 +67,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   override lazy val aggBufferAttributes = sum :: count :: Nil
 
   override lazy val initialValues = Seq(
-    /* sum = */ Literal(0).cast(sumDataType),
+    /* sum = */ Literal.default(sumDataType),
     /* count = */ Literal(0L)
   )
 
@@ -76,18 +77,20 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
+  // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
     case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
+      DecimalPrecision.decimalAndDecimal(
+        Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _ =>
-      sum.cast(resultType) / count.cast(resultType)
+      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
     /* sum = */
     Add(
       sum,
-      coalesce(child.cast(sumDataType), Literal(0).cast(sumDataType))),
+      coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
 }

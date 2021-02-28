@@ -25,8 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
 import scala.util.control.NonFatal
 
-import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
@@ -126,7 +126,7 @@ private[spark] object AccumulatorSuite {
     sc.addSparkListener(listener)
     testBody
     // wait until all events have been processed before proceeding to assert things
-    sc.listenerBus.waitUntilEmpty(10 * 1000)
+    sc.listenerBus.waitUntilEmpty()
     val accums = listener.getCompletedStageInfos.flatMap(_.accumulables.values)
     val isSet = accums.exists { a =>
       a.name == Some(PEAK_EXECUTION_MEMORY) && a.value.exists(_.asInstanceOf[Long] > 0L)
@@ -157,7 +157,7 @@ private class SaveInfoListener extends SparkListener {
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
-    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo]).toSeq
 
   /**
    * If `jobCompletionCallback` is set, block until the next call has finished.

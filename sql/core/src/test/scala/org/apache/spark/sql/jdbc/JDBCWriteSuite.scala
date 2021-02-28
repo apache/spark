@@ -17,23 +17,26 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.DriverManager
+import java.sql.{Date, DriverManager, Timestamp}
+import java.time.{Instant, LocalDate}
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
+import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
+class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
   val url = "jdbc:h2:mem:testdb2"
   var conn: java.sql.Connection = null
@@ -79,6 +82,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url1', dbtable 'TEST.PEOPLE1', user 'testUser', password 'testPass')
       """.stripMargin.replaceAll("\n", " "))
+
+    conn1.prepareStatement("create table test.timetypes (d DATE, t TIMESTAMP)").executeUpdate()
+    conn.commit()
   }
 
   after {
@@ -192,24 +198,29 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
   }
 
   test("Truncate") {
-    JdbcDialects.registerDialect(testH2Dialect)
-    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
-    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
-    val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+      val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+      val df3 = spark.createDataFrame(sparkContext.parallelize(arr2x3), schema3)
 
-    df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
-    df2.write.mode(SaveMode.Overwrite).option("truncate", true)
-      .jdbc(url1, "TEST.TRUNCATETEST", properties)
-    assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
-
-    val m = intercept[AnalysisException] {
-      df3.write.mode(SaveMode.Overwrite).option("truncate", true)
+      df.write.jdbc(url1, "TEST.TRUNCATETEST", properties)
+      df2.write.mode(SaveMode.Overwrite).option("truncate", true)
         .jdbc(url1, "TEST.TRUNCATETEST", properties)
-    }.getMessage
-    assert(m.contains("Column \"seq\" not found"))
-    assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
-    JdbcDialects.unregisterDialect(testH2Dialect)
+      assert(1 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+      assert(2 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).collect()(0).length)
+
+      val m = intercept[AnalysisException] {
+        df3.write.mode(SaveMode.Overwrite).option("truncate", true)
+          .jdbc(url1, "TEST.TRUNCATETEST", properties)
+      }.getMessage
+      assert(m.contains("Column \"seq\" not found"))
+      assert(0 === spark.read.jdbc(url1, "TEST.TRUNCATETEST", properties).count())
+    } finally {
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("createTableOptions") {
@@ -383,12 +394,15 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .foldLeft(new StructType())((schema, colType) => schema.add(colType._1, colType._2))
       val createTableColTypes =
         colTypes.map { case (col, dataType) => s"$col $dataType" }.mkString(", ")
-      val df = spark.createDataFrame(sparkContext.parallelize(Seq(Row.empty)), schema)
 
       val expectedSchemaStr =
         colTypes.map { case (col, dataType) => s""""$col" $dataType """ }.mkString(", ")
 
-      assert(JdbcUtils.schemaString(df, url1, Option(createTableColTypes)) == expectedSchemaStr)
+      assert(JdbcUtils.schemaString(
+        schema,
+        spark.sqlContext.conf.caseSensitiveAnalysis,
+        url1,
+        Option(createTableColTypes)) == expectedSchemaStr)
     }
 
     testCreateTableColDataTypes(Seq("boolean"))
@@ -542,5 +556,109 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .jdbc(url1, "TEST.TIMEOUTTEST", properties)
     }.getMessage
     assert(errMsg.contains("Statement was canceled or the session timed out"))
+  }
+
+  test("metrics") {
+    val df = spark.createDataFrame(sparkContext.parallelize(arr2x2), schema2)
+    val df2 = spark.createDataFrame(sparkContext.parallelize(arr1x2), schema2)
+
+    runAndVerifyRecordsWritten(2) {
+      df.write.mode(SaveMode.Append).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(1) {
+      df2.write.mode(SaveMode.Overwrite).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(1) {
+      df2.write.mode(SaveMode.Overwrite).option("truncate", true)
+        .jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+
+    runAndVerifyRecordsWritten(0) {
+      intercept[AnalysisException] {
+        df2.write.mode(SaveMode.ErrorIfExists).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+      }
+    }
+
+    runAndVerifyRecordsWritten(0) {
+      df.write.mode(SaveMode.Ignore).jdbc(url, "TEST.BASICCREATETEST", new Properties())
+    }
+  }
+
+  private def runAndVerifyRecordsWritten(expected: Long)(job: => Unit): Unit = {
+    assert(expected === runAndReturnMetrics(job, _.taskMetrics.outputMetrics.recordsWritten))
+  }
+
+  private def runAndReturnMetrics(job: => Unit, collector: (SparkListenerTaskEnd) => Long): Long = {
+    val taskMetrics = new ArrayBuffer[Long]()
+
+    // Avoid receiving earlier taskEnd events
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    val listener = new SparkListener() {
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        taskMetrics += collector(taskEnd)
+      }
+    }
+    sparkContext.addSparkListener(listener)
+
+    job
+
+    sparkContext.listenerBus.waitUntilEmpty()
+
+    sparkContext.removeSparkListener(listener)
+    taskMetrics.sum
+  }
+
+  test("SPARK-34144: write and read java.time LocalDate and Instant") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val schema = new StructType().add("d", DateType).add("t", TimestampType);
+      val values = Seq(Row.apply(LocalDate.parse("2020-01-01"),
+        Instant.parse("2020-02-02T12:13:14.56789Z")))
+      val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
+
+      df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
+
+      val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
+      assert(1 === rows.length);
+      assert(rows(0).getAs[LocalDate](0) === LocalDate.parse("2020-01-01"))
+      assert(rows(0).getAs[Instant](1) === Instant.parse("2020-02-02T12:13:14.56789Z"))
+    }
+  }
+
+  test("SPARK-34144: write Date and Timestampt, read LocalDate and Instant") {
+    val schema = new StructType().add("d", DateType).add("t", TimestampType);
+    val values = Seq(Row.apply(Date.valueOf("2020-01-01"),
+      Timestamp.valueOf("2020-02-02 12:13:14.56789")))
+    val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
+
+    df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
+
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
+      assert(1 === rows.length);
+      assert(rows(0).getAs[LocalDate](0) === LocalDate.parse("2020-01-01"))
+      // 8 hour difference since Timestamp was America/Los_Angeles and Instant is GMT
+      assert(rows(0).getAs[Instant](1) === Instant.parse("2020-02-02T20:13:14.56789Z"))
+    }
+  }
+
+  test("SPARK-34144: write LocalDate and Instant, read Date and Timestampt") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      val schema = new StructType().add("d", DateType).add("t", TimestampType);
+      val values = Seq(Row.apply(LocalDate.parse("2020-01-01"),
+        Instant.parse("2020-02-02T12:13:14.56789Z")))
+      val df = spark.createDataFrame(sparkContext.makeRDD(values), schema)
+
+      df.write.jdbc(url, "TEST.TIMETYPES", new Properties())
+    }
+
+    val rows = spark.read.jdbc(url, "TEST.TIMETYPES", new Properties()).collect()
+    assert(1 === rows.length);
+    assert(rows(0).getAs[java.sql.Date](0) === java.sql.Date.valueOf("2020-01-01"))
+    // -8 hour difference since Instant was GMT and Timestamp is America/Los_Angeles
+    assert(rows(0).getAs[java.sql.Timestamp](1)
+      === java.sql.Timestamp.valueOf("2020-02-02 04:13:14.56789"))
   }
 }

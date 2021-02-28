@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -36,12 +36,12 @@ case class LogicalRelation(
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(
-    output = output.map(QueryPlan.normalizeExprId(_, output)),
+    output = output.map(QueryPlan.normalizeExpressions(_, output)),
     catalogTable = None)
 
   override def computeStats(): Statistics = {
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled)))
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled || conf.planStatsEnabled)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 
@@ -64,14 +64,23 @@ case class LogicalRelation(
   }
 
   override def simpleString(maxFields: Int): String = {
-    s"Relation[${truncatedString(output, ",", maxFields)}] $relation"
+    s"Relation ${catalogTable.map(_.identifier.unquotedString).getOrElse("")}" +
+      s"[${truncatedString(output, ",", maxFields)}] $relation"
   }
 }
 
 object LogicalRelation {
-  def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, None, isStreaming)
+  def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation = {
+    // The v1 source may return schema containing char/varchar type. We replace char/varchar
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
+    LogicalRelation(relation, schema.toAttributes, None, isStreaming)
+  }
 
-  def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, Some(table), false)
+  def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation = {
+    // The v1 source may return schema containing char/varchar type. We replace char/varchar
+    // with "annotated" string type here as the query engine doesn't support char/varchar yet.
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
+    LogicalRelation(relation, schema.toAttributes, Some(table), false)
+  }
 }

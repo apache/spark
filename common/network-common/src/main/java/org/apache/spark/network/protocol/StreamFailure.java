@@ -17,8 +17,11 @@
 
 package org.apache.spark.network.protocol;
 
-import com.google.common.base.Objects;
+import java.util.Objects;
+
 import io.netty.buffer.ByteBuf;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 
 /**
  * Message indicating an error when transferring a stream.
@@ -54,7 +57,7 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(streamId, error);
+    return Objects.hash(streamId, error);
   }
 
   @Override
@@ -68,9 +71,9 @@ public final class StreamFailure extends AbstractMessage implements ResponseMess
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
-      .add("streamId", streamId)
-      .add("error", error)
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+      .append("streamId", streamId)
+      .append("error", error)
       .toString();
   }
 

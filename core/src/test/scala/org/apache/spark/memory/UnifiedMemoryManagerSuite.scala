@@ -305,7 +305,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
     intercept[RuntimeException] {
       mm.acquireExecutionMemory(1000L, 0, memoryMode)
     }
-    val assertInvariants = PrivateMethod[Unit]('assertInvariants)
+    val assertInvariants = PrivateMethod[Unit](Symbol("assertInvariants"))
     mm.invokePrivate[Unit](assertInvariants())
   }
 

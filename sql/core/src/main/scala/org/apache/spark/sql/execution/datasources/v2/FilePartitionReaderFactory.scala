@@ -17,9 +17,8 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile, PartitioningUtils}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReader, PartitionReaderFactory}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.execution.datasources.{FilePartition, PartitionedFile}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
@@ -27,7 +26,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.toIterator.map { file =>
-      new PartitionedFileReader(file, buildReader(file))
+      PartitionedFileReader(file, buildReader(file))
     }
     new FilePartitionReader[InternalRow](iter)
   }
@@ -36,7 +35,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
     assert(partition.isInstanceOf[FilePartition])
     val filePartition = partition.asInstanceOf[FilePartition]
     val iter = filePartition.files.toIterator.map { file =>
-      new PartitionedFileReader(file, buildColumnarReader(file))
+      PartitionedFileReader(file, buildColumnarReader(file))
     }
     new FilePartitionReader[ColumnarBatch](iter)
   }
@@ -46,23 +45,10 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
   def buildColumnarReader(partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
     throw new UnsupportedOperationException("Cannot create columnar reader.")
   }
-
-  protected def getReadDataSchema(
-      readSchema: StructType,
-      partitionSchema: StructType,
-      isCaseSensitive: Boolean): StructType = {
-    val partitionNameSet =
-      partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
-    val fields = readSchema.fields.filterNot { field =>
-      partitionNameSet.contains(PartitioningUtils.getColName(field, isCaseSensitive))
-    }
-
-    StructType(fields)
-  }
 }
 
 // A compound class for combining file and its corresponding reader.
-private[v2] class PartitionedFileReader[T](
+private[v2] case class PartitionedFileReader[T](
     file: PartitionedFile,
     reader: PartitionReader[T]) extends PartitionReader[T] {
   override def next(): Boolean = reader.next()

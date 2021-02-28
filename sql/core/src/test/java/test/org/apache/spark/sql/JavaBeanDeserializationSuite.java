@@ -18,13 +18,23 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.*;
+
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
+import org.junit.*;
 
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.catalyst.util.TimestampFormatter;
+import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
-import org.junit.*;
 
 import org.apache.spark.sql.test.TestSparkSession;
 
@@ -73,7 +83,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
       .as(encoder);
 
     List<ArrayRecord> records = dataset.collectAsList();
-    Assert.assertEquals(records, ARRAY_RECORDS);
+    Assert.assertEquals(ARRAY_RECORDS, records);
   }
 
   private static final List<MapRecord> MAP_RECORDS = new ArrayList<>();
@@ -116,7 +126,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     List<MapRecord> records = dataset.collectAsList();
 
-    Assert.assertEquals(records, MAP_RECORDS);
+    Assert.assertEquals(MAP_RECORDS, records);
   }
 
   @Test
@@ -202,6 +212,17 @@ public class JavaBeanDeserializationSuite implements Serializable {
     return new GenericRow(values);
   }
 
+  private static String timestampToString(Timestamp ts) {
+    String timestampString = String.valueOf(ts);
+    String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(ts);
+
+    if (timestampString.length() > 19 && !timestampString.substring(19).equals(".0")) {
+      return formatted + timestampString.substring(19);
+    } else {
+      return formatted;
+    }
+  }
+
   private static RecordSpark22000 createRecordSpark22000(Row recordRow) {
     RecordSpark22000 record = new RecordSpark22000();
     record.setShortField(String.valueOf(recordRow.getShort(0)));
@@ -211,7 +232,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
     record.setStringField(recordRow.getString(5));
     record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
-    record.setTimestampField(String.valueOf(recordRow.getTimestamp(7)));
+    record.setTimestampField(timestampToString(recordRow.getTimestamp(7)));
     // This would figure out that null value will not become "null".
     record.setNullIntField(null);
     return record;
@@ -481,17 +502,17 @@ public class JavaBeanDeserializationSuite implements Serializable {
 
     @Override
     public String toString() {
-      return com.google.common.base.Objects.toStringHelper(this)
-              .add("shortField", shortField)
-              .add("intField", intField)
-              .add("longField", longField)
-              .add("floatField", floatField)
-              .add("doubleField", doubleField)
-              .add("stringField", stringField)
-              .add("booleanField", booleanField)
-              .add("timestampField", timestampField)
-              .add("nullIntField", nullIntField)
-              .toString();
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("shortField", shortField)
+          .append("intField", intField)
+          .append("longField", longField)
+          .append("floatField", floatField)
+          .append("doubleField", doubleField)
+          .append("stringField", stringField)
+          .append("booleanField", booleanField)
+          .append("timestampField", timestampField)
+          .append("nullIntField", nullIntField)
+          .toString();
     }
   }
 
@@ -508,5 +529,97 @@ public class JavaBeanDeserializationSuite implements Serializable {
     public void setId(Integer id) {
       this.id = id;
     }
+  }
+
+  @Test
+  public void testBeanWithLocalDateAndInstant() {
+    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
+    try {
+      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
+      List<Row> inputRows = new ArrayList<>();
+      List<LocalDateInstantRecord> expectedRecords = new ArrayList<>();
+
+      for (long idx = 0 ; idx < 5 ; idx++) {
+        Row row = createLocalDateInstantRow(idx);
+        inputRows.add(row);
+        expectedRecords.add(createLocalDateInstantRecord(row));
+      }
+
+      Encoder<LocalDateInstantRecord> encoder = Encoders.bean(LocalDateInstantRecord.class);
+
+      StructType schema = new StructType()
+        .add("localDateField", DataTypes.DateType)
+        .add("instantField", DataTypes.TimestampType);
+
+      Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+      Dataset<LocalDateInstantRecord> dataset = dataFrame.as(encoder);
+
+      List<LocalDateInstantRecord> records = dataset.collectAsList();
+
+      Assert.assertEquals(expectedRecords, records);
+    } finally {
+        spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
+    }
+  }
+
+  public static final class LocalDateInstantRecord {
+    private String localDateField;
+    private String instantField;
+
+    public LocalDateInstantRecord() { }
+
+    public String getLocalDateField() {
+      return localDateField;
+    }
+
+    public void setLocalDateField(String localDateField) {
+      this.localDateField = localDateField;
+    }
+
+    public String getInstantField() {
+      return instantField;
+    }
+
+    public void setInstantField(String instantField) {
+      this.instantField = instantField;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      LocalDateInstantRecord that = (LocalDateInstantRecord) o;
+      return Objects.equals(localDateField, that.localDateField) &&
+        Objects.equals(instantField, that.instantField);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(localDateField, instantField);
+    }
+
+    @Override
+    public String toString() {
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+          .append("localDateField", localDateField)
+          .append("instantField", instantField)
+          .toString();
+    }
+
+  }
+
+  private static Row createLocalDateInstantRow(Long index) {
+    Object[] values = new Object[] { LocalDate.ofEpochDay(42), Instant.ofEpochSecond(42) };
+    return new GenericRow(values);
+  }
+
+  private static LocalDateInstantRecord createLocalDateInstantRecord(Row recordRow) {
+    LocalDateInstantRecord record = new LocalDateInstantRecord();
+    record.setLocalDateField(String.valueOf(recordRow.getLocalDate(0)));
+    Instant instant = recordRow.getInstant(1);
+    TimestampFormatter formatter = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(SQLConf.get().sessionLocalTimeZone()));
+    record.setInstantField(formatter.format(DateTimeUtils.instantToMicros(instant)));
+    return record;
   }
 }

@@ -22,8 +22,6 @@ Please refer to PageRank implementation provided by graphx
 Example Usage:
 bin/spark-submit examples/src/main/python/pagerank.py data/mllib/pagerank_data.txt 10
 """
-from __future__ import print_function
-
 import re
 import sys
 from operator import add

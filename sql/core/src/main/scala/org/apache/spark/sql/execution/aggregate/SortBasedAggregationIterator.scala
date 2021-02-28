@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.execution.metric.SQLMetric
 
 /**
- * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
- * sorted by values of [[groupingExpressions]].
+ * An iterator used to evaluate
+ * [[org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction]].
+ * It assumes the input rows have been sorted by values of [[groupingExpressions]].
  */
 class SortBasedAggregationIterator(
     partIndex: Int,

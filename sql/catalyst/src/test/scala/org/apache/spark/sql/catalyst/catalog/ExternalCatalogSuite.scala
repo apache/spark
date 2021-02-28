@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionAlreadyExistsException, N
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -143,8 +144,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // Note: alter properties here because Hive does not support altering other fields
     catalog.alterDatabase(db1.copy(properties = Map("k" -> "v3", "good" -> "true")))
     val newDb1 = catalog.getDatabase("db1")
-    assert(db1.properties.isEmpty)
-    assert(newDb1.properties.size == 2)
+    assert((db1.properties -- Seq(PROP_OWNER)).isEmpty)
+    assert((newDb1.properties -- Seq(PROP_OWNER)).size == 2)
     assert(newDb1.properties.get("k") == Some("v3"))
     assert(newDb1.properties.get("good") == Some("true"))
   }
@@ -277,6 +278,28 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
+  test("get tables by name") {
+    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", "tbl2"))
+      .map(_.identifier.table) == Seq("tbl1", "tbl2"))
+  }
+
+  test("get tables by name when some tables do not exists") {
+    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", "tblnotexist"))
+      .map(_.identifier.table) == Seq("tbl1"))
+  }
+
+  test("get tables by name when contains invalid name") {
+    // scalastyle:off
+    val name = "砖"
+    // scalastyle:on
+    assert(newBasicCatalog().getTablesByName("db2", Seq("tbl1", name))
+      .map(_.identifier.table) == Seq("tbl1"))
+  }
+
+  test("get tables by name when empty table list") {
+    assert(newBasicCatalog().getTablesByName("db2", Seq.empty).isEmpty)
+  }
+
   test("list tables without pattern") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] { catalog.listTables("unknown_db") }
@@ -385,8 +408,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       partitionColumnNames = Seq("partCol1", "partCol2"))
     catalog.createTable(table, ignoreIfExists = false)
 
-    val newLocationPart1 = newUriForDatabase()
-    val newLocationPart2 = newUriForDatabase()
+    val newLocationPart1 = newUriForPartition(Seq("p1=1", "p2=2"))
+    val newLocationPart2 = newUriForPartition(Seq("p1=3", "p2=4"))
 
     val partition1 =
       CatalogTablePartition(Map("partCol1" -> "1", "partCol2" -> "2"),
@@ -959,7 +982,6 @@ abstract class CatalogTestUtils {
     catalog.createDatabase(newDb("db3"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     catalog.createTable(newTable("tbl2", "db2"), ignoreIfExists = false)
-    catalog.createTable(newView("view1", Some("db3")), ignoreIfExists = false)
     catalog.createPartitions("db2", "tbl2", Seq(part1, part2), ignoreIfExists = false)
     catalog.createFunction("db2", newFunc("func1", Some("db2")))
     catalog
@@ -968,6 +990,11 @@ abstract class CatalogTestUtils {
   def newFunc(): CatalogFunction = newFunc("funcName")
 
   def newUriForDatabase(): URI = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
+
+  def newUriForPartition(parts: Seq[String]): URI = {
+    val path = parts.foldLeft(Utils.createTempDir())(new java.io.File(_, _))
+    new URI(path.toURI.toString.stripSuffix("/"))
+  }
 
   def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
@@ -991,11 +1018,11 @@ abstract class CatalogTestUtils {
   }
 
   def newView(
+      db: String,
       name: String,
-      database: Option[String] = None): CatalogTable = {
-    val viewDefaultDatabase = database.getOrElse("default")
+      props: Map[String, String]): CatalogTable = {
     CatalogTable(
-      identifier = TableIdentifier(name, database),
+      identifier = TableIdentifier(name, Some(db)),
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = new StructType()
@@ -1004,7 +1031,7 @@ abstract class CatalogTestUtils {
         .add("a", "int")
         .add("b", "string"),
       viewText = Some("SELECT * FROM tbl1"),
-      properties = Map(CatalogTable.VIEW_DEFAULT_DATABASE -> viewDefaultDatabase))
+      properties = props)
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {

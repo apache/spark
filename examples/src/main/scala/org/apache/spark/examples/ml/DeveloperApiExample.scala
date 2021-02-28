@@ -36,12 +36,11 @@ import org.apache.spark.sql.{Dataset, Row, SparkSession}
  */
 object DeveloperApiExample {
 
-  def main(args: Array[String]) {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder
       .appName("DeveloperApiExample")
       .getOrCreate()
-    import spark.implicits._
 
     // Prepare training data.
     val training = spark.createDataFrame(Seq(
@@ -162,7 +161,7 @@ private class MyLogisticRegressionModel(
    *          This raw prediction may be any real number, where a larger value indicates greater
    *          confidence for that label.
    */
-  override protected def predictRaw(features: Vector): Vector = {
+  override def predictRaw(features: Vector): Vector = {
     val margin = BLAS.dot(features, coefficients)
     // There are 2 classes (binary classification), so we return a length-2 vector,
     // where index i corresponds to class i (i = 0, 1).

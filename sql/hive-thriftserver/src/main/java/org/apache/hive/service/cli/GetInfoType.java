@@ -18,7 +18,7 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TGetInfoType;
+import org.apache.hive.service.rpc.thrift.TGetInfoType;
 
 /**
  * GetInfoType.
@@ -72,7 +72,8 @@ public enum GetInfoType {
   CLI_DESCRIBE_PARAMETER(TGetInfoType.CLI_DESCRIBE_PARAMETER),
   CLI_CATALOG_NAME(TGetInfoType.CLI_CATALOG_NAME),
   CLI_COLLATION_SEQ(TGetInfoType.CLI_COLLATION_SEQ),
-  CLI_MAX_IDENTIFIER_LEN(TGetInfoType.CLI_MAX_IDENTIFIER_LEN);
+  CLI_MAX_IDENTIFIER_LEN(TGetInfoType.CLI_MAX_IDENTIFIER_LEN),
+  CLI_ODBC_KEYWORDS(TGetInfoType.CLI_ODBC_KEYWORDS);
 
   private final TGetInfoType tInfoType;
 

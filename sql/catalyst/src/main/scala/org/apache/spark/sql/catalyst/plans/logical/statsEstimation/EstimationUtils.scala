@@ -63,7 +63,7 @@ object EstimationUtils {
     }
   }
 
-  def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt()
+  def ceil(bigDecimal: BigDecimal): BigInt = bigDecimal.setScale(0, RoundingMode.CEILING).toBigInt
 
   /** Get column stats for output attributes. */
   def getOutputMap(inputMap: AttributeMap[ColumnStat], output: Seq[Attribute])
@@ -344,7 +344,7 @@ object EstimationUtils {
         }
       }
     }
-    overlappedRanges
+    overlappedRanges.toSeq
   }
 
   /**

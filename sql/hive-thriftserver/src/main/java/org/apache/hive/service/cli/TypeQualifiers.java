@@ -25,9 +25,9 @@ import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.VarcharTypeInfo;
-import org.apache.hive.service.cli.thrift.TCLIServiceConstants;
-import org.apache.hive.service.cli.thrift.TTypeQualifierValue;
-import org.apache.hive.service.cli.thrift.TTypeQualifiers;
+import org.apache.hive.service.rpc.thrift.TCLIServiceConstants;
+import org.apache.hive.service.rpc.thrift.TTypeQualifierValue;
+import org.apache.hive.service.rpc.thrift.TTypeQualifiers;
 
 /**
  * This class holds type qualifier information for a primitive type,

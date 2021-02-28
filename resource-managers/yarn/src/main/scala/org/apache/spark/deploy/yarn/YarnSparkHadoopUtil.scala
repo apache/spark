@@ -25,8 +25,9 @@ import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
 import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.SecurityManager
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.resource.ExecutorResourceRequest
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
@@ -36,7 +37,6 @@ object YarnSparkHadoopUtil {
   // the common cases. Memory overhead tends to grow with container size.
 
   val MEMORY_OVERHEAD_FACTOR = 0.10
-  val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
 
@@ -106,7 +106,7 @@ object YarnSparkHadoopUtil {
    * Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
    * an inconsistent state.
    * TODO: If the OOM is not recoverable by rescheduling it on different node, then do
-   * 'something' to fail job ... akin to blacklisting trackers in mapred ?
+   * 'something' to fail job ... akin to unhealthy trackers in mapred ?
    *
    * The handler if an OOM Exception is thrown by the JVM must be configured on Windows
    * differently: the 'taskkill' command should be used, whereas Unix-based systems use 'kill'.
@@ -182,4 +182,12 @@ object YarnSparkHadoopUtil {
     ConverterUtils.toContainerId(containerIdString)
   }
 
+  /**
+   * Get offHeap memory size from [[ExecutorResourceRequest]]
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf,
+    execRequest: ExecutorResourceRequest): Long = {
+    Utils.checkOffHeapEnabled(sparkConf, execRequest.amount)
+  }
 }

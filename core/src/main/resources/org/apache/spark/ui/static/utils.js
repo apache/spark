@@ -39,7 +39,7 @@ function formatDuration(milliseconds) {
 
 function formatBytes(bytes, type) {
     if (type !== 'display') return bytes;
-    if (bytes == 0) return '0.0 B';
+    if (bytes <= 0) return '0.0 B';
     var k = 1024;
     var dm = 1;
     var sizes = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
@@ -56,13 +56,17 @@ function formatTimeMillis(timeMillis) {
     return "-";
   } else {
     var dt = new Date(timeMillis);
+    return formatDateString(dt);
+  }
+}
+
+function formatDateString(dt) {
     return dt.getFullYear() + "-" +
       padZeroes(dt.getMonth() + 1) + "-" +
       padZeroes(dt.getDate()) + " " +
       padZeroes(dt.getHours()) + ":" +
       padZeroes(dt.getMinutes()) + ":" +
       padZeroes(dt.getSeconds());
-  }
 }
 
 function getTimeZone() {
@@ -70,7 +74,7 @@ function getTimeZone() {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch(ex) {
     // Get time zone from a string representing the date,
-    // eg. "Thu Nov 16 2017 01:13:32 GMT+0800 (CST)" -> "CST"
+    // e.g. "Thu Nov 16 2017 01:13:32 GMT+0800 (CST)" -> "CST"
     return new Date().toString().match(/\((.*)\)/)[1];
   }
 }
@@ -101,7 +105,7 @@ function getStandAloneAppId(cb) {
   }
   // Looks like Web UI is running in standalone mode
   // Let's get application-id using REST End Point
-  $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
+  $.getJSON(uiRoot + "/api/v1/applications", function(response, status, jqXHR) {
     if (response && response.length > 0) {
       var appId = response[0].id;
       cb(appId);
@@ -148,12 +152,15 @@ function createTemplateURI(appId, templateName) {
     var baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
     return baseURI;
   }
-  return location.origin + "/static/" + templateName + "-template.html";
+  return uiRoot + "/static/" + templateName + "-template.html";
 }
 
 function setDataTableDefaults() {
   $.extend($.fn.dataTable.defaults, {
     stateSave: true,
+    stateSaveParams: function(_, data) {
+        data.search.search = "";
+    },
     lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
     pageLength: 20
   });
@@ -161,7 +168,10 @@ function setDataTableDefaults() {
 
 function formatDate(date) {
   if (date <= 0) return "-";
-  else return date.split(".")[0].replace("T", " ");
+  else {
+     var dt = new Date(date.replace("GMT", "Z"));
+     return formatDateString(dt);
+  }
 }
 
 function createRESTEndPointForExecutorsPage(appId) {
@@ -183,5 +193,5 @@ function createRESTEndPointForExecutorsPage(appId) {
             return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
         }
     }
-    return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
+    return uiRoot + "/api/v1/applications/" + appId + "/allexecutors";
 }

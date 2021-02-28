@@ -39,7 +39,7 @@ case class SaveIntoDataSourceCommand(
     options: Map[String, String],
     mode: SaveMode) extends RunnableCommand {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     dataSource.createRelation(
@@ -51,5 +51,11 @@ case class SaveIntoDataSourceCommand(
   override def simpleString(maxFields: Int): String = {
     val redacted = SQLConf.get.redactOptions(options)
     s"SaveIntoDataSourceCommand ${dataSource}, ${redacted}, ${mode}"
+  }
+
+  // Override `clone` since the default implementation will turn `CaseInsensitiveMap` to a normal
+  // map.
+  override def clone(): LogicalPlan = {
+    SaveIntoDataSourceCommand(query.clone(), dataSource, options, mode)
   }
 }

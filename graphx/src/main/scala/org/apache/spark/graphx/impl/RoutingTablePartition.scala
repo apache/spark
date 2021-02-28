@@ -123,7 +123,7 @@ class RoutingTablePartition(
    */
   def foreachWithinEdgePartition
       (pid: PartitionID, includeSrc: Boolean, includeDst: Boolean)
-      (f: VertexId => Unit) {
+      (f: VertexId => Unit): Unit = {
     val (vidsCandidate, srcVids, dstVids) = routingTable(pid)
     val size = vidsCandidate.length
     if (includeSrc && includeDst) {

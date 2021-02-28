@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -131,15 +131,36 @@ class IDFModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema, logging = true)
-    // TODO: Make the idfModel.transform natively in ml framework to avoid extra conversion.
-    val idf = udf { vec: Vector => idfModel.transform(OldVectors.fromML(vec)).asML }
-    dataset.withColumn($(outputCol), idf(col($(inputCol))))
+    val outputSchema = transformSchema(dataset.schema, logging = true)
+
+    val func = { vector: Vector =>
+      vector match {
+        case SparseVector(size, indices, values) =>
+          val (newIndices, newValues) = feature.IDFModel.transformSparse(idfModel.idf,
+            indices, values)
+          Vectors.sparse(size, newIndices, newValues)
+        case DenseVector(values) =>
+          val newValues = feature.IDFModel.transformDense(idfModel.idf, values)
+          Vectors.dense(newValues)
+        case other =>
+          throw new UnsupportedOperationException(
+            s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+      }
+    }
+
+    val transformer = udf(func)
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
+      outputSchema($(outputCol)).metadata)
   }
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    var outputSchema = validateAndTransformSchema(schema)
+    if ($(outputCol).nonEmpty) {
+      outputSchema = SchemaUtils.updateAttributeGroupSize(outputSchema,
+        $(outputCol), idf.size)
+    }
+    outputSchema
   }
 
   @Since("1.4.1")
@@ -160,9 +181,13 @@ class IDFModel private[ml] (
   @Since("3.0.0")
   def numDocs: Long = idfModel.numDocs
 
-
   @Since("1.6.0")
   override def write: MLWriter = new IDFModelWriter(this)
+
+  @Since("3.0.0")
+  override def toString: String = {
+    s"IDFModel: uid=$uid, numDocs=$numDocs, numFeatures=${idf.size}"
+  }
 }
 
 @Since("1.6.0")
@@ -190,10 +215,10 @@ object IDFModel extends MLReadable[IDFModel] {
       val data = sparkSession.read.parquet(dataPath)
 
       val model = if (majorVersion(metadata.sparkVersion) >= 3) {
-        val Row(idf: Vector, df: Seq[_], numDocs: Long) = data.select("idf", "docFreq", "numDocs")
-          .head()
+        val Row(idf: Vector, df: scala.collection.Seq[_], numDocs: Long) =
+          data.select("idf", "docFreq", "numDocs").head()
         new IDFModel(metadata.uid, new feature.IDFModel(OldVectors.fromML(idf),
-          df.asInstanceOf[Seq[Long]].toArray, numDocs))
+          df.asInstanceOf[scala.collection.Seq[Long]].toArray, numDocs))
       } else {
         val Row(idf: Vector) = MLUtils.convertVectorColumnsToML(data, "idf")
           .select("idf")

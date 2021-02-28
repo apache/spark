@@ -23,10 +23,17 @@ import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
-import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.sources.v2.reader.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFactory, Scan, SupportsReportPartitioning}
+import org.apache.spark.sql.execution.{ExplainUtils, LeafExecNode}
+import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.connector.SupportsMetadata
+import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.Utils
 
-trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
+trait DataSourceV2ScanExecBase extends LeafExecNode {
+
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   def scan: Scan
 
@@ -35,7 +42,34 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
   def readerFactory: PartitionReaderFactory
 
   override def simpleString(maxFields: Int): String = {
-    s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
+    val result =
+      s"$nodeName${truncatedString(output, "[", ", ", "]", maxFields)} ${scan.description()}"
+    redact(result)
+  }
+
+  /**
+   * Shorthand for calling redact() without specifying redacting rules
+   */
+  protected def redact(text: String): String = {
+    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val metaDataStr = scan match {
+      case s: SupportsMetadata =>
+        s.getMetaData().toSeq.sorted.flatMap {
+          case (_, value) if value.isEmpty || value.equals("[]") => None
+          case (key, value) => Some(s"$key: ${redact(value)}")
+          case _ => None
+        }
+      case _ =>
+        Seq(scan.description())
+    }
+    s"""
+       |$formattedNodeName
+       |${ExplainUtils.generateFieldString("Output", output)}
+       |${metaDataStr.mkString("\n")}
+       |""".stripMargin
   }
 
   override def outputPartitioning: physical.Partitioning = scan match {
@@ -49,7 +83,7 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
     case _ => super.outputPartitioning
   }
 
-  override def supportsBatch: Boolean = {
+  override def supportsColumnar: Boolean = {
     require(partitions.forall(readerFactory.supportColumnarReads) ||
       !partitions.exists(readerFactory.supportColumnarReads),
       "Cannot mix row-based and columnar input partitions.")
@@ -59,17 +93,21 @@ trait DataSourceV2ScanExecBase extends LeafExecNode with ColumnarBatchScan {
 
   def inputRDD: RDD[InternalRow]
 
-  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+  def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
 
   override def doExecute(): RDD[InternalRow] = {
-    if (supportsBatch) {
-      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
-    } else {
-      val numOutputRows = longMetric("numOutputRows")
-      inputRDD.map { r =>
-        numOutputRows += 1
-        r
-      }
+    val numOutputRows = longMetric("numOutputRows")
+    inputRDD.map { r =>
+      numOutputRows += 1
+      r
+    }
+  }
+
+  override def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    val numOutputRows = longMetric("numOutputRows")
+    inputRDD.asInstanceOf[RDD[ColumnarBatch]].map { b =>
+      numOutputRows += b.numRows()
+      b
     }
   }
 }

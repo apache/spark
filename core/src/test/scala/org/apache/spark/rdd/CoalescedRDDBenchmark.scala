@@ -67,7 +67,8 @@ object CoalescedRDDBenchmark extends BenchmarkBase {
     benchmark.run()
   }
 
-  private def performCoalesce(blocks: immutable.Seq[(Int, Seq[String])], numPartitions: Int) {
+  private def performCoalesce(blocks: immutable.Seq[(Int, Seq[String])],
+      numPartitions: Int): Unit = {
     sc.makeRDD(blocks).coalesce(numPartitions).partitions
   }
 

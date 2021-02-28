@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.{mutable, Map}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -25,9 +25,12 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
-import org.apache.spark.sql.catalyst.util.{quoteIdentifier, truncatedString}
+import org.apache.spark.sql.catalyst.util.{truncatedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -307,30 +310,101 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     nameToIndex.get(name)
   }
 
+  /**
+   * Returns the normalized path to a field and the field in this struct and its child structs.
+   *
+   * If includeCollections is true, this will return fields that are nested in maps and arrays.
+   */
+  private[sql] def findNestedField(
+      fieldNames: Seq[String],
+      includeCollections: Boolean = false,
+      resolver: Resolver = _ == _): Option[(Seq[String], StructField)] = {
+    def prettyFieldName(nameParts: Seq[String]): String = {
+      import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+      nameParts.quoted
+    }
+
+    def findField(
+        struct: StructType,
+        searchPath: Seq[String],
+        normalizedPath: Seq[String]): Option[(Seq[String], StructField)] = {
+      searchPath.headOption.flatMap { searchName =>
+        val found = struct.fields.filter(f => resolver(searchName, f.name))
+        if (found.length > 1) {
+          val names = found.map(f => prettyFieldName(normalizedPath :+ f.name))
+            .mkString("[", ", ", " ]")
+          throw new AnalysisException(
+            s"Ambiguous field name: ${prettyFieldName(normalizedPath :+ searchName)}. Found " +
+              s"multiple columns that can match: $names")
+        } else if (found.isEmpty) {
+          None
+        } else {
+          val field = found.head
+          (searchPath.tail, field.dataType, includeCollections) match {
+            case (Seq(), _, _) =>
+              Some(normalizedPath -> field)
+
+            case (names, struct: StructType, _) =>
+              findField(struct, names, normalizedPath :+ field.name)
+
+            case (_, _, false) =>
+              None // types nested in maps and arrays are not used
+
+            case (Seq("key"), MapType(keyType, _, _), true) =>
+              // return the key type as a struct field to include nullability
+              Some((normalizedPath :+ field.name) -> StructField("key", keyType, nullable = false))
+
+            case (Seq("key", names @ _*), MapType(struct: StructType, _, _), true) =>
+              findField(struct, names, normalizedPath ++ Seq(field.name, "key"))
+
+            case (Seq("value"), MapType(_, valueType, isNullable), true) =>
+              // return the value type as a struct field to include nullability
+              Some((normalizedPath :+ field.name) ->
+                StructField("value", valueType, nullable = isNullable))
+
+            case (Seq("value", names @ _*), MapType(_, struct: StructType, _), true) =>
+              findField(struct, names, normalizedPath ++ Seq(field.name, "value"))
+
+            case (Seq("element"), ArrayType(elementType, isNullable), true) =>
+              // return the element type as a struct field to include nullability
+              Some((normalizedPath :+ field.name) ->
+                StructField("element", elementType, nullable = isNullable))
+
+            case (Seq("element", names @ _*), ArrayType(struct: StructType, _), true) =>
+              findField(struct, names, normalizedPath ++ Seq(field.name, "element"))
+
+            case _ =>
+              None
+          }
+        }
+      }
+    }
+    findField(this, fieldNames, Nil)
+  }
+
   protected[sql] def toAttributes: Seq[AttributeReference] =
     map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   def treeString: String = treeString(Int.MaxValue)
 
-  def treeString(level: Int): String = {
-    val builder = new StringBuilder
-    builder.append("root\n")
+  def treeString(maxDepth: Int): String = {
+    val stringConcat = new StringUtils.StringConcat()
+    stringConcat.append("root\n")
     val prefix = " |"
-    fields.foreach(field => field.buildFormattedString(prefix, builder))
-
-    if (level <= 0 || level == Int.MaxValue) {
-      builder.toString()
-    } else {
-      builder.toString().split("\n").filter(_.lastIndexOf("|--") < level * 5 + 1).mkString("\n")
-    }
+    val depth = if (maxDepth > 0) maxDepth else Int.MaxValue
+    fields.foreach(field => field.buildFormattedString(prefix, stringConcat, depth))
+    stringConcat.toString()
   }
 
   // scalastyle:off println
   def printTreeString(): Unit = println(treeString)
   // scalastyle:on println
 
-  private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    fields.foreach(field => field.buildFormattedString(prefix, builder))
+  private[sql] def buildFormattedString(
+      prefix: String,
+      stringConcat: StringConcat,
+      maxDepth: Int): Unit = {
+    fields.foreach(field => field.buildFormattedString(prefix, stringConcat, maxDepth))
   }
 
   override private[sql] def jsonValue =
@@ -349,7 +423,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 
   override def simpleString: String = {
-    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}")
+    val fieldTypes = fields.view.map(field => s"${field.name}:${field.dataType.simpleString}").toSeq
     truncatedString(
       fieldTypes,
       "struct<", ",", ">",
@@ -358,14 +432,20 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def catalogString: String = {
     // in catalogString, we should not truncate
-    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.catalogString}")
-    s"struct<${fieldTypes.mkString(",")}>"
+    val stringConcat = new StringUtils.StringConcat()
+    val len = fields.length
+    stringConcat.append("struct<")
+    var i = 0
+    while (i < len) {
+      stringConcat.append(s"${fields(i).name}:${fields(i).dataType.catalogString}")
+      i += 1
+      if (i < len) stringConcat.append(",")
+    }
+    stringConcat.append(">")
+    stringConcat.toString
   }
 
-  override def sql: String = {
-    val fieldTypes = fields.map(f => s"${quoteIdentifier(f.name)}: ${f.dataType.sql}")
-    s"STRUCT<${fieldTypes.mkString(", ")}>"
-  }
+  override def sql: String = s"STRUCT<${fields.map(_.sql).mkString(", ")}>"
 
   /**
    * Returns a string containing a schema in DDL format. For example, the following value:
@@ -441,7 +521,7 @@ object StructType extends AbstractDataType {
   override private[sql] def simpleString: String = "struct"
 
   private[sql] def fromString(raw: String): StructType = {
-    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parse(raw)) match {
+    Try(DataType.fromJson(raw)).getOrElse(LegacyTypeStringParser.parseString(raw)) match {
       case t: StructType => t
       case _ => throw new RuntimeException(s"Failed parsing ${StructType.simpleString}: $raw")
     }
@@ -459,7 +539,7 @@ object StructType extends AbstractDataType {
 
   def apply(fields: java.util.List[StructField]): StructType = {
     import scala.collection.JavaConverters._
-    StructType(fields.asScala)
+    StructType(fields.asScala.toSeq)
   }
 
   private[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
@@ -493,7 +573,7 @@ object StructType extends AbstractDataType {
           leftContainsNull || rightContainsNull)
 
       case (StructType(leftFields), StructType(rightFields)) =>
-        val newFields = ArrayBuffer.empty[StructField]
+        val newFields = mutable.ArrayBuffer.empty[StructField]
 
         val rightMapped = fieldsMap(rightFields)
         leftFields.foreach {
@@ -523,7 +603,7 @@ object StructType extends AbstractDataType {
             newFields += f
           }
 
-        StructType(newFields)
+        StructType(newFields.toSeq)
 
       case (DecimalType.Fixed(leftPrecision, leftScale),
         DecimalType.Fixed(rightPrecision, rightScale)) =>
@@ -552,7 +632,45 @@ object StructType extends AbstractDataType {
     }
 
   private[sql] def fieldsMap(fields: Array[StructField]): Map[String, StructField] = {
-    import scala.collection.breakOut
-    fields.map(s => (s.name, s))(breakOut)
+    // Mimics the optimization of breakOut, not present in Scala 2.13, while working in 2.12
+    val map = mutable.Map[String, StructField]()
+    map.sizeHint(fields.length)
+    fields.foreach(s => map.put(s.name, s))
+    map
+  }
+
+  /**
+   * Returns a `StructType` that contains missing fields recursively from `source` to `target`.
+   * Note that this doesn't support looking into array type and map type recursively.
+   */
+  def findMissingFields(
+      source: StructType,
+      target: StructType,
+      resolver: Resolver): Option[StructType] = {
+    def bothStructType(dt1: DataType, dt2: DataType): Boolean =
+      dt1.isInstanceOf[StructType] && dt2.isInstanceOf[StructType]
+
+    val newFields = mutable.ArrayBuffer.empty[StructField]
+
+    target.fields.foreach { field =>
+      val found = source.fields.find(f => resolver(field.name, f.name))
+      if (found.isEmpty) {
+        // Found a missing field in `source`.
+        newFields += field
+      } else if (bothStructType(found.get.dataType, field.dataType) &&
+          !found.get.dataType.sameType(field.dataType)) {
+        // Found a field with same name, but different data type.
+        findMissingFields(found.get.dataType.asInstanceOf[StructType],
+          field.dataType.asInstanceOf[StructType], resolver).map { missingType =>
+          newFields += found.get.copy(dataType = missingType)
+        }
+      }
+    }
+
+    if (newFields.isEmpty) {
+      None
+    } else {
+      Some(StructType(newFields.toSeq))
+    }
   }
 }

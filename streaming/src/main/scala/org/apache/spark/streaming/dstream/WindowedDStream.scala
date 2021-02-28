@@ -46,7 +46,7 @@ class WindowedDStream[T: ClassTag](
 
   def windowDuration: Duration = _windowDuration
 
-  override def dependencies: List[DStream[_]] = List(parent)
+  override def dependencies: List[DStream[T]] = List(parent)
 
   override def slideDuration: Duration = _slideDuration
 

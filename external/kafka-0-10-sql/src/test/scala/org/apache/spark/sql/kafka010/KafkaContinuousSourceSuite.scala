@@ -21,7 +21,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.datasources.v2.ContinuousScanExec
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.ContinuousTrigger
 import org.apache.spark.sql.streaming.Trigger
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
@@ -33,7 +33,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withTranscationalProducer { producer =>
+      testUtils.withTransactionalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
@@ -99,7 +99,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withTranscationalProducer { producer =>
+      testUtils.withTransactionalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
@@ -169,6 +169,10 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
       }
     }
   }
+
+  test("SPARK-27494: read kafka record containing null key/values.") {
+    testNullableKeyValue(ContinuousTrigger(100))
+  }
 }
 
 class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
@@ -189,6 +193,7 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
       .format("kafka")
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
+      .option("kafka.request.timeout.ms", "3000")
       .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")

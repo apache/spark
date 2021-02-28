@@ -21,7 +21,8 @@ import java.net.URLClassLoader
 
 import scala.collection.JavaConverters._
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SparkContext, SparkException, SparkFunSuite, TestUtils}
 
@@ -111,9 +112,9 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
     val res1 = classLoader.getResources("resource1").asScala.toList
     assert(res1.size === 2)
     assert(classLoader.getResources("resource2").asScala.size === 1)
-
-    res1.map(scala.io.Source.fromURL(_).mkString) should contain inOrderOnly
-      ("resource1Contents-child", "resource1Contents-parent")
+    res1.map { res =>
+      Utils.tryWithResource(scala.io.Source.fromURL(res))(_.mkString)
+    } should contain inOrderOnly("resource1Contents-child", "resource1Contents-parent")
     classLoader.close()
     parentLoader.close()
   }
@@ -134,7 +135,8 @@ class MutableURLClassLoaderSuite extends SparkFunSuite with Matchers {
 
     try {
       sc.makeRDD(1 to 5, 2).mapPartitions { x =>
-        Utils.classForName(className, noSparkClassLoader = true).getConstructor().newInstance()
+        Utils.classForName[AnyRef](className, noSparkClassLoader = true).
+          getConstructor().newInstance()
         Seq().iterator
       }.count()
     }
