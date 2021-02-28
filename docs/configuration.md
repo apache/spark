@@ -118,29 +118,30 @@ Spark properties mainly can be divided into three kinds:
 <table class="table">
 <tr><th>Configuration Type</th><th>Effect Scope</th><th>Usage</th><th>Remark</th></tr>
 <tr>
-  <td><code>Driver Launch Related Configuration</code></td>
-  <td>Effect before start driver process.</td>
+  <td><code>Lauch Driver Related Configuration</code></td>
+  <td>Effect before start driver JVM.</td>
   <td>
-    Configuration used to submit application, such as `spark.driver.memory`, `spark.driver.extraclassPath`,
+    Configuration used to submit application, such as `spark.driver.memory`, `spark.driver.extraClassPath`,
     these kind of properties only effect before driver's JVM is started, so it would be suggested to set through
     configuration file or `spark-submit` command line options.  
   </td>
   <td>
-    `spark.driver.memory`
-    `spark.driver.memoryOverhead`
-    `spark.driver.cores`
-    `spark.driver.userClassPathFirst`
-    `spark.driver.extraClassPath`
-    `spark.driver.defaultJavaOptions`
-    `spark.driver.extraJavaOptions`
-    `spark.driver.extraLibraryPath`
-    `spark.driver.resource.*`
-    `spark.pyspark.driver.python`
-    `spark.pyspark.python`
-    `spark.r.shell.command'
-    `spark.launcher.childProcLoggerName`
-    `spark.launcher.childConectionTimeout`
-    `spark.yarn.driver.*`
+    The following is a list of such configurations:<br/>
+     `spark.driver.memory`<br/>
+     `spark.driver.memoryOverhead`<br/>
+     `spark.driver.cores`<br/>
+     `spark.driver.userClassPathFirst`<br/>
+     `spark.driver.extraClassPath`<br/>
+     `spark.driver.defaultJavaOptions`<br/>
+     `spark.driver.extraJavaOptions`<br/>
+     `spark.driver.extraLibraryPath`<br/>
+     `spark.driver.resource.*`<br/>
+     `spark.pyspark.driver.python`<br/>
+     `spark.pyspark.python`<br/>
+     `spark.r.shell.command`<br/>
+     `spark.launcher.childProcLoggerName`<br/>
+     `spark.launcher.childConnectionTimeout`<br/>
+     `spark.yarn.driver.*`
   </td>
 </tr>
 <tr>
@@ -167,6 +168,7 @@ Spark properties mainly can be divided into three kinds:
     
   </td>
 </tr>
+</table>
 
 ## Viewing Spark Properties
 
