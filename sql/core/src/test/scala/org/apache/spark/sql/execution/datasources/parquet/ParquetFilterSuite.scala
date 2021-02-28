@@ -39,15 +39,10 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.InferFiltersFromConstraints
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-<<<<<<< HEAD
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
-=======
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.parseColumnPath
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
->>>>>>> upstream/master
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
@@ -81,13 +76,9 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       caseSensitive: Option[Boolean] = None): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
-<<<<<<< HEAD
-      conf.parquetFilterPushDownInFilterThreshold, conf.caseSensitiveAnalysis,
-      DateTimeUtils.defaultTimeZone())
-=======
       conf.parquetFilterPushDownInFilterThreshold,
-      caseSensitive.getOrElse(conf.caseSensitiveAnalysis))
->>>>>>> upstream/master
+      caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
+      ZoneId.systemDefault())
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -1457,17 +1448,6 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
   }
 
   test("SPARK-25207: Case-insensitive field resolution for pushdown when reading parquet") {
-<<<<<<< HEAD
-    def createParquetFilter(caseSensitive: Boolean): ParquetFilters = {
-      new ParquetFilters(conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
-        conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
-        conf.parquetFilterPushDownInFilterThreshold, caseSensitive, DateTimeUtils.defaultTimeZone())
-    }
-    val caseSensitiveParquetFilters = createParquetFilter(caseSensitive = true)
-    val caseInsensitiveParquetFilters = createParquetFilter(caseSensitive = false)
-
-=======
->>>>>>> upstream/master
     def testCaseInsensitiveResolution(
         schema: StructType,
         expected: FilterPredicate,

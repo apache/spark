@@ -47,6 +47,8 @@ object DateTimeUtils {
   final val JULIAN_DAY_OF_EPOCH = 2440588
 
   final val TimeZoneUTC = TimeZone.getTimeZone("UTC")
+  // for why ".normalized", see https://stackoverflow.com/a/39507023/2965879
+  final val ZoneIdUTC = ZoneId.of("UTC").normalized()
 
   val TIMEZONE_OPTION = "timeZone"
 

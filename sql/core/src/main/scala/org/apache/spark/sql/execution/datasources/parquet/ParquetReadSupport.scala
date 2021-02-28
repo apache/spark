@@ -52,28 +52,16 @@ import org.apache.spark.sql.types._
  * Due to this reason, we no longer rely on [[ReadContext]] to pass requested schema from [[init()]]
  * to [[prepareForRead()]], but use a private `var` for simplicity.
  */
-<<<<<<< HEAD
-private[parquet] class ParquetReadSupport(
-    val convertTz: Option[TimeZone],
-    val sessionLocalTz: TimeZone)
-    extends ReadSupport[UnsafeRow] with Logging {
-=======
 class ParquetReadSupport(
     val convertTz: Option[ZoneId],
     enableVectorizedReader: Boolean,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     int96RebaseMode: LegacyBehaviorPolicy.Value)
   extends ReadSupport[InternalRow] with Logging {
->>>>>>> upstream/master
   private var catalystRequestedSchema: StructType = _
 
   def this() = {
     // We need a zero-arg constructor for SpecificParquetRecordReaderBase.  But that is only
-<<<<<<< HEAD
-    // used in the vectorized reader, where we get the convertTz value directly, and the value here
-    // is ignored.
-    this(None, null)
-=======
     // used in the vectorized reader, where we get the convertTz/rebaseDateTime value directly,
     // and the values here are ignored.
     this(
@@ -81,7 +69,6 @@ class ParquetReadSupport(
       enableVectorizedReader = true,
       datetimeRebaseMode = LegacyBehaviorPolicy.CORRECTED,
       int96RebaseMode = LegacyBehaviorPolicy.LEGACY)
->>>>>>> upstream/master
   }
 
   /**
@@ -150,12 +137,8 @@ class ParquetReadSupport(
       ParquetReadSupport.expandUDT(catalystRequestedSchema),
       new ParquetToSparkSchemaConverter(conf),
       convertTz,
-<<<<<<< HEAD
-      sessionLocalTz)
-=======
       datetimeRebaseMode,
       int96RebaseMode)
->>>>>>> upstream/master
   }
 }
 

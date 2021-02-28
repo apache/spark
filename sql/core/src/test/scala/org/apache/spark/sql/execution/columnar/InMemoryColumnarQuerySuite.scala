@@ -524,41 +524,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
       // This test case depends on the size of ORC in statistics.
       withSQLConf(
         SQLConf.CBO_ENABLED.key -> "true",
-<<<<<<< HEAD
-        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "parquet") {
-      withTempPath { workDir =>
-        withTable("table1") {
-          val workDirPath = workDir.getAbsolutePath
-          val data = Seq(100, 200, 300, 400).toDF("count")
-          data.write.parquet(workDirPath)
-          val dfFromFile = spark.read.parquet(workDirPath).cache()
-          val inMemoryRelation = dfFromFile.queryExecution.optimizedPlan.collect {
-            case plan: InMemoryRelation => plan
-          }.head
-          // InMemoryRelation's stats is file size before the underlying RDD is materialized
-          assert(inMemoryRelation.computeStats().sizeInBytes === 894)
-
-          // InMemoryRelation's stats is updated after materializing RDD
-          dfFromFile.collect()
-          assert(inMemoryRelation.computeStats().sizeInBytes === 16)
-
-          // test of catalog table
-          val dfFromTable = spark.catalog.createTable("table1", workDirPath).cache()
-          val inMemoryRelation2 = dfFromTable.queryExecution.optimizedPlan.
-            collect { case plan: InMemoryRelation => plan }.head
-
-          // Even CBO enabled, InMemoryRelation's stats keeps as the file size before table's stats
-          // is calculated
-          assert(inMemoryRelation2.computeStats().sizeInBytes === 894)
-
-          // InMemoryRelation's stats should be updated after calculating stats of the table
-          // clear cache to simulate a fresh environment
-          dfFromTable.unpersist(blocking = true)
-          spark.sql("ANALYZE TABLE table1 COMPUTE STATISTICS")
-          val inMemoryRelation3 = spark.read.table("table1").cache().queryExecution.optimizedPlan.
-            collect { case plan: InMemoryRelation => plan }.head
-          assert(inMemoryRelation3.computeStats().sizeInBytes === 48)
-=======
         SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "orc",
         SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
         withTempPath { workDir =>
@@ -594,7 +559,6 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSparkSession {
               collect { case plan: InMemoryRelation => plan }.head
             assert(inMemoryRelation3.computeStats().sizeInBytes === 48)
           }
->>>>>>> upstream/master
         }
       }
     }

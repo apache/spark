@@ -98,8 +98,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final String int96RebaseMode;
 
-  private TimeZone sessionLocalTz = null;
-
   /**
    * columnBatch object that is used for batch decoding. This is created on first use and triggers
    * batched decoding. It is not valid to interleave calls to the batched interface with the row
@@ -128,11 +126,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-<<<<<<< HEAD
-  public VectorizedParquetRecordReader(TimeZone convertTz, TimeZone sessionLocalTz, boolean useOffHeap, int capacity) {
-    this.convertTz = convertTz;
-    this.sessionLocalTz = sessionLocalTz;
-=======
   public VectorizedParquetRecordReader(
       ZoneId convertTz,
       String datetimeRebaseMode,
@@ -142,7 +135,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     this.convertTz = convertTz;
     this.datetimeRebaseMode = datetimeRebaseMode;
     this.int96RebaseMode = int96RebaseMode;
->>>>>>> upstream/master
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
   }
@@ -338,18 +330,13 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     columnReaders = new VectorizedColumnReader[columns.size()];
     for (int i = 0; i < columns.size(); ++i) {
       if (missingColumns[i]) continue;
-<<<<<<< HEAD
-      columnReaders[i] = new VectorizedColumnReader(columns.get(i), types.get(i).getLogicalTypeAnnotation(),
-        pages.getPageReader(columns.get(i)), convertTz, sessionLocalTz);
-=======
       columnReaders[i] = new VectorizedColumnReader(
         columns.get(i),
-        types.get(i).getOriginalType(),
+        types.get(i).getLogicalTypeAnnotation(),
         pages.getPageReader(columns.get(i)),
         convertTz,
         datetimeRebaseMode,
         int96RebaseMode);
->>>>>>> upstream/master
     }
     totalCountLoadedSoFar += pages.getRowCount();
   }

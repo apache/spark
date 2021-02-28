@@ -139,20 +139,6 @@ case class ParquetPartitionReaderFactory(
 
     lazy val footerFileMetaData =
       ParquetFileReader.readFooter(conf, filePath, SKIP_ROW_GROUPS).getFileMetaData
-    // Try to push down filters when filter push-down is enabled.
-    val pushed = if (enableParquetFilterPushDown) {
-      val parquetSchema = footerFileMetaData.getSchema
-      val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
-        pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
-      filters
-        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-        // is used here.
-        .flatMap(parquetFilters.createFilter)
-        .reduceOption(FilterApi.and)
-    } else {
-      None
-    }
     // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
     // *only* if the file was created by something other than "parquet-mr", so check the actual
     // writer here for this file.  We have to do this per-file, as each file in the table may
@@ -167,6 +153,22 @@ case class ParquetPartitionReaderFactory(
       } else {
         None
       }
+
+    // Try to push down filters when filter push-down is enabled.
+    val pushed = if (enableParquetFilterPushDown) {
+      val parquetSchema = footerFileMetaData.getSchema
+      val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
+        pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive,
+        convertTz.getOrElse(DateTimeUtils.ZoneIdUTC))
+      filters
+        // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+        // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+        // is used here.
+        .flatMap(parquetFilters.createFilter)
+        .reduceOption(FilterApi.and)
+    } else {
+      None
+    }
 
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)

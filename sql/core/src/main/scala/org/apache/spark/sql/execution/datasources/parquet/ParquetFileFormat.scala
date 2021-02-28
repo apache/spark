@@ -269,30 +269,9 @@ class ParquetFileFormat
           null)
 
       val sharedConf = broadcastedHadoopConf.value.value
-      val sessionLocalTz = DateTimeUtils.getTimeZone(
-        sharedConf.get(SQLConf.SESSION_LOCAL_TIMEZONE.key))
 
       lazy val footerFileMetaData =
         ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
-      // Try to push down filters when filter push-down is enabled.
-      val pushed = if (enableParquetFilterPushDown) {
-        val parquetSchema = footerFileMetaData.getSchema
-<<<<<<< HEAD
-        val parquetFilters = new ParquetFilters(pushDownDate, pushDownTimestamp, pushDownDecimal,
-          pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive, sessionLocalTz)
-=======
-        val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
-          pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
->>>>>>> upstream/master
-        filters
-          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
-          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
-          // is used here.
-          .flatMap(parquetFilters.createFilter(_))
-          .reduceOption(FilterApi.and)
-      } else {
-        None
-      }
 
       // PARQUET_INT96_TIMESTAMP_CONVERSION says to apply timezone conversions to int96 timestamps'
       // *only* if the file was created by something other than "parquet-mr", so check the actual
@@ -308,6 +287,22 @@ class ParquetFileFormat
         } else {
           None
         }
+
+      // Try to push down filters when filter push-down is enabled.
+      val pushed = if (enableParquetFilterPushDown) {
+        val parquetSchema = footerFileMetaData.getSchema
+        val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
+          pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive,
+          convertTz.orNull)
+        filters
+          // Collects all converted Parquet filter predicates. Notice that not all predicates can be
+          // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
+          // is used here.
+          .flatMap(parquetFilters.createFilter(_))
+          .reduceOption(FilterApi.and)
+      } else {
+        None
+      }
 
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
         footerFileMetaData.getKeyValueMetaData.get,
@@ -329,12 +324,8 @@ class ParquetFileFormat
       if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull,
-<<<<<<< HEAD
-          sessionLocalTz,
-=======
           datetimeRebaseMode.toString,
           int96RebaseMode.toString,
->>>>>>> upstream/master
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
@@ -359,16 +350,9 @@ class ParquetFileFormat
           int96RebaseMode)
         val reader = if (pushed.isDefined && enableRecordFilter) {
           val parquetFilter = FilterCompat.get(pushed.get, null)
-<<<<<<< HEAD
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz, sessionLocalTz),
-            parquetFilter)
-        } else {
-          new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz, sessionLocalTz))
-=======
           new ParquetRecordReader[InternalRow](readSupport, parquetFilter)
         } else {
           new ParquetRecordReader[InternalRow](readSupport)
->>>>>>> upstream/master
         }
         val iter = new RecordReaderIterator[InternalRow](reader)
         // SPARK-23457 Register a task completion listener before `initialization`.

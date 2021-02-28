@@ -18,13 +18,8 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
-<<<<<<< HEAD
-import java.util.TimeZone
-
-import scala.language.existentials
-=======
 import java.time.ZoneOffset
->>>>>>> upstream/master
+import java.util.TimeZone
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -35,12 +30,8 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
-<<<<<<< HEAD
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
-=======
 import org.apache.spark.sql.test.SharedSparkSession
->>>>>>> upstream/master
+import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 
 class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedSparkSession {
   test("parquet files with different physical schemas but share the same logical schema") {
@@ -298,6 +289,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
     def withTimeZone(timeZone: String)(f: => Unit): Unit = {
       val tz = TimeZone.getDefault
+      // Java 8+ ZoneId-API does not support changing timezone at runtime
       TimeZone.setDefault(TimeZone.getTimeZone(timeZone))
       try f finally TimeZone.setDefault(tz)
     }

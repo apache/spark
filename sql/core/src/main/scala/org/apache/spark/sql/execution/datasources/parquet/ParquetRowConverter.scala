@@ -26,15 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-<<<<<<< HEAD
-import org.apache.parquet.schema.{GroupType, LogicalTypeAnnotation, MessageType, Type}
+import org.apache.parquet.schema.{GroupType, LogicalTypeAnnotation, Type}
 import org.apache.parquet.schema.LogicalTypeAnnotation.{TimeUnit, _}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
-=======
-import org.apache.parquet.schema.{GroupType, OriginalType, Type}
-import org.apache.parquet.schema.OriginalType.LIST
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, FIXED_LEN_BYTE_ARRAY, INT32, INT64, INT96}
->>>>>>> upstream/master
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
@@ -113,23 +107,16 @@ private[parquet] class ParquetPrimitiveConverter(val updater: ParentContainerUpd
  * }}}
  * 5 converters will be created:
  *
-<<<<<<< HEAD
- * - a root [[ParquetRowConverter]] for [[MessageType]] `root`, which contains:
- *   - a [[ParquetPrimitiveConverter]] for required [[intType()]] field `f1`, and
- *   - a nested [[ParquetRowConverter]] for optional [[GroupType]] `f2`, which contains:
- *     - a [[ParquetPrimitiveConverter]] for required [[DOUBLE]] field `f21`, and
- *     - a [[ParquetStringConverter]] for optional [[stringType()]] string field `f22`
-=======
  * - a root [[ParquetRowConverter]] for [[org.apache.parquet.schema.MessageType]] `root`,
  * which contains:
  *   - a [[ParquetPrimitiveConverter]] for required
- *   [[org.apache.parquet.schema.OriginalType.INT_32]] field `f1`, and
+ *   [[org.apache.parquet.schema.LogicalTypeAnnotation.intType()]] field `f1`, and
  *   - a nested [[ParquetRowConverter]] for optional [[GroupType]] `f2`, which contains:
  *     - a [[ParquetPrimitiveConverter]] for required
  *     [[org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.DOUBLE]] field `f21`, and
- *     - a [[ParquetStringConverter]] for optional [[org.apache.parquet.schema.OriginalType.UTF8]]
+ *     - a [[ParquetStringConverter]] for optional
+ *     [[org.apache.parquet.schema.LogicalTypeAnnotation.stringType()]]
  *     string field `f22`
->>>>>>> upstream/master
  *
  * When used as a root converter, [[NoopUpdater]] should be used since root converters don't have
  * any "parent" container.
@@ -149,14 +136,9 @@ private[parquet] class ParquetRowConverter(
     schemaConverter: ParquetToSparkSchemaConverter,
     parquetType: GroupType,
     catalystType: StructType,
-<<<<<<< HEAD
-    convertTz: Option[TimeZone],
-    sessionLocalTz: TimeZone,
-=======
     convertTz: Option[ZoneId],
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     int96RebaseMode: LegacyBehaviorPolicy.Value,
->>>>>>> upstream/master
     updater: ParentContainerUpdater)
   extends ParquetGroupConverter(updater) with Logging {
 
@@ -344,31 +326,25 @@ private[parquet] class ParquetRowConverter(
       case TimestampType if isTimestampWithUnit(parquetType, TimeUnit.MICROS) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-<<<<<<< HEAD
+            val time = timestampRebaseFunc(value)
             val utc = parquetType.getLogicalTypeAnnotation
               .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
-            val adjTime = if (utc) value else DateTimeUtils.convertTz(value, sessionLocalTz, UTC)
+            val adjTime = if (utc) value else DateTimeUtils.convertTz(time,
+              convertTz.getOrElse(DateTimeUtils.ZoneIdUTC), DateTimeUtils.ZoneIdUTC)
             updater.setLong(adjTime.asInstanceOf[Long])
-=======
-            updater.setLong(timestampRebaseFunc(value))
->>>>>>> upstream/master
           }
         }
 
       case TimestampType if isTimestampWithUnit(parquetType, TimeUnit.MILLIS) =>
         new ParquetPrimitiveConverter(updater) {
           override def addLong(value: Long): Unit = {
-<<<<<<< HEAD
+            val micros = DateTimeUtils.millisToMicros(value)
+            val rawTime = timestampRebaseFunc(micros)
             val utc = parquetType.getLogicalTypeAnnotation
               .asInstanceOf[TimestampLogicalTypeAnnotation].isAdjustedToUTC
-            val rawTime = DateTimeUtils.fromMillis(value)
             val adjTime = if (utc) rawTime else DateTimeUtils.convertTz(rawTime,
-              sessionLocalTz, UTC)
+              convertTz.getOrElse(DateTimeUtils.ZoneIdUTC), DateTimeUtils.ZoneIdUTC)
             updater.setLong(adjTime.asInstanceOf[Long])
-=======
-            val micros = DateTimeUtils.millisToMicros(value)
-            updater.setLong(timestampRebaseFunc(micros))
->>>>>>> upstream/master
           }
         }
 
@@ -441,16 +417,9 @@ private[parquet] class ParquetRowConverter(
           parquetType.asGroupType(),
           t,
           convertTz,
-<<<<<<< HEAD
-          sessionLocalTz,
-          new ParentContainerUpdater {
-            override def set(value: Any): Unit = updater.set(value.asInstanceOf[InternalRow].copy())
-          })
-=======
           datetimeRebaseMode,
           int96RebaseMode,
           wrappedUpdater)
->>>>>>> upstream/master
 
       case t =>
         throw new RuntimeException(

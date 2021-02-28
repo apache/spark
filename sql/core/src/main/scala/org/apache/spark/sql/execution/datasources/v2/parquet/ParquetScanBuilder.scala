@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
@@ -49,10 +50,12 @@ case class ParquetScanBuilder(
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+    val convertTz = DateTimeUtils.getZoneId(sqlConf.sessionLocalTimeZone)
     val parquetSchema =
       new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
     val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
-      pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
+      pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive,
+      convertTz)
     parquetFilters.convertibleFilters(this.filters).toArray
   }
 

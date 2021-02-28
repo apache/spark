@@ -42,17 +42,6 @@ private[parquet] class ParquetRecordMaterializer(
     parquetSchema: MessageType,
     catalystSchema: StructType,
     schemaConverter: ParquetToSparkSchemaConverter,
-<<<<<<< HEAD
-    convertTz: Option[TimeZone],
-    sessionLocalTz: TimeZone)
-  extends RecordMaterializer[UnsafeRow] {
-
-  private val rootConverter =
-    new ParquetRowConverter(schemaConverter, parquetSchema, catalystSchema, convertTz,
-      sessionLocalTz, NoopUpdater)
-
-  override def getCurrentRecord: UnsafeRow = rootConverter.currentRecord
-=======
     convertTz: Option[ZoneId],
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     int96RebaseMode: LegacyBehaviorPolicy.Value)
@@ -68,7 +57,6 @@ private[parquet] class ParquetRecordMaterializer(
     NoopUpdater)
 
   override def getCurrentRecord: InternalRow = rootConverter.currentRecord
->>>>>>> upstream/master
 
   override def getRootConverter: GroupConverter = rootConverter
 }

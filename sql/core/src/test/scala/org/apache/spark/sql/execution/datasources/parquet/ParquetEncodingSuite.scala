@@ -16,8 +16,6 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.util.TimeZone
-
 import scala.collection.JavaConverters._
 
 import org.apache.parquet.hadoop.ParquetOutputFormat
@@ -44,14 +42,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-<<<<<<< HEAD
-          null,
-          TimeZone.getDefault,
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
-=======
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
->>>>>>> upstream/master
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -78,14 +69,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-<<<<<<< HEAD
-          null,
-          TimeZone.getDefault,
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
-=======
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
->>>>>>> upstream/master
         reader.initialize(file.asInstanceOf[String], null)
         val batch = reader.resultBatch()
         assert(reader.nextBatch())
@@ -116,14 +100,7 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
 
         val conf = sqlContext.conf
         val reader = new VectorizedParquetRecordReader(
-<<<<<<< HEAD
-          null,
-          TimeZone.getDefault,
-          conf.offHeapColumnVectorEnabled,
-          conf.parquetVectorizedReaderBatchSize)
-=======
           conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
->>>>>>> upstream/master
         reader.initialize(file, null /* set columns to null to project all columns */)
         val column = reader.resultBatch().column(0)
         assert(reader.nextBatch())
