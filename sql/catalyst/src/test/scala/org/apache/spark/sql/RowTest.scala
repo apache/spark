@@ -108,6 +108,31 @@ class RowTest extends AnyFunSpec with Matchers {
     }
   }
 
+  describe("row not equals") {
+    val externalRow = Row(1)
+    val externalRow2 = Row(1.0)
+
+    it("inequality check for external rows") {
+      externalRow should not equal externalRow2
+    }
+
+    val externalRow3 =
+      new GenericRowWithSchema(Array(1), StructType(Seq(StructField("col1", IntegerType))))
+    val externalRow4 =
+      new GenericRowWithSchema(Array(1.0), StructType(Seq(StructField("col1", DoubleType))))
+
+    it("inequality check for external rows with schema") {
+      externalRow3 should not equal externalRow4
+    }
+
+    val internalRow = InternalRow(1)
+    val internalRow2 = InternalRow(1.0)
+
+    it("inequality check for internal rows") {
+      internalRow should not equal internalRow2
+    }
+  }
+
   describe("row immutability") {
     val values = Seq(1, 2, "3", "IV", 6L)
     val externalRow = Row.fromSeq(values)
