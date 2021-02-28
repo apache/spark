@@ -66,6 +66,8 @@
   url: sql-pyspark-pandas-with-arrow.html
 - text: Migration Guide
   url: sql-migration-old.html
+- text: SQL Metrics
+  url: sql-metrics.html
 - text: SQL Reference
   url: sql-ref.html
   subitems:
