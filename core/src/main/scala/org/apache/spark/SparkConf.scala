@@ -21,10 +21,11 @@ import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.LinkedHashSet
+import scala.collection.mutable.{ArrayBuffer, HashMap, LinkedHashSet}
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.SparkConf.{AlternateConfig, DeprecatedConfig, RemovedConfig}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
@@ -582,6 +583,29 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
 }
 
+private[spark] object LegacyConfigsRegister {
+  lazy val deprecateConfigs = new ArrayBuffer[DeprecatedConfig]()
+  lazy val removedConfigs = new ArrayBuffer[RemovedConfig]()
+  lazy val alternatedConfigs = new HashMap[String, ArrayBuffer[AlternateConfig]]()
+
+  def registerDeprecated(key: String, version: String, deprecationMessage: String): Unit = {
+    deprecateConfigs += DeprecatedConfig(key, version, deprecationMessage)
+  }
+
+  def registerAlternated(
+      key: String,
+      alternativeConfigs: Seq[(String, String, String => String)]): Unit = {
+    val configs = alternatedConfigs.getOrElseUpdate(key, new ArrayBuffer[AlternateConfig]())
+    configs ++= alternativeConfigs.map { case (key, version, translation) =>
+      AlternateConfig(key, version, translation)
+    }
+  }
+
+  def registerRemoved(key: String, version: String, defaultValue: String, comment: String): Unit = {
+    removedConfigs += RemovedConfig(key, version, defaultValue, comment)
+  }
+}
+
 private[spark] object SparkConf extends Logging {
 
   /**
@@ -637,7 +661,7 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.excludeOnFailure.killExcludedExecutors"),
       DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
         "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
-    )
+    ) ++ LegacyConfigsRegister.deprecateConfigs
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
   }
@@ -718,7 +742,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
     "spark.kafka.consumer.cache.capacity" -> Seq(
       AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
-  )
+  ) ++ LegacyConfigsRegister.alternatedConfigs
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
@@ -796,7 +820,7 @@ private[spark] object SparkConf extends Logging {
    * @param version Version of Spark where key was deprecated.
    * @param deprecationMessage Message to include in the deprecation warning.
    */
-  private case class DeprecatedConfig(
+  private[spark] case class DeprecatedConfig(
       key: String,
       version: String,
       deprecationMessage: String)
@@ -808,9 +832,21 @@ private[spark] object SparkConf extends Logging {
    * @param version The Spark version in which the key was deprecated.
    * @param translation A translation function for converting old config values into new ones.
    */
-  private case class AlternateConfig(
+  private[spark] case class AlternateConfig(
       key: String,
       version: String,
       translation: String => String = null)
+
+  /**
+   * Holds information about keys that have been removed.
+   *
+   * @param key The removed config key.
+   * @param version Version of Spark where key was removed.
+   * @param defaultValue The default config value. It can be used to notice
+   *                     users that they set non-default value to an already removed config.
+   * @param comment Additional info regarding to the removed config.
+   */
+  private[spark]
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
 
 }

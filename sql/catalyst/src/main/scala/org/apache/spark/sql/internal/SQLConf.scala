@@ -30,7 +30,8 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkContext, TaskContext}
+import org.apache.spark.{LegacyConfigsRegister, SparkConf, SparkContext, TaskContext}
+import org.apache.spark.SparkConf.{DeprecatedConfig, RemovedConfig}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -3099,16 +3100,6 @@ object SQLConf {
       .createWithDefault(false)
 
   /**
-   * Holds information about keys that have been deprecated.
-   *
-   * @param key The deprecated key.
-   * @param version Version of Spark where key was deprecated.
-   * @param comment Additional info regarding to the removed config. For example,
-   *                reasons of config deprecation, what users should use instead of it.
-   */
-  case class DeprecatedConfig(key: String, version: String, comment: String)
-
-  /**
    * Maps deprecated SQL config keys to information about the deprecation.
    *
    * The extra information is logged as a warning when the SQL config is present
@@ -3149,21 +3140,10 @@ object SQLConf {
         s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
         """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
-    )
+    ) ++ LegacyConfigsRegister.deprecateConfigs
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
   }
-
-  /**
-   * Holds information about keys that have been removed.
-   *
-   * @param key The removed config key.
-   * @param version Version of Spark where key was removed.
-   * @param defaultValue The default config value. It can be used to notice
-   *                     users that they set non-default value to an already removed config.
-   * @param comment Additional info regarding to the removed config.
-   */
-  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
 
   /**
    * The map contains info about removed SQL configs. Keys are SQL config names,
@@ -3195,7 +3175,7 @@ object SQLConf {
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
-    )
+    ) ++ LegacyConfigsRegister.removedConfigs
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
   }
@@ -3927,11 +3907,13 @@ class SQLConf extends Serializable with Logging {
    * Logs a warning message if the given config key is deprecated.
    */
   private def logDeprecationWarning(key: String): Unit = {
-    SQLConf.deprecatedSQLConfigs.get(key).foreach {
-      case DeprecatedConfig(configName, version, comment) =>
-        logWarning(
-          s"The SQL config '$configName' has been deprecated in Spark v$version " +
-          s"and may be removed in the future. $comment")
+    if (key.startsWith("spark.sql")) {
+      SQLConf.deprecatedSQLConfigs.get(key).foreach {
+        case DeprecatedConfig(configName, version, comment) =>
+          logWarning(
+            s"The SQL config '$configName' has been deprecated in Spark v$version " +
+              s"and may be removed in the future. $comment")
+      }
     }
   }
 

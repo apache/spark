@@ -22,6 +22,7 @@ import java.util.regex.PatternSyntaxException
 
 import scala.util.matching.Regex
 
+import org.apache.spark.LegacyConfigsRegister
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 import org.apache.spark.util.Utils
 
@@ -202,6 +203,23 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def version(v: String): ConfigBuilder = {
     _version = v
+    this
+  }
+
+  def deprecated(version: String, deprecationMessage: String): ConfigBuilder = {
+    LegacyConfigsRegister.registerDeprecated(key, version, deprecationMessage)
+    this
+  }
+
+  def alternated(
+      alternativeConfig: (String, String, String => String),
+      others: (String, String, String => String)*): ConfigBuilder = {
+    LegacyConfigsRegister.registerAlternated(key, alternativeConfig +: others )
+    this
+  }
+
+  def removed(version: String, defaultValue: String, comment: String): ConfigBuilder = {
+    LegacyConfigsRegister.registerRemoved(key, version, defaultValue, comment)
     this
   }
 
