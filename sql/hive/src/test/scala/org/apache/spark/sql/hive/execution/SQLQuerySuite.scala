@@ -2566,8 +2566,6 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         sql("CREATE TABLE d1.t1(a INT) USING PARQUET")
         sql("CREATE TABLE d1.t2(a INT) USING PARQUET")
 
-        checkAnswer(sql("SELECT * from show_tables()"),
-          Row("default", "t1", false) :: Nil)
         checkAnswer(sql("SELECT * from show_tables('default')"),
           Row("default", "t1", false) :: Nil)
         checkAnswer(sql("SELECT * from show_tables('d1')"),
