@@ -115,21 +115,58 @@ versions of Spark; in such cases, the older key names are still accepted, but ta
 precedence than any instance of the newer key.
 
 Spark properties mainly can be divided into three kinds: 
-
-    1. configuration used to submit application, such as "spark.driver.memory", "spark.driver.extraclassPath",
-       these kind of properties only effect before driver's JVM is started, so it would be suggested to set through
-       configuration file or `spark-submit` command line options. For these kind of configuration, they are 
-       "spark.driver.memory", "spark.driver.memoryOverhead", "spark.driver.cores", "spark.driver.userClassPathFirst",
-       "spark.driver.extraClassPath", "spark.driver.defaultJavaOptions", "spark.driver.extraJavaOptions",
-       "spark.driver.extraLibraryPath", "spark.driver.resource.*", "spark.pyspark.driver.python", "spark.pyspark.python", "spark.r.shell.command",
-       "spark.launcher.childProcLoggerName", "spark.launcher.childConectionTimeout", "spark.yarn.driver.*".
-    2. one is related to deploy, like "spark.master", "spark.executor.instances", this kind of properties may not
-       be affected when setting programmatically through `SparkConf` in runtime after SparkContext has been started,
-       or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to
-       set through configuration file, `spark-submit` command line options, or setting programmatically through `SparkConf`
-       in runtime before start SparkContext.
-    3. another is mainly related to Spark runtime control,
-       like "spark.task.maxFailures", this kind of properties can be set in either way.
+<table class="table">
+<tr><th>Configuration Type</th><th>Effect Scope</th><th>Usage</th><th>Remark</th></tr>
+<tr>
+  <td><code>Driver Launch Related Configuration</code></td>
+  <td>Effect before start driver process.</td>
+  <td>
+    Configuration used to submit application, such as `spark.driver.memory`, `spark.driver.extraclassPath`,
+    these kind of properties only effect before driver's JVM is started, so it would be suggested to set through
+    configuration file or `spark-submit` command line options.  
+  </td>
+  <td>
+    `spark.driver.memory`
+    `spark.driver.memoryOverhead`
+    `spark.driver.cores`
+    `spark.driver.userClassPathFirst`
+    `spark.driver.extraClassPath`
+    `spark.driver.defaultJavaOptions`
+    `spark.driver.extraJavaOptions`
+    `spark.driver.extraLibraryPath`
+    `spark.driver.resource.*`
+    `spark.pyspark.driver.python`
+    `spark.pyspark.python`
+    `spark.r.shell.command'
+    `spark.launcher.childProcLoggerName`
+    `spark.launcher.childConectionTimeout`
+    `spark.yarn.driver.*`
+  </td>
+</tr>
+<tr>
+  <td><code>Application Deploy Related Configuration</code></td>
+  <td>Effect before start SparkContext.</td>
+  <td>
+    Like "spark.master", "spark.executor.instances", this kind of properties may not
+    be affected when setting programmatically through `SparkConf` in runtime after SparkContext has been started,
+    or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to
+    set through configuration file, `spark-submit` command line options, or setting programmatically through `SparkConf`
+    in runtime before start SparkContext.  
+  </td>
+  <td>
+    
+  </td>
+</tr>
+<tr>
+  <td><code>Spark Runtime Control Related Configuration</code></td>
+  <td>Effect when runtime.</td>
+  <td>
+    Like "spark.task.maxFailures", this kind of properties can be set in either way. 
+  </td>
+  <td>
+    
+  </td>
+</tr>
 
 ## Viewing Spark Properties
 
