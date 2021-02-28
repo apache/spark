@@ -15,20 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 
-class AlterTablePartitionV2SQLSuite extends DatasourceV2SQLBase {
-  test("ALTER TABLE RECOVER PARTITIONS") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo")
-      val e = intercept[AnalysisException] {
-        sql(s"ALTER TABLE $t RECOVER PARTITIONS")
-      }
-      assert(e.message.contains(
-        "ALTER TABLE ... RECOVER PARTITIONS is not supported for v2 tables."))
+/**
+ * Physical plan node for renaming a table partition.
+ */
+case class RenamePartitionExec(
+    table: SupportsPartitionManagement,
+    from: ResolvedPartitionSpec,
+    to: ResolvedPartitionSpec,
+    refreshCache: () => Unit) extends V2CommandExec {
+
+  override def output: Seq[Attribute] = Seq.empty
+
+  override protected def run(): Seq[InternalRow] = {
+    if (table.renamePartition(from.ident, to.ident)) {
+      refreshCache()
     }
+    Seq.empty
   }
 }

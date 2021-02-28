@@ -29,13 +29,14 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, SchemaColumnConvertNotSupportedException}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -3793,6 +3794,17 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-33591: null as string partition literal value 'null' after setting legacy conf") {
+    withSQLConf(SQLConf.LEGACY_PARSE_NULL_PARTITION_SPEC_AS_STRING_LITERAL.key -> "true") {
+      val t = "tbl"
+      withTable("tbl") {
+        sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
+        sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
+        checkAnswer(spark.sql(s"SELECT * FROM $t"), Row(0, "null"))
+      }
+    }
+  }
+
   test("SPARK-33593: Vector reader got incorrect data with binary partition value") {
     Seq("false", "true").foreach(value => {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> value) {
@@ -3869,12 +3881,187 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(unions.size == 1)
   }
 
-  test("SPARK-33591: null as a partition value") {
-    val t = "part_table"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (col1 INT, p1 STRING) USING PARQUET PARTITIONED BY (p1)")
-      sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
-      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, null))
+  test("SPARK-34212 Parquet should read decimals correctly") {
+    def readParquet(schema: String, path: File): DataFrame = {
+      spark.read.schema(schema).parquet(path.toString)
+    }
+
+    withTempPath { path =>
+      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
+      df.write.parquet(path.toString)
+
+      Seq(true, false).foreach { vectorizedReader =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReader.toString) {
+          // We can read the decimal parquet field with a larger precision, if scale is the same.
+          val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+          checkAnswer(readParquet(schema, path), df)
+        }
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
+        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+
+    // tests for parquet types without decimal metadata.
+    withTempPath { path =>
+      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      df.write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
+        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
+        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
+        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        val e = intercept[SparkException] {
+          readParquet("d DECIMAL(3, 2)", path).collect()
+        }.getCause
+        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+  }
+
+  test("SPARK-34421: Resolve temporary objects in temporary views with CTEs") {
+    val tempFuncName = "temp_func"
+    withUserDefinedFunction(tempFuncName -> true) {
+      spark.udf.register(tempFuncName, identity[Int](_))
+
+      val tempViewName = "temp_view"
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 1")
+
+        val testViewName = "test_view"
+
+        withTempView(testViewName) {
+          sql(
+            s"""
+              |CREATE TEMPORARY VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT $tempFuncName(0)
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(0))
+        }
+
+        withTempView(testViewName) {
+          sql(
+            s"""
+              |CREATE TEMPORARY VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT * FROM $tempViewName
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+          checkAnswer(sql(s"SELECT * FROM $testViewName"), Row(1))
+        }
+      }
+    }
+  }
+
+  test("SPARK-34421: Resolve temporary objects in permanent views with CTEs") {
+    val tempFuncName = "temp_func"
+    withUserDefinedFunction((tempFuncName, true)) {
+      spark.udf.register(tempFuncName, identity[Int](_))
+
+      val tempViewName = "temp_view"
+      withTempView(tempViewName) {
+        sql(s"CREATE TEMPORARY VIEW $tempViewName AS SELECT 1")
+
+        val testViewName = "test_view"
+
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT * FROM $tempViewName
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+        }
+        assert(e.message.contains("Not allowed to create a permanent view " +
+          s"`default`.`$testViewName` by referencing a temporary view $tempViewName"))
+
+        val e2 = intercept[AnalysisException] {
+          sql(
+            s"""
+              |CREATE VIEW $testViewName AS
+              |WITH cte AS (
+              |  SELECT $tempFuncName(0)
+              |)
+              |SELECT * FROM cte
+              |""".stripMargin)
+        }
+        assert(e2.message.contains("Not allowed to create a permanent view " +
+          s"`default`.`$testViewName` by referencing a temporary function `$tempFuncName`"))
+      }
+    }
+  }
+
+  test("SPARK-26138 Pushdown limit through InnerLike when condition is empty") {
+    withTable("t1", "t2") {
+      spark.range(5).repartition(1).write.saveAsTable("t1")
+      spark.range(5).repartition(1).write.saveAsTable("t2")
+      val df = spark.sql("SELECT * FROM t1 CROSS JOIN t2 LIMIT 3")
+      val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: LogicalRelation) => l
+      }
+      assert(pushedLocalLimits.length === 2)
+      checkAnswer(df, Row(0, 0) :: Row(0, 1) :: Row(0, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
+    withTable("left_table", "nonempty_right_table", "empty_right_table") {
+      spark.range(5).toDF().repartition(1).write.saveAsTable("left_table")
+      spark.range(3).write.saveAsTable("nonempty_right_table")
+      spark.range(0).write.saveAsTable("empty_right_table")
+      Seq("LEFT SEMI", "LEFT ANTI").foreach { joinType =>
+        val joinWithNonEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN nonempty_right_table LIMIT 3")
+        val joinWithEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN empty_right_table LIMIT 3")
+
+        Seq(joinWithNonEmptyRightDf, joinWithEmptyRightDf).foreach { df =>
+          val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+            case l @ LocalLimit(_, _: LogicalRelation) => l
+          }
+          assert(pushedLocalLimits.length === 1)
+        }
+
+        val expectedAnswer = Seq(Row(0), Row(1), Row(2))
+        if (joinType == "LEFT SEMI") {
+          checkAnswer(joinWithNonEmptyRightDf, expectedAnswer)
+          checkAnswer(joinWithEmptyRightDf, Seq.empty)
+        } else {
+          checkAnswer(joinWithNonEmptyRightDf, Seq.empty)
+          checkAnswer(joinWithEmptyRightDf, expectedAnswer)
+        }
+      }
     }
   }
 }

@@ -21,11 +21,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedView}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
+import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedTable, ResolvedView}
+import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog.{TableChange, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.internal.SQLConf
@@ -35,7 +36,7 @@ import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
  * Object for grouping all error messages of the query compilation.
  * Currently it includes all AnalysisExceptions.
  */
-object QueryCompilationErrors {
+private[spark] object QueryCompilationErrors {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
@@ -191,11 +192,6 @@ object QueryCompilationErrors {
       s"$quoted as it's not a data source v2 relation.")
   }
 
-  def expectTableNotTempViewError(quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
-    new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table",
-      t.origin.line, t.origin.startPosition)
-  }
-
   def expectTableOrPermanentViewNotTempViewError(
       quoted: String, cmd: String, t: TreeNode[_]): Throwable = {
     new AnalysisException(s"$quoted is a temp view. '$cmd' expects a table or permanent view.",
@@ -230,9 +226,18 @@ object QueryCompilationErrors {
       t.origin.line, t.origin.startPosition)
   }
 
-  def expectTableNotViewError(v: ResolvedView, cmd: String, t: TreeNode[_]): Throwable = {
+  def expectTableNotViewError(
+      v: ResolvedView, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
     val viewStr = if (v.isTemp) "temp view" else "view"
-    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.",
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(s"${v.identifier.quoted} is a $viewStr. '$cmd' expects a table.$hintStr",
+      t.origin.line, t.origin.startPosition)
+  }
+
+  def expectViewNotTableError(
+      v: ResolvedTable, cmd: String, mismatchHint: Option[String], t: TreeNode[_]): Throwable = {
+    val hintStr = mismatchHint.map(" " + _).getOrElse("")
+    new AnalysisException(s"${v.identifier.quoted} is a table. '$cmd' expects a view.$hintStr",
       t.origin.line, t.origin.startPosition)
   }
 
@@ -248,6 +253,11 @@ object QueryCompilationErrors {
 
   def invalidStarUsageError(prettyName: String): Throwable = {
     new AnalysisException(s"Invalid usage of '*' in $prettyName")
+  }
+
+  def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {
+    new AnalysisException(s"count($targetString.*) is not allowed. " +
+      "Please use count(*) or expand the columns manually, e.g. count(col1, col2)")
   }
 
   def orderByPositionRangeError(index: Int, size: Int, t: TreeNode[_]): Throwable = {
@@ -661,5 +671,87 @@ object QueryCompilationErrors {
 
   def cannotReadCorruptedTablePropertyError(key: String, details: String = ""): Throwable = {
     new AnalysisException(s"Cannot read table property '$key' as it's corrupted.$details")
+  }
+
+  def invalidSchemaStringError(exp: Expression): Throwable = {
+    new AnalysisException(s"The expression '${exp.sql}' is not a valid schema string.")
+  }
+
+  def schemaNotFoldableError(exp: Expression): Throwable = {
+    new AnalysisException(
+      "Schema should be specified in DDL format as a string literal or output of " +
+        s"the schema_of_json/schema_of_csv functions instead of ${exp.sql}")
+  }
+
+  def schemaIsNotStructTypeError(dataType: DataType): Throwable = {
+    new AnalysisException(s"Schema should be struct type but got ${dataType.sql}.")
+  }
+
+  def keyValueInMapNotStringError(m: CreateMap): Throwable = {
+    new AnalysisException(
+      s"A type of keys and values in map() must be string, but got ${m.dataType.catalogString}")
+  }
+
+  def nonMapFunctionNotAllowedError(): Throwable = {
+    new AnalysisException("Must use a map() function for options")
+  }
+
+  def invalidFieldTypeForCorruptRecordError(): Throwable = {
+    new AnalysisException("The field for corrupt records must be string type and nullable")
+  }
+
+  def dataTypeUnsupportedByClassError(x: DataType, className: String): Throwable = {
+    new AnalysisException(s"DataType '$x' is not supported by $className.")
+  }
+
+  def parseModeUnsupportedError(funcName: String, mode: ParseMode): Throwable = {
+    new AnalysisException(s"$funcName() doesn't support the ${mode.name} mode. " +
+      s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+  }
+
+  def unfoldableFieldUnsupportedError(): Throwable = {
+    new AnalysisException("The field parameter needs to be a foldable string value.")
+  }
+
+  def literalTypeUnsupportedForSourceTypeError(field: String, source: Expression): Throwable = {
+    new AnalysisException(s"Literals of type '$field' are currently not supported " +
+      s"for the ${source.dataType.catalogString} type.")
+  }
+
+  def arrayComponentTypeUnsupportedError(clz: Class[_]): Throwable = {
+    new AnalysisException(s"Unsupported component type $clz in arrays")
+  }
+
+  def secondArgumentNotDoubleLiteralError(): Throwable = {
+    new AnalysisException("The second argument should be a double literal.")
+  }
+
+  def dataTypeUnsupportedByExtractValueError(
+      dataType: DataType, extraction: Expression, child: Expression): Throwable = {
+    val errorMsg = dataType match {
+      case StructType(_) =>
+        s"Field name should be String Literal, but it's $extraction"
+      case other =>
+        s"Can't extract value from $child: need struct type but got ${other.catalogString}"
+    }
+    new AnalysisException(errorMsg)
+  }
+
+  def noHandlerForUDAFError(name: String): Throwable = {
+    new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
+      "Use sparkSession.udf.register(...) instead.")
+  }
+
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
   }
 }

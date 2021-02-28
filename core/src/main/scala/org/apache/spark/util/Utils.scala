@@ -1939,7 +1939,9 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
+    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
+    // we directly use the Java APIs instead.
+    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
   }
 
   /**
@@ -2978,7 +2980,7 @@ private[spark] object Utils extends Logging {
    * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
    */
   def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
-    val metadata = new StringBuilder("[")
+    val metadata = new StringBuilder(s"(${paths.length} paths)[")
     var index: Int = 0
     while (index < paths.length && metadata.length < stopAppendingThreshold) {
       if (index > 0) {
@@ -2986,6 +2988,12 @@ private[spark] object Utils extends Logging {
       }
       metadata.append(paths(index).toString)
       index += 1
+    }
+    if (paths.length > index) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append("...")
     }
     metadata.append("]")
     metadata.toString

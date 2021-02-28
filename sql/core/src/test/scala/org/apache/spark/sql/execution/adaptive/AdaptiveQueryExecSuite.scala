@@ -113,8 +113,8 @@ class AdaptiveQueryExecSuite
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
-      case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
-      case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
     }
   }
 
@@ -760,7 +760,7 @@ class AdaptiveQueryExecSuite
         val error = intercept[Exception] {
           aggregated.count()
         }
-        assert(error.getCause().toString contains "Invalid bucket file")
+        assert(error.toString contains "Invalid bucket file")
         assert(error.getSuppressed.size === 0)
       }
     }
@@ -1230,6 +1230,28 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-34533: Eliminate left anti join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("emptyTestData") {
+        spark.range(0).write.saveAsTable("emptyTestData")
+        Seq(
+          // broadcast non-empty right side
+          ("SELECT /*+ broadcast(testData3) */ * FROM testData LEFT ANTI JOIN testData3", true),
+          // broadcast empty right side
+          ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData",
+            false),
+          // broadcast left side
+          ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false)
+        ).foreach { case (query, isEliminated) =>
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(findTopLevelBaseJoin(plan).size == 1)
+          assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+        }
+      }
+    }
+  }
+
   test("SPARK-32753: Only copy tags to node with no tags") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v1") {
@@ -1459,5 +1481,28 @@ class AdaptiveQueryExecSuite
         }
       }
     }
+  }
+
+  test("SPARK-33933: Materialize BroadcastQueryStage first in AQE") {
+    val testAppender = new LogAppender("aqe query stage materialization order test")
+    val df = spark.range(1000).select($"id" % 26, $"id" % 10)
+      .toDF("index", "pv")
+    val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
+      .toDF("index", "name")
+    val testDf = df.groupBy("index")
+      .agg(sum($"pv").alias("pv"))
+      .join(dim, Seq("index"))
+    withLogAppender(testAppender, level = Some(Level.DEBUG)) {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val result = testDf.collect()
+        assert(result.length == 26)
+      }
+    }
+    val materializeLogs = testAppender.loggingEvents
+      .map(_.getRenderedMessage)
+      .filter(_.startsWith("Materialize query stage"))
+      .toArray
+    assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
+    assert(materializeLogs(1).startsWith("Materialize query stage ShuffleQueryStageExec"))
   }
 }

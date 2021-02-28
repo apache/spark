@@ -57,7 +57,7 @@ class K8sSubmitOpSuite extends SparkFunSuite with BeforeAndAfter {
   private var err: PrintStream = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(podOperations.inNamespace(namespace)).thenReturn(podOperations)
     when(podOperations.delete(podList.asJava)).thenReturn(true)

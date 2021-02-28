@@ -18,43 +18,33 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionsException, ResolvedPartitionSpec}
+import org.apache.spark.sql.catalyst.analysis.ResolvedPartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{SupportsAtomicPartitionManagement, SupportsPartitionManagement}
 
 /**
- * Physical plan node for dropping partitions of table.
+ * Physical plan node for table partition truncation.
  */
-case class AlterTableDropPartitionExec(
+case class TruncatePartitionExec(
     table: SupportsPartitionManagement,
-    partSpecs: Seq[ResolvedPartitionSpec],
-    ignoreIfNotExists: Boolean,
-    purge: Boolean,
+    partSpec: ResolvedPartitionSpec,
     refreshCache: () => Unit) extends V2CommandExec {
-  import DataSourceV2Implicits._
 
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
-    val (existsPartIdents, notExistsPartIdents) =
-      partSpecs.map(_.ident).partition(table.partitionExists)
-
-    if (notExistsPartIdents.nonEmpty && !ignoreIfNotExists) {
-      throw new NoSuchPartitionsException(
-        table.name(), notExistsPartIdents, table.partitionSchema())
-    }
-
-    val isTableAltered = existsPartIdents match {
-      case Seq() => false // Nothing will be done
-      case Seq(partIdent) =>
-        if (purge) table.purgePartition(partIdent) else table.dropPartition(partIdent)
-      case _ if table.isInstanceOf[SupportsAtomicPartitionManagement] =>
-        val idents = existsPartIdents.toArray
-        val atomicTable = table.asAtomicPartitionable
-        if (purge) atomicTable.purgePartitions(idents) else atomicTable.dropPartitions(idents)
-      case _ =>
-        throw new UnsupportedOperationException(
-          s"Nonatomic partition table ${table.name()} can not drop multiple partitions.")
+    val isTableAltered = if (table.partitionSchema.length != partSpec.names.length) {
+      table match {
+        case atomicPartTable: SupportsAtomicPartitionManagement =>
+          val partitionIdentifiers = atomicPartTable.listPartitionIdentifiers(
+            partSpec.names.toArray, partSpec.ident)
+          atomicPartTable.truncatePartitions(partitionIdentifiers)
+        case _ =>
+          throw new UnsupportedOperationException(
+            s"The table ${table.name()} does not support truncation of multiple partition.")
+      }
+    } else {
+      table.truncatePartition(partSpec.ident)
     }
     if (isTableAltered) refreshCache()
     Seq.empty

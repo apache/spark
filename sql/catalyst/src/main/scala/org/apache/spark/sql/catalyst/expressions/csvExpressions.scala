@@ -21,12 +21,12 @@ import java.io.CharArrayWriter
 
 import com.univocity.parsers.csv.CsvParser
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.csv._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -91,7 +91,7 @@ case class CsvToStructs(
       assert(!rows.hasNext)
       result
     } else {
-      throw new IllegalArgumentException("Expected one row from CSV parser.")
+      throw QueryExecutionErrors.rowFromCSVParserNotExpectedError
     }
   }
 
@@ -105,8 +105,7 @@ case class CsvToStructs(
       defaultColumnNameOfCorruptRecord = nameOfCorruptRecord)
     val mode = parsedOptions.parseMode
     if (mode != PermissiveMode && mode != FailFastMode) {
-      throw new AnalysisException(s"from_csv() doesn't support the ${mode.name} mode. " +
-        s"Acceptable modes are ${PermissiveMode.name} and ${FailFastMode.name}.")
+      throw QueryCompilationErrors.parseModeUnsupportedError("from_csv", mode)
     }
     ExprUtils.verifyColumnNameOfCorruptRecord(
       nullableSchema,
@@ -242,7 +241,7 @@ case class StructsToCsv(
   lazy val inputSchema: StructType = child.dataType match {
     case st: StructType => st
     case other =>
-      throw new IllegalArgumentException(s"Unsupported input type ${other.catalogString}")
+      throw QueryExecutionErrors.inputTypeUnsupportedError(other)
   }
 
   @transient

@@ -153,10 +153,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.reader = new ParquetFileReader(
         configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
+    this.totalRowCount = reader.getFilteredRecordCount();
 
     // For test purpose.
     // If the last external accumulator is `NumRowGroupsAccumulator`, the row group number to read
@@ -232,10 +229,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(
         config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    // use the blocks from the reader in case some do not match filters and will not be read
-    for (BlockMetaData block : reader.getRowGroups()) {
-      this.totalRowCount += block.getRowCount();
-    }
+    this.totalRowCount = reader.getFilteredRecordCount();
   }
 
   @Override

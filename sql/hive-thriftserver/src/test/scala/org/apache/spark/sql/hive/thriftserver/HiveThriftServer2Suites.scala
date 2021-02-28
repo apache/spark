@@ -389,6 +389,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
           statement.executeQuery("SELECT key FROM test_table ORDER BY KEY DESC")
         }
 
+        // The cached temporary table can be used indirectly if the query matches.
         val plan = statement.executeQuery("explain select key from test_map ORDER BY key DESC")
         plan.next()
         plan.next()
