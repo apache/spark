@@ -365,7 +365,7 @@ class JDBCSuite extends QueryTest
     // are applied for columns with Filter producing wrong results. On the other hand, JDBCRDD
     // correctly handles this case by assigning `requiredColumns` properly. See PR 10427 for more
     // discussions.
-    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1)))
+    assert(sql("SELECT COUNT(1) FROM foobar WHERE NAME = 'mary'").collect.toSet === Set(Row(1L)))
   }
 
   test("SELECT * WHERE (quoted strings)") {

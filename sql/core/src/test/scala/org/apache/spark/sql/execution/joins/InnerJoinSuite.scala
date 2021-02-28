@@ -284,8 +284,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       right,
       () => (left.col("key") === right.col("key")).expr,
       Seq(
-        (Row(0, 0), "L0", Row(0, 0), "R0"),
-        (Row(1, 1), "L1", Row(1, 1), "R1"),
-        (Row(2, 2), "L2", Row(2, 2), "R2")))
+        (Row(0L, 0L), "L0", Row(0L, 0L), "R0"),
+        (Row(1L, 1L), "L1", Row(1L, 1L), "R1"),
+        (Row(2L, 2L), "L2", Row(2L, 2L), "R2")))
   }
 }

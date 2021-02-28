@@ -143,7 +143,7 @@ abstract class AvroSuite
   test("request no fields") {
     val df = spark.read.format("avro").load(episodesAvro)
     df.createOrReplaceTempView("avro_table")
-    assert(spark.sql("select count(*) from avro_table").collect().head === Row(8))
+    assert(spark.sql("select count(*) from avro_table").collect().head === Row(8L))
   }
 
   test("convert formats") {

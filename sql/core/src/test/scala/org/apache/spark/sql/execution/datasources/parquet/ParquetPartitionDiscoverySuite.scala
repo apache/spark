@@ -310,7 +310,7 @@ abstract class ParquetPartitionDiscoverySuite
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(InternalRow(10, UTF8String.fromString("20")),
+          Partition(InternalRow(10.0, UTF8String.fromString("20")),
             "hdfs://host:9000/path/a=10/b=20"),
           Partition(InternalRow(10.5, UTF8String.fromString("hello")),
             "hdfs://host:9000/path/a=10.5/b=hello"))))
@@ -331,7 +331,7 @@ abstract class ParquetPartitionDiscoverySuite
           StructField("a", DoubleType),
           StructField("b", StringType))),
         Seq(
-          Partition(InternalRow(10, UTF8String.fromString("20")),
+          Partition(InternalRow(10.0, UTF8String.fromString("20")),
             "hdfs://host:9000/path/a=10/b=20"),
           Partition(InternalRow(10.5, UTF8String.fromString("hello")),
             "hdfs://host:9000/path/a=10.5/b=hello"))))
@@ -357,7 +357,7 @@ abstract class ParquetPartitionDiscoverySuite
           StructField("a", DoubleType),
           StructField("b", NullType))),
         Seq(
-          Partition(InternalRow(10, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
+          Partition(InternalRow(10.0, null), s"hdfs://host:9000/path/a=10/b=$defaultPartitionName"),
           Partition(InternalRow(10.5, null),
             s"hdfs://host:9000/path/a=10.5/b=$defaultPartitionName"))))
 

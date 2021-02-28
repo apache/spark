@@ -313,7 +313,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
       Files.write(file.toPath, content, StandardOpenOption.CREATE, StandardOpenOption.WRITE)
 
       val actual = readBinaryFile(file, StructType(schema.takeRight(3)))
-      val expected = Row(new Timestamp(file.lastModified()), content.length, content)
+      val expected = Row(new Timestamp(file.lastModified()), content.length.toLong, content)
 
       assert(actual === expected)
     }
@@ -332,7 +332,7 @@ class BinaryFileFormatSuite extends QueryTest with SharedSparkSession {
 
       // Otherwise, it should be able to read.
       assert(
-        readBinaryFile(file, StructType(schema(LENGTH) :: Nil)) === Row(content.length),
+        readBinaryFile(file, StructType(schema(LENGTH) :: Nil)) === Row(content.length.toLong),
         "Get length should not read content.")
       assert(
         spark.read.format(BINARY_FILE).load(file.getPath).count() === 1,

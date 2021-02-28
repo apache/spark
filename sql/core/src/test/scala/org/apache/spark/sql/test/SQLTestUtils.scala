@@ -479,6 +479,8 @@ private[sql] object SQLTestUtils {
       val converted: Seq[Row] = answer.map { s =>
         Row.fromSeq(s.toSeq.map {
           case d: java.math.BigDecimal => BigDecimal(d)
+          case d: Double if d.equals(-0.0) => 0.0
+          case f: Float if f.equals(-0.0f) => 0.0f
           case b: Array[Byte] => b.toSeq
           case o => o
         })
