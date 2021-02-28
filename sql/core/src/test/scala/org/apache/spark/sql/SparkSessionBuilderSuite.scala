@@ -416,7 +416,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
   }
 
-  test(" SPARK-34558: warehouse path should be qualified and populate to spark and hadoop conf") {
+  test("SPARK-34558: warehouse path should be qualified and populate to spark and hadoop conf") {
     Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
       val path = new Path(pathStr)
       val conf = new SparkConf().set(WAREHOUSE_PATH, pathStr)
@@ -429,6 +429,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       // session related configs
       assert(hadoopConf.get("hive.metastore.warehouse.dir") === expected)
       assert(session.conf.get(WAREHOUSE_PATH) === expected)
+      assert(session.sessionState.conf.warehousePath === expected)
 
       // shared configs
       assert(session.sharedState.conf.get(WAREHOUSE_PATH) === expected)
