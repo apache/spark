@@ -479,11 +479,31 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
+        <br><code>?details=true</code> list all attempts with stage detail data.
+        <br><code>?withSummaries=true</code> list task metrics distribution and executor metrics distribution
+        of each attempt.
+        <br><code>?quantiles=0.1,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles.
+        default value is <code>0.1,0.25,0.5,0.75,1.0</code>, only effect when <code>withSummaries=true</code>
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt.</td>
+    <td>
+      Details for the given stage attempt.
+      <br><code>?details=true</code> list all attempts with stage detail data.
+      <br><code>?withSummaries=true</code> list task metrics distribution and executor metrics distribution
+      of each attempt.
+      <br><code>?quantiles=0.1,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles.
+      default value is <code>0.1,0.25,0.5,0.75,1.0</code>, only effect when <code>withSummaries=true</code>
+      <br>Example:
+      <br><code>?details=true</code>
+      <br><code>?withSummaries=true</code>
+      <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
