@@ -479,11 +479,17 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
+      <br><code>?details=true</code> list all attempts with stage detail data.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state, only effect when <code>details=true</code>..
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt.</td>
+    <>
+      Details for the given stage attempt.
+      <br><code>?details=true</code> show stage with detail data.
+      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state, only effect when <code>details=true</code>.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
