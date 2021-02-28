@@ -922,9 +922,7 @@ object SparkSession extends Logging {
 
       // Get the session from current thread's active session.
       var session = activeThreadSession.get()
-      if ((session ne null) && !session.sparkContext.isStopped &&
-        session.sparkContext.conf.get(CATALOG_IMPLEMENTATION) ==
-          sparkConf.get(CATALOG_IMPLEMENTATION)) {
+      if ((session ne null) && !session.sparkContext.isStopped) {
         applyModifiableSettings(session)
         return session
       }
@@ -933,9 +931,7 @@ object SparkSession extends Logging {
       SparkSession.synchronized {
         // If the current thread does not have an active session, get it from the global session.
         session = defaultSession.get()
-        if ((session ne null) && !session.sparkContext.isStopped &&
-          session.sparkContext.conf.get(CATALOG_IMPLEMENTATION) ==
-            sparkConf.get(CATALOG_IMPLEMENTATION)) {
+        if ((session ne null) && !session.sparkContext.isStopped) {
           applyModifiableSettings(session)
           return session
         }
