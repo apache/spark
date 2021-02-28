@@ -261,7 +261,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .trigger(Trigger.Continuous(100))
       .start()
 
-    val expected = Set(0, 1, 2, 3)
+    val expected = Set(0L, 1L, 2L, 3L)
     val continuousExecution =
       query.asInstanceOf[StreamingQueryWrapper].streamingQuery.asInstanceOf[ContinuousExecution]
     waitForRateSourceCommittedValue(continuousExecution, expected.max, 20 * 1000)
