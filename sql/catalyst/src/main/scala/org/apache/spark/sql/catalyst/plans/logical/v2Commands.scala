@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, ResolvedPartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -57,6 +57,11 @@ trait V2WriteCommand extends Command {
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
+}
+
+trait V2PartitionCommand extends Command {
+  def table: LogicalPlan
+  def allowPartialPartitionSpec: Boolean = false
 }
 
 /**
@@ -305,7 +310,7 @@ case class DescribeNamespace(
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET (DBPROPERTIES|PROPERTIES)
  * command.
  */
-case class AlterNamespaceSetProperties(
+case class SetNamespaceProperties(
     namespace: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
@@ -314,7 +319,7 @@ case class AlterNamespaceSetProperties(
 /**
  * The logical plan of the ALTER (DATABASE|SCHEMA|NAMESPACE) ... SET LOCATION command.
  */
-case class AlterNamespaceSetLocation(
+case class SetNamespaceLocation(
     namespace: LogicalPlan,
     location: String) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
@@ -676,14 +681,11 @@ case class AnalyzeColumn(
  *                 PARTITION spec1 [LOCATION 'loc1'][, PARTITION spec2 [LOCATION 'loc2'], ...];
  * }}}
  */
-case class AlterTableAddPartition(
-    child: LogicalPlan,
+case class AddPartitions(
+    table: LogicalPlan,
     parts: Seq[PartitionSpec],
-    ifNotExists: Boolean) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    ifNotExists: Boolean) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
@@ -698,36 +700,28 @@ case class AlterTableAddPartition(
  *     ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
-case class AlterTableDropPartition(
-    child: LogicalPlan,
+case class DropPartitions(
+    table: LogicalPlan,
     parts: Seq[PartitionSpec],
     ifExists: Boolean,
-    purge: Boolean) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved && parts.forall(_.isInstanceOf[ResolvedPartitionSpec])
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    purge: Boolean) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
  * The logical plan of the ALTER TABLE ... RENAME TO PARTITION command.
  */
-case class AlterTableRenamePartition(
-    child: LogicalPlan,
+case class RenamePartitions(
+    table: LogicalPlan,
     from: PartitionSpec,
-    to: PartitionSpec) extends Command {
-  override lazy val resolved: Boolean =
-    childrenResolved &&
-      from.isInstanceOf[ResolvedPartitionSpec] &&
-      to.isInstanceOf[ResolvedPartitionSpec]
-
-  override def children: Seq[LogicalPlan] = child :: Nil
+    to: PartitionSpec) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 /**
  * The logical plan of the ALTER TABLE ... RECOVER PARTITIONS command.
  */
-case class AlterTableRecoverPartitions(child: LogicalPlan) extends Command {
+case class RecoverPartitions(child: LogicalPlan) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -767,23 +761,29 @@ object ShowColumns {
 /**
  * The logical plan of the TRUNCATE TABLE command.
  */
-case class TruncateTable(
-    child: LogicalPlan,
-    partitionSpec: Option[TablePartitionSpec]) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
+case class TruncateTable(table: LogicalPlan) extends Command {
+  override def children: Seq[LogicalPlan] = table :: Nil
+}
+
+/**
+ * The logical plan of the TRUNCATE TABLE ... PARTITION command.
+ */
+case class TruncatePartition(
+    table: LogicalPlan,
+    partitionSpec: PartitionSpec) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
+  override def allowPartialPartitionSpec: Boolean = true
 }
 
 /**
  * The logical plan of the SHOW PARTITIONS command.
  */
 case class ShowPartitions(
-    child: LogicalPlan,
+    table: LogicalPlan,
     pattern: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends Command {
-  override def children: Seq[LogicalPlan] = child :: Nil
-
-  override lazy val resolved: Boolean =
-    childrenResolved && pattern.forall(_.isInstanceOf[ResolvedPartitionSpec])
+    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends V2PartitionCommand {
+  override def children: Seq[LogicalPlan] = table :: Nil
+  override def allowPartialPartitionSpec: Boolean = true
 }
 
 object ShowPartitions {
@@ -802,7 +802,10 @@ case class DropView(
 /**
  * The logical plan of the MSCK REPAIR TABLE command.
  */
-case class RepairTable(child: LogicalPlan) extends Command {
+case class RepairTable(
+    child: LogicalPlan,
+    enableAddPartitions: Boolean,
+    enableDropPartitions: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
@@ -819,7 +822,7 @@ case class AlterViewAs(
 /**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
-case class AlterViewSetProperties(
+case class SetViewProperties(
     child: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
@@ -828,7 +831,7 @@ case class AlterViewSetProperties(
 /**
  * The logical plan of the ALTER VIEW ... UNSET TBLPROPERTIES command.
  */
-case class AlterViewUnsetProperties(
+case class UnsetViewProperties(
     child: LogicalPlan,
     propertyKeys: Seq[String],
     ifExists: Boolean) extends Command {
@@ -838,7 +841,7 @@ case class AlterViewUnsetProperties(
 /**
  * The logical plan of the ALTER TABLE ... SET [SERDE|SERDEPROPERTIES] command.
  */
-case class AlterTableSerDeProperties(
+case class SetTableSerDeProperties(
     child: LogicalPlan,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
@@ -876,7 +879,7 @@ case class UncacheTable(
 /**
  * The logical plan of the ALTER TABLE ... SET LOCATION command.
  */
-case class AlterTableSetLocation(
+case class SetTableLocation(
     table: LogicalPlan,
     partitionSpec: Option[TablePartitionSpec],
     location: String) extends Command {
@@ -886,7 +889,7 @@ case class AlterTableSetLocation(
 /**
  * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
  */
-case class AlterTableSetProperties(
+case class SetTableProperties(
     table: LogicalPlan,
     properties: Map[String, String]) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
@@ -895,7 +898,7 @@ case class AlterTableSetProperties(
 /**
  * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
  */
-case class AlterTableUnsetProperties(
+case class UnsetTableProperties(
     table: LogicalPlan,
     propertyKeys: Seq[String],
     ifExists: Boolean) extends Command {

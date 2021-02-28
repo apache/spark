@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.{DefinedByConstructorParams, FunctionIdenti
 import org.apache.spark.sql.catalyst.analysis.UnresolvedTable
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableRecoverPartitions, LocalRelation, LogicalPlan, SubqueryAlias, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
@@ -448,7 +448,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def recoverPartitions(tableName: String): Unit = {
     val multiPartIdent = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     sparkSession.sessionState.executePlan(
-      AlterTableRecoverPartitions(
+      RecoverPartitions(
         UnresolvedTable(multiPartIdent, "recoverPartitions()", None))).toRdd
   }
 

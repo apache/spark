@@ -1222,7 +1222,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetProperties using v2 catalog") {
+  test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test' WITH PROPERTIES ('a'='a','b'='b','c'='c')")
@@ -1238,7 +1238,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetProperties: reserved properties") {
+  test("ALTER NAMESPACE .. SET PROPERTIES reserved properties") {
     import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
@@ -1269,7 +1269,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetLocation using v2 catalog") {
+  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test_1'")
@@ -1992,7 +1992,7 @@ class DataSourceV2SQLSuite
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+      sql(s"CREATE VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }

@@ -20,8 +20,6 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 import java.util.{Collections, Locale}
 
-import scala.collection.JavaConverters._
-
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
@@ -32,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunc
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableSetLocation, AlterTableSetProperties, AlterTableUnsetProperties, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, ShowTableProperties, SubqueryAlias, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
@@ -54,7 +52,6 @@ class PlanResolutionSuite extends AnalysisTest {
     val t = mock(classOf[Table])
     when(t.schema()).thenReturn(new StructType().add("i", "int").add("s", "string"))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
-    when(t.properties()).thenReturn(Map("test" ->"test", "comment" -> "new_comment").asJava)
     t
   }
 
@@ -70,7 +67,6 @@ class PlanResolutionSuite extends AnalysisTest {
     when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
     when(t.tableType).thenReturn(CatalogTableType.MANAGED)
     when(t.provider).thenReturn(Some(v1Format))
-    when(t.properties).thenReturn(Map("test" ->"test", "comment" -> "new_comment"))
     V1Table(t)
   }
 
@@ -756,15 +752,10 @@ class PlanResolutionSuite extends AnalysisTest {
           "'comment' = 'new_comment')"
         val sql2 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('comment', 'test')"
         val sql3 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES IF EXISTS ('comment', 'test')"
-        val sql4 = s"ALTER TABLE $tblName UNSET TBLPROPERTIES ('unknown')"
 
         val parsed1 = parseAndResolve(sql1)
         val parsed2 = parseAndResolve(sql2)
         val parsed3 = parseAndResolve(sql3)
-        val e = intercept[AnalysisException] {
-          parseAndResolve(sql4)
-        }
-        e.getMessage.contains("Attempted to unset non-existent property 'unknown'")
 
         if (useV1Command) {
           val tableIdent = TableIdentifier(tblName, Some("default"))
@@ -780,23 +771,23 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed3, expected3)
         } else {
           parsed1 match {
-            case AlterTableSetProperties(_: ResolvedTable, properties) =>
+            case SetTableProperties(_: ResolvedTable, properties) =>
               assert(properties == Map(("test", "test"), ("comment", "new_comment")))
-            case _ => fail("expect AlterTableSetProperties")
+            case _ => fail(s"expect ${SetTableProperties.getClass.getName}")
           }
 
           parsed2 match {
-            case AlterTableUnsetProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+            case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
               assert(propertyKeys == Seq("comment", "test"))
               assert(!ifExists)
-            case _ => fail("expect AlterTableUnsetProperties")
+            case _ => fail(s"expect ${UnsetTableProperties.getClass.getName}")
           }
 
           parsed3 match {
-            case AlterTableUnsetProperties(_: ResolvedTable, propertyKeys, ifExists) =>
+            case UnsetTableProperties(_: ResolvedTable, propertyKeys, ifExists) =>
               assert(propertyKeys == Seq("comment", "test"))
               assert(ifExists)
-            case _ => fail("expect AlterTableUnsetProperties")
+            case _ => fail(s"expect ${UnsetTableProperties.getClass.getName}")
           }
         }
     }
@@ -808,12 +799,14 @@ class PlanResolutionSuite extends AnalysisTest {
 
     // For non-existing tables, we convert it to v2 command with `UnresolvedV2Table`
     parsed4 match {
-      case AlterTableSetProperties(_: UnresolvedTable, _) => // OK
-      case _ => fail("Expect AlterTableSetProperties, but got:\n" + parsed4.treeString)
+      case SetTableProperties(_: UnresolvedTable, _) => // OK
+      case _ =>
+        fail(s"Expect ${SetTableProperties.getClass.getName}, but got:\n" + parsed4.treeString)
     }
     parsed5 match {
-      case AlterTableUnsetProperties(_: UnresolvedTable, _, _) => // OK
-      case _ => fail("Expect AlterTableUnsetProperties, but got:\n" + parsed5.treeString)
+      case UnsetTableProperties(_: UnresolvedTable, _, _) => // OK
+      case _ =>
+        fail(s"Expect ${UnsetTableProperties.getClass.getName}, but got:\n" + parsed5.treeString)
     }
   }
 
@@ -835,7 +828,7 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTableSetProperties(_: ResolvedTable, changes) =>
+            case SetTableProperties(_: ResolvedTable, changes) =>
               assert(changes == Map(("a", "1"), ("b", "0.1"), ("c", "true")))
             case _ => fail("Expect AlterTable, but got:\n" + parsed.treeString)
           }
@@ -856,9 +849,10 @@ class PlanResolutionSuite extends AnalysisTest {
           comparePlans(parsed, expected)
         } else {
           parsed match {
-            case AlterTableSetLocation(_: ResolvedTable, _, location) =>
+            case SetTableLocation(_: ResolvedTable, _, location) =>
               assert(location === "new location")
-            case _ => fail("Expect AlterTableSetLocation, but got:\n" + parsed.treeString)
+            case _ =>
+              fail(s"Expect ${SetTableLocation.getClass.getName}, but got:\n" + parsed.treeString)
           }
         }
     }
