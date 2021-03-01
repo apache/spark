@@ -66,9 +66,7 @@ object SQLConf {
   }
 
   // For testing only
-  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
-    sqlConfEntries.remove(entry.key)
-  }
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
