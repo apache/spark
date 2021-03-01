@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.util.Utils
 
 
-
 /**
  * Static SQL configuration is a cross-session, immutable Spark configuration. External users can
  * see the static sql configs via `SparkSession.conf`, but can NOT set/unset them.
