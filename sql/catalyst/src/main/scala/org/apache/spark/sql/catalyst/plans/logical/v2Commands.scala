@@ -661,6 +661,15 @@ case class AnalyzeTable(
 }
 
 /**
+ * The logical plan of the ANALYZE TABLES command.
+ */
+case class AnalyzeTables(
+    namespace: LogicalPlan,
+    noScan: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
+}
+
+/**
  * The logical plan of the ANALYZE TABLE FOR COLUMNS command.
  */
 case class AnalyzeColumn(

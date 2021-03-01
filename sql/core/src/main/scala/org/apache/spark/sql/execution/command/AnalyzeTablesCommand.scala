@@ -17,19 +17,30 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.TableIdentifier
 
 
 /**
- * Analyzes the given table to generate statistics, which will be used in query optimizations.
+ * Analyzes all tables in the given database to generate statistics.
  */
-case class AnalyzeTableCommand(
-    tableIdent: TableIdentifier,
-    noScan: Boolean = true) extends RunnableCommand {
+case class AnalyzeTablesCommand(
+    databaseName: Option[String],
+    noScan: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    CommandUtils.analyzeTable(sparkSession, tableIdent, noScan)
+    val catalog = sparkSession.sessionState.catalog
+    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
+    catalog.listTables(db).foreach { tbl =>
+      try {
+        CommandUtils.analyzeTable(sparkSession, tbl, noScan)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Failed to analyze table ${tbl.table} in the " +
+            s"database $db because of ${e.toString}", e)
+      }
+    }
     Seq.empty[Row]
   }
 }
