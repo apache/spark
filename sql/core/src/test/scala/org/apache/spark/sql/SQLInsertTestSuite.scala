@@ -212,39 +212,67 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
   }
 
   test("SPARK-33474: Support typed literals as partition spec values") {
-    withTable("t1", "t2", "t4", "t5") {
+    withTable("t1", "t3") {
       val binaryStr = "Spark SQL"
       val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
-      sql("CREATE TABLE t1(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
-      sql("INSERT INTO t1 PARTITION(part = date'2019-01-02') VALUES('a')")
-      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t1"), Row("a", "2019-01-02"))
+      sql(
+        """
+          | CREATE TABLE t1(name STRING, part1 DATE, part2 TIMESTAMP, part3 BINARY, part4 STRING)
+          | USING PARQUET PARTITIONED BY (part1, part2, part3, part4)""".stripMargin)
 
-      sql("CREATE TABLE t2(name STRING, part TIMESTAMP) USING PARQUET PARTITIONED BY (part)")
-      sql("INSERT INTO t2 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
-      checkAnswer(sql("SELECT name, CAST(part AS STRING) FROM t2"), Row("a", "2019-01-02 11:11:11"))
+      sql(
+        s"""
+           | INSERT INTO t1 PARTITION(
+           | part1 = date'2019-01-01',
+           | part2 = timestamp'2019-01-01 11:11:11',
+           | part3 = X'$binaryHexStr',
+           | part4 = 'partition1'
+           | ) VALUES('a')""".stripMargin)
+      checkAnswer(sql(
+        """
+          | SELECT
+          |   name,
+          |   CAST(part1 AS STRING),
+          |   CAST(part2 as STRING),
+          |   CAST(part3 as STRING),
+          |   CAST(part4 as STRING)
+          | FROM t1""".stripMargin),
+        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "partition1"))
+
+      // test insert timestamp literal partition value to date partition
+      sql(
+        s"""
+           | INSERT INTO t1 PARTITION(
+           | part1 = timestamp'2019-01-02 11:11:11',
+           | part2 = timestamp'2019-01-02 11:11:11',
+           | part3 = X'$binaryHexStr',
+           | part4 = 'partition2'
+           | ) VALUES('a')""".stripMargin)
+      checkAnswer(sql(
+        """
+          | SELECT
+          |   name,
+          |   CAST(part1 AS STRING),
+          |   CAST(part2 as STRING),
+          |   CAST(part3 as STRING),
+          |   CAST(part4 as STRING)
+          | FROM t1""".stripMargin),
+        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "partition1") ::
+          Row("a", "2019-01-02", "2019-01-02 11:11:11", "Spark SQL", "partition2") :: Nil)
 
       val e = intercept[AnalysisException] {
-        sql("CREATE TABLE t3(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
+        sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
       }.getMessage
       assert(e.contains("Cannot use interval"))
 
-      sql("CREATE TABLE t4(name STRING, part BINARY) USING CSV PARTITIONED BY (part)")
-      sql(s"INSERT INTO t4 PARTITION(part = X'$binaryHexStr') VALUES('a')")
-      checkAnswer(sql("SELECT name, cast(part as string) FROM t4"), Row("a", binaryStr))
-
-      // test type conversion
-      sql("CREATE TABLE t5(name STRING, part STRING) USING CSV PARTITIONED BY (part)")
-      sql(s"INSERT INTO t5 PARTITION(part = X'$binaryHexStr') VALUES('a')")
-      sql("INSERT INTO t5 PARTITION(part = date'2019-01-02') VALUES('a')")
-      sql("INSERT INTO t5 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
-      checkAnswer(sql("SELECT name, cast(part as string) FROM t5"),
+      // test type construct literal as string conversion
+      sql("CREATE TABLE t3(name STRING, part STRING) USING CSV PARTITIONED BY (part)")
+      sql(s"INSERT INTO t3 PARTITION(part = X'$binaryHexStr') VALUES('a')")
+      sql("INSERT INTO t3 PARTITION(part = date'2019-01-02') VALUES('a')")
+      sql("INSERT INTO t3 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
+      checkAnswer(sql("SELECT name, cast(part as string) FROM t3"),
         Row("a", binaryStr) :: Row("a", "2019-01-02") ::
           Row("a", "2019-01-02 11:11:11") :: Nil)
-
-      // test insert timestamp literal partition value to date partition
-      sql("INSERT INTO t1 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('b')")
-      checkAnswer(sql("SELECT name, cast(part as string) FROM t1"),
-        Row("a", "2019-01-02") :: Row("b", "2019-01-02") :: Nil)
     }
   }
 
