@@ -49,8 +49,6 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
-import org.apache.parquet.hadoop.metadata.BlockMetaData;
-import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
@@ -157,19 +155,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
+
     ParquetReadOptions options = HadoopReadOptions
       .builder(config)
       .withRange(0, length)
       .build();
-
-    ParquetMetadata footer;
-    try (ParquetFileReader reader = ParquetFileReader
-        .open(HadoopInputFile.fromPath(file, config), options)) {
-      footer = reader.getFooter();
-    }
-
-    List<BlockMetaData> blocks = footer.getBlocks();
-    this.fileSchema = footer.getFileMetaData().getSchema();
+    this.reader = ParquetFileReader.open(HadoopInputFile.fromPath(file, config), options);
+    this.fileSchema = reader.getFooter().getFileMetaData().getSchema();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
@@ -188,11 +180,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
+    reader.setRequestedSchema(requestedSchema);
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
-    // unfortunately we'd have to create the reader again since there is no column projection
-    // in the new API.
-    this.reader = new ParquetFileReader(
-        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     this.totalRowCount = reader.getFilteredRecordCount();
   }
 
