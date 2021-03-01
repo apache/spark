@@ -412,8 +412,6 @@ object DataWritingSparkTask extends Logging {
 }
 
 private[v2] trait TableWriteExecHelper extends V2TableWriteExec with SupportsV1Write {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-
   protected def writeToTable(
       catalog: TableCatalog,
       table: Table,

@@ -34,8 +34,6 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
-
   private var catalogName: String = null
   private var options: JDBCOptions = _
   private var dialect: JdbcDialect = _

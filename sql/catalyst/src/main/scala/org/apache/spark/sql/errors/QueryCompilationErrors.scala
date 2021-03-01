@@ -783,10 +783,16 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cannotReplaceMissingTableError(
-      tableIdentifier: Identifier, cause: Option[Throwable] = None): Throwable = {
+      tableIdentifier: Identifier): Throwable = {
     new CannotReplaceMissingTableException(
-      cannotReplaceMissingTableExceptionMessage(tableIdentifier),
-      cause
+      cannotReplaceMissingTableExceptionMessage(tableIdentifier)
+    )
+  }
+
+  def cannotReplaceMissingTableError(
+      tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
+    new CannotReplaceMissingTableException(
+      cannotReplaceMissingTableExceptionMessage(tableIdentifier), cause
     )
   }
 

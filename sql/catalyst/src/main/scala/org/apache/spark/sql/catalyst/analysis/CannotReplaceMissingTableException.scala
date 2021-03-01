@@ -19,15 +19,8 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.errors.QueryCompilationErrors
 
 class CannotReplaceMissingTableException(
     message: String,
     cause: Option[Throwable] = None)
-  extends AnalysisException(message, cause = cause) {
-
-  def this(tableIdentifier: Identifier, cause: Option[Throwable] = None) = {
-    this(QueryCompilationErrors.cannotReplaceMissingTableExceptionMessage(tableIdentifier), cause)
-  }
-}
+  extends AnalysisException(message, cause = cause)

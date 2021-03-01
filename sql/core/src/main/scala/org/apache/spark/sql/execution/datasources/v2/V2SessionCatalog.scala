@@ -39,7 +39,6 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 class V2SessionCatalog(catalog: SessionCatalog)
   extends TableCatalog with SupportsNamespaces with SQLConfHelper {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
   import V2SessionCatalog._
 
   override val defaultNamespace: Array[String] = Array("default")
@@ -185,8 +184,6 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   implicit class TableIdentifierHelper(ident: Identifier) {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
-
     def asTableIdentifier: TableIdentifier = {
       ident.namespace match {
         case Array(db) =>
