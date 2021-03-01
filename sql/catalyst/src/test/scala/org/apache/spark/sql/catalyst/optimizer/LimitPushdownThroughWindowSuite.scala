@@ -74,7 +74,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
-  test("Should not pushdown when child's maxRows smaller than limit value") {
+  test("Should not push down when child's maxRows smaller than limit value") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
@@ -85,7 +85,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-  test("Should not pushdown if it is not range based window function") {
+  test("Should not push down if it is not range based window function") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(count(b), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
@@ -96,7 +96,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-  test("Should not pushdown if more than one window function") {
+  test("Should not push down if more than one window function") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),

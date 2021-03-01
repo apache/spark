@@ -621,7 +621,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
         if child.maxRows.forall( _ > limitVal) =>
       LocalLimit(
         limitExpr = limitExpr,
-        child = window.copy(child = Limit(Literal(limitVal), Sort(orderSpec, true, child))))
+        child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
   }
 }
 
