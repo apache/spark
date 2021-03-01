@@ -20,13 +20,12 @@ import java.net.URI
 import java.time.ZoneId
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
 import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
 import org.apache.parquet.format.converter.ParquetMetadataConverter.SKIP_ROW_GROUPS
-import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetRecordReader}
+import org.apache.parquet.hadoop.{ParquetFileReader, ParquetInputFormat, ParquetInputSplit, ParquetRecordReader}
 
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
@@ -122,14 +121,21 @@ case class ParquetPartitionReaderFactory(
   private def buildReaderBase[T](
       file: PartitionedFile,
       buildReaderFunc: (
-        FileSplit, InternalRow, TaskAttemptContextImpl,
+        ParquetInputSplit, InternalRow, TaskAttemptContextImpl,
           Option[FilterPredicate], Option[ZoneId],
           LegacyBehaviorPolicy.Value,
           LegacyBehaviorPolicy.Value) => RecordReader[Void, T]): RecordReader[Void, T] = {
     val conf = broadcastedConf.value.value
 
     val filePath = new Path(new URI(file.filePath))
-    val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
+    val split =
+      new org.apache.parquet.hadoop.ParquetInputSplit(
+        filePath,
+        file.start,
+        file.start + file.length,
+        file.length,
+        Array.empty,
+        null)
 
     lazy val footerFileMetaData =
       ParquetFileReader.readFooter(conf, filePath, SKIP_ROW_GROUPS).getFileMetaData
@@ -193,7 +199,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createRowBaseParquetReader(
-      split: FileSplit,
+      split: ParquetInputSplit,
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],
@@ -228,7 +234,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   private def createParquetVectorizedReader(
-      split: FileSplit,
+      split: ParquetInputSplit,
       partitionValues: InternalRow,
       hadoopAttemptContext: TaskAttemptContextImpl,
       pushed: Option[FilterPredicate],

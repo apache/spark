@@ -194,7 +194,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      fail("Fail to get the lates Spark versions to test.")
+      logError("Fail to get the latest Spark versions to test.")
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
@@ -232,7 +232,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
-    runSparkSubmit(args)
+    if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
   }
 }
 
@@ -251,8 +251,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
-      // do not throw exception during object initialization.
-      case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
+      // Do not throw exception during object initialization.
+      case NonFatal(_) => Nil
     }
     versions
       .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())

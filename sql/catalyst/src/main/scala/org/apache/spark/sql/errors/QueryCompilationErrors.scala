@@ -929,10 +929,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"$cmd is not supported for v2 tables.")
   }
 
-  def showTableExtendedNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("SHOW TABLE EXTENDED")
-  }
-
   def analyzeTableNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("ANALYZE TABLE")
   }
@@ -963,5 +959,17 @@ private[spark] object QueryCompilationErrors {
 
   def repairTableNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("MSCK REPAIR TABLE")
+
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
   }
 }
