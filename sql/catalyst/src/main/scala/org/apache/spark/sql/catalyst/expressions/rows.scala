@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.util.hashing.MurmurHash3
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
@@ -187,21 +185,6 @@ class GenericRowWithSchema(values: Array[Any], override val schema: StructType)
   protected def this() = this(null, null)
 
   override def fieldIndex(name: String): Int = schema.fieldIndex(name)
-
-  override def hashCode: Int = {
-    var h = super.hashCode
-    h = MurmurHash3.mix(h, schema.hashCode)
-    MurmurHash3.finalizeHash(h, 2)
-  }
-
-  override def equals(o: Any): Boolean = {
-    if (!o.isInstanceOf[GenericRowWithSchema]) return false
-    val other = o.asInstanceOf[GenericRowWithSchema]
-
-    if (other eq null) return false
-
-    super.equals(o) && schema.equals(other.schema)
-  }
 }
 
 /**
