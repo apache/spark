@@ -163,7 +163,7 @@ Note that Spark properties have different effective timing and they can be divid
 <tr>
   <td><code>Spark Runtime Control Related Configuration</code></td>
   <td>
-    Like <code>spark.task.maxFailures</code>, all other properties can be set either way when run time. 
+    Like <code>spark.task.maxFailures</code>, all other properties can be set either way when runtime. 
   </td>
   <td>
      The following is examples of such configurations:
