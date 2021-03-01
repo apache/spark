@@ -166,6 +166,52 @@ object OverwritePartitionsDynamic {
   }
 }
 
+case class AppendMicroBatch(
+    table: SupportsWrite,
+    query: LogicalPlan,
+    queryId: String,
+    writeOptions: Map[String, String],
+    batchId: Option[Long] = None,
+    write: Option[Write] = None) extends V2MicroBatchWriteCommand {
+
+  override def withNewBatchId(batchId: Long): AppendMicroBatch = {
+    copy(batchId = Some(batchId))
+  }
+}
+
+case class OverwriteMicroBatch(
+    table: SupportsWrite,
+    query: LogicalPlan,
+    queryId: String,
+    writeOptions: Map[String, String],
+    batchId: Option[Long] = None,
+    write: Option[Write] = None) extends V2MicroBatchWriteCommand {
+
+  override def withNewBatchId(batchId: Long): OverwriteMicroBatch = {
+    copy(batchId = Some(batchId))
+  }
+}
+
+case class UpdateAsAppendMicroBatch(
+    table: SupportsWrite,
+    query: LogicalPlan,
+    queryId: String,
+    writeOptions: Map[String, String],
+    batchId: Option[Long] = None,
+    write: Option[Write] = None) extends V2MicroBatchWriteCommand {
+
+  override def withNewBatchId(batchId: Long): UpdateAsAppendMicroBatch = {
+    copy(batchId = Some(batchId))
+  }
+}
+
+trait V2MicroBatchWriteCommand extends Command {
+  def table: SupportsWrite
+  def query: LogicalPlan
+  def withNewBatchId(batchId: Long): V2MicroBatchWriteCommand
+
+  override def children: Seq[LogicalPlan] = Seq(query)
+}
 
 /** A trait used for logical plan nodes that create or replace V2 table definitions. */
 trait V2CreateTablePlan extends LogicalPlan {

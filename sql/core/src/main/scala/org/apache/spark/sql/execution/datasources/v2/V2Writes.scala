@@ -22,11 +22,12 @@ import java.util.UUID
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, AppendMicroBatch, LogicalPlan, OverwriteByExpression, OverwriteMicroBatch, OverwritePartitionsDynamic, UpdateAsAppendMicroBatch}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwrite, SupportsTruncate, WriteBuilder}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.internal.connector.SupportsStreamingUpdateAsAppend
 import org.apache.spark.sql.sources.{AlwaysTrue, Filter}
 
 /**
@@ -78,6 +79,34 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       }
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
       o.copy(write = Some(write), query = newQuery)
+
+    case a @ AppendMicroBatch(table, query, queryId, options, _, None) =>
+      val writeBuilder = newWriteBuilder(table, query, options, queryId)
+      val write = writeBuilder.build()
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      a.copy(write = Some(write), query = newQuery)
+
+    case o @ OverwriteMicroBatch(table, query, queryId, options, _, None) =>
+      val writeBuilder = newWriteBuilder(table, query, options, queryId)
+      val write = writeBuilder match {
+        case builder: SupportsTruncate =>
+          builder.truncate().build()
+        case _ =>
+          throw new SparkException(s"Table $table does not support micro-batch overwrites")
+      }
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      o.copy(write = Some(write), query = newQuery)
+
+    case u @ UpdateAsAppendMicroBatch(table, query, queryId, options, _, None) =>
+      val writeBuilder = newWriteBuilder(table, query, options, queryId)
+      val write = writeBuilder match {
+        case builder: SupportsStreamingUpdateAsAppend =>
+          builder.build()
+        case _ =>
+          throw new SparkException(s"Table $table does not support micro-batch updates as appends")
+      }
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, conf)
+      u.copy(write = Some(write), query = newQuery)
   }
 
   private def isTruncate(filters: Array[Filter]): Boolean = {
@@ -87,12 +116,10 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   private def newWriteBuilder(
       table: Table,
       query: LogicalPlan,
-      writeOptions: Map[String, String]): WriteBuilder = {
+      writeOptions: Map[String, String],
+      queryId: String = UUID.randomUUID.toString): WriteBuilder = {
 
-    val info = LogicalWriteInfoImpl(
-      queryId = UUID.randomUUID().toString,
-      query.schema,
-      writeOptions.asOptions)
+    val info = LogicalWriteInfoImpl(queryId, query.schema, writeOptions.asOptions)
     table.asWritable.newWriteBuilder(info)
   }
 }

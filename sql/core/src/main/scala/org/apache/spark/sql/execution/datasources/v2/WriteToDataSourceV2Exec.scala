@@ -35,6 +35,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingT
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriterCommitMessage}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWrite
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -217,7 +218,7 @@ case class AtomicReplaceTableAsSelectExec(
 case class AppendDataExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec
+    write: Write) extends V2TableBatchWriteExec
 
 /**
  * Physical plan node for overwrite into a v2 table.
@@ -232,7 +233,7 @@ case class AppendDataExec(
 case class OverwriteByExpressionExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec
+    write: Write) extends V2TableBatchWriteExec
 
 /**
  * Physical plan node for dynamic partition overwrite into a v2 table.
@@ -246,7 +247,7 @@ case class OverwriteByExpressionExec(
 case class OverwritePartitionsDynamicExec(
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec
+    write: Write) extends V2TableBatchWriteExec
 
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
@@ -257,7 +258,33 @@ case class WriteToDataSourceV2Exec(
   }
 }
 
-trait V2ExistingTableWriteExec extends V2TableWriteExec {
+case class AppendMicroBatchExec(
+    batchId: Long,
+    query: SparkPlan,
+    write: Write) extends V2TableMicroBatchWriteExec
+
+case class OverwriteMicroBatchExec(
+    batchId: Long,
+    query: SparkPlan,
+    write: Write) extends V2TableMicroBatchWriteExec
+
+case class UpdateAsAppendMicroBatchExec(
+    batchId: Long,
+    query: SparkPlan,
+    write: Write) extends V2TableMicroBatchWriteExec
+
+// TODO: refresh cache from micro-batch writes
+trait V2TableMicroBatchWriteExec extends V2TableWriteExec {
+  def batchId: Long
+  def write: Write
+
+  override protected def run(): Seq[InternalRow] = {
+    val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
+    writeWithV2(microBatchWrite)
+  }
+}
+
+trait V2TableBatchWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
 

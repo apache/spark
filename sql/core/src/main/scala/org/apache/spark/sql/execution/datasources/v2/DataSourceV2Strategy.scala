@@ -261,6 +261,15 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw new AnalysisException("DELETE is only supported with v2 tables.")
       }
 
+    case AppendMicroBatch(_, query, _, _, Some(batchId), Some(write)) =>
+      AppendMicroBatchExec(batchId, planLater(query), write) :: Nil
+
+    case OverwriteMicroBatch(_, query, _, _, Some(batchId), Some(write)) =>
+      OverwriteMicroBatchExec(batchId, planLater(query), write) :: Nil
+
+    case UpdateAsAppendMicroBatch(_, query, _, _, Some(batchId), Some(write)) =>
+      UpdateAsAppendMicroBatchExec(batchId, planLater(query), write) :: Nil
+
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
 

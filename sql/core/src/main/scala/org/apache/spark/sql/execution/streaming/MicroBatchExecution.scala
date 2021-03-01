@@ -22,14 +22,14 @@ import scala.collection.mutable.{Map => MutableMap}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendMicroBatch, LeafNode, LocalRelation, LogicalPlan, OverwriteMicroBatch, Project, UpdateAsAppendMicroBatch, V2MicroBatchWriteCommand}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
-import org.apache.spark.sql.execution.streaming.sources.WriteToMicroBatchDataSource
+import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamWriterCommitProgress, V2TableMicroBatchWriteExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.util.{Clock, Utils}
@@ -141,10 +141,24 @@ class MicroBatchExecution(
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
       case s: SupportsWrite =>
-        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
-        WriteToMicroBatchDataSource(streamingWrite, _logicalPlan)
-
+        buildWritePlan(s, extraOptions, _logicalPlan)
       case _ => _logicalPlan
+    }
+  }
+
+  // TODO: perform checks using the capability API
+  private def buildWritePlan(
+      table: SupportsWrite,
+      writeOptions: Map[String, String],
+      query: LogicalPlan): LogicalPlan = {
+
+    outputMode match {
+      case Append =>
+        AppendMicroBatch(table, query, queryId = id.toString, writeOptions)
+      case Complete =>
+        OverwriteMicroBatch(table, query, queryId = id.toString, writeOptions)
+      case Update =>
+        UpdateAsAppendMicroBatch(table, query, queryId = id.toString, writeOptions)
     }
   }
 
@@ -566,7 +580,10 @@ class MicroBatchExecution(
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
       case _: SupportsWrite =>
-        newAttributePlan.asInstanceOf[WriteToMicroBatchDataSource].createPlan(currentBatchId)
+        newAttributePlan match {
+          case w: V2MicroBatchWriteCommand => w.withNewBatchId(currentBatchId)
+          case other => throw new IllegalArgumentException(s"unknown write plan type: $other")
+        }
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
@@ -600,7 +617,7 @@ class MicroBatchExecution(
             nextBatch.collect()
         }
         lastExecution.executedPlan match {
-          case w: WriteToDataSourceV2Exec => w.commitProgress
+          case w: V2TableMicroBatchWriteExec => w.commitProgress
           case _ => None
         }
       }
