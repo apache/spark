@@ -439,6 +439,4 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
         expected)
     }
   }
-
-
 }
