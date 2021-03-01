@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{ col, lit, product }
+import org.apache.spark.sql.functions.{col, lit, product}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ByteType, DoubleType, FloatType, IntegerType, ShortType}
 
@@ -67,7 +67,7 @@ class ProductAggSuite extends QueryTest
   test("windowed factorials") {
     val win = Window.partitionBy(lit(1)).orderBy("x")
 
-    val prodFactorials = data16.withColumn("f", product(col("x")).over(win))
+    val prodFactorials = data16.withColumn("f", product(col("x")).over(win)).orderBy(col("x"))
 
     assert(prodFactorials.count === 16)
 
