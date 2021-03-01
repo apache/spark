@@ -59,11 +59,13 @@ object SQLConf {
   val staticConfKeys: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
-    require(!sqlConfEntries.containsKey(entry.key),
-      s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
-    sqlConfEntries.put(entry.key, entry)
-  }
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.merge(entry.key, entry,
+    (existingConfigEntry, newConfigEntry) => {
+      require(existingConfigEntry == null,
+        s"Duplicate SQLConfigEntry. ${newConfigEntry.key} has been registered")
+      newConfigEntry
+    }
+  )
 
   // For testing only
   private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
