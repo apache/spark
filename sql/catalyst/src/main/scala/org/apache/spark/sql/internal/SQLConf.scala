@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
@@ -53,8 +53,8 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, ConfigEntry[_]]())
+  private[sql] val sqlConfEntries =
+    new ConcurrentHashMap[String, ConfigEntry[_]]()
 
   val staticConfKeys: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
