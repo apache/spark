@@ -267,6 +267,12 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         if (mapStatus == null) {
           throw new IllegalStateException("Cannot call stop(true) without having called write()");
         }
+        if (partitionWriters != null) {
+          // Safely close files because it's stopped.
+          for (DiskBlockObjectWriter writer : partitionWriters) {
+            writer.close();
+          }
+        }
         return Option.apply(mapStatus);
       } else {
         // The map task failed, so delete our output data.
