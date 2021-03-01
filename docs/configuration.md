@@ -118,7 +118,7 @@ Note that Spark properties have different effective timing and they can be divid
 <table class="table">
 <tr><th>Configuration Type</th><th>Meaning</th><th>Examples</th></tr>
 <tr>
-  <td><code>Configuration: Launching Driver</code></td>
+  <td><code>Launching Driver</code></td>
   <td>
     Configuration used to submit an application, such as <code>spark.driver.memory</code>, <code>spark.driver.extraClassPath</code>, these kind of properties only effect before driver's JVM is started, so it would be suggested to set through configuration file or <code>spark-submit</code> command line options.  
   </td>
@@ -144,7 +144,7 @@ Note that Spark properties have different effective timing and they can be divid
   </td>
 </tr>
 <tr>
-  <td><code>Configuration: Application Deployment</code></td>
+  <td><code>Application Deployment</code></td>
   <td>
     Like <code>spark.master</code>, <code>spark.executor.instances</code>, this kind of properties may not be affected when setting programmatically through <code>SparkConf</code> in runtime after SparkContext has been started, or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to set through configuration file, <code>spark-submit</code> command line options, or setting programmatically through <code>SparkConf</code> in runtime before start SparkContext.  
   </td>
