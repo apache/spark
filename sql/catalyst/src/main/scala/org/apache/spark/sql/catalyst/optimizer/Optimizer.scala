@@ -613,6 +613,15 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case _ => join
       }
       LocalLimit(exp, newJoin)
+
+    case LocalLimit(limitExpr @ IntegerLiteral(limitVal),
+        window @ Window(Seq(Alias(WindowExpression(_: RankLike | _: RowNumber,
+            WindowSpecDefinition(Nil, orderSpec,
+                SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)), _, _, child))
+        if child.maxRows.forall( _ > limitVal) =>
+      LocalLimit(
+        limitExpr = limitExpr,
+        child = window.copy(child = Limit(Literal(limitVal), Sort(orderSpec, true, child))))
   }
 }
 
