@@ -510,12 +510,12 @@ case class ShowTableExtended(
     namespace: LogicalPlan,
     pattern: String,
     partitionSpec: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowTableExtended.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowTableExtended.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = namespace :: Nil
 }
 
 object ShowTableExtended {
-  val OUTPUT = Seq(
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
