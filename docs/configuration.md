@@ -116,11 +116,11 @@ precedence than any instance of the newer key.
 
 Note that Spark properties have different effective timing and they can be divided into two kinds:
 <table class="table">
-<tr><th>Configuration Type</th><th>Meaning</th><th>Examples</th></tr>
+<tr><th>Effect Timing</th><th>Meaning</th><th>Examples</th></tr>
 <tr>
   <td><code>Launching Driver</code></td>
   <td>
-    Configuration used to submit an application, such as <code>spark.driver.memory</code>, <code>spark.driver.extraClassPath</code>, these kind of properties only effect before driver's JVM is started, so it would be suggested to set through configuration file or <code>spark-submit</code> command line options.  
+    Configurations used to submit an application, such as <code>spark.driver.memory</code>, <code>spark.driver.extraClassPath</code>, these kinds of properties only effect before a driver JVM is started, so it would be suggested to set through a configuration file or <code>spark-submit</code> command line options.  
   </td>
   <td>
     The following is a list of such configurations:
@@ -144,9 +144,9 @@ Note that Spark properties have different effective timing and they can be divid
   </td>
 </tr>
 <tr>
-  <td><code>Application Deployment</code></td>
+  <td><code>Deploying Application</code> according to <code>Launching Driver</code></td>
   <td>
-    Like <code>spark.master</code>, <code>spark.executor.instances</code>, this kind of properties may not be affected when setting programmatically through <code>SparkConf</code> in runtime after SparkContext has been started, or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to set through configuration file, <code>spark-submit</code> command line options, or setting programmatically through <code>SparkConf</code> in runtime before start SparkContext.  
+    Like <code>spark.master</code>, <code>spark.executor.instances</code>, these kinds of properties may not be affected when setting programmatically through <code>SparkConf</code> in runtime after SparkContext has been started, or the behavior depends on which cluster manager and the deploy mode you choose, so it would be suggested to set through a configuration file, <code>spark-submit</code> command line options, or setting programmatically through <code>SparkConf</code> in runtime before starting <code>SparkContext</code>.  
   </td>
   <td>
      The following is some examples of such configurations:
