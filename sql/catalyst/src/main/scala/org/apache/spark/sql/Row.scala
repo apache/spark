@@ -447,7 +447,7 @@ trait Row extends Serializable {
             if (d1.compareTo(o2.asInstanceOf[java.math.BigDecimal]) != 0) {
               return false
             }
-          case _ => if (!o1.equals(o2)) {
+          case _ => if (o1 != o2) {
             return false
           }
         }
