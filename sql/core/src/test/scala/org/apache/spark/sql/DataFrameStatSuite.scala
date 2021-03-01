@@ -436,7 +436,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val df = spark.range(0, 100)
       .select(lit("Foo").as("name"), (col("id") % 3).as("key"))
     val sampled = df.stat.sampleBy(
-      struct($"name", $"key"), Map(Row("Foo", 0L) -> 0.1, Row("Foo", 1L) -> 0.2), 0L)
+      struct($"name", $"key"), Map(Row("Foo", 0) -> 0.1, Row("Foo", 1) -> 0.2), 0L)
     checkAnswer(
       sampled.groupBy("key").count().orderBy("key"),
       Seq(Row(0, 1), Row(1, 6)))

@@ -961,7 +961,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: CTAS for managed data source tables") {
       withTable("t", "t1") {
         versionSpark.range(1).write.saveAsTable("t")
-        assert(versionSpark.table("t").collect() === Array(Row(0L)))
+        assert(versionSpark.table("t").collect() === Array(Row(0)))
         versionSpark.sql("create table t1 using parquet as select 2 as a")
         assert(versionSpark.table("t1").collect() === Array(Row(2)))
       }
