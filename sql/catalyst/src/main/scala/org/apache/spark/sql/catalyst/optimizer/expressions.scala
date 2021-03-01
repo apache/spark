@@ -376,7 +376,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             and
           } else {
             // (a && b) && a && (a && c) => a && b && c
-            distinct.reduce(And)
+            mergeConjunctivePredicates(distinct.toSeq)
           }
         }
 
@@ -414,7 +414,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             or
           } else {
             // (a || b) || a || (a || c) => a || b || c
-            distinct.reduce(Or)
+            mergeDisjunctivePredicates(distinct.toSeq)
           }
         }
 

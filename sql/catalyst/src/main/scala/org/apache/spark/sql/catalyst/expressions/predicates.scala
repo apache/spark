@@ -157,6 +157,30 @@ trait PredicateHelper extends AliasHelper with Logging {
     }
   }
 
+  protected def mergeConjunctivePredicates(exprs: Seq[Expression]): Expression = {
+    mergePredicates(exprs, And)
+  }
+
+  protected def mergeDisjunctivePredicates(exprs: Seq[Expression]): Expression = {
+    mergePredicates(exprs, Or)
+  }
+
+  private def mergePredicates[Expression](
+    exprs: Seq[Expression], op: (Expression, Expression) => Expression): Expression = {
+    exprs match {
+      case Seq(expression) => expression
+      case expressions =>
+        val grouped = expressions.grouped(2).toSeq
+        val pairwiseOpd = for (g <- grouped) yield {
+          g match {
+            case Seq(a, b) => op(a, b)
+            case Seq(x) => x
+          }
+        }
+        mergePredicates(pairwiseOpd, op)
+    }
+  }
+
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when it is acceptable to move expression evaluation within a query

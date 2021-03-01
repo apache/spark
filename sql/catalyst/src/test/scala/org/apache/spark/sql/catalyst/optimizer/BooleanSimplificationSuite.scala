@@ -131,7 +131,7 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       'a > 1 && ('b > 2 && 'c > 3))
 
     checkCondition(('a > 1 && 'b >2) && ('a > 4 && 'b > 5) && ('a > 1 && 'c > 3),
-      'a > 1 && 'b > 2 && 'c > 3 && 'a > 4 && 'b > 5)
+      ('a > 1 && 'b > 2) && ('c > 3 && 'a > 4) && 'b > 5)
 
     checkCondition(
       'a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && ('a > 1 && 'b > 3 && 'c >1)),
@@ -154,8 +154,8 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
     checkCondition(('a > 1 || 'b > 2) || 'a > 1 || ('a > 1 || 'c > 3),
       'a > 1 || 'b > 2 || 'c > 3)
 
-    checkCondition(('a > 1 || 'b >2) || 'a > 4 ||('a > 1 || 'c > 3),
-      'a > 1 || 'b > 2 || 'a > 4 || 'c > 3)
+    checkCondition(('a > 1 || 'b >2) || ('a > 4 || 'b > 5) ||('a > 1 || 'c > 3),
+      ('a > 1 || 'b > 2) || ('a > 4 || 'b > 5) || 'c > 3)
 
     checkCondition(
       'a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || ('a > 1 || 'b > 3 || 'c > 1)),
