@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table, TableCapabi
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder}
 import org.apache.spark.sql.connector.write._
-import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.SerializableConfiguration
@@ -41,9 +40,7 @@ import org.apache.spark.util.SerializableConfiguration
  * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
  * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
-class SimpleWritableDataSource extends SimpleTableProvider {
-
-  private val tableSchema = new StructType().add("i", "int").add("j", "int")
+class SimpleWritableDataSource extends TestingV2Source {
 
   class MyScanBuilder(path: String, conf: Configuration) extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
@@ -66,7 +63,7 @@ class SimpleWritableDataSource extends SimpleTableProvider {
       new CSVReaderFactory(serializableConf)
     }
 
-    override def readSchema(): StructType = tableSchema
+    override def readSchema(): StructType = TestingV2Source.schema
   }
 
   class MyWriteBuilder(path: String, info: LogicalWriteInfo)
@@ -132,7 +129,7 @@ class SimpleWritableDataSource extends SimpleTableProvider {
     private val path = options.get("path")
     private val conf = SparkContext.getActive.get.hadoopConfiguration
 
-    override def schema(): StructType = tableSchema
+    override def schema(): StructType = TestingV2Source.schema
 
     override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
       new MyScanBuilder(new Path(path).toUri.toString, conf)
