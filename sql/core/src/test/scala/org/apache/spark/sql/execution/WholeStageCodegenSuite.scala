@@ -38,7 +38,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
     val plan = df.queryExecution.executedPlan
     assert(plan.find(_.isInstanceOf[WholeStageCodegenExec]).isDefined)
-    assert(df.collect() === Array(Row(2L)))
+    assert(df.collect() === Array(Row(2)))
   }
 
   test("Aggregate should be included in WholeStageCodegen") {
@@ -47,7 +47,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(df.collect() === Array(Row(9L, 4.5)))
+    assert(df.collect() === Array(Row(9, 4.5)))
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen") {
@@ -56,7 +56,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
-    assert(df.collect() === Array(Row(0L, 1L), Row(2L, 1L), Row(4L, 1L)))
+    assert(df.collect() === Array(Row(0, 1), Row(2, 1), Row(4, 1)))
   }
 
   test("BroadcastHashJoin should be included in WholeStageCodegen") {
@@ -67,7 +67,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.queryExecution.executedPlan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[BroadcastHashJoinExec]).isDefined)
-    assert(df.collect() === Array(Row(1L, 1, "1"), Row(1L, 1, "1"), Row(2L, 2, "2")))
+    assert(df.collect() === Array(Row(1, 1, "1"), Row(1, 1, "1"), Row(2, 2, "2")))
   }
 
   test("ShuffledHashJoin should be included in WholeStageCodegen") {
@@ -98,7 +98,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortExec]).isDefined)
-    assert(df.collect() === Array(Row(1L), Row(2L), Row(3L)))
+    assert(df.collect() === Array(Row(1), Row(2), Row(3)))
   }
 
   test("MapElements should be included in WholeStageCodegen") {

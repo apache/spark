@@ -2501,7 +2501,7 @@ class DataSourceV2SQLSuite
         |PARTITIONED BY (id, city)""".stripMargin)
       val partTable = catalog("testpart").asTableCatalog
         .loadTable(Identifier.of(Array("ns1", "ns2"), "tbl")).asInstanceOf[InMemoryPartitionTable]
-      val expectedPartitionIdent = InternalRow.fromSeq(Seq(1L, UTF8String.fromString("NY")))
+      val expectedPartitionIdent = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
       assert(!partTable.partitionExists(expectedPartitionIdent))
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
       assert(partTable.partitionExists(expectedPartitionIdent))
@@ -2554,7 +2554,7 @@ class DataSourceV2SQLSuite
       val loc = "partition_location"
       sql(s"ALTER TABLE $t ADD PARTITION (id = 1, city = 'NY') LOCATION '$loc'")
 
-      val ident = InternalRow.fromSeq(Seq(1L, UTF8String.fromString("NY")))
+      val ident = InternalRow.fromSeq(Seq(1, UTF8String.fromString("NY")))
       assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
 
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")

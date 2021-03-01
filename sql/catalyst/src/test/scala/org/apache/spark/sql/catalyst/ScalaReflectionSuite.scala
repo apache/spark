@@ -310,8 +310,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       Some(primitiveData), Some(new CalendarInterval(1, 2, 3)))
     val dataType = schemaFor[OptionalData].dataType
     val convertedData = InternalRow(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
-      InternalRow(1, 1.toLong, 1.toDouble, 1.toFloat, 1.toShort, 1.toByte, true),
-      new CalendarInterval(1, 2, 3))
+      InternalRow(1, 1, 1, 1, 1, 1, true), new CalendarInterval(1, 2, 3))
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 

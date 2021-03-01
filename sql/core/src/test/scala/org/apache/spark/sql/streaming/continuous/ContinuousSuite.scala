@@ -312,7 +312,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       },
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(x => Row(x.toLong)))
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_)))
     )
   }
 
@@ -332,7 +332,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       },
       IncrementEpoch(),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(x => Row(x.toLong))))
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
   }
 
   test("restarts") {
@@ -364,7 +364,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       StartStream(Trigger.Continuous(1012)),
       AwaitEpoch(15),
       StopStream,
-      CheckAnswerRowsContains(scala.Range(0, 2500).map(x => Row(x.toLong))))
+      CheckAnswerRowsContains(scala.Range(0, 2500).map(Row(_))))
   }
 }
 

@@ -192,7 +192,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       val input = inputData.map(NonFoldableLiteral.create(_, dataType))
       val expected = if (inputData(0) == null) {
         null
-      } else if (inputData.slice(1, 10).exists(inputData(0).equals)) {
+      } else if (inputData.slice(1, 10).contains(inputData(0))) {
         true
       } else if (inputData.slice(1, 10).contains(null)) {
         null
