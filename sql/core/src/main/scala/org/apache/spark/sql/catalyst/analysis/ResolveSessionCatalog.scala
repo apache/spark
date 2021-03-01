@@ -373,15 +373,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         AnalyzePartitionCommand(ident.asTableIdentifier, partitionSpec, noScan)
       }
 
+    case AnalyzeTables(DatabaseInSessionCatalog(db), noScan) =>
+      AnalyzeTablesCommand(Some(db), noScan)
+
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
     case RepairTable(ResolvedV1TableIdentifier(ident), addPartitions, dropPartitions) =>
-      AlterTableRecoverPartitionsCommand(
-        ident.asTableIdentifier,
-        addPartitions,
-        dropPartitions,
-        "MSCK REPAIR TABLE")
+      RepairTableCommand(ident.asTableIdentifier, addPartitions, dropPartitions)
 
     case LoadData(ResolvedV1TableIdentifier(ident), path, isLocal, isOverwrite, partition) =>
       LoadDataCommand(
@@ -398,10 +397,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         ShowCreateTableCommand(ident.asTableIdentifier)
       }
 
-    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
+    case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
+      TruncateTableCommand(ident.asTableIdentifier, None)
+
+    case TruncatePartition(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,
-        partitionSpec.toSeq.asUnresolvedPartitionSpecs.map(_.spec).headOption)
+        Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
     case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
@@ -422,7 +424,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       ShowColumnsCommand(db, v1TableName, output)
 
     case RecoverPartitions(ResolvedV1TableIdentifier(ident)) =>
-      AlterTableRecoverPartitionsCommand(
+      RepairTableCommand(
         ident.asTableIdentifier,
         enableAddPartitions = true,
         enableDropPartitions = false,

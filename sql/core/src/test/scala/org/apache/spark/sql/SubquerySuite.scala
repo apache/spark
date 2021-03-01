@@ -1115,12 +1115,12 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |SELECT c1 FROM t1
            |WHERE
            |c1 IN ((
-           |        SELECT c1 FROM t2
+           |        SELECT c1 + 1 AS c1 FROM t2
            |        ORDER BY c1
            |       )
            |       UNION
            |       (
-           |         SELECT c1 FROM t2
+           |         SELECT c1 + 2 AS c1 FROM t2
            |         ORDER BY c1
            |       ))
         """.stripMargin

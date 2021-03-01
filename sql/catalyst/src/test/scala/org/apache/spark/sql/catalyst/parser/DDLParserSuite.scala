@@ -1873,6 +1873,15 @@ class DDLParserSuite extends AnalysisTest {
       "Expected `NOSCAN` instead of `xxxx`")
   }
 
+  test("SPARK-33687: analyze tables statistics") {
+    comparePlans(parsePlan("ANALYZE TABLES IN a.b.c COMPUTE STATISTICS"),
+      AnalyzeTables(UnresolvedNamespace(Seq("a", "b", "c")), noScan = false))
+    comparePlans(parsePlan("ANALYZE TABLES FROM a COMPUTE STATISTICS NOSCAN"),
+      AnalyzeTables(UnresolvedNamespace(Seq("a")), noScan = true))
+    intercept("ANALYZE TABLES IN a.b.c COMPUTE STATISTICS xxxx",
+      "Expected `NOSCAN` instead of `xxxx`")
+  }
+
   test("analyze table column statistics") {
     intercept("ANALYZE TABLE a.b.c COMPUTE STATISTICS FOR COLUMNS", "")
 

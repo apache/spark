@@ -115,7 +115,7 @@ case class CreateViewCommand(
 
     if (viewType == LocalTempView) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && !isSamePlan(catalog.getRawTempView(name.table), aliasedPlan)) {
+      if (replace && needsToUncache(catalog.getRawTempView(name.table), aliasedPlan)) {
         logInfo(s"Try to uncache ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
@@ -139,7 +139,7 @@ case class CreateViewCommand(
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && !isSamePlan(catalog.getRawGlobalTempView(name.table), aliasedPlan)) {
+      if (replace && needsToUncache(catalog.getRawGlobalTempView(name.table), aliasedPlan)) {
         logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
@@ -193,15 +193,17 @@ case class CreateViewCommand(
   }
 
   /**
-   * Checks if the temp view (the result of getTempViewRawPlan or getRawGlobalTempView) is storing
-   * the same plan as the given aliased plan.
+   * Checks if need to uncache the temp view being replaced.
    */
-  private def isSamePlan(
+  private def needsToUncache(
       rawTempView: Option[LogicalPlan],
       aliasedPlan: LogicalPlan): Boolean = rawTempView match {
-    case Some(TemporaryViewRelation(_, Some(p))) => p.sameResult(aliasedPlan)
-    case Some(p) => p.sameResult(aliasedPlan)
-    case _ => false
+    // The temp view doesn't exist, no need to uncache.
+    case None => false
+    // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
+    // same-result plans.
+    case Some(TemporaryViewRelation(_, Some(p))) => !p.sameResult(aliasedPlan)
+    case Some(p) => !p.sameResult(aliasedPlan)
   }
 
   /**
