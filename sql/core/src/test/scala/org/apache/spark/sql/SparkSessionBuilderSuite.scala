@@ -32,15 +32,13 @@ import org.apache.spark.util.ThreadUtils
  */
 class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  def reset(): Unit = {
+  override def afterEach(): Unit = {
     // This suite should not interfere with the other test suites.
     SparkSession.getActiveSession.foreach(_.stop())
     SparkSession.clearActiveSession()
     SparkSession.getDefaultSession.foreach(_.stop())
     SparkSession.clearDefaultSession()
   }
-
-  override def afterEach(): Unit = reset()
 
   test("create with config options and propagate them to SparkContext and SparkSession") {
     val session = SparkSession.builder()
@@ -416,8 +414,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
   }
 
-  test("SPARK-34558: warehouse path should be qualified and populate to spark and hadoop conf") {
-    Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
+  Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
+    test(s"SPARK-34558: warehouse should be qualified for spark/hadoop conf - $pathStr") {
       val path = new Path(pathStr)
       val conf = new SparkConf().set(WAREHOUSE_PATH, pathStr)
       val session = SparkSession.builder()
@@ -439,8 +437,8 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(session.sparkContext.conf.get(WAREHOUSE_PATH) === expected)
       assert(session.sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir") ===
         expected)
-
-      reset()
     }
   }
+
+
 }
