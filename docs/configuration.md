@@ -116,13 +116,12 @@ precedence than any instance of the newer key.
 
 Note that Spark properties have different effective timing and they can be divided into three kinds:
 <table class="table">
-<tr><th>Configuration Type</th><th>Effective Timing</th><th>Meaning</th><th>Examples</th></tr>
+<tr><th>Configuration Type</th><th>Meaning</th><th>Examples</th></tr>
 <tr>
   <td><code>Configurations needed at driver launch</code></td>
   <td>
     Configuration used to submit an application, such as <code>spark.driver.memory</code>, <code>spark.driver.extraClassPath</code>, these kind of properties only effect before driver's JVM is started, so it would be suggested to set through configuration file or <code>spark-submit</code> command line options.  
   </td>
-  <td>Effect before start driver JVM.</td>
   <td>
     The following is a list of such configurations:
     <ul>
@@ -146,7 +145,6 @@ Note that Spark properties have different effective timing and they can be divid
 </tr>
 <tr>
   <td><code>Application Deploy Related Configuration</code></td>
-  <td>Effect before start SparkContext.</td>
   <td>
     Like <code>spark.master</code>, <code>spark.executor.instances</code>, this kind of properties may not be affected when setting programmatically through <code>SparkConf</code> in runtime after SparkContext has been started, or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to set through configuration file, <code>spark-submit</code> command line options, or setting programmatically through <code>SparkConf</code> in runtime before start SparkContext.  
   </td>
@@ -164,9 +162,8 @@ Note that Spark properties have different effective timing and they can be divid
 </tr>
 <tr>
   <td><code>Spark Runtime Control Related Configuration</code></td>
-  <td>Effect when runtime.</td>
   <td>
-    Like <code>spark.task.maxFailures</code>, all other properties can be set either way. 
+    Like <code>spark.task.maxFailures</code>, all other properties can be set either way when run time. 
   </td>
   <td>
      The following is examples of such configurations:
