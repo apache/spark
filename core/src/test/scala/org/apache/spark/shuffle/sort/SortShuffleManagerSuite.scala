@@ -139,29 +139,40 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers with LocalSpar
     )))
   }
 
-  test("Data could not be cleaned up when unregisterShuffle") {
+  test("Shuffle data can be cleaned up whether spark.shuffle.useOldFetchProtocol=true/false") {
     withTempDir { tmpDir =>
-      val conf = new SparkConf(loadDefaults = false)
-      conf.set("spark.local.dir", tmpDir.getAbsolutePath)
-      sc = new SparkContext("local", "SPARK-34541", conf)
-      val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
-      // Create a shuffleRdd
-      val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
-        .setSerializer(new JavaSerializer(conf))
       def getAllFiles: Set[File] =
         FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
-      val filesBeforeShuffle = getAllFiles
-      // Force the shuffle to be performed
-      shuffledRdd.count()
-      // Ensure that the shuffle actually created files that will need to be cleaned up
-      val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
-      filesCreatedByShuffle.map(_.getName) should be
-      Set("shuffle_0_0_0.data", "shuffle_0_0_0.index")
-      // Check that the cleanup actually removes the files
-      sc.env.blockManager.master.removeShuffle(0, blocking = true)
-      for (file <- filesCreatedByShuffle) {
-        assert (!file.exists(), s"Shuffle file $file was not cleaned up")
+      def runJobAndRemoveShuffle(conf: SparkConf, mapId: Long): Unit = {
+        sc = new SparkContext("local", "test", conf)
+        // For making the taskAttemptId starts from 1.
+        sc.parallelize(1 to 10).count()
+        val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
+        // Create a shuffleRdd
+        val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
+          .setSerializer(new JavaSerializer(conf))
+        val filesBeforeShuffle = getAllFiles
+        // Force the shuffle to be performed
+        shuffledRdd.count()
+        // Ensure that the shuffle actually created files that will need to be cleaned up
+        val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
+        filesCreatedByShuffle.map(_.getName) should be
+        Set("shuffle_0_" + mapId + "_0.data", "shuffle_0_" + mapId + "_0.index")
+        // Check that the cleanup actually removes the files
+        sc.env.blockManager.master.removeShuffle(0, blocking = true)
+        for (file <- filesCreatedByShuffle) {
+          assert (!file.exists(), s"Shuffle file $file was not cleaned up")
+        }
       }
+      val conf = new SparkConf(loadDefaults = false)
+      conf.set("spark.local.dir", tmpDir.getAbsolutePath)
+      conf.set("spark.shuffle.useOldFetchProtocol", "true")
+      runJobAndRemoveShuffle(conf, 0)
+      if (sc != null) {
+        sc.stop()
+      }
+      conf.set("spark.shuffle.useOldFetchProtocol", "false")
+      runJobAndRemoveShuffle(conf, 1)
     }
   }
 }
