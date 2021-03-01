@@ -135,7 +135,7 @@ public class OneForOneBlockFetcher {
       ArrayList<Integer> reduceIdsByMapId = mapIdToReduceIds.get(mapId);
       int reduceId = Integer.parseInt(blockIdParts[3]);
       assert(reduceIdsByMapId.isEmpty()
-              || reduceId > reduceIdsByMapId.get(reduceIdsByMapId.size() - 1));
+        || reduceId > reduceIdsByMapId.get(reduceIdsByMapId.size() - 1));
       reduceIdsByMapId.add(reduceId);
       if (batchFetchEnabled) {
         // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
