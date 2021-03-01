@@ -959,6 +959,7 @@ private[spark] object QueryCompilationErrors {
 
   def repairTableNotSupportedForV2TablesError(): Throwable = {
     notSupportedForV2TablesError("MSCK REPAIR TABLE")
+  }
 
   def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
     new AnalysisException("Database from v1 session catalog is not specified")
