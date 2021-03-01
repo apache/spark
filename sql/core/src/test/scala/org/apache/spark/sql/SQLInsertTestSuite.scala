@@ -217,8 +217,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       val binaryHexStr = Hex.hex(UTF8String.fromString(binaryStr).getBytes).toString
       sql(
         """
-          | CREATE TABLE t1(name STRING, part1 DATE, part2 TIMESTAMP, part3 BINARY, part4 STRING)
-          | USING PARQUET PARTITIONED BY (part1, part2, part3, part4)""".stripMargin)
+          | CREATE TABLE t1(name STRING, part1 DATE, part2 TIMESTAMP, part3 BINARY,
+          |  part4 STRING, part5 STRING, part6 STRING)
+          | USING PARQUET PARTITIONED BY (part1, part2, part3, part4, part5, part6)""".stripMargin)
 
       sql(
         s"""
@@ -226,7 +227,9 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
            | part1 = date'2019-01-01',
            | part2 = timestamp'2019-01-01 11:11:11',
            | part3 = X'$binaryHexStr',
-           | part4 = 'partition1'
+           | part4 = 'a',
+           | part5 = 'a',
+           | part6 = 'a'
            | ) VALUES('a')""".stripMargin)
       checkAnswer(sql(
         """
@@ -235,18 +238,22 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           |   CAST(part1 AS STRING),
           |   CAST(part2 as STRING),
           |   CAST(part3 as STRING),
-          |   CAST(part4 as STRING)
+          |   CAST(part4 as STRING),
+          |   CAST(part5 as STRING),
+          |   CAST(part6 as STRING)
           | FROM t1""".stripMargin),
-        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "partition1"))
+        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "a", "a", "a"))
 
-      // test insert timestamp literal partition value to date partition
+      // test type conversion
       sql(
         s"""
            | INSERT INTO t1 PARTITION(
            | part1 = timestamp'2019-01-02 11:11:11',
            | part2 = timestamp'2019-01-02 11:11:11',
            | part3 = X'$binaryHexStr',
-           | part4 = 'partition2'
+           | part4 = date'2019-01-01',
+           | part5 = timestamp'2019-01-01 11:11:11',
+           | part6 = X'$binaryHexStr'
            | ) VALUES('a')""".stripMargin)
       checkAnswer(sql(
         """
@@ -255,24 +262,18 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           |   CAST(part1 AS STRING),
           |   CAST(part2 as STRING),
           |   CAST(part3 as STRING),
-          |   CAST(part4 as STRING)
+          |   CAST(part4 as STRING),
+          |   CAST(part5 as STRING),
+          |   CAST(part6 as STRING)
           | FROM t1""".stripMargin),
-        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "partition1") ::
-          Row("a", "2019-01-02", "2019-01-02 11:11:11", "Spark SQL", "partition2") :: Nil)
+        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "a", "a", "a") ::
+          Row("a", "2019-01-02", "2019-01-02 11:11:11", "Spark SQL",
+            "2019-01-01", "2019-01-01 11:11:11", "Spark SQL") :: Nil)
 
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
       }.getMessage
       assert(e.contains("Cannot use interval"))
-
-      // test type construct literal as string conversion
-      sql("CREATE TABLE t3(name STRING, part STRING) USING CSV PARTITIONED BY (part)")
-      sql(s"INSERT INTO t3 PARTITION(part = X'$binaryHexStr') VALUES('a')")
-      sql("INSERT INTO t3 PARTITION(part = date'2019-01-02') VALUES('a')")
-      sql("INSERT INTO t3 PARTITION(part = timestamp'2019-01-02 11:11:11') VALUES('a')")
-      checkAnswer(sql("SELECT name, cast(part as string) FROM t3"),
-        Row("a", binaryStr) :: Row("a", "2019-01-02") ::
-          Row("a", "2019-01-02 11:11:11") :: Nil)
     }
   }
 
