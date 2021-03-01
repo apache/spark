@@ -262,3 +262,149 @@ private[ml] class BlockLogisticAggregator(
     }
   }
 }
+
+
+/**
+ * BlockBinaryLogisticAggregator computes the gradient and loss used in Logistic classification
+ * for blocks in sparse or dense matrix in an online fashion.
+ *
+ * Two BlockLogisticAggregators can be merged together to have a summary of loss and gradient of
+ * the corresponding joint dataset.
+ *
+ * NOTE: The feature values are expected to already have be scaled (divided by [[bcFeaturesStd]],
+ * NOT centered) before computation.
+ *
+ * @param bcCoefficients The coefficients corresponding to the features.
+ * @param fitIntercept Whether to fit an intercept term.
+ * @param fitWithMean Whether to center the data with mean before training. If true, we MUST adjust
+ *                    the intercept of both initial coefficients and final solution in the caller.
+ */
+private[ml] class BlockBinaryLogisticAggregator(
+    bcFeaturesStd: Broadcast[Array[Double]],
+    bcFeaturesMean: Broadcast[Array[Double]],
+    fitIntercept: Boolean,
+    fitWithMean: Boolean)(bcCoefficients: Broadcast[Vector])
+  extends DifferentiableLossAggregator[InstanceBlock, BlockBinaryLogisticAggregator] with Logging {
+
+  if (fitWithMean) {
+    require(fitIntercept, s"for training without intercept, should not center the vectors")
+  }
+
+  private val numFeatures = bcFeaturesStd.value.length
+  protected override val dim: Int = bcCoefficients.value.size
+
+  @transient private lazy val coefficientsArray = bcCoefficients.value match {
+    case DenseVector(values) => values
+    case _ => throw new IllegalArgumentException(s"coefficients only supports dense vector but " +
+      s"got type ${bcCoefficients.value.getClass}.)")
+  }
+
+  @transient private lazy val linear = if (fitIntercept) {
+    new DenseVector(coefficientsArray.take(numFeatures))
+  } else {
+    new DenseVector(coefficientsArray)
+  }
+
+  @transient private lazy val scaledMean = if (fitWithMean) {
+    bcFeaturesMean.value.zip(bcFeaturesStd.value)
+      .map { case (mean, std) => if (std != 0) mean / std else 0.0 }
+  } else {
+    null
+  }
+
+  // pre-computed prediction of an empty vector.
+  // with this as an offset, for a sparse vector, we only need to
+  // deal with non-zero values in prediction.
+  private lazy val emptyPrediction = if (fitWithMean) {
+    val dot = BLAS.getBLAS(numFeatures).ddot(numFeatures, linear.values, 1, scaledMean, 1)
+    coefficientsArray.last - dot
+  } else {
+    Double.NaN
+  }
+
+  /**
+   * Add a new training instance block to this BlockLogisticAggregator, and update the loss and
+   * gradient of the objective function.
+   *
+   * @param block The instance block of data point to be added.
+   * @return This BlockLogisticAggregator object.
+   */
+  def add(block: InstanceBlock): this.type = {
+    require(block.matrix.isTransposed)
+    require(numFeatures == block.numFeatures, s"Dimensions mismatch when adding new " +
+      s"instance. Expecting $numFeatures but got ${block.numFeatures}.")
+    require(block.weightIter.forall(_ >= 0),
+      s"instance weights ${block.weightIter.mkString("[", ",", "]")} has to be >= 0.0")
+
+    if (block.weightIter.forall(_ == 0)) return this
+    val size = block.size
+
+    // arr/vec here represents margins or negative dotProducts
+    val arr = Array.ofDim[Double](size)
+    if (fitWithMean) {
+      java.util.Arrays.fill(arr, emptyPrediction)
+    } else if (fitIntercept) {
+      java.util.Arrays.fill(arr, coefficientsArray.last)
+    }
+    val vec = new DenseVector(arr)
+    BLAS.gemv(-1.0, block.matrix, linear, -1.0, vec)
+
+    // in-place convert margins to multiplier
+    // then, arr/vec represents multiplier
+    var localLossSum = 0.0
+    var localWeightSum = 0.0
+    var i = 0
+    while (i < size) {
+      val weight = block.getWeight(i)
+      localWeightSum += weight
+      if (weight > 0) {
+        val label = block.getLabel(i)
+        val margin = arr(i)
+        if (label > 0) {
+          // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
+          localLossSum += weight * Utils.log1pExp(margin)
+        } else {
+          localLossSum += weight * (Utils.log1pExp(margin) - margin)
+        }
+        val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
+        arr(i) = multiplier
+      } else { arr(i) = 0.0 }
+      i += 1
+    }
+    lossSum += localLossSum
+    weightSum += localWeightSum
+
+    // predictions are all correct, no gradient signal
+    if (arr.forall(_ == 0)) return this
+
+    block.matrix match {
+      case dm: DenseMatrix =>
+        BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
+          vec.values, 1, 1.0, gradientSumArray, 1)
+
+      case sm: SparseMatrix if fitIntercept =>
+        val linearGradSumVec = new DenseVector(Array.ofDim[Double](numFeatures))
+        BLAS.gemv(1.0, sm.transpose, vec, 0.0, linearGradSumVec)
+        BLAS.getBLAS(numFeatures).daxpy(numFeatures, 1.0, linearGradSumVec.values, 1,
+          gradientSumArray, 1)
+
+      case sm: SparseMatrix if !fitIntercept =>
+        val gradSumVec = new DenseVector(gradientSumArray)
+        BLAS.gemv(1.0, sm.transpose, vec, 1.0, gradSumVec)
+
+      case m =>
+        throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
+    }
+
+    if (fitIntercept) {
+      val multiplierSum = arr.sum
+      if (fitWithMean) {
+        BLAS.getBLAS(numFeatures).daxpy(numFeatures, -multiplierSum, scaledMean, 1,
+          gradientSumArray, 1)
+      }
+      gradientSumArray(numFeatures) += multiplierSum
+    }
+
+    this
+  }
+}

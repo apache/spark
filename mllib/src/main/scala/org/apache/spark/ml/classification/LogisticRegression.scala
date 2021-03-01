@@ -623,8 +623,8 @@ class LogisticRegression @Since("1.2.0") (
        as a result, no scaling is needed.
      */
     val (allCoefficients, objectiveHistory) =
-      trainImpl(instances, actualBlockSizeInMB, featuresStd, numClasses,
-        initialCoefWithInterceptMatrix, regularization, optimizer)
+      trainImpl(instances, actualBlockSizeInMB, featuresStd, featuresMean, numClasses,
+        initialCoefWithInterceptMatrix.toArray, regularization, optimizer)
 
     if (allCoefficients == null) {
       val msg = s"${optimizer.getClass.getName} failed."
@@ -934,31 +934,56 @@ class LogisticRegression @Since("1.2.0") (
       instances: RDD[Instance],
       actualBlockSizeInMB: Double,
       featuresStd: Array[Double],
+      featuresMean: Array[Double],
       numClasses: Int,
-      initialCoefWithInterceptMatrix: Matrix,
+      initialCoefWithInterceptArray: Array[Double],
       regularization: Option[L2Regularization],
       optimizer: FirstOrderMinimizer[BDV[Double], DiffFunction[BDV[Double]]]) = {
     val numFeatures = featuresStd.length
     val bcFeaturesStd = instances.context.broadcast(featuresStd)
+    val bcFeaturesMean = instances.context.broadcast(featuresMean)
 
-    val standardized = instances.mapPartitions { iter =>
+    val scaled = instances.mapPartitions { iter =>
       val inverseStd = bcFeaturesStd.value.map { std => if (std != 0) 1.0 / std else 0.0 }
       val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
       iter.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
     }
 
     val maxMemUsage = (actualBlockSizeInMB * 1024L * 1024L).ceil.toLong
-    val blocks = InstanceBlock.blokifyWithMaxMemUsage(standardized, maxMemUsage)
+    val blocks = InstanceBlock.blokifyWithMaxMemUsage(scaled, maxMemUsage)
       .persist(StorageLevel.MEMORY_AND_DISK)
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
-    val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses, $(fitIntercept),
-      checkMultinomial(numClasses))(_)
+    val multinomial = checkMultinomial(numClasses)
+    val fitWithMean = !multinomial && $(fitIntercept) &&
+      (!isSet(lowerBoundsOnIntercepts) || $(lowerBoundsOnIntercepts)(0).isNegInfinity) &&
+      (!isSet(upperBoundsOnIntercepts) || $(upperBoundsOnIntercepts)(0).isPosInfinity)
 
-    val costFun = new RDDLossFunction(blocks, getAggregatorFunc,
-      regularization, $(aggregationDepth))
+    val costFun = if (multinomial) {
+      // TODO: create a separate BlockMultinomialLogisticAggregator for clearness
+      val getAggregatorFunc = new BlockLogisticAggregator(numFeatures, numClasses,
+         $(fitIntercept), true)(_)
+      new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
+    } else {
+       val getAggregatorFunc = new BlockBinaryLogisticAggregator(bcFeaturesStd, bcFeaturesMean,
+         $(fitIntercept), fitWithMean)(_)
+      new RDDLossFunction(blocks, getAggregatorFunc, regularization, $(aggregationDepth))
+    }
+
+    if (fitWithMean) {
+      var i = 0
+      var adapt = 0.0
+      while (i < numFeatures) {
+        if (featuresStd(i) != 0) {
+          adapt += initialCoefWithInterceptArray(i) * featuresMean(i) / featuresStd(i)
+        }
+        i += 1
+      }
+      initialCoefWithInterceptArray(numFeatures) += adapt
+    }
+
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      new BDV[Double](initialCoefWithInterceptMatrix.toArray))
+      new BDV[Double](initialCoefWithInterceptArray))
 
     /*
        Note that in Logistic Regression, the objective history (loss + regularization)
@@ -973,8 +998,21 @@ class LogisticRegression @Since("1.2.0") (
     }
     blocks.unpersist()
     bcFeaturesStd.destroy()
+    bcFeaturesMean.destroy()
 
-    (if (state == null) null else state.x.toArray, arrayBuilder.result)
+    val solution = if (state == null) null else state.x.toArray
+    if (fitWithMean && solution != null) {
+      var i = 0
+      var adapt = 0.0
+      while (i < numFeatures) {
+        if (featuresStd(i) != 0) {
+          adapt += solution(i) * featuresMean(i) / featuresStd(i)
+        }
+        i += 1
+      }
+      solution(numFeatures) -= adapt
+    }
+    (solution, arrayBuilder.result)
   }
 
   @Since("1.4.0")
