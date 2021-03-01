@@ -61,7 +61,7 @@ object DataSourceV2Implicits {
       table match {
         case t: TruncatableTable => t
         case _ =>
-          throw new AnalysisException(s"Table does not support truncates: ${table.name}")
+          throw QueryCompilationErrors.tableDoesNotSupportTruncatesError(table)
       }
     }
 

@@ -912,6 +912,10 @@ private[spark] object QueryCompilationErrors {
     tableDoesNotSupportError("deletes", table)
   }
 
+  def tableDoesNotSupportTruncatesError(table: Table): Throwable = {
+    tableDoesNotSupportError("truncates", table)
+  }
+
   def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
     tableDoesNotSupportError("partition management", table)
   }
