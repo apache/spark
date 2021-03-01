@@ -35,7 +35,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{BooleanType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, LongType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
@@ -2665,6 +2665,30 @@ class DataSourceV2SQLSuite
       // Insert into the existing partition must not fail
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'def'")
       assert(partTable.partitionExists(expectedPartitionIdent))
+    }
+  }
+
+  test("SPARK-34561: drop/add columns to a dataset of `DESCRIBE TABLE`") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      val description = sql(s"DESCRIBE TABLE $tbl")
+      val noCommentDataset = description.drop("comment")
+      val expectedSchema = new StructType()
+        .add(
+          name = "col_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column").build())
+        .add(
+          name = "data_type",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("col_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
     }
   }
 

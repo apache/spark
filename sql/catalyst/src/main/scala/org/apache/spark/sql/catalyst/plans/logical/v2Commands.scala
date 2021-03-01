@@ -324,7 +324,6 @@ case class ShowNamespaces(
     pattern: Option[String],
     override val output: Seq[Attribute] = ShowNamespaces.OUTPUT) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
-  override def producedAttributes: AttributeSet = outputSet
 }
 
 object ShowNamespaces {
@@ -337,9 +336,13 @@ object ShowNamespaces {
 case class DescribeRelation(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends Command {
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+object DescribeRelation {
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
 }
 
 /**
