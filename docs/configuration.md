@@ -114,58 +114,67 @@ in the `spark-defaults.conf` file. A few configuration keys have been renamed si
 versions of Spark; in such cases, the older key names are still accepted, but take lower
 precedence than any instance of the newer key.
 
-Spark properties mainly can be divided into three kinds: 
+Note that Spark properties have different effective timing and they can be divided into three kinds:
 <table class="table">
-<tr><th>Configuration Type</th><th>Effect Scope</th><th>Usage</th><th>Remark</th></tr>
+<tr><th>Configuration Type</th><th>Effective Timing</th><th>Meaning</th><th>Examples</th></tr>
 <tr>
-  <td><code>Lauch Driver Related Configuration</code></td>
+  <td><code>Configurations needed at driver launch</code></td>
+  <td>
+    Configuration used to submit an application, such as <code>spark.driver.memory</code>, <code>spark.driver.extraClassPath</code>, these kind of properties only effect before driver's JVM is started, so it would be suggested to set through configuration file or <code>spark-submit</code> command line options.  
+  </td>
   <td>Effect before start driver JVM.</td>
   <td>
-    Configuration used to submit application, such as `spark.driver.memory`, `spark.driver.extraClassPath`,
-    these kind of properties only effect before driver's JVM is started, so it would be suggested to set through
-    configuration file or `spark-submit` command line options.  
-  </td>
-  <td>
-    The following is a list of such configurations:<br/>
-     `spark.driver.memory`<br/>
-     `spark.driver.memoryOverhead`<br/>
-     `spark.driver.cores`<br/>
-     `spark.driver.userClassPathFirst`<br/>
-     `spark.driver.extraClassPath`<br/>
-     `spark.driver.defaultJavaOptions`<br/>
-     `spark.driver.extraJavaOptions`<br/>
-     `spark.driver.extraLibraryPath`<br/>
-     `spark.driver.resource.*`<br/>
-     `spark.pyspark.driver.python`<br/>
-     `spark.pyspark.python`<br/>
-     `spark.r.shell.command`<br/>
-     `spark.launcher.childProcLoggerName`<br/>
-     `spark.launcher.childConnectionTimeout`<br/>
-     `spark.yarn.driver.*`
+    The following is a list of such configurations:
+    <ul>
+      <li><code>spark.driver.memory</code>
+      <li><code>spark.driver.memoryOverhead</code>
+      <li><code>spark.driver.cores</code>
+      <li><code>spark.driver.userClassPathFirst</code>
+      <li><code>spark.driver.extraClassPath</code>
+      <li><code>spark.driver.defaultJavaOptions</code>
+      <li><code>spark.driver.extraJavaOptions</code>
+      <li><code>spark.driver.extraLibraryPath</code>
+      <li><code>spark.driver.resource.*</code>
+      <li><code>spark.pyspark.driver.python</code>
+      <li><code>spark.pyspark.python</code>
+      <li><code>spark.r.shell.command</code>
+      <li><code>spark.launcher.childProcLoggerName</code>
+      <li><code>spark.launcher.childConnectionTimeout</code>
+      <li><code>spark.yarn.driver.*</code>
+     </ul>
   </td>
 </tr>
 <tr>
   <td><code>Application Deploy Related Configuration</code></td>
   <td>Effect before start SparkContext.</td>
   <td>
-    Like "spark.master", "spark.executor.instances", this kind of properties may not
-    be affected when setting programmatically through `SparkConf` in runtime after SparkContext has been started,
-    or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to
-    set through configuration file, `spark-submit` command line options, or setting programmatically through `SparkConf`
-    in runtime before start SparkContext.  
+    Like <code>spark.master</code>, <code>spark.executor.instances</code>, this kind of properties may not be affected when setting programmatically through <code>SparkConf</code> in runtime after SparkContext has been started, or the behavior is depending on which cluster manager and deploy mode you choose, so it would be suggested to set through configuration file, <code>spark-submit</code> command line options, or setting programmatically through <code>SparkConf</code> in runtime before start SparkContext.  
   </td>
   <td>
-    
+     The following is a example such configurations:
+      <ul>
+        <li><code>spark.master</code>
+        <li><code>spark.app.name</code>
+        <li><code>spark.executor.memory</code>
+        <li><code>spark.submit.deployMode</code>
+        <li><code>spark.eventLog.enabled</code>
+        <li><code>etc...</code>
+       </ul>
   </td>
 </tr>
 <tr>
   <td><code>Spark Runtime Control Related Configuration</code></td>
   <td>Effect when runtime.</td>
   <td>
-    Like "spark.task.maxFailures", this kind of properties can be set in either way. 
+    Like <code>spark.task.maxFailures</code>, all other properties can be set either way. 
   </td>
   <td>
-    
+     The following is examples of such configurations:
+      <ul>
+        <li><code>spark.task.maxFailures</code>
+        <li><code>spark.sql.shuffle.partitions</code>
+        <li><code>etc...</code>
+       </ul>
   </td>
 </tr>
 </table>
