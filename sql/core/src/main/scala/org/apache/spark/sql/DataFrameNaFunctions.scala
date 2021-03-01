@@ -396,7 +396,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   private def fillMap(values: Seq[(String, Any)]): DataFrame = {
     // Error handling
     val attrToValue = AttributeMap(values.map { case (colName, replaceValue) =>
-	  // Check column name exists
+	    // Check column name exists
       val attr = df.resolve(colName) match {
         case a: Attribute => a
         case _ => throw new IllegalArgumentException("Nested field is not supported.")
