@@ -65,7 +65,7 @@ license: |
  
   - In Spark 3.2, the output schema of `SHOW TBLPROPERTIES` becomes `key: string, value: string` whether you specify the table property key or not. In Spark 3.1 and earlier, the output schema of `SHOW TBLPROPERTIES` is `value: string` when you specify the table property key. To restore the old schema with the builtin catalog, you can set `spark.sql.legacy.keepCommandOutputSchema` to `true`.
 
-  - In Spark 3.2, we support a typed literal for a partition constant value in a INSERT clause. For example, a right-side constant value in `PARTITION (dt = date'2020-01-01')` is parsed as a date-typed literal in the partition spec. In Spark 3.1 and earlier, the partition value will be treated as string value `date '2020-01-01'` and it's a illegal date type string value and will been converted to `__HIVE_DEFAULT_PARTITION__`.
+  - In Spark 3.2, we support a typed literal for a partition constant value in a partition spec clause. For example, a right-side constant value in `PARTITION (dt = date'2020-01-01')` is parsed as a date-typed literal in the partition spec. In Spark 3.1 and earlier, the partition value will be treated as string value `date '2020-01-01'` and it's a illegal date type string value and will be converted to `__HIVE_DEFAULT_PARTITION__`.
 
 ## Upgrading from Spark SQL 3.0 to 3.1
 
