@@ -864,14 +864,15 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
   test("SPARK-34548: Remove unnecessary children from Union") {
     Seq(RemoveNoopUnion.ruleName, "").map { ruleName =>
       withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> ruleName) {
-        val testData_2 = spark.sparkContext.parallelize(
+        val testDataCopy = spark.sparkContext.parallelize(
           (1 to 100).map(i => SQLTestData.TestData(i, i.toString))).toDF()
 
-        val distinctUnionDF1 = testData.union(testData).union(testData_2).distinct()
-        val expected = testData.union(testData_2).distinct()
+        val distinctUnionDF1 = testData.union(testData).union(testDataCopy).distinct()
+        val expected = testData.union(testDataCopy).distinct()
         checkAnswer(distinctUnionDF1, expected)
 
-        val distinctUnionDF2 = testData.union(testData).union(testData_2).dropDuplicates(Seq("key"))
+        val distinctUnionDF2 = testData.union(testData).union(testDataCopy)
+          .dropDuplicates(Seq("key"))
         checkAnswer(distinctUnionDF2, expected)
       }
     }
