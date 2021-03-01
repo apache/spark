@@ -126,21 +126,21 @@ Note that Spark properties have different effective timing and they can be divid
   <td>
     The following is a list of such configurations:
     <ul>
-      <li><code>spark.driver.memory</code>
-      <li><code>spark.driver.memoryOverhead</code>
-      <li><code>spark.driver.cores</code>
-      <li><code>spark.driver.userClassPathFirst</code>
-      <li><code>spark.driver.extraClassPath</code>
-      <li><code>spark.driver.defaultJavaOptions</code>
-      <li><code>spark.driver.extraJavaOptions</code>
-      <li><code>spark.driver.extraLibraryPath</code>
-      <li><code>spark.driver.resource.*</code>
-      <li><code>spark.pyspark.driver.python</code>
-      <li><code>spark.pyspark.python</code>
-      <li><code>spark.r.shell.command</code>
-      <li><code>spark.launcher.childProcLoggerName</code>
-      <li><code>spark.launcher.childConnectionTimeout</code>
-      <li><code>spark.yarn.driver.*</code>
+      <li><code>spark.driver.memory</code></li>
+      <li><code>spark.driver.memoryOverhead</code></li>
+      <li><code>spark.driver.cores</code></li>
+      <li><code>spark.driver.userClassPathFirst</code></li>
+      <li><code>spark.driver.extraClassPath</code></li>
+      <li><code>spark.driver.defaultJavaOptions</code></li>
+      <li><code>spark.driver.extraJavaOptions</code></li>
+      <li><code>spark.driver.extraLibraryPath</code></li>
+      <li><code>spark.driver.resource.*</code></li>
+      <li><code>spark.pyspark.driver.python</code></li>
+      <li><code>spark.pyspark.python</code></li>
+      <li><code>spark.r.shell.command</code></li>
+      <li><code>spark.launcher.childProcLoggerName</code></li>
+      <li><code>spark.launcher.childConnectionTimeout</code></li>
+      <li><code>spark.yarn.driver.*</code></li>
      </ul>
   </td>
 </tr>
@@ -152,14 +152,14 @@ Note that Spark properties have different effective timing and they can be divid
   </td>
   <td>
      The following is a example such configurations:
-      <ul>
-        <li><code>spark.master</code>
-        <li><code>spark.app.name</code>
-        <li><code>spark.executor.memory</code>
-        <li><code>spark.submit.deployMode</code>
-        <li><code>spark.eventLog.enabled</code>
-        <li><code>etc...</code>
-       </ul>
+     <ul>
+       <li><code>spark.master</code></li>
+       <li><code>spark.app.name</code></li>
+       <li><code>spark.executor.memory</code></li>
+       <li><code>spark.submit.deployMode</code></li>
+       <li><code>spark.eventLog.enabled</code></li>
+       <li><code>etc...</code></li>
+     </ul>
   </td>
 </tr>
 <tr>
@@ -170,11 +170,11 @@ Note that Spark properties have different effective timing and they can be divid
   </td>
   <td>
      The following is examples of such configurations:
-      <ul>
-        <li><code>spark.task.maxFailures</code>
-        <li><code>spark.sql.shuffle.partitions</code>
-        <li><code>etc...</code>
-       </ul>
+     <ul>
+       <li><code>spark.task.maxFailures</code></li>
+       <li><code>spark.sql.shuffle.partitions</code></li>
+       <li><code>etc...</code></li>
+      </ul>
   </td>
 </tr>
 </table>
