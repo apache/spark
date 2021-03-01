@@ -947,7 +947,10 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
         // We should reset `spark.sql.catalogImplementation` according to current requirement.
-        sparkContext.conf.set(CATALOG_IMPLEMENTATION, sparkConf.get(CATALOG_IMPLEMENTATION))
+        if (sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory" &&
+          sparkConf.get(CATALOG_IMPLEMENTATION) == "hive") {
+          sparkContext.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+        }
         applyExtensions(
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
           extensions)
