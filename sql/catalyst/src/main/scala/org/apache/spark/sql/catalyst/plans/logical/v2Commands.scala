@@ -785,13 +785,16 @@ case class TruncatePartition(
 case class ShowPartitions(
     table: LogicalPlan,
     pattern: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends V2PartitionCommand {
+    override val output: Seq[Attribute] = ShowPartitions.getOutputAttrs)
+  extends V2PartitionCommand {
   override def children: Seq[LogicalPlan] = table :: Nil
   override def allowPartialPartitionSpec: Boolean = true
 }
 
 object ShowPartitions {
-  val OUTPUT = Seq(AttributeReference("partition", StringType, nullable = false)())
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("partition", StringType, nullable = false)())
+  }
 }
 
 /**
