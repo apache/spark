@@ -331,12 +331,14 @@ case class SetNamespaceLocation(
 case class ShowNamespaces(
     namespace: LogicalPlan,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowNamespaces.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowNamespaces.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 }
 
 object ShowNamespaces {
-  val OUTPUT = Seq(AttributeReference("namespace", StringType, nullable = false)())
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("namespace", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -345,9 +347,13 @@ object ShowNamespaces {
 case class DescribeRelation(
     relation: LogicalPlan,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean) extends Command {
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeRelation.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
+}
+
+object DescribeRelation {
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeTableAttributes()
 }
 
 /**
@@ -492,12 +498,12 @@ case class RenameTable(
 case class ShowTables(
     namespace: LogicalPlan,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowTables.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowTables.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 }
 
 object ShowTables {
-  val OUTPUT = Seq(
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)())
@@ -510,12 +516,12 @@ case class ShowTableExtended(
     namespace: LogicalPlan,
     pattern: String,
     partitionSpec: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowTableExtended.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowTableExtended.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = namespace :: Nil
 }
 
 object ShowTableExtended {
-  val OUTPUT = Seq(
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
@@ -531,12 +537,12 @@ object ShowTableExtended {
 case class ShowViews(
     namespace: LogicalPlan,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowViews.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowViews.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 }
 
 object ShowViews {
-  val OUTPUT = Seq(
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("viewName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)())
@@ -572,12 +578,12 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends Command 
 case class ShowTableProperties(
     table: LogicalPlan,
     propertyKey: Option[String],
-    override val output: Seq[Attribute] = ShowTableProperties.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowTableProperties.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = table :: Nil
 }
 
 object ShowTableProperties {
-  val OUTPUT: Seq[Attribute] = Seq(
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("key", StringType, nullable = false)(),
     AttributeReference("value", StringType, nullable = false)())
 }
@@ -642,12 +648,14 @@ case class ShowFunctions(
     userScope: Boolean,
     systemScope: Boolean,
     pattern: Option[String],
-    override val output: Seq[Attribute] = ShowFunctions.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowFunctions.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child.toSeq
 }
 
 object ShowFunctions {
-  val OUTPUT = Seq(AttributeReference("function", StringType, nullable = false)())
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("function", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -658,6 +666,15 @@ case class AnalyzeTable(
     partitionSpec: Map[String, Option[String]],
     noScan: Boolean) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+/**
+ * The logical plan of the ANALYZE TABLES command.
+ */
+case class AnalyzeTables(
+    namespace: LogicalPlan,
+    noScan: Boolean) extends Command {
+  override def children: Seq[LogicalPlan] = Seq(namespace)
 }
 
 /**
@@ -750,12 +767,14 @@ case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends
 case class ShowColumns(
     child: LogicalPlan,
     namespace: Option[Seq[String]],
-    override val output: Seq[Attribute] = ShowColumns.OUTPUT) extends Command {
+    override val output: Seq[Attribute] = ShowColumns.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
 }
 
 object ShowColumns {
-  val OUTPUT: Seq[Attribute] = Seq(AttributeReference("col_name", StringType, nullable = false)())
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("col_name", StringType, nullable = false)())
+  }
 }
 
 /**
@@ -781,13 +800,16 @@ case class TruncatePartition(
 case class ShowPartitions(
     table: LogicalPlan,
     pattern: Option[PartitionSpec],
-    override val output: Seq[Attribute] = ShowPartitions.OUTPUT) extends V2PartitionCommand {
+    override val output: Seq[Attribute] = ShowPartitions.getOutputAttrs)
+  extends V2PartitionCommand {
   override def children: Seq[LogicalPlan] = table :: Nil
   override def allowPartialPartitionSpec: Boolean = true
 }
 
 object ShowPartitions {
-  val OUTPUT = Seq(AttributeReference("partition", StringType, nullable = false)())
+  def getOutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("partition", StringType, nullable = false)())
+  }
 }
 
 /**

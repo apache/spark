@@ -859,6 +859,8 @@ class Analyzer(override val catalogManager: CatalogManager)
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case s @ ShowViews(UnresolvedNamespace(Seq()), _, _) =>
         s.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
+      case a @ AnalyzeTables(UnresolvedNamespace(Seq()), _) =>
+        a.copy(namespace = ResolvedNamespace(currentCatalog, catalogManager.currentNamespace))
       case UnresolvedNamespace(Seq()) =>
         ResolvedNamespace(currentCatalog, Seq.empty[String])
       case UnresolvedNamespace(CatalogAndNamespace(catalog, ns)) =>

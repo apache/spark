@@ -208,6 +208,28 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       checkAnswer(spark.table("t"), Row("1", null))
     }
   }
+
+  test("SPARK-34556: " +
+    "checking duplicate static partition columns should respect case sensitive conf") {
+    withTable("t") {
+      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
+      val e = intercept[AnalysisException] {
+        sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
+      }
+      assert(e.getMessage.contains("Found duplicate keys 'c'"))
+    }
+    // The following code is skipped for Hive because columns stored in Hive Metastore is always
+    // case insensitive and we cannot create such table in Hive Metastore.
+    if (!format.startsWith("hive")) {
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        withTable("t") {
+          sql(s"CREATE TABLE t(i int, c string, C string) USING PARQUET PARTITIONED BY (c, C)")
+          sql("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
+          checkAnswer(spark.table("t"), Row(1, "2", "3"))
+        }
+      }
+    }
+  }
 }
 
 class FileSourceSQLInsertTestSuite extends SQLInsertTestSuite with SharedSparkSession {
