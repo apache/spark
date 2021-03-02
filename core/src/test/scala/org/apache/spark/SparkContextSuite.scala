@@ -1197,6 +1197,33 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
       "spark configs have higher priority than spark.hadoop configs")
   }
+  test("SPARK-34225: addFile/addJar shouldn't further encode URI if a URI form string is passed") {
+    withTempDir { dir =>
+      val jar = File.createTempFile("testprefix", "test jar1.jar", dir)
+      val jarUrl = jar.toURI.toString
+      val file = File.createTempFile("testprefix", "test file1.txt", dir)
+      val fileUrl = file.toURI.toString
+
+      try {
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addJar(jarUrl)
+        sc.addFile(fileUrl)
+        sc.parallelize(Array(1), 1).map { x =>
+          val gottenJar = new File(SparkFiles.get(jar.getName))
+          if (!gottenJar.exists()) {
+            throw new SparkException("file doesn't exist : " + jar)
+          }
+          val gottenFile = new File(SparkFiles.get(file.getName))
+          if (!gottenFile.exists()) {
+            throw new SparkException("file doesn't exist : " + file)
+          }
+          x
+        }.collect()
+      } finally {
+        sc.stop()
+      }
+    }
+  }
 }
 
 object SparkContextSuite {
