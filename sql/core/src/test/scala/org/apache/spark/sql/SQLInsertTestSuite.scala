@@ -218,19 +218,22 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
       sql(
         """
           | CREATE TABLE t1(name STRING, part1 DATE, part2 TIMESTAMP, part3 BINARY,
-          |  part4 STRING, part5 STRING, part6 STRING)
-          | USING PARQUET PARTITIONED BY (part1, part2, part3, part4, part5, part6)""".stripMargin)
+          |  part4 STRING, part5 STRING, part6 STRING, part7 STRING)
+          | USING PARQUET PARTITIONED BY (part1, part2, part3, part4, part5, part6, part7)
+         """.stripMargin)
 
       sql(
         s"""
-           | INSERT INTO t1 PARTITION(
+           | INSERT OVERWRITE t1 PARTITION(
            | part1 = date'2019-01-01',
            | part2 = timestamp'2019-01-01 11:11:11',
            | part3 = X'$binaryHexStr',
            | part4 = 'a',
            | part5 = 'a',
-           | part6 = 'a'
-           | ) VALUES('a')""".stripMargin)
+           | part6 = 'a',
+           | part7 = 'p1'
+           | ) VALUES('a')
+        """.stripMargin)
       checkAnswer(sql(
         """
           | SELECT
@@ -241,19 +244,22 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           |   CAST(part4 as STRING),
           |   CAST(part5 as STRING),
           |   CAST(part6 as STRING)
-          | FROM t1""".stripMargin),
+          | FROM t1
+          | WHERE part7 = 'p1'
+        """.stripMargin),
         Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "a", "a", "a"))
 
       // test type conversion
       sql(
         s"""
-           | INSERT INTO t1 PARTITION(
+           | INSERT OVERWRITE t1 PARTITION(
            | part1 = timestamp'2019-01-02 11:11:11',
            | part2 = timestamp'2019-01-02 11:11:11',
            | part3 = X'$binaryHexStr',
            | part4 = date'2019-01-01',
            | part5 = timestamp'2019-01-01 11:11:11',
-           | part6 = X'$binaryHexStr'
+           | part6 = X'$binaryHexStr',
+           | part7 = 'p2'
            | ) VALUES('a')""".stripMargin)
       checkAnswer(sql(
         """
@@ -265,10 +271,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           |   CAST(part4 as STRING),
           |   CAST(part5 as STRING),
           |   CAST(part6 as STRING)
-          | FROM t1""".stripMargin),
-        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "a", "a", "a") ::
-          Row("a", "2019-01-02", "2019-01-02 11:11:11", "Spark SQL",
-            "2019-01-01", "2019-01-01 11:11:11", "Spark SQL") :: Nil)
+          | FROM t1
+          | WHERE part7 = 'p2'
+         """.stripMargin),
+        Row("a", "2019-01-02", "2019-01-02 11:11:11", "Spark SQL",
+          "2019-01-01", "2019-01-01 11:11:11", "Spark SQL"))
 
       val e = intercept[AnalysisException] {
         sql("CREATE TABLE t2(name STRING, part INTERVAL) USING PARQUET PARTITIONED BY (part)")
