@@ -241,10 +241,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           |   CAST(part1 AS STRING),
           |   CAST(part2 as STRING),
           |   CAST(part3 as STRING),
-          |   CAST(part4 as STRING),
-          |   CAST(part5 as STRING),
-          |   CAST(part6 as STRING),
-          |   CAST(part7 as STRING)
+          |   part4,
+          |   part5,
+          |   part6,
+          |   part7
           | FROM t1
         """.stripMargin),
         Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "p1",
