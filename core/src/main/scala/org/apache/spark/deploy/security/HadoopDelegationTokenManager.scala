@@ -98,9 +98,7 @@ private[spark] class HadoopDelegationTokenManager(
 
     val isEnabledDeprecated = deprecatedProviderEnabledConfigs.forall { pattern =>
       sparkConf
-        .getOption(pattern.format(serviceName))
-        .map(_.toBoolean)
-        .getOrElse(true)
+        .getOption(pattern.format(serviceName)).forall(_.toBoolean)
     }
 
     sparkConf

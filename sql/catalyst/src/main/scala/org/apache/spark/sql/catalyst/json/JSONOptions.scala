@@ -50,23 +50,23 @@ private[sql] class JSONOptions(
   val samplingRatio =
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   val primitivesAsString =
-    parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
+    parameters.get("primitivesAsString").exists(_.toBoolean)
   val prefersDecimal =
-    parameters.get("prefersDecimal").map(_.toBoolean).getOrElse(false)
+    parameters.get("prefersDecimal").exists(_.toBoolean)
   val allowComments =
-    parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
+    parameters.get("allowComments").exists(_.toBoolean)
   val allowUnquotedFieldNames =
-    parameters.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false)
+    parameters.get("allowUnquotedFieldNames").exists(_.toBoolean)
   val allowSingleQuotes =
-    parameters.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true)
+    parameters.get("allowSingleQuotes").forall(_.toBoolean)
   val allowNumericLeadingZeros =
-    parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false)
+    parameters.get("allowNumericLeadingZeros").exists(_.toBoolean)
   val allowNonNumericNumbers =
-    parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+    parameters.get("allowNonNumericNumbers").forall(_.toBoolean)
   val allowBackslashEscapingAnyCharacter =
-    parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+    parameters.get("allowBackslashEscapingAnyCharacter").exists(_.toBoolean)
   private val allowUnquotedControlChars =
-    parameters.get("allowUnquotedControlChars").map(_.toBoolean).getOrElse(false)
+    parameters.get("allowUnquotedControlChars").exists(_.toBoolean)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
@@ -74,7 +74,7 @@ private[sql] class JSONOptions(
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
 
   // Whether to ignore column of all null values or empty array/struct during schema inference
-  val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").map(_.toBoolean).getOrElse(false)
+  val dropFieldIfAllNull = parameters.get("dropFieldIfAllNull").exists(_.toBoolean)
 
   val timeZone: TimeZone = DateTimeUtils.getTimeZone(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))
@@ -87,7 +87,7 @@ private[sql] class JSONOptions(
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
-  val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get("multiLine").exists(_.toBoolean)
 
   /**
    * A string between two consecutive JSON records.

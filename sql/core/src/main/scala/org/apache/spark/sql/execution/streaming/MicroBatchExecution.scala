@@ -326,8 +326,7 @@ class MicroBatchExecution(
       case (source, available) =>
         committedOffsets
           .get(source)
-          .map(committed => committed != available)
-          .getOrElse(true)
+          .forall(committed => committed != available)
     }
   }
 
