@@ -58,11 +58,11 @@ class HiveSharedStateSuite extends SparkFunSuite {
     initialConfigs.foreach { case (k, v) => builder.config(k, v) }
     val ss = builder.getOrCreate()
     val state = ss.sharedState
-    val qualifiedWH =
+    val qualifiedWHPath =
       FileUtils.makeQualified(new Path(warehousePath), sc.hadoopConfiguration).toString
-    assert(sc.conf.get(WAREHOUSE_PATH.key) === qualifiedWH,
+    assert(sc.conf.get(WAREHOUSE_PATH.key) === qualifiedWHPath,
       "initial warehouse conf in session options can affect application wide spark conf")
-    assert(sc.hadoopConfiguration.get(ConfVars.METASTOREWAREHOUSE.varname) === qualifiedWH,
+    assert(sc.hadoopConfiguration.get(ConfVars.METASTOREWAREHOUSE.varname) === qualifiedWHPath,
       "initial warehouse conf in session options can affect application wide hadoop conf")
 
     assert(!state.sparkContext.conf.contains("spark.foo"),
@@ -72,7 +72,7 @@ class HiveSharedStateSuite extends SparkFunSuite {
     val client = state.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
     assert(client.getConf("spark.foo", "") === "bar",
       "session level conf should be passed to catalog")
-    assert(client.getConf(ConfVars.METASTOREWAREHOUSE.varname, "") === qualifiedWH,
+    assert(client.getConf(ConfVars.METASTOREWAREHOUSE.varname, "") === qualifiedWHPath,
       "session level conf should be passed to catalog")
 
     assert(state.globalTempViewManager.database === tmpDb)

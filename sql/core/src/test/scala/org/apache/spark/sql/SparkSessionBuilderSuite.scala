@@ -415,7 +415,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
-    test(s"SPARK-34558: warehouse should be qualified for spark/hadoop conf - $pathStr") {
+    test(s"SPARK-34558: warehouse path ($pathStr) should be qualified for spark/hadoop conf") {
       val path = new Path(pathStr)
       val conf = new SparkConf().set(WAREHOUSE_PATH, pathStr)
       val session = SparkSession.builder()

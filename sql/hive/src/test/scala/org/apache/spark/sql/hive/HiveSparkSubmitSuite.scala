@@ -409,11 +409,11 @@ object SetWarehouseLocationTest extends Logging {
 
     }
 
-    val qualifiedWH = FileUtils.makeQualified(
+    val qualifiedWHPath = FileUtils.makeQualified(
       new Path(expectedWarehouseLocation), sparkSession.sparkContext.hadoopConfiguration).toString
-    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != qualifiedWH) {
+    if (sparkSession.conf.get(WAREHOUSE_PATH.key) != qualifiedWHPath) {
       throw new Exception(
-        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location $qualifiedWH.")
+        s"${WAREHOUSE_PATH.key} is not set to the expected warehouse location $qualifiedWHPath.")
     }
 
     val catalog = sparkSession.sessionState.catalog
@@ -426,7 +426,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        CatalogUtils.stringToURI(s"$qualifiedWH/testlocation")
+        CatalogUtils.stringToURI(s"$qualifiedWHPath/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -442,7 +442,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
       val expectedLocation = CatalogUtils.stringToURI(
-        s"$qualifiedWH/testlocationdb.db/testlocation")
+        s"$qualifiedWHPath/testlocationdb.db/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
