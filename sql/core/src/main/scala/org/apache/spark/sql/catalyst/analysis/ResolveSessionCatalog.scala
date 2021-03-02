@@ -203,12 +203,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, _) =>
       DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
 
-    case DescribeColumn(ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended) =>
+    case DescribeColumn(
+         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, _) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
       DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended)
 
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended) =>
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, _) =>
       column match {
         case u: UnresolvedAttribute =>
           throw QueryCompilationErrors.columnDoesNotExistError(u.name)
