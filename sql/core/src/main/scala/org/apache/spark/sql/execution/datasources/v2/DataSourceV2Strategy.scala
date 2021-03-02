@@ -214,9 +214,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
       }
 
-    case AppendData(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), query, _,
-        _, Some(write)) =>
-      AppendDataExec(v2, planLater(query), refreshCache(r), write) :: Nil
+    case AppendData(r: DataSourceV2Relation, query, _, _, Some(write)) =>
+      AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, query,
         _, _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -229,13 +228,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             s"${v2Write.getClass.getName} is not an instance of ${classOf[V1Write].getName}")
       }
 
-    case OverwriteByExpression(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), _, query,
-        _, _, Some(write)) =>
-      OverwriteByExpressionExec(v2, planLater(query), refreshCache(r), write) :: Nil
+    case OverwriteByExpression(r: DataSourceV2Relation, _, query, _, _, Some(write)) =>
+      OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _, Some(write)) =>
-      val writable = r.table.asWritable
-      OverwritePartitionsDynamicExec(writable, planLater(query), refreshCache(r), write) :: Nil
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
+      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
