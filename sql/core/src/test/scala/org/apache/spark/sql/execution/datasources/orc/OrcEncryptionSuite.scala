@@ -23,9 +23,7 @@ import org.apache.orc.impl.HadoopShimsFactory
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.tags.DedicatedJVMTest
 
-@DedicatedJVMTest
 class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
   import testImplicits._
 
@@ -69,7 +67,7 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
 
     val df = originalData.toDF("ssn", "email", "name")
 
-    withTempPath { dir =>
+    withTempDir { dir =>
       val path = dir.getAbsolutePath
       withTable("encrypted") {
         sql(
