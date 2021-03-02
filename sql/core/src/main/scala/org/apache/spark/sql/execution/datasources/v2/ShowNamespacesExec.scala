@@ -47,7 +47,7 @@ case class ShowNamespacesExec(
     val toRow = RowEncoder(schema).resolveAndBind().createSerializer()
 
     namespaces.map(_.quoted).map { ns =>
-      if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
+      if (pattern.forall(StringUtils.filterPattern(Seq(ns), _).nonEmpty)) {
         rows += toRow(new GenericRowWithSchema(Array(ns), schema)).copy()
       }
     }

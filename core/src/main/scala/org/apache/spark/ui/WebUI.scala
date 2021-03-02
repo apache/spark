@@ -155,7 +155,7 @@ private[spark] abstract class WebUI(
   }
 
   /** @return Whether SSL enabled. Only valid after [[bind]]. */
-  def isSecure: Boolean = serverInfo.map(_.securePort.isDefined).getOrElse(false)
+  def isSecure: Boolean = serverInfo.exists(_.securePort.isDefined)
 
   /** @return The scheme of web interface. Only valid after [[bind]]. */
   def scheme: String = if (isSecure) "https://" else "http://"

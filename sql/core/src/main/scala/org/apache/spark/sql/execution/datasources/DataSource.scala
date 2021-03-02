@@ -121,9 +121,7 @@ case class DataSource(
    * Whether or not paths should be globbed before being used to access files.
    */
   def globPaths: Boolean = {
-    options.get(DataSource.GLOB_PATHS_KEY)
-      .map(_ == "true")
-      .getOrElse(true)
+    options.get(DataSource.GLOB_PATHS_KEY).forall(_ == "true")
   }
 
   bucketSpec.map { bucket =>

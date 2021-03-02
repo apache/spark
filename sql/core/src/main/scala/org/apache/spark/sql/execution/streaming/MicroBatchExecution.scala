@@ -325,7 +325,7 @@ class MicroBatchExecution(
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
                   val start = committedOffsets.get(source).map(_.asInstanceOf[Offset])
-                  if (start.map(_ == end).getOrElse(true)) {
+                  if (start.forall(_ == end)) {
                     source.getBatch(start, end)
                   }
                 case nonV1Tuple =>
@@ -355,9 +355,7 @@ class MicroBatchExecution(
     availableOffsets.exists {
       case (source, available) =>
         committedOffsets
-          .get(source)
-          .map(committed => committed != available)
-          .getOrElse(true)
+          .get(source).forall(committed => committed != available)
     }
   }
 
@@ -481,7 +479,7 @@ class MicroBatchExecution(
     newData = reportTimeTaken("getBatch") {
       availableOffsets.flatMap {
         case (source: Source, available: Offset)
-          if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
+          if committedOffsets.get(source).forall(_ != available) =>
           val current = committedOffsets.get(source).map(_.asInstanceOf[Offset])
           val batch = source.getBatch(current, available)
           assert(batch.isStreaming,
@@ -491,7 +489,7 @@ class MicroBatchExecution(
           Some(source -> batch.logicalPlan)
 
         case (stream: MicroBatchStream, available)
-          if committedOffsets.get(stream).map(_ != available).getOrElse(true) =>
+          if committedOffsets.get(stream).forall(_ != available) =>
           val current = committedOffsets.get(stream).map {
             off => stream.deserializeOffset(off.json)
           }

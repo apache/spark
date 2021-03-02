@@ -590,7 +590,7 @@ object StateStore extends Logging {
     if (SparkEnv.get != null) {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       val verified =
-        coordinatorRef.map(_.verifyIfInstanceActive(storeProviderId, executorId)).getOrElse(false)
+        coordinatorRef.exists(_.verifyIfInstanceActive(storeProviderId, executorId))
       logDebug(s"Verified whether the loaded instance $storeProviderId is active: $verified")
       verified
     } else {
