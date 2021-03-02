@@ -89,8 +89,9 @@ abstract class LogicalPlan
     }
   }
 
-  private[this] lazy val childAttributes =
-    AttributeSeq(children.flatMap(c => c.output ++ c.metadataOutput))
+  private[this] lazy val childAttributes = AttributeSeq(children.flatMap(_.output))
+
+  private[this] lazy val childMetadataAttributes = AttributeSeq(children.flatMap(_.metadataOutput))
 
   private[this] lazy val outputAttributes = AttributeSeq(output)
 
@@ -103,6 +104,7 @@ abstract class LogicalPlan
       nameParts: Seq[String],
       resolver: Resolver): Option[NamedExpression] =
     childAttributes.resolve(nameParts, resolver)
+      .orElse(childMetadataAttributes.resolve(nameParts, resolver))
 
   /**
    * Optionally resolves the given strings to a [[NamedExpression]] based on the output of this
