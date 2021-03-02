@@ -133,4 +133,19 @@ class CollapseWindowSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-34565: do not collapse two windows if project between them " +
+    "generates an input column") {
+
+    val query = testRelation
+      .window(Seq(min(a).as("min_a")), partitionSpec1, orderSpec1)
+      .select($"a", $"b", $"c", $"min_a", ($"a" + $"b").as("d"))
+      .window(Seq(max($"d").as("max_d")), partitionSpec1, orderSpec1)
+      .analyze
+
+    val optimized = Optimize.execute(query)
+    assert(query.output === optimized.output)
+
+    comparePlans(optimized, query)
+  }
 }
