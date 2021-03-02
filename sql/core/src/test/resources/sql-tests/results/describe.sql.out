@@ -520,7 +520,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, false
+   +- DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -530,7 +530,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, true
+   +- DescribeTableCommand `default`.`t`, true, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -544,14 +544,14 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 col_name: string, data_type: string, comment: string
-DescribeTableCommand `default`.`t`, false
+DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 == Optimized Logical Plan ==
-DescribeTableCommand `default`.`t`, false
+DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, false
+   +- DescribeTableCommand `default`.`t`, false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
@@ -561,7 +561,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeColumnCommand
-   +- DescribeColumnCommand `default`.`t`, [spark_catalog, default, t, b], false
+   +- DescribeColumnCommand `default`.`t`, [spark_catalog, default, t, b], false, [info_name#x, info_value#x]
 
 
 -- !query
@@ -571,7 +571,7 @@ struct<plan:string>
 -- !query output
 == Physical Plan ==
 Execute DescribeTableCommand
-   +- DescribeTableCommand `default`.`t`, Map(c -> Us, d -> 2), false
+   +- DescribeTableCommand `default`.`t`, Map(c -> Us, d -> 2), false, [col_name#x, data_type#x, comment#x]
 
 
 -- !query
