@@ -354,8 +354,8 @@ class MicroBatchExecution(
   private def isNewDataAvailable: Boolean = {
     availableOffsets.exists {
       case (source, available) =>
-        !committedOffsets
-          .get(source).contains(available)
+        committedOffsets
+          .get(source).forall(committed => committed != available)
     }
   }
 
