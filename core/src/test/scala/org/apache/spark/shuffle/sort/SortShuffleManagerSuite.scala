@@ -27,7 +27,6 @@ import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.matchers.must.Matchers
-import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.rdd.ShuffledRDD
@@ -139,11 +138,15 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers with LocalSpar
     )))
   }
 
-  test("Shuffle data can be cleaned up whether spark.shuffle.useOldFetchProtocol=true/false") {
-    withTempDir { tmpDir =>
-      def getAllFiles: Set[File] =
-        FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
-      def runJobAndRemoveShuffle(conf: SparkConf, mapId: Long): Unit = {
+  Seq("true", "false").foreach { value =>
+    test(s"SPARK-34541: shuffle can be removed when spark.shuffle.useOldFetchProtocol=$value") {
+      withTempDir { tmpDir =>
+        def getAllFiles: Set[File] =
+          FileUtils.listFiles(
+            tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+        val conf = new SparkConf(loadDefaults = false)
+        conf.set("spark.local.dir", tmpDir.getAbsolutePath)
+        conf.set("spark.shuffle.useOldFetchProtocol", value)
         sc = new SparkContext("local", "test", conf)
         // For making the taskAttemptId starts from 1.
         sc.parallelize(1 to 10).count()
@@ -156,23 +159,12 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers with LocalSpar
         shuffledRdd.count()
         // Ensure that the shuffle actually created files that will need to be cleaned up
         val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
-        filesCreatedByShuffle.map(_.getName) should be
-        Set("shuffle_0_" + mapId + "_0.data", "shuffle_0_" + mapId + "_0.index")
         // Check that the cleanup actually removes the files
         sc.env.blockManager.master.removeShuffle(0, blocking = true)
         for (file <- filesCreatedByShuffle) {
           assert (!file.exists(), s"Shuffle file $file was not cleaned up")
         }
       }
-      val conf = new SparkConf(loadDefaults = false)
-      conf.set("spark.local.dir", tmpDir.getAbsolutePath)
-      conf.set("spark.shuffle.useOldFetchProtocol", "true")
-      runJobAndRemoveShuffle(conf, 0)
-      if (sc != null) {
-        sc.stop()
-      }
-      conf.set("spark.shuffle.useOldFetchProtocol", "false")
-      runJobAndRemoveShuffle(conf, 1)
     }
   }
 }
