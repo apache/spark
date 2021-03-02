@@ -209,9 +209,9 @@ private[spark] case class ConfigBuilder(key: String) {
   /**
    * Deprecated the current config
    *
-   * @param version Version of Spark where the config was deprecated.
-   * @param deprecationMessage Message to include in the deprecation warning.
-   * @return
+   * @param version version of Spark where the config was deprecated.
+   * @param deprecationMessage message to include in the deprecation warning.
+   * @return this.type
    */
   def deprecated(version: String, deprecationMessage: String): ConfigBuilder = {
     LegacyConfigsRegister.registerDeprecated(key, version, deprecationMessage)
@@ -219,16 +219,16 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   /**
+   * Add alternative configs for the current config
    *
-   * @param alternativeConfig
-   * @param others
-   * @return
+   * @param alternativeConfig (alternative key, deprecated version)
+   * @param others a variable sequence of alternativeConfig
+   * @return this.type
    */
   def alternative(
       alternativeConfig: (String, String),
       others: (String, String)*): ConfigBuilder = {
     val alternativeWithNullTranslation = (alternativeConfig +: others).map { alternative =>
-      _alternatives = _alternatives :+ alternative._1
       (alternative._1, alternative._2, null: String => String)
     }
     alternativeWithTranslation(
@@ -237,10 +237,19 @@ private[spark] case class ConfigBuilder(key: String) {
     this
   }
 
+  /**
+   * Add alternative configs with translation for the current config
+   *
+   * @param alternativeConfig (alternative key, deprecated version, translation)
+   * @param others a variable sequence of alternativeConfig
+   * @return this.type
+   */
   def alternativeWithTranslation(
       alternativeConfig: (String, String, String => String),
       others: (String, String, String => String)*): ConfigBuilder = {
-    LegacyConfigsRegister.registerAlternative(key, alternativeConfig +: others)
+    val alternatives = alternativeConfig +: others
+    alternatives.foreach(c => _alternatives :+= c._1)
+    LegacyConfigsRegister.registerAlternative(key, alternatives)
     this
   }
 
