@@ -168,14 +168,11 @@ trait PredicateHelper extends AliasHelper with Logging {
     exprs match {
       case Seq(expression) => expression
       case expressions =>
-        val grouped = expressions.grouped(2).toSeq
-        val pairwiseExprs = for (g <- grouped) yield {
-          g match {
-            case Seq(a, b) => op(a, b)
-            case Seq(x) => x
-          }
+        val pairwiseExprs = expressions.grouped(2).map {
+          case Seq(e1, e2) => op(e1, e2)
+          case Seq(e) => e
         }
-        buildBalancedPredicate(pairwiseExprs, op)
+        buildBalancedPredicate(pairwiseExprs.toSeq, op)
     }
   }
 
