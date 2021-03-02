@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
 class LimitPushdownThroughWindowSuite extends PlanTest {
+  // CollapseProject and RemoveNoopOperators is needed because we need it to collapse project.
   private val limitPushdownRules = Seq(
       CollapseProject,
       RemoveNoopOperators,
@@ -41,7 +42,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
         limitPushdownRules: _*) :: Nil
   }
 
-  // Push down limit through window need CollapseProject and RemoveNoopOperators.
   private object WithoutOptimize extends RuleExecutor[LogicalPlan] {
     val batches =
       Batch("Without Limit pushdown", FixedPoint(100),
@@ -74,6 +74,17 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
+  test("Should not push down if partitionSpec is not empty") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(a :: Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .limit(20)
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
+  }
+
   test("Should not push down when child's maxRows smaller than limit value") {
     val originalQuery = testRelation
       .select(a, b, c,
@@ -85,7 +96,7 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-  test("Should not push down if it is not range based window function") {
+  test("Should not push down if it is not RankLike/RowNumber window function") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(count(b), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))

@@ -551,7 +551,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
+ * Pushes down [[LocalLimit]] beneath UNION ALL, joins and Window.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -614,11 +614,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
       }
       LocalLimit(exp, newJoin)
 
+    // Adding an extra Limit below WINDOW when there is only one RankLike/RowNumber
+    // window function and partitionSpec is empty.
     case LocalLimit(limitExpr @ IntegerLiteral(limitVal),
         window @ Window(Seq(Alias(WindowExpression(_: RankLike | _: RowNumber,
             WindowSpecDefinition(Nil, orderSpec,
                 SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)), _, _, child))
-        if child.maxRows.forall( _ > limitVal) =>
+        if child.maxRows.forall(_ > limitVal) =>
+      // Sort is needed here because we need global sort.
       LocalLimit(
         limitExpr = limitExpr,
         child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
