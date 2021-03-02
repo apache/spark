@@ -356,7 +356,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         val lhs = splitDisjunctivePredicates(left)
         val rhs = splitDisjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (!common.isEmpty) {
+        if (common.nonEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
@@ -394,7 +394,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
         val lhs = splitConjunctivePredicates(left)
         val rhs = splitConjunctivePredicates(right)
         val common = lhs.filter(e => rhs.exists(e.semanticEquals))
-        if (!common.isEmpty) {
+        if (common.nonEmpty) {
           val ldiff = lhs.filterNot(e => common.exists(e.semanticEquals))
           val rdiff = rhs.filterNot(e => common.exists(e.semanticEquals))
           if (ldiff.isEmpty || rdiff.isEmpty) {
