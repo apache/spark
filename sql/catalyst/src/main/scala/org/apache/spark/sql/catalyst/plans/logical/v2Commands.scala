@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
-import org.apache.spark.sql.types.{BooleanType, DataType, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
 
 /**
  * Base trait for DataSourceV2 write commands
@@ -303,7 +303,11 @@ case class DescribeNamespace(
 }
 
 object DescribeNamespace {
-  def getOutputAttr: Seq[Attribute] = DescribeCommandSchema.describeNamespaceAttributes()
+  def getOutputAttr: Seq[Attribute] = Seq(
+    AttributeReference("info_name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the namespace info").build())(),
+    AttributeReference("info_value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the namespace info").build())())
 }
 
 /**

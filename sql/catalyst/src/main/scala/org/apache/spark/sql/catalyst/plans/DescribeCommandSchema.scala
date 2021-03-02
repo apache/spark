@@ -21,12 +21,6 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
 
 private[sql] object DescribeCommandSchema {
-  def describeNamespaceAttributes(): Seq[AttributeReference] = Seq(
-    AttributeReference("info_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column info").build())(),
-    AttributeReference("info_value", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "value of the column info").build())())
-
   def describeTableAttributes(): Seq[AttributeReference] = Seq(
     AttributeReference("col_name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),

@@ -2610,7 +2610,8 @@ class DataSourceV2SQLSuite
           name = "info_value",
           dataType = StringType,
           nullable = true,
-          metadata = new MetadataBuilder().putString("comment", "value of the column info").build())
+          metadata = new MetadataBuilder()
+            .putString("comment", "value of the namespace info").build())
       assert(noCommentDataset.schema === expectedSchema)
       val isNullDataset = noCommentDataset
         .withColumn("is_null", noCommentDataset("info_value").isNull)
