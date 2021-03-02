@@ -1074,7 +1074,7 @@ object TestSettings {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
 
       if (jdwpEnabled) {
-        val jdwpAddr = sys.props.getOrElse("test.jdwp.address", "0")
+        val jdwpAddr = sys.props.getOrElse("test.jdwp.address", "localhost:0")
         val jdwpServer = sys.props.getOrElse("test.jdwp.server", "y")
         val jdwpSuspend = sys.props.getOrElse("test.jdwp.suspend", "y")
         ("-agentlib:jdwp=transport=dt_socket," +
