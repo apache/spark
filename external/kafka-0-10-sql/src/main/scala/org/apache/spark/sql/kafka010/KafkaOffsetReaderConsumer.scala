@@ -105,7 +105,7 @@ private[kafka010] class KafkaOffsetReaderConsumer(
    * Whether we should divide Kafka TopicPartitions with a lot of data into smaller Spark tasks.
    */
   private def shouldDivvyUpLargePartitions(numTopicPartitions: Int): Boolean = {
-    minPartitions.map(_ > numTopicPartitions).getOrElse(false)
+    minPartitions.exists(_ > numTopicPartitions)
   }
 
   private def nextGroupId(): String = {

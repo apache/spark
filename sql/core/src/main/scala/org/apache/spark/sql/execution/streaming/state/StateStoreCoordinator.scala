@@ -143,7 +143,7 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
       val providerIdsToUnload = providerIdsToCheck.filter { providerId =>
         val providerLoc = instances.get(providerId)
         // This provider is is already loaded in other executor. Marked it to unload.
-        providerLoc.map(_ != taskLocation).getOrElse(false)
+        providerLoc.exists(_ != taskLocation)
       }
       context.reply(providerIdsToUnload)
 

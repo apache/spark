@@ -44,7 +44,7 @@ case class ShowNamespacesExec(
 
     val rows = new ArrayBuffer[InternalRow]()
     namespaces.map(_.quoted).map { ns =>
-      if (pattern.map(StringUtils.filterPattern(Seq(ns), _).nonEmpty).getOrElse(true)) {
+      if (pattern.forall(StringUtils.filterPattern(Seq(ns), _).nonEmpty)) {
         rows += toCatalystRow(ns)
       }
     }
