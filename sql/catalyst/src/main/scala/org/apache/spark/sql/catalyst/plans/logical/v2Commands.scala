@@ -296,10 +296,14 @@ case class DropNamespace(
  */
 case class DescribeNamespace(
     namespace: LogicalPlan,
-    extended: Boolean) extends Command {
+    extended: Boolean,
+    override val output: Seq[Attribute] = DescribeNamespace.getOutputAttr) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 
-  override def output: Seq[Attribute] = Seq(
+}
+
+object DescribeNamespace {
+  def getOutputAttr: Seq[Attribute] = Seq(
     AttributeReference("name", StringType, nullable = false,
       new MetadataBuilder().putString("comment", "name of the column").build())(),
     AttributeReference("value", StringType, nullable = true,

@@ -2600,6 +2600,24 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34577: drop/add columns to a dataset of `DESCRIBE NAMESPACE`") {
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      val description = sql(s"DESCRIBE NAMESPACE ns")
+      val noCommentDataset = description.drop("name")
+      val expectedSchema = new StructType()
+        .add(
+          name = "value",
+          dataType = StringType,
+          nullable = true,
+          metadata = new MetadataBuilder().putString("comment", "value of the column").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("value").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
