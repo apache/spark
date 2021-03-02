@@ -83,6 +83,7 @@ package object config {
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst")
       .version("1.3.0")
+      .alternative(("spark.yarn.user.classpath.first", "1.3"))
       .booleanConf
       .createWithDefault(false)
 
@@ -102,6 +103,7 @@ package object config {
     .doc("The amount of non-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified.")
     .version("2.3.0")
+    .alternative(("spark.yarn.driver.memoryOverhead", "2.3"))
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -294,6 +296,9 @@ package object config {
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.executor.userClassPathFirst")
       .version("1.3.0")
+      .alternative(
+        ("spark.yarn.user.classpath.first", "1.3"),
+        ("spark.files.userClassPathFirst", "1.3"))
       .booleanConf
       .createWithDefault(false)
 
@@ -312,6 +317,7 @@ package object config {
     .doc("The amount of non-heap memory to be allocated per executor, in MiB unless otherwise" +
       " specified.")
     .version("2.3.0")
+    .alternative(("spark.yarn.executor.memoryOverhead", "2.3"))
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -329,7 +335,7 @@ package object config {
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
       "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
     .version("1.6.0")
-    .withAlternative("spark.unsafe.offHeap")
+    .alternative(("spark.unsafe.offHeap", "1.6"))
     .booleanConf
     .createWithDefault(false)
 
@@ -526,8 +532,8 @@ package object config {
 
   private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
     ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
-      .version("0.7.0")
-      .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
+      .version("3.1.0")
+      .alternative(("spark.storage.blockManagerSlaveTimeoutMs", "3.1.0"))
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
@@ -683,16 +689,19 @@ package object config {
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")
+    .alternative(("spark.yarn.keytab", "3.0"))
     .stringConf.createOptional
 
   private[spark] val PRINCIPAL = ConfigBuilder("spark.kerberos.principal")
     .doc("Name of the Kerberos principal.")
     .version("3.0.0")
+    .alternative(("spark.yarn.principal", "3.0"))
     .stringConf
     .createOptional
 
   private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.kerberos.relogin.period")
     .version("3.0.0")
+    .alternative(("spark.yarn.kerberos.relogin.period", "3.0"))
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1m")
 
@@ -712,6 +721,9 @@ package object config {
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
       "that hosts fs.defaultFS does not need to be listed here.")
     .version("3.0.0")
+    .alternative(
+      ("spark.yarn.access.namenodes", "2.2"),
+      ("spark.yarn.access.hadoopFileSystems", "3.0"))
     .stringConf
     .toSequence
     .createWithDefault(Nil)
@@ -767,63 +779,63 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.enabled")
+      .alternative(("spark.blacklist.enabled", "3.1.0"))
       .booleanConf
       .createOptional
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+      .alternative(("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0"))
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.task.maxTaskAttemptsPerNode")
+      .alternative(("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0"))
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedTasksPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedTasksPerExecutor")
+      .alternative(("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0"))
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedTasksPerExecutor")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .alternative(("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0"))
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedExecutorsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.maxFailedExecutorsPerNode")
+      .alternative(("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0"))
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedExecutorsPerNode")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.stage.maxFailedExecutorsPerNode")
+      .alternative(("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0"))
       .intConf
       .createWithDefault(2)
 
   private[spark] val EXCLUDE_ON_FAILURE_TIMEOUT_CONF =
     ConfigBuilder("spark.excludeOnFailure.timeout")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.timeout")
+      .alternative(("spark.blacklist.timeout", "3.1.0"))
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.killBlacklistedExecutors")
+      .alternative(("spark.blacklist.killBlacklistedExecutors", "3.1.0"))
       .booleanConf
       .createWithDefault(false)
 
@@ -838,14 +850,14 @@ package object config {
     ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
       .version("3.1.0")
-      .withAlternative("spark.scheduler.executorTaskBlacklistTime")
+      .alternative(("spark.scheduler.executorTaskBlacklistTime", "2.1.0"))
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.blacklist.application.fetchFailure.enabled")
+      .alternative(("spark.blacklist.application.fetchFailure.enabled", "3.1.0"))
       .booleanConf
       .createWithDefault(false)
 
@@ -865,6 +877,7 @@ package object config {
         ".eventqueue.queueName.capacity` first. If it's not configured, Spark will " +
         "use the default capacity specified by this config.")
       .version("2.3.0")
+      .alternative(("spark.scheduler.listenerbus.eventqueue.size", "2.3"))
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
@@ -1191,6 +1204,9 @@ package object config {
         "For users who enabled external shuffle service, this feature can only work when " +
         "external shuffle service is at least 2.3.0.")
       .version("3.0.0")
+      .alternative(
+        ("spark.reducer.maxReqSizeShuffleToMem", "2.3"),
+        ("spark.maxRemoteBlockSizeFetchToMem", "3.0"))
       .bytesConf(ByteUnit.BYTE)
       // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition
@@ -1223,6 +1239,7 @@ package object config {
         "otherwise specified. These buffers reduce the number of disk seeks and system calls " +
         "made in creating intermediate shuffle files.")
       .version("1.4.0")
+      .alternative(("spark.shuffle.file.buffer.kb", "1.4"))
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The file buffer size must be positive and less than or equal to" +
@@ -1516,7 +1533,7 @@ package object config {
         "before aborting a TaskSet which is unschedulable because all executors are " +
         "excluded due to failures.")
       .version("3.1.0")
-      .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
+      .alternative(("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0"))
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
       .createWithDefault(120)
@@ -1630,6 +1647,7 @@ package object config {
   private[spark] val EXECUTOR_LOGS_ROLLING_MAX_SIZE =
     ConfigBuilder("spark.executor.logs.rolling.maxSize")
       .version("1.4.0")
+      .alternative(("spark.executor.logs.rolling.size.maxBytes", "1.4"))
       .stringConf
       .createWithDefault((1024 * 1024).toString)
 
@@ -1666,6 +1684,7 @@ package object config {
         "Snappy compression codec is used. Lowering this block size " +
         "will also lower shuffle memory usage when Snappy is used")
       .version("1.4.0")
+      .alternative(("spark.io.compression.snappy.block.size", "1.4"))
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
@@ -1675,6 +1694,7 @@ package object config {
         "codec is used. Lowering this block size will also lower shuffle memory " +
         "usage when LZ4 is used.")
       .version("1.4.0")
+      .alternative(("spark.io.compression.lz4.block.size", "1.4"))
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
@@ -1756,6 +1776,7 @@ package object config {
       "buffer to receive it, this represents a fixed memory overhead per reduce task, " +
       "so keep it small unless you have a large amount of memory")
     .version("1.4.0")
+    .alternative(("spark.reducer.maxMbInFlight", "1.4"))
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("48m")
 

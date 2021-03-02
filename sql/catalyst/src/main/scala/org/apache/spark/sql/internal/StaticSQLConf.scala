@@ -66,6 +66,7 @@ object StaticSQLConf {
       .doc("The maximum length allowed in a single cell when " +
         "storing additional schema information in Hive's metastore.")
       .version("1.3.1")
+      .deprecated("3.2", s"Use '${SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead.")
       .intConf
       .createWithDefault(4000)
 

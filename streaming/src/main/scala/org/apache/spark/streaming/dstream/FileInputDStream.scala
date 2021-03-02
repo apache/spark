@@ -89,10 +89,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    * Files with mod times older than this "window" of remembering will be ignored. So if new
    * files are visible within this window, then the file will get selected in the next batch.
    */
-  private val minRememberDurationS = {
-    Seconds(ssc.conf.getTimeAsSeconds("spark.streaming.fileStream.minRememberDuration",
-      ssc.conf.get("spark.streaming.minRememberDuration", "60s")))
-  }
+  private val minRememberDurationS = ssc.conf.get(StreamingConf.FILE_STREAM_MIN_REMEMBER_DURATION)
 
   // This is a def so that it works during checkpoint recovery:
   private def clock = ssc.scheduler.clock

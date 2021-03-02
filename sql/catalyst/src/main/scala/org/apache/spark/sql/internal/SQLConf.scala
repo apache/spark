@@ -31,7 +31,7 @@ import scala.util.matching.Regex
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{LegacyConfigsRegister, SparkConf, SparkContext, TaskContext}
-import org.apache.spark.SparkConf.{DeprecatedConfig, RemovedConfig}
+import org.apache.spark.SparkConf.DeprecatedConfig
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
@@ -423,6 +423,7 @@ object SQLConf {
       .internal()
       .doc("(Deprecated since Spark 3.0)")
       .version("1.6.0")
+      .deprecated("3.0", s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it.")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("64MB")
 
@@ -846,6 +847,7 @@ object SQLConf {
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
          s"releases and replaced by ${SPARK_IGNORE_MISSING_FILES.key}.")
     .version("1.4.0")
+    .deprecated("3.0", s"This config is replaced by '${SPARK_IGNORE_MISSING_FILES.key}'.")
     .booleanConf
     .createWithDefault(false)
 
@@ -928,6 +930,9 @@ object SQLConf {
       "It will be removed in the future releases. If you must use, use 'SparkSessionExtensions' " +
       "instead to inject it as a custom rule.")
     .version("2.1.1")
+    .deprecated("3.0", "Avoid to depend on this optimization to " +
+      "prevent a potential correctness issue. If you must use, use 'SparkSessionExtensions' " +
+      "instead to inject it as a custom rule.")
     .booleanConf
     .createWithDefault(false)
 
@@ -1006,6 +1011,7 @@ object SQLConf {
       "without specifying any storage property will be converted to a data source table, " +
       s"using the data source set by ${DEFAULT_DATA_SOURCE_NAME.key}.")
     .version("2.0.0")
+    .deprecated("3.1", s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead.")
     .booleanConf
     .createWithDefault(false)
 
@@ -2020,6 +2026,7 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.enabled")
       .doc("(Deprecated since Spark 3.0, please set 'spark.sql.execution.arrow.pyspark.enabled'.)")
       .version("2.3.0")
+      .deprecated("3.0", s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it.")
       .booleanConf
       .createWithDefault(false)
 
@@ -2073,6 +2080,7 @@ object SQLConf {
       .doc("(Deprecated since Spark 3.0, please set " +
         "'spark.sql.execution.arrow.pyspark.fallback.enabled'.)")
       .version("2.4.0")
+      .deprecated("3.0", s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it.")
       .booleanConf
       .createWithDefault(true)
 
@@ -2119,6 +2127,8 @@ object SQLConf {
         "the returned Pandas DataFrame based on position, regardless of column label type. " +
         "This configuration will be deprecated in future releases.")
       .version("2.4.1")
+      .deprecated("2.4", "The config allows to switch to the behaviour " +
+        "before Spark 2.4 and will be removed in the future releases.")
       .booleanConf
       .createWithDefault(true)
 
@@ -2510,6 +2520,8 @@ object SQLConf {
       .doc("If it is set to true, the data source provider com.databricks.spark.avro is mapped " +
         "to the built-in but external Avro data source module for backward compatibility.")
       .version("2.4.0")
+      .deprecated("3.2",
+       """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
       .booleanConf
       .createWithDefault(true)
 
@@ -2875,7 +2887,7 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees ancient " +
         "timestamps that are ambiguous between the two calendars.")
       .version("3.1.0")
-      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInWrite")
+      .alternative(("spark.sql.legacy.parquet.int96RebaseModeInWrite", "3.2"))
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2893,7 +2905,7 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInWrite")
+      .alternative(("spark.sql.legacy.parquet.datetimeRebaseModeInWrite", "3.2"))
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2909,7 +2921,7 @@ object SQLConf {
         "timestamps that are ambiguous between the two calendars. This config is only effective " +
         "if the writer info (like Spark, Hive) of the Parquet files is unknown.")
       .version("3.1.0")
-      .withAlternative("spark.sql.legacy.parquet.int96RebaseModeInRead")
+      .alternative(("spark.sql.legacy.parquet.int96RebaseModeInRead", "3.2"))
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2928,7 +2940,7 @@ object SQLConf {
         "TIMESTAMP_MILLIS, TIMESTAMP_MICROS. The INT96 type has the separate config: " +
         s"${PARQUET_INT96_REBASE_MODE_IN_READ.key}.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.parquet.datetimeRebaseModeInRead")
+      .alternative(("spark.sql.legacy.parquet.datetimeRebaseModeInRead", "3.2"))
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2943,7 +2955,7 @@ object SQLConf {
         "When EXCEPTION, which is the default, Spark will fail the writing if it sees " +
         "ancient dates/timestamps that are ambiguous between the two calendars.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInWrite")
+      .alternative(("spark.sql.legacy.avro.datetimeRebaseModeInWrite", "3.2"))
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -2959,7 +2971,7 @@ object SQLConf {
         "ancient dates/timestamps that are ambiguous between the two calendars. This config is " +
         "only effective if the writer info (like Spark, Hive) of the Avro files is unknown.")
       .version("3.0.0")
-      .withAlternative("spark.sql.legacy.avro.datetimeRebaseModeInRead")
+      .alternative(("spark.sql.legacy.avro.datetimeRebaseModeInRead", "3.2"))
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(LegacyBehaviorPolicy.values.map(_.toString))
@@ -3106,44 +3118,19 @@ object SQLConf {
    * in the user's configuration.
    */
   val deprecatedSQLConfigs: Map[String, DeprecatedConfig] = {
-    val configs = Seq(
-      DeprecatedConfig(
-        PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME.key, "2.4",
-        "The config allows to switch to the behaviour before Spark 2.4 " +
-          "and will be removed in the future releases."),
-      DeprecatedConfig(HIVE_VERIFY_PARTITION_PATH.key, "3.0",
-        s"This config is replaced by '${SPARK_IGNORE_MISSING_FILES.key}'."),
-      DeprecatedConfig(ARROW_EXECUTION_ENABLED.key, "3.0",
-        s"Use '${ARROW_PYSPARK_EXECUTION_ENABLED.key}' instead of it."),
-      DeprecatedConfig(ARROW_FALLBACK_ENABLED.key, "3.0",
-        s"Use '${ARROW_PYSPARK_FALLBACK_ENABLED.key}' instead of it."),
-      DeprecatedConfig(SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "3.0",
-        s"Use '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' instead of it."),
-      DeprecatedConfig(OPTIMIZER_METADATA_ONLY.key, "3.0",
-        "Avoid to depend on this optimization to prevent a potential correctness issue. " +
-          "If you must use, use 'SparkSessionExtensions' instead to inject it as a custom rule."),
-      DeprecatedConfig(CONVERT_CTAS.key, "3.1",
-        s"Set '${LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT.key}' to false instead."),
-      DeprecatedConfig("spark.sql.sources.schemaStringLengthThreshold", "3.2",
-        s"Use '${HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key}' instead."),
-      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
-        s"Use '${PARQUET_INT96_REBASE_MODE_IN_WRITE.key}' instead."),
-      DeprecatedConfig(PARQUET_INT96_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${PARQUET_INT96_REBASE_MODE_IN_READ.key}' instead."),
-      DeprecatedConfig(PARQUET_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
-        s"Use '${PARQUET_REBASE_MODE_IN_WRITE.key}' instead."),
-      DeprecatedConfig(PARQUET_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${PARQUET_REBASE_MODE_IN_READ.key}' instead."),
-      DeprecatedConfig(AVRO_REBASE_MODE_IN_WRITE.alternatives.head, "3.2",
-        s"Use '${AVRO_REBASE_MODE_IN_WRITE.key}' instead."),
-      DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
-        s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
-      DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
-        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
-    ) ++ LegacyConfigsRegister.deprecateConfigs
-
-    Map(configs.map { cfg => cfg.key -> cfg } : _*)
+    Map(LegacyConfigsRegister.deprecateConfigs.map { cfg => cfg.key -> cfg } : _*)
   }
+
+  /**
+   * Holds information about keys that have been removed.
+   *
+   * @param key The removed config key.
+   * @param version Version of Spark where key was removed.
+   * @param defaultValue The default config value. It can be used to notice
+   *                     users that they set non-default value to an already removed config.
+   * @param comment Additional info regarding to the removed config.
+   */
+  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
 
   /**
    * The map contains info about removed SQL configs. Keys are SQL config names,
@@ -3175,7 +3162,7 @@ object SQLConf {
         s"Please use `${PLAN_CHANGE_LOG_RULES.key}` instead."),
       RemovedConfig("spark.sql.optimizer.planChangeLog.batches", "3.1.0", "",
         s"Please use `${PLAN_CHANGE_LOG_BATCHES.key}` instead.")
-    ) ++ LegacyConfigsRegister.removedConfigs
+    )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
   }

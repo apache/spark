@@ -133,6 +133,7 @@ package object config extends Logging {
   private[spark] val SPARK_JARS = ConfigBuilder("spark.yarn.jars")
     .doc("Location of jars containing Spark classes.")
     .version("2.0.0")
+    .alternative(("spark.yarn.jar", "2.0"))
     .stringConf
     .toSequence
     .createOptional
@@ -202,6 +203,9 @@ package object config extends Logging {
 
   private[spark] val AM_MAX_WAIT_TIME = ConfigBuilder("spark.yarn.am.waitTime")
     .version("1.3.0")
+    .alternativeWithTranslation(("spark.yarn.applicationMaster.waitTries", "1.3",
+      // Translate old value to a duration, with 10s wait time per try.
+      s => s"${s.toLong * 10}s"))
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("100s")
 
@@ -225,6 +229,7 @@ package object config extends Logging {
 
   private[spark] val MAX_EXECUTOR_FAILURES = ConfigBuilder("spark.yarn.max.executor.failures")
     .version("1.0.0")
+    .alternative(("spark.yarn.max.worker.failures", "1.5"))
     .intConf
     .createOptional
 
@@ -392,7 +397,7 @@ package object config extends Logging {
   private[spark] val YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED =
     ConfigBuilder("spark.yarn.executor.launch.excludeOnFailure.enabled")
       .version("3.1.0")
-      .withAlternative("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
+      .alternative(("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0"))
       .booleanConf
       .createWithDefault(false)
 

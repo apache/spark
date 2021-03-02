@@ -54,6 +54,7 @@ private[spark] object Network {
   private[spark] val RPC_ASK_TIMEOUT =
     ConfigBuilder("spark.rpc.askTimeout")
       .version("1.4.0")
+      .alternative(("spark.akka.askTimeout", "1.4"))
       .stringConf
       .createOptional
 
@@ -78,12 +79,14 @@ private[spark] object Network {
   private[spark] val RPC_LOOKUP_TIMEOUT =
     ConfigBuilder("spark.rpc.lookupTimeout")
       .version("1.4.0")
+      .alternative(("spark.akka.lookupTimeout", "1.4"))
       .stringConf
       .createOptional
 
   private[spark] val RPC_MESSAGE_MAX_SIZE =
     ConfigBuilder("spark.rpc.message.maxSize")
       .version("2.0.0")
+      .alternative(("spark.akka.frameSize", "1.6"))
       .intConf
       .createWithDefault(128)
 
@@ -96,12 +99,14 @@ private[spark] object Network {
   private[spark] val RPC_NUM_RETRIES =
     ConfigBuilder("spark.rpc.numRetries")
       .version("1.4.0")
+      .alternative(("spark.akka.num.retries", "1.4"))
       .intConf
       .createWithDefault(3)
 
   private[spark] val RPC_RETRY_WAIT =
     ConfigBuilder("spark.rpc.retry.wait")
       .version("1.4.0")
+      .alternative(("spark.akka.retry.wait", "1.4"))
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("3s")
 }

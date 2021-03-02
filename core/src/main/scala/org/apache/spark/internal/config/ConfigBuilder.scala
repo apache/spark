@@ -206,20 +206,41 @@ private[spark] case class ConfigBuilder(key: String) {
     this
   }
 
+  /**
+   * Deprecated the current config
+   *
+   * @param version Version of Spark where the config was deprecated.
+   * @param deprecationMessage Message to include in the deprecation warning.
+   * @return
+   */
   def deprecated(version: String, deprecationMessage: String): ConfigBuilder = {
     LegacyConfigsRegister.registerDeprecated(key, version, deprecationMessage)
     this
   }
 
-  def alternated(
-      alternativeConfig: (String, String, String => String),
-      others: (String, String, String => String)*): ConfigBuilder = {
-    LegacyConfigsRegister.registerAlternated(key, alternativeConfig +: others )
+  /**
+   *
+   * @param alternativeConfig
+   * @param others
+   * @return
+   */
+  def alternative(
+      alternativeConfig: (String, String),
+      others: (String, String)*): ConfigBuilder = {
+    val alternativeWithNullTranslation = (alternativeConfig +: others).map { alternative =>
+      _alternatives = _alternatives :+ alternative._1
+      (alternative._1, alternative._2, null: String => String)
+    }
+    alternativeWithTranslation(
+      alternativeWithNullTranslation.head,
+      alternativeWithNullTranslation.tail: _*)
     this
   }
 
-  def removed(version: String, defaultValue: String, comment: String): ConfigBuilder = {
-    LegacyConfigsRegister.registerRemoved(key, version, defaultValue, comment)
+  def alternativeWithTranslation(
+      alternativeConfig: (String, String, String => String),
+      others: (String, String, String => String)*): ConfigBuilder = {
+    LegacyConfigsRegister.registerAlternative(key, alternativeConfig +: others)
     this
   }
 
@@ -235,11 +256,6 @@ private[spark] case class ConfigBuilder(key: String) {
   def withPrepended(key: String, separator: String = " "): ConfigBuilder = {
     _prependedKey = Option(key)
     _prependSeparator = separator
-    this
-  }
-
-  def withAlternative(key: String): ConfigBuilder = {
-    _alternatives = _alternatives :+ key
     this
   }
 

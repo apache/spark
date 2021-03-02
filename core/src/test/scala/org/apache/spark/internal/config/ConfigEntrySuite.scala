@@ -265,8 +265,8 @@ class ConfigEntrySuite extends SparkFunSuite {
   test("conf entry: alternative keys") {
     val conf = new SparkConf()
     val iConf = ConfigBuilder(testKey("a"))
-      .withAlternative(testKey("b"))
-      .withAlternative(testKey("c"))
+      .alternative((testKey("b"), "version"))
+      .alternative((testKey("c"), "version"))
       .intConf.createWithDefault(0)
 
     // no key is set, return default value.

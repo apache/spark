@@ -55,11 +55,14 @@ private[spark] object Kryo {
 
   val KRYO_SERIALIZER_BUFFER_SIZE = ConfigBuilder("spark.kryoserializer.buffer")
     .version("1.4.0")
+    .alternativeWithTranslation(("spark.kryoserializer.buffer.mb", "1.4",
+      s => s"${(s.toDouble * 1000).toInt}k"))
     .bytesConf(ByteUnit.KiB)
     .createWithDefaultString("64k")
 
   val KRYO_SERIALIZER_MAX_BUFFER_SIZE = ConfigBuilder("spark.kryoserializer.buffer.max")
     .version("1.4.0")
+    .alternative(("spark.kryoserializer.buffer.max.mb", "1.4"))
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("64m")
 

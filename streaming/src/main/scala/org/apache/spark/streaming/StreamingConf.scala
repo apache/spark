@@ -185,4 +185,10 @@ object StreamingConf {
       .longConf
       .createWithDefault(0)
 
+  private[streaming] val FILE_STREAM_MIN_REMEMBER_DURATION =
+    ConfigBuilder("spark.streaming.fileStream.minRememberDuration")
+      .version("1.5.0")
+      .alternative(("spark.streaming.minRememberDuration", "1.5"))
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("60s")
 }

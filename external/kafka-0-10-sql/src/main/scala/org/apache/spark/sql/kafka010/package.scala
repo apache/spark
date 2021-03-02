@@ -46,6 +46,7 @@ package object kafka010 {   // scalastyle:ignore
       .doc("The maximum number of consumers cached. Please note it's a soft limit" +
         " (check Structured Streaming Kafka integration guide for further details).")
       .version("3.0.0")
+      .alternative(("spark.sql.kafkaConsumerCache.capacity", "3.0"))
       .intConf
       .createWithDefault(64)
 

@@ -37,6 +37,10 @@ private[spark] object History {
 
   val UPDATE_INTERVAL_S = ConfigBuilder("spark.history.fs.update.interval")
     .version("1.4.0")
+    .alternative(
+      ("spark.history.fs.update.interval.seconds", "1.4"),
+      ("spark.history.fs.updateInterval", "1.3"),
+      ("spark.history.updateInterval", "1.3"))
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("10s")
 
@@ -47,11 +51,13 @@ private[spark] object History {
 
   val CLEANER_INTERVAL_S = ConfigBuilder("spark.history.fs.cleaner.interval")
     .version("1.4.0")
+    .alternative(("spark.history.fs.cleaner.interval.seconds", "1.4"))
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1d")
 
   val MAX_LOG_AGE_S = ConfigBuilder("spark.history.fs.cleaner.maxAge")
     .version("1.4.0")
+    .alternative(("spark.history.fs.cleaner.maxAge.seconds", "1.4"))
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("7d")
 

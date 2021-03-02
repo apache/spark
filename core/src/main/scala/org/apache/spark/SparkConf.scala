@@ -25,7 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, LinkedHashSet}
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
-import org.apache.spark.SparkConf.{AlternateConfig, DeprecatedConfig, RemovedConfig}
+import org.apache.spark.SparkConf.{AlternativeConfig, DeprecatedConfig}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.History._
@@ -585,24 +585,20 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
 private[spark] object LegacyConfigsRegister {
   lazy val deprecateConfigs = new ArrayBuffer[DeprecatedConfig]()
-  lazy val removedConfigs = new ArrayBuffer[RemovedConfig]()
-  lazy val alternatedConfigs = new HashMap[String, ArrayBuffer[AlternateConfig]]()
+  lazy val alternativeConfigs = new HashMap[String, ArrayBuffer[AlternativeConfig]]()
 
   def registerDeprecated(key: String, version: String, deprecationMessage: String): Unit = {
     deprecateConfigs += DeprecatedConfig(key, version, deprecationMessage)
   }
 
-  def registerAlternated(
+  def registerAlternative(
       activeKey: String,
-      alternativeConfigs: Seq[(String, String, String => String)]): Unit = {
-    val configs = alternatedConfigs.getOrElseUpdate(activeKey, new ArrayBuffer[AlternateConfig]())
-    configs ++= alternativeConfigs.map { case (alternativeKey, version, translation) =>
-      AlternateConfig(alternativeKey, version, translation)
+      alternatives: Seq[(String, String, String => String)]): Unit = {
+    val configs =
+      alternativeConfigs.getOrElseUpdate(activeKey, new ArrayBuffer[AlternativeConfig]())
+    configs ++= alternatives.map { case (alternativeKey, deprecatedVersion, translation) =>
+      AlternativeConfig(alternativeKey, deprecatedVersion, translation)
     }
-  }
-
-  def registerRemoved(key: String, version: String, defaultValue: String, comment: String): Unit = {
-    removedConfigs += RemovedConfig(key, version, defaultValue, comment)
   }
 }
 
@@ -619,15 +615,11 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.cache.class", "0.8",
         "The spark.cache.class property is no longer being used! Specify storage levels using " +
         "the RDD.persist() method instead."),
-      DeprecatedConfig("spark.yarn.user.classpath.first", "1.3",
-        "Please use spark.{driver,executor}.userClassPathFirst instead."),
       DeprecatedConfig("spark.kryoserializer.buffer.mb", "1.4",
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
       DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
-      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
-        "Please use the new excludedOnFailure options, spark.excludeOnFailure.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
       DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
@@ -637,30 +629,6 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
       DeprecatedConfig("spark.executor.plugins", "3.0.0",
         "Feature replaced with new plugin API. See Monitoring documentation."),
-      DeprecatedConfig("spark.blacklist.enabled", "3.1.0",
-        "Please use spark.excludeOnFailure.enabled"),
-      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor"),
-      DeprecatedConfig("spark.blacklist.task.maxTaskAttemptsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.task.maxTaskAttemptsPerNode"),
-      DeprecatedConfig("spark.blacklist.application.maxFailedTasksPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.application.maxFailedTasksPerExecutor"),
-      DeprecatedConfig("spark.blacklist.stage.maxFailedTasksPerExecutor", "3.1.0",
-        "Please use spark.excludeOnFailure.stage.maxFailedTasksPerExecutor"),
-      DeprecatedConfig("spark.blacklist.application.maxFailedExecutorsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.application.maxFailedExecutorsPerNode"),
-      DeprecatedConfig("spark.blacklist.stage.maxFailedExecutorsPerNode", "3.1.0",
-        "Please use spark.excludeOnFailure.stage.maxFailedExecutorsPerNode"),
-      DeprecatedConfig("spark.blacklist.timeout", "3.1.0",
-        "Please use spark.excludeOnFailure.timeout"),
-      DeprecatedConfig("spark.blacklist.application.fetchFailure.enabled", "3.1.0",
-        "Please use spark.excludeOnFailure.application.fetchFailure.enabled"),
-      DeprecatedConfig("spark.scheduler.blacklist.unschedulableTaskSetTimeout", "3.1.0",
-        "Please use spark.scheduler.excludeOnFailure.unschedulableTaskSetTimeout"),
-      DeprecatedConfig("spark.blacklist.killBlacklistedExecutors", "3.1.0",
-        "Please use spark.excludeOnFailure.killExcludedExecutors"),
-      DeprecatedConfig("spark.yarn.blacklist.executor.launch.blacklisting.enabled", "3.1.0",
-        "Please use spark.yarn.executor.launch.excludeOnFailure.enabled")
     ) ++ LegacyConfigsRegister.deprecateConfigs
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -674,75 +642,7 @@ private[spark] object SparkConf extends Logging {
    *
    * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
-  private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
-    EXECUTOR_USER_CLASS_PATH_FIRST.key -> Seq(
-      AlternateConfig("spark.files.userClassPathFirst", "1.3")),
-    UPDATE_INTERVAL_S.key -> Seq(
-      AlternateConfig("spark.history.fs.update.interval.seconds", "1.4"),
-      AlternateConfig("spark.history.fs.updateInterval", "1.3"),
-      AlternateConfig("spark.history.updateInterval", "1.3")),
-    CLEANER_INTERVAL_S.key -> Seq(
-      AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
-    MAX_LOG_AGE_S.key -> Seq(
-      AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
-    "spark.yarn.am.waitTime" -> Seq(
-      AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
-        // Translate old value to a duration, with 10s wait time per try.
-        translation = s => s"${s.toLong * 10}s")),
-    REDUCER_MAX_SIZE_IN_FLIGHT.key -> Seq(
-      AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
-    KRYO_SERIALIZER_BUFFER_SIZE.key -> Seq(
-      AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
-        translation = s => s"${(s.toDouble * 1000).toInt}k")),
-    KRYO_SERIALIZER_MAX_BUFFER_SIZE.key -> Seq(
-      AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
-    SHUFFLE_FILE_BUFFER_SIZE.key -> Seq(
-      AlternateConfig("spark.shuffle.file.buffer.kb", "1.4")),
-    EXECUTOR_LOGS_ROLLING_MAX_SIZE.key -> Seq(
-      AlternateConfig("spark.executor.logs.rolling.size.maxBytes", "1.4")),
-    IO_COMPRESSION_SNAPPY_BLOCKSIZE.key -> Seq(
-      AlternateConfig("spark.io.compression.snappy.block.size", "1.4")),
-    IO_COMPRESSION_LZ4_BLOCKSIZE.key -> Seq(
-      AlternateConfig("spark.io.compression.lz4.block.size", "1.4")),
-    RPC_NUM_RETRIES.key -> Seq(
-      AlternateConfig("spark.akka.num.retries", "1.4")),
-    RPC_RETRY_WAIT.key -> Seq(
-      AlternateConfig("spark.akka.retry.wait", "1.4")),
-    RPC_ASK_TIMEOUT.key -> Seq(
-      AlternateConfig("spark.akka.askTimeout", "1.4")),
-    RPC_LOOKUP_TIMEOUT.key -> Seq(
-      AlternateConfig("spark.akka.lookupTimeout", "1.4")),
-    "spark.streaming.fileStream.minRememberDuration" -> Seq(
-      AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
-    "spark.yarn.max.executor.failures" -> Seq(
-      AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
-    MEMORY_OFFHEAP_ENABLED.key -> Seq(
-      AlternateConfig("spark.unsafe.offHeap", "1.6")),
-    RPC_MESSAGE_MAX_SIZE.key -> Seq(
-      AlternateConfig("spark.akka.frameSize", "1.6")),
-    "spark.yarn.jars" -> Seq(
-      AlternateConfig("spark.yarn.jar", "2.0")),
-    MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
-      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3"),
-      AlternateConfig("spark.maxRemoteBlockSizeFetchToMem", "3.0")),
-    LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
-      AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
-    DRIVER_MEMORY_OVERHEAD.key -> Seq(
-      AlternateConfig("spark.yarn.driver.memoryOverhead", "2.3")),
-    EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
-      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3")),
-    KEYTAB.key -> Seq(
-      AlternateConfig("spark.yarn.keytab", "3.0")),
-    PRINCIPAL.key -> Seq(
-      AlternateConfig("spark.yarn.principal", "3.0")),
-    KERBEROS_RELOGIN_PERIOD.key -> Seq(
-      AlternateConfig("spark.yarn.kerberos.relogin.period", "3.0")),
-    KERBEROS_FILESYSTEMS_TO_ACCESS.key -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"),
-      AlternateConfig("spark.yarn.access.hadoopFileSystems", "3.0")),
-    "spark.kafka.consumer.cache.capacity" -> Seq(
-      AlternateConfig("spark.sql.kafkaConsumerCache.capacity", "3.0"))
-  ) ++ LegacyConfigsRegister.alternatedConfigs
+  private val configsWithAlternatives = LegacyConfigsRegister.alternativeConfigs
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
@@ -750,7 +650,7 @@ private[spark] object SparkConf extends Logging {
    *
    * Maps the deprecated config name to a 2-tuple (new config name, alternate config info).
    */
-  private val allAlternatives: Map[String, (String, AlternateConfig)] = {
+  private val allAlternatives: Map[String, (String, AlternativeConfig)] = {
     configsWithAlternatives.keys.flatMap { key =>
       configsWithAlternatives(key).map { cfg => (cfg.key -> (key -> cfg)) }
     }.toMap
@@ -832,21 +732,9 @@ private[spark] object SparkConf extends Logging {
    * @param version The Spark version in which the key was deprecated.
    * @param translation A translation function for converting old config values into new ones.
    */
-  private[spark] case class AlternateConfig(
+  private[spark] case class AlternativeConfig(
       key: String,
       version: String,
       translation: String => String = null)
-
-  /**
-   * Holds information about keys that have been removed.
-   *
-   * @param key The removed config key.
-   * @param version Version of Spark where key was removed.
-   * @param defaultValue The default config value. It can be used to notice
-   *                     users that they set non-default value to an already removed config.
-   * @param comment Additional info regarding to the removed config.
-   */
-  private[spark]
-  case class RemovedConfig(key: String, version: String, defaultValue: String, comment: String)
 
 }
