@@ -1084,7 +1084,7 @@ private[spark] object JsonProtocol {
       .map { l => l.extract[List[JValue]].map(_.extract[Int]) }
       .getOrElse(Seq.empty)
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
-    val isBarrier = jsonOption(json \ "Barrier").map(_.extract[Boolean]).getOrElse(false)
+    val isBarrier = jsonOption(json \ "Barrier").exists(_.extract[Boolean])
     val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val memSize = (json \ "Memory Size").extract[Long]

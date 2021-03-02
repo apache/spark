@@ -156,7 +156,7 @@ class CSVOptions(
       s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS][XXX]"
     })
 
-  val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get("multiLine").exists(_.toBoolean)
 
   val maxColumns = getInt("maxColumns", 20480)
 

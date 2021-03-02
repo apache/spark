@@ -133,7 +133,7 @@ case class CaseWhen(
 
   override def nullable: Boolean = {
     // Result is nullable if any of the branch is nullable, or if the else value is nullable
-    branches.exists(_._2.nullable) || elseValue.map(_.nullable).getOrElse(true)
+    branches.exists(_._2.nullable) || elseValue.forall(_.nullable)
   }
 
   override def checkInputDataTypes(): TypeCheckResult = {

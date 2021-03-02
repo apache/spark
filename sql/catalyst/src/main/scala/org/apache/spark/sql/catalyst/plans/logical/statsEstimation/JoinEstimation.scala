@@ -86,7 +86,7 @@ case class JoinEstimation(join: Join) extends Logging {
       val inputAttrStats = AttributeMap(
         leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
       val attributesWithStat = join.output.filter(a =>
-        inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
+        inputAttrStats.get(a).exists(_.hasCountStats))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
 
       val outputStats: Seq[(Attribute, ColumnStat)] = if (outputRows == 0) {

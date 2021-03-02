@@ -48,7 +48,7 @@ private[spark] class SparkUI private (
   with Logging
   with UIRoot {
 
-  val killEnabled = sc.map(_.conf.get(UI_KILL_ENABLED)).getOrElse(false)
+  val killEnabled = sc.exists(_.conf.get(UI_KILL_ENABLED))
 
   var appId: String = _
 
@@ -66,7 +66,7 @@ private[spark] class SparkUI private (
     addStaticHandler(SparkUI.STATIC_RESOURCE_DIR)
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
-    if (sc.map(_.conf.get(UI_PROMETHEUS_ENABLED)).getOrElse(false)) {
+    if (sc.exists(_.conf.get(UI_PROMETHEUS_ENABLED))) {
       attachHandler(PrometheusResource.getServletHandler(this))
     }
 

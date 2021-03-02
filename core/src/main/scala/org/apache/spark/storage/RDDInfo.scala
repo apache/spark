@@ -60,8 +60,7 @@ private[spark] object RDDInfo {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
     val callsiteLongForm = Option(SparkEnv.get)
-      .map(_.conf.get(EVENT_LOG_CALLSITE_LONG_FORM))
-      .getOrElse(false)
+      .exists(_.conf.get(EVENT_LOG_CALLSITE_LONG_FORM))
 
     val callSite = if (callsiteLongForm) {
       rdd.creationSite.longForm
