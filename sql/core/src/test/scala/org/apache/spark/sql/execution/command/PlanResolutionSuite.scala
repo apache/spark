@@ -867,9 +867,9 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, false)
+            TableIdentifier(tblName, Some("default")), Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map.empty, true)
+            TableIdentifier(tblName, Some("default")), Map.empty, true, parsed2.output)
 
           comparePlans(parsed1, expected1)
           comparePlans(parsed2, expected2)
@@ -891,7 +891,7 @@ class PlanResolutionSuite extends AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
-            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false)
+            TableIdentifier(tblName, Some("default")), Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
