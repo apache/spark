@@ -1176,8 +1176,8 @@ private[spark] object JsonProtocol {
     val memSize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
-    val outputDeterministicLevel = DeterministicLevel
-      .withName((json \ "DeterministicLevel").extract[String])
+    val outputDeterministicLevel = DeterministicLevel.withName(
+      jsonOption(json \ "DeterministicLevel").map(_.extract[String]).getOrElse("DETERMINATE"))
 
     val rddInfo =
       new RDDInfo(rddId, name, numPartitions, storageLevel, isBarrier, parentIds, callsite, scope,

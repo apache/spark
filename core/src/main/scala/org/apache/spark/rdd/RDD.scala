@@ -2013,7 +2013,7 @@ abstract class RDD[T: ClassTag](
    * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
    * for the definition.
    *
-   * By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is DETERMINATE. For
+   *l By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is DETERMINATE. For
    * RDDs with parents, we will generate a deterministic level candidate per parent according to
    * the dependency. The deterministic level of the current RDD is the deterministic level
    * candidate that is deterministic least. Please override [[getOutputDeterministicLevel]] to
