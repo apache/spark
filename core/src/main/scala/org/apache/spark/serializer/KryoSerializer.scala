@@ -153,7 +153,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
-    def registerAvro[T >: Null <: GenericContainer](implicit ct: ClassTag[T]) =
+    def registerAvro[T <: GenericContainer]()(implicit ct: ClassTag[T]): Unit =
       kryo.register(ct.runtimeClass, new GenericAvroSerializer[T](avroSchemas))
     registerAvro[GenericRecord]
     registerAvro[GenericData.Record]

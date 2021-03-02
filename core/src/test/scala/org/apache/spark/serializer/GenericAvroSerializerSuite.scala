@@ -28,7 +28,11 @@ import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.internal.config.SERIALIZER
 
 class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
-  conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+
+  override def beforeAll(): Unit = {
+    conf.set(SERIALIZER, "org.apache.spark.serializer.KryoSerializer")
+    super.beforeAll()
+  }
 
   val recordSchema : Schema = SchemaBuilder
     .record("testRecord").fields()
@@ -101,8 +105,7 @@ class GenericAvroSerializerSuite extends SparkFunSuite with SharedSparkContext {
     }
 
     test(s"SPARK-34477: GenericData.$name serialization and deserialization" +
-      s"through KryoSerializer ") {
-      require(conf.get(SERIALIZER) == "org.apache.spark.serializer.KryoSerializer")
+      " through KryoSerializer ") {
       val rdd = sc.parallelize((0 until 10).map(_ => datum), 2)
       assert(rdd.collect() sameElements Array.fill(10)(datum))
     }

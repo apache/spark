@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  *                that needs to be serialized.
  * @tparam D the subtype of [[GenericContainer]] handled by this serializer
  */
-private[serializer] class GenericAvroSerializer[D >: Null <: GenericContainer]
+private[serializer] class GenericAvroSerializer[D <: GenericContainer]
   (schemas: Map[Long, String]) extends KSerializer[D] {
 
   /** Used to reduce the amount of effort to compress the schema */
@@ -153,7 +153,7 @@ private[serializer] class GenericAvroSerializer[D >: Null <: GenericContainer]
     val decoder = DecoderFactory.get.directBinaryDecoder(input, null)
     readerCache.getOrElseUpdate(schema, GenericData.get.createDatumReader(schema))
       .asInstanceOf[DatumReader[D]]
-      .read(null, decoder)
+      .read(null.asInstanceOf[D], decoder)
   }
 
   override def write(kryo: Kryo, output: KryoOutput, datum: D): Unit =
