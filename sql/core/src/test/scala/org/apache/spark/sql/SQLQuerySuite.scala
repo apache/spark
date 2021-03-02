@@ -3837,7 +3837,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     val sumFuncClass = "org.apache.spark.examples.sql.Spark33084"
     val functionName = "test_udf"
     withTempDir { dir =>
-      System.setProperty("ivy.default.ivy.user.dir", dir.getAbsolutePath)
+      System.setProperty("ivy.home", dir.getAbsolutePath)
       val sourceJar = new File(Thread.currentThread().getContextClassLoader
         .getResource("SPARK-33084.jar").getFile)
       val targetCacheJarDir = new File(dir.getAbsolutePath +
