@@ -399,7 +399,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       // Check column name exists
       val attr = df.resolve(colName) match {
         case a: Attribute => a
-        case _ => throw new IllegalArgumentException("Nested field is not supported.")
+        case _ => throw new UnsupportedOperationException(
+          s"Nested field ${colName} is not supported.")
       }
       // Check data type
       replaceValue match {
