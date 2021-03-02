@@ -228,10 +228,10 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
            | part1 = date'2019-01-01',
            | part2 = timestamp'2019-01-01 11:11:11',
            | part3 = X'$binaryHexStr',
-           | part4 = 'a',
-           | part5 = 'a',
-           | part6 = 'a',
-           | part7 = 'p1'
+           | part4 = 'p1',
+           | part5 = date'2019-01-01',
+           | part6 = timestamp'2019-01-01 11:11:11',
+           | part7 = X'$binaryHexStr'
            | ) VALUES('a')
         """.stripMargin)
       checkAnswer(sql(
@@ -243,38 +243,11 @@ trait SQLInsertTestSuite extends QueryTest with SQLTestUtils {
           |   CAST(part3 as STRING),
           |   CAST(part4 as STRING),
           |   CAST(part5 as STRING),
-          |   CAST(part6 as STRING)
+          |   CAST(part6 as STRING),
+          |   CAST(part7 as STRING)
           | FROM t1
-          | WHERE part7 = 'p1'
         """.stripMargin),
-        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "a", "a", "a"))
-
-      // test type conversion
-      sql(
-        s"""
-           | INSERT OVERWRITE t1 PARTITION(
-           | part1 = timestamp'2019-01-02 11:11:11',
-           | part2 = timestamp'2019-01-02 11:11:11',
-           | part3 = X'$binaryHexStr',
-           | part4 = date'2019-01-01',
-           | part5 = timestamp'2019-01-01 11:11:11',
-           | part6 = X'$binaryHexStr',
-           | part7 = 'p2'
-           | ) VALUES('a')""".stripMargin)
-      checkAnswer(sql(
-        """
-          | SELECT
-          |   name,
-          |   CAST(part1 AS STRING),
-          |   CAST(part2 as STRING),
-          |   CAST(part3 as STRING),
-          |   CAST(part4 as STRING),
-          |   CAST(part5 as STRING),
-          |   CAST(part6 as STRING)
-          | FROM t1
-          | WHERE part7 = 'p2'
-         """.stripMargin),
-        Row("a", "2019-01-02", "2019-01-02 11:11:11", "Spark SQL",
+        Row("a", "2019-01-01", "2019-01-01 11:11:11", "Spark SQL", "p1",
           "2019-01-01", "2019-01-01 11:11:11", "Spark SQL"))
 
       val e = intercept[AnalysisException] {
