@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -90,7 +90,7 @@ public class OneForOneBlockFetcher {
     }
     if (!transportConf.useOldFetchProtocol() && isShuffleBlocks(blockIds)) {
       this.blockIds = new String[blockIds.length];
-      this.message = createFetchShuffleBlocksMsgAndRebuildBlockIds(appId, execId, blockIds);
+      this.message = createFetchShuffleBlocksMsgAndBuildBlockIds(appId, execId, blockIds);
     } else {
       this.blockIds = blockIds;
       this.message = new OpenBlocks(appId, execId, blockIds);
@@ -110,13 +110,14 @@ public class OneForOneBlockFetcher {
    * Create FetchShuffleBlocks message and rebuild internal blockIds by
    * analyzing the pass in blockIds.
    */
-  private FetchShuffleBlocks createFetchShuffleBlocksMsgAndRebuildBlockIds(
+  private FetchShuffleBlocks createFetchShuffleBlocksMsgAndBuildBlockIds(
       String appId, String execId, String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
     boolean batchFetchEnabled = firstBlock.length == 5;
 
-    HashMap<Long, ArrayList<Integer>> mapIdToReduceIds = new HashMap<>();
+    LinkedHashMap<Long, ArrayList<Integer>> mapIdToReduceIds = new LinkedHashMap<>();
+    LinkedHashMap<Long, ArrayList<String>> mapIdToBlockIds = new LinkedHashMap<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
       if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
@@ -127,7 +128,11 @@ public class OneForOneBlockFetcher {
       if (!mapIdToReduceIds.containsKey(mapId)) {
         mapIdToReduceIds.put(mapId, new ArrayList<>());
       }
+      if (!mapIdToBlockIds.containsKey(mapId)) {
+        mapIdToBlockIds.put(mapId, new ArrayList<>());
+      }
       mapIdToReduceIds.get(mapId).add(Integer.parseInt(blockIdParts[3]));
+      mapIdToBlockIds.get(mapId).add(blockId);
       if (batchFetchEnabled) {
         // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
         // FetchShuffleBlocks to store the start and end reduce id for range
@@ -138,24 +143,28 @@ public class OneForOneBlockFetcher {
     }
     long[] mapIds = Longs.toArray(mapIdToReduceIds.keySet());
     int[][] reduceIdArr = new int[mapIds.length][];
-    int blockIdIndex = 0;
     for (int i = 0; i < mapIds.length; i++) {
       reduceIdArr[i] = Ints.toArray(mapIdToReduceIds.get(mapIds[i]));
+    }
+
+    // Fill internal `blockIds` by the read order in using `FetchShuffleBlocks`
+    long[] blockMapIds = Longs.toArray(mapIdToBlockIds.keySet());
+    assert(mapIds.length == blockMapIds.length);
+    int blockIdIndex = 0;
+    for (int i = 0; i < blockMapIds.length; i++) {
       // The `blockIds`'s order must be same with the read order specified in in FetchShuffleBlocks
       // because the shuffle data's return order should match the `blockIds`'s order to ensure
       // blockId and data match.
-      if (!batchFetchEnabled) {
-        for (int j = 0; j < reduceIdArr[i].length; j++) {
-          this.blockIds[blockIdIndex++] = "shuffle_" + shuffleId + "_" + mapIds[i] + "_"
-                  + reduceIdArr[i][j];
-        }
-      } else {
-        assert (reduceIdArr[i].length == 2);
-        this.blockIds[blockIdIndex++] = "shuffle_" + shuffleId + "_" + mapIds[i] + "_"
-                + reduceIdArr[i][0] + "_" + reduceIdArr[i][1];
+      long blockMapId = blockMapIds[i];
+      // The keys in `mapIdToReduceIds` and `mapIdToBlockIds` should be same order.
+      assert(blockMapId == mapIds[i]);
+      ArrayList<String> blockIdsByMapId = mapIdToBlockIds.get(blockMapId);
+      for (int j = 0; j < blockIdsByMapId.size(); j++) {
+        this.blockIds[blockIdIndex++] = blockIdsByMapId.get(i);
       }
     }
     assert(blockIdIndex == this.blockIds.length);
+
     return new FetchShuffleBlocks(
       appId, execId, shuffleId, mapIds, reduceIdArr, batchFetchEnabled);
   }
