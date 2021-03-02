@@ -18,7 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
@@ -53,22 +53,22 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private[sql] val sqlConfEntries = java.util.Collections.synchronizedMap(
-    new java.util.HashMap[String, ConfigEntry[_]]())
+  private[sql] val sqlConfEntries =
+    new ConcurrentHashMap[String, ConfigEntry[_]]()
 
   val staticConfKeys: java.util.Set[String] =
     java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
-    require(!sqlConfEntries.containsKey(entry.key),
-      s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
-    sqlConfEntries.put(entry.key, entry)
-  }
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.merge(entry.key, entry,
+    (existingConfigEntry, newConfigEntry) => {
+      require(existingConfigEntry == null,
+        s"Duplicate SQLConfigEntry. ${newConfigEntry.key} has been registered")
+      newConfigEntry
+    }
+  )
 
   // For testing only
-  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.synchronized {
-    sqlConfEntries.remove(entry.key)
-  }
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
