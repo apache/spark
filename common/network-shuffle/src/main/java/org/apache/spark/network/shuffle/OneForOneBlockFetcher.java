@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -116,7 +116,7 @@ public class OneForOneBlockFetcher {
     int shuffleId = Integer.parseInt(firstBlock[1]);
     boolean batchFetchEnabled = firstBlock.length == 5;
 
-    HashMap<Long, BlocksInfo> mapIdToBlocksInfo = new HashMap<>();
+    LinkedHashMap<Long, BlocksInfo> mapIdToBlocksInfo = new LinkedHashMap<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
       if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
@@ -125,7 +125,7 @@ public class OneForOneBlockFetcher {
       }
       long mapId = Long.parseLong(blockIdParts[2]);
       if (!mapIdToBlocksInfo.containsKey(mapId)) {
-        mapIdToBlocksInfo.put(mapId, new BlocksInfo(new ArrayList<>(), new ArrayList<>()));
+        mapIdToBlocksInfo.put(mapId, new BlocksInfo());
       }
       BlocksInfo blocksInfoByMapId = mapIdToBlocksInfo.get(mapId);
       blocksInfoByMapId.blockIds.add(blockId);
@@ -173,12 +173,12 @@ public class OneForOneBlockFetcher {
   /** The reduceIds and blocks in a single mapId */
   private class BlocksInfo {
 
-    ArrayList<Integer> reduceIds;
-    ArrayList<String> blockIds;
+    final ArrayList<Integer> reduceIds;
+    final ArrayList<String> blockIds;
 
-    public BlocksInfo(ArrayList<Integer> reduceIds, ArrayList<String> blockIds) {
-      this.reduceIds = reduceIds;
-      this.blockIds = blockIds;
+    public BlocksInfo() {
+      this.reduceIds = new ArrayList<>();
+      this.blockIds = new ArrayList<>();
     }
   }
 
