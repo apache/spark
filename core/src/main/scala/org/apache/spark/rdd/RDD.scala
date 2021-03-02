@@ -2022,7 +2022,7 @@ abstract class RDD[T: ClassTag](
   // TODO: make it public so users can set deterministic level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different deterministic level for
   // different partitions.
-  private[spark] final lazy val outputDeterministicLevel: DeterministicLevel.Value = {
+  private[spark] final def outputDeterministicLevel: DeterministicLevel.Value = {
     if (isReliablyCheckpointed) {
       DeterministicLevel.DETERMINATE
     } else {
