@@ -46,7 +46,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
     // enable memo iff we serialize the row with schema (schema and class should be memorized)
-    val pickle = new Pickler(needConversion)
+    val pickle = new Pickler(needConversion, false)
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     // For each row, add it to the queue.
     val inputIterator = iter.map { row =>
