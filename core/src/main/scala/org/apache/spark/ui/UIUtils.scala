@@ -506,6 +506,7 @@ private[spark] object UIUtils extends Logging {
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
            data-placement="top">
           DAG Visualization
+
         </a>
       </span>
       <div id="dag-viz-graph"></div>
@@ -524,6 +525,9 @@ private[spark] object UIUtils extends Logging {
                 } ++
                 g.rootCluster.getBarrierClusters.map { c =>
                   <div class="barrier-rdd">{c.id}</div>
+                } ++
+                g.rootCluster.getIndeterminateNodes.map { n =>
+                  <div class="indeterminate-rdd">{n.id}</div>
                 }
               }
             </div>
