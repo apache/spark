@@ -89,6 +89,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   implicit def newInstantEncoder: Encoder[java.time.Instant] = Encoders.INSTANT
 
   /** @since 3.2.0 */
+  implicit def newDurationEncoder: Encoder[java.time.Duration] = Encoders.DURATION
+
+  /** @since 3.2.0 */
   implicit def newJavaEnumEncoder[A <: java.lang.Enum[_] : TypeTag]: Encoder[A] =
     ExpressionEncoder()
 

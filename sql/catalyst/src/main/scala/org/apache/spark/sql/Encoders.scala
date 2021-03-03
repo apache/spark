@@ -136,6 +136,14 @@ object Encoders {
   def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.Duration` class
+   * to the internal representation of nullable Catalyst's DayTimeIntervalType.
+   *
+   * @since 3.2.0
+   */
+  def DURATION: Encoder[java.time.Duration] = ExpressionEncoder()
+
+  /**
    * Creates an encoder for Java Bean of type T.
    *
    * T must be publicly accessible.
