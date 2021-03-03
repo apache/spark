@@ -775,7 +775,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
   }
 
   test("test CTAS") {
-    withTable("test_ctas_1234") {
+    withTable("test_ctas_123") {
       sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
       checkAnswer(
         sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
@@ -1969,7 +1969,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
       for (i <- 1 to 3) {
         Files.write(s"$i", new File(dirPath, s"part-r-0000$i"), StandardCharsets.UTF_8)
       }
-      withTable("load_t_folder_wildcard") {
+      withTable("load_t") {
         sql("CREATE TABLE load_t (a STRING) USING hive")
         sql(s"LOAD DATA LOCAL INPATH '${
           path.substring(0, path.length - 1)

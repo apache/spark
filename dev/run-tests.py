@@ -20,7 +20,6 @@
 import itertools
 from argparse import ArgumentParser
 import os
-import random
 import re
 import sys
 import subprocess
@@ -257,21 +256,11 @@ def build_spark_documentation():
     os.chdir(SPARK_HOME)
 
 
-def get_zinc_port():
-    """
-    Get a randomized port on which to start Zinc
-    """
-    return random.randrange(3030, 4030)
-
-
 def exec_maven(mvn_args=()):
     """Will call Maven in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    zinc_port = get_zinc_port()
-    os.environ["ZINC_PORT"] = "%s" % zinc_port
-    zinc_flag = "-DzincPort=%s" % zinc_port
-    flags = [os.path.join(SPARK_HOME, "build", "mvn"), zinc_flag]
+    flags = [os.path.join(SPARK_HOME, "build", "mvn")]
     run_cmd(flags + mvn_args)
 
 

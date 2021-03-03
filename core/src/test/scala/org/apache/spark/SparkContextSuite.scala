@@ -1035,13 +1035,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-33084: Add jar support Ivy URI -- default transitive = false") {
+  test("SPARK-33084: Add jar support Ivy URI -- default transitive = true") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
     sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
-
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
@@ -1081,6 +1078,22 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         .head.getRenderedMessage
       dependencyJars.foreach(jar => assert(existMsg.contains(jar)))
     }
+  }
+
+  test("SPARK-34506: Add jar support Ivy URI -- transitive=false will not download " +
+    "dependency jars") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=false")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+  }
+
+  test("SPARK-34506: Add jar support Ivy URI -- test exclude param when transitive unspecified") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?exclude=commons-lang:commons-lang")
+    assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
+    assert(sc.listJars().exists(_.contains("org.slf4j_slf4j-api-1.7.10.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
   test("SPARK-33084: Add jar support Ivy URI -- test exclude param when transitive=true") {
@@ -1131,24 +1144,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-33084: Add jar support Ivy URI -- test param key case sensitive") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=true")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=false")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
 
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?TRANSITIVE=false")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
-  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case sensitive") {
+  test("SPARK-33084: Add jar support Ivy URI -- test transitive value case insensitive") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=TRUE")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=FALSE")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
     assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
 
-    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=true")
+    sc.addJar("ivy://org.apache.hive:hive-storage-api:2.7.0?transitive=false")
     assert(sc.listJars().exists(_.contains("org.apache.hive_hive-storage-api-2.7.0.jar")))
-    assert(sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
+    assert(!sc.listJars().exists(_.contains("commons-lang_commons-lang-2.6.jar")))
   }
 
   test("SPARK-34346: hadoop configuration priority for spark/hive/hadoop configs") {

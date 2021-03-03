@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -33,6 +34,8 @@ class RemoveNoopUnionSuite extends PlanTest {
   }
 
   val testRelation = LocalRelation("a".attr.int, "b".attr.int)
+  val testRelation2 =
+    LocalRelation(output = Seq("a".attr.int, "b".attr.int), data = Seq(InternalRow(1, 2)))
 
   test("SPARK-34474: Remove redundant Union under Distinct") {
     val union = Union(testRelation :: testRelation :: Nil)
@@ -66,5 +69,17 @@ class RemoveNoopUnionSuite extends PlanTest {
     val distinct = Distinct(union)
     val optimized = Optimize.execute(distinct)
     comparePlans(optimized, distinct)
+  }
+
+  test("SPARK-34548: Remove unnecessary children from Union") {
+    val union = Union(testRelation :: testRelation :: testRelation2 :: Nil)
+    val distinct = Distinct(union)
+    val optimized1 = Optimize.execute(distinct)
+    comparePlans(optimized1, Distinct(Union(testRelation :: testRelation2 :: Nil)))
+
+    val deduplicate = Deduplicate(testRelation.output, union)
+    val optimized2 = Optimize.execute(deduplicate)
+    comparePlans(optimized2,
+      Deduplicate(testRelation.output, Union(testRelation :: testRelation2 :: Nil)))
   }
 }
