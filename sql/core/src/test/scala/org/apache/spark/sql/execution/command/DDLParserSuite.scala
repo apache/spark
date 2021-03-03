@@ -353,6 +353,17 @@ class DDLParserSuite extends AnalysisTest with SharedSparkSession {
     assert(e.contains("Found duplicate keys 'key1'"))
   }
 
+  test("SPARK-34556: duplicate keys in partition spec") {
+    val e = intercept[ParseException] {
+      parser.parsePlan("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
+    }.getMessage
+    assert(e.contains("Found duplicate keys 'c'"))
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.CASE_SENSITIVE, true)
+    val caseSensitiveParser = new SparkSqlParser(conf)
+    caseSensitiveParser.parsePlan("INSERT OVERWRITE t PARTITION (c='2', C='3') VALUES (1)")
+  }
+
   test("duplicate columns in partition specs") {
     val e = intercept[ParseException] {
       parser.parsePlan(
