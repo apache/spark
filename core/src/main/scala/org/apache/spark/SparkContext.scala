@@ -1922,13 +1922,6 @@ class SparkContext(config: SparkConf) extends Logging {
     addJar(path, false)
   }
 
-  // Visible for testing
-  private[spark] def convertPathToFileForWin(path: String): File = {
-    // Make URI from path to ensure using Utils.resolveURI to ensure encoded characters like %20
-    // are not encoded further regardless of `path` is URI form or not.
-    new File(Utils.resolveURI(path))
-  }
-
   private def addJar(path: String, addedOnSubmit: Boolean): Unit = {
     def addLocalJarFile(file: File): Seq[String] = {
       try {
@@ -1976,7 +1969,7 @@ class SparkContext(config: SparkConf) extends Logging {
     } else {
       val (keys, scheme) = if (path.contains("\\") && Utils.isWindows) {
         // For local paths with backslashes on Windows, URI throws an exception
-        (addLocalJarFile(convertPathToFileForWin(path)), "local")
+        (addLocalJarFile(new File(path)), "local")
       } else {
         val uri = Utils.resolveURI(path)
         // SPARK-17650: Make sure this is a valid URL before adding it to the list of dependencies

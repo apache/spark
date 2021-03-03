@@ -1224,15 +1224,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         sc.stop()
       }
     }
-
-    val sep = File.separator
-    val winJar = s"C:${sep}foo${sep}test jar.jar"
-    val winJarUrl = "file:/C:/foo/test%20jar.jar"
-    val resolvedWinJar = sc.convertPathToFileForWin(winJar).toString
-    val resolvedWinJarUrl = sc.convertPathToFileForWin(winJarUrl).toString
-
-    assert(resolvedWinJar.substring(resolvedWinJar.lastIndexOf("/C:") + 1) === winJar)
-    assert(resolvedWinJarUrl.substring(resolvedWinJarUrl.lastIndexOf("/C:") + 1) === winJar)
   }
 }
 
