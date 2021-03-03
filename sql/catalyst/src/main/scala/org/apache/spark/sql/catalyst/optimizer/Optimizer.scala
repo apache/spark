@@ -616,15 +616,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
     // Adding an extra Limit below WINDOW when there is only one RankLike/RowNumber
     // window function and partitionSpec is empty.
-    case LocalLimit(limitExpr @ IntegerLiteral(limitVal),
+    case LocalLimit(limitExpr @ IntegerLiteral(limit),
         window @ Window(Seq(Alias(WindowExpression(_: RankLike | _: RowNumber,
             WindowSpecDefinition(Nil, orderSpec,
                 SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))), _)), _, _, child))
-        if child.maxRows.forall(_ > limitVal) =>
+        if limit < conf.topKSortFallbackThreshold && child.maxRows.forall(_ > limit) =>
       // Sort is needed here because we need global sort.
-      LocalLimit(
-        limitExpr = limitExpr,
-        child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
+      window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
   }
 }
 
@@ -1572,6 +1570,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Limit(l, child) if canEliminate(l, child) =>
+      child
+    case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>

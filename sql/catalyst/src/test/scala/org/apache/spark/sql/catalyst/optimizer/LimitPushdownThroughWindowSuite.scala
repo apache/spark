@@ -24,17 +24,17 @@ import org.apache.spark.sql.catalyst.expressions.{CurrentRow, Rank, RowFrame, Ro
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 class LimitPushdownThroughWindowSuite extends PlanTest {
   // CollapseProject and RemoveNoopOperators is needed because we need it to collapse project.
   private val limitPushdownRules = Seq(
-      CollapseProject,
-      RemoveNoopOperators,
-      LimitPushDown,
-      EliminateLimits,
-      ConstantFolding,
-      BooleanSimplification
-    )
+    CollapseProject,
+    RemoveNoopOperators,
+    LimitPushDown,
+    EliminateLimits,
+    ConstantFolding,
+    BooleanSimplification)
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -117,5 +117,30 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     comparePlans(
       Optimize.execute(originalQuery.analyze),
       WithoutOptimize.execute(originalQuery.analyze))
+  }
+
+  test("Push down limit through window respect spark.sql.execution.topKSortFallbackThreshold") {
+    Seq(1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        val originalQuery = testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .limit(2)
+        val correctAnswer = if (threshold == 1) {
+          originalQuery
+        } else {
+          testRelation
+            .select(a, b, c)
+            .orderBy(c.desc)
+            .limit(2)
+            .select(a, b, c,
+              windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        }
+
+        comparePlans(
+          Optimize.execute(originalQuery.analyze),
+          WithoutOptimize.execute(correctAnswer.analyze))
+      }
+    }
   }
 }

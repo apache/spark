@@ -229,6 +229,12 @@ class CombiningLimitsSuite extends PlanTest {
     )
   }
 
+  test("Remove GlobalLimit operator if it's child max row <= limit") {
+    val query = GlobalLimit(100, testRelation)
+    val optimized = Optimize.execute(query.analyze)
+    comparePlans(optimized, testRelation)
+  }
+
   private def checkPlanAndMaxRow(
       optimized: LogicalPlan, expected: LogicalPlan, expectedMaxRow: Long): Unit = {
     comparePlans(Optimize.execute(optimized.analyze), expected.analyze)
