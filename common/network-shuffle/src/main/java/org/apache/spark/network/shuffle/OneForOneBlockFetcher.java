@@ -176,7 +176,7 @@ public class OneForOneBlockFetcher {
     final ArrayList<Integer> reduceIds;
     final ArrayList<String> blockIds;
 
-    public BlocksInfo() {
+    BlocksInfo() {
       this.reduceIds = new ArrayList<>();
       this.blockIds = new ArrayList<>();
     }
