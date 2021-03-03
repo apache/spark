@@ -2631,6 +2631,25 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34576: drop/add columns to a dataset of `DESCRIBE COLUMN`") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      val description = sql(s"DESCRIBE TABLE $tbl c0")
+      val noCommentDataset = description.drop("info_value")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
