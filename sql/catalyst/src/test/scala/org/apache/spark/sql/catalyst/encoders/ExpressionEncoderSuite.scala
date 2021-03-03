@@ -205,6 +205,18 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
 
+  // holder class to trigger Class.getSimpleName issue
+  object MalformedClassObject extends Serializable {
+    case class MalformedNameExample(x: Int)
+  }
+
+  {
+    OuterScopes.addOuterScope(MalformedClassObject)
+    encodeDecodeTest(
+      MalformedClassObject.MalformedNameExample(42),
+      "nested Scala class should work")
+  }
+
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
   productTest(
