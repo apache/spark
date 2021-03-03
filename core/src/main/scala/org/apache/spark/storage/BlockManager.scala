@@ -179,6 +179,9 @@ private[spark] class BlockManager(
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
 
+  private[spark] val markFileLostOnExecutorLost: Boolean = conf.get(
+    config.MARK_FILE_LOST_ON_EXECUTOR_LOST)
+
   private val remoteReadNioBufferConversion =
     conf.get(Network.NETWORK_REMOTE_READ_NIO_BUFFER_CONVERSION)
 
