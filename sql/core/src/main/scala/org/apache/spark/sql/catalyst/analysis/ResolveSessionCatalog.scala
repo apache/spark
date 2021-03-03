@@ -250,11 +250,13 @@ class ResolveSessionCatalog(
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, _) =>
-      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
+    case DescribeRelation(
+         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended, output)
 
-    case DescribeColumn(ResolvedV1TableOrViewIdentifier(ident), colNameParts, isExtended) =>
-      DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended)
+    case DescribeColumn(
+         ResolvedV1TableOrViewIdentifier(ident), colNameParts, isExtended, output) =>
+      DescribeColumnCommand(ident.asTableIdentifier, colNameParts, isExtended, output)
 
     // For CREATE TABLE [AS SELECT], we should use the v1 command if the catalog is resolved to the
     // session catalog and the table provider is not v2.

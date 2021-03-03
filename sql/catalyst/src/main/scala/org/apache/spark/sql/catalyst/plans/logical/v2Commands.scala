@@ -351,9 +351,13 @@ object DescribeRelation {
 case class DescribeColumn(
     relation: LogicalPlan,
     colNameParts: Seq[String],
-    isExtended: Boolean) extends Command {
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+}
+
+object DescribeColumn {
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 }
 
 /**
