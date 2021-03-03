@@ -257,7 +257,7 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
      <td>(none)</td>
      <td>
-       The initial number of shuffle partitions before coalescing. By default it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
+       The initial number of shuffle partitions before coalescing. If not set, it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
      </td>
      <td>3.0.0</td>
    </tr>
