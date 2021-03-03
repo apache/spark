@@ -69,7 +69,9 @@ trait ShowPartitionsSuiteBase extends QueryTest with DDLCommandTestUtils {
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $t")
       }.getMessage
-      assert(errMsg.contains("not allowed on a table that is not partitioned"))
+      assert(errMsg.contains("not allowed on a table that is not partitioned") ||
+        // V2 error message.
+        errMsg.contains(s"Table $t is not partitioned"))
     }
   }
 

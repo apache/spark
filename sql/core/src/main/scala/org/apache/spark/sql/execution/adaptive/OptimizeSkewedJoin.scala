@@ -63,8 +63,8 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
 
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
-   * partition size * ADAPTIVE_EXECUTION_SKEWED_PARTITION_FACTOR and also larger than
-   * ADVISORY_PARTITION_SIZE_IN_BYTES.
+   * partition size * SKEW_JOIN_SKEWED_PARTITION_FACTOR and also larger than
+   * SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.
    */
   private def isSkewed(size: Long, medianSize: Long): Boolean = {
     size > medianSize * conf.getConf(SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR) &&

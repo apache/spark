@@ -202,7 +202,7 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView(v2) {
+      withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
