@@ -17,26 +17,19 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io.File
-
-import scala.collection.JavaConverters._
-
-import org.apache.commons.io.FileUtils
-import org.apache.commons.io.filefilter.TrueFileFilter
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
-import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, Serializer}
 
 /**
  * Tests for the fallback logic in UnsafeShuffleManager. Actual tests of shuffling data are
  * performed in other suites.
  */
-class SortShuffleManagerSuite extends SparkFunSuite with Matchers with LocalSparkContext {
+class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
 
@@ -136,35 +129,5 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers with LocalSpar
       aggregator = Some(mock(classOf[Aggregator[Any, Any, Any]])),
       mapSideCombine = true
     )))
-  }
-
-  Seq("true", "false").foreach { value =>
-    test(s"SPARK-34541: shuffle can be removed when spark.shuffle.useOldFetchProtocol=$value") {
-      withTempDir { tmpDir =>
-        def getAllFiles: Set[File] =
-          FileUtils.listFiles(
-            tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
-        val conf = new SparkConf(loadDefaults = false)
-        conf.set("spark.local.dir", tmpDir.getAbsolutePath)
-        conf.set("spark.shuffle.useOldFetchProtocol", value)
-        sc = new SparkContext("local", "test", conf)
-        // For making the taskAttemptId starts from 1.
-        sc.parallelize(1 to 10).count()
-        val rdd = sc.parallelize(1 to 10, 1).map(x => (x, x))
-        // Create a shuffleRdd
-        val shuffledRdd = new ShuffledRDD[Int, Int, Int](rdd, new HashPartitioner(4))
-          .setSerializer(new JavaSerializer(conf))
-        val filesBeforeShuffle = getAllFiles
-        // Force the shuffle to be performed
-        shuffledRdd.count()
-        // Ensure that the shuffle actually created files that will need to be cleaned up
-        val filesCreatedByShuffle = getAllFiles -- filesBeforeShuffle
-        // Check that the cleanup actually removes the files
-        sc.env.blockManager.master.removeShuffle(0, blocking = true)
-        for (file <- filesCreatedByShuffle) {
-          assert (!file.exists(), s"Shuffle file $file was not cleaned up")
-        }
-      }
-    }
   }
 }
