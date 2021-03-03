@@ -272,7 +272,8 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
     ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
-      .doc("Time to wait before considering a pending executor timedout.")
+      .doc("Time to wait before a newly created executor POD request, which does not reached " +
+        "the POD pending state yet, considered timedout and will be deleted.")
       .version("3.1.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")

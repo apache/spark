@@ -539,7 +539,7 @@ EXPLAIN EXTENDED DESC t
 struct<plan:string>
 -- !query output
 == Parsed Logical Plan ==
-'DescribeRelation false
+'DescribeRelation false, [col_name#x, data_type#x, comment#x]
 +- 'UnresolvedTableOrView [t], DESCRIBE TABLE, true
 
 == Analyzed Logical Plan ==

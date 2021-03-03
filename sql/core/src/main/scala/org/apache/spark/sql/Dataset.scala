@@ -2307,7 +2307,7 @@ class Dataset[T] private[sql](
    *   case class Book(title: String, words: String)
    *   val ds: Dataset[Book]
    *
-   *   val allWords = ds.select('title, explode(split('words, " ")).as("word"))
+   *   val allWords = ds.select($"title", explode(split($"words", " ")).as("word"))
    *
    *   val bookCountPerWord = allWords.groupBy("word").agg(count_distinct("title"))
    * }}}
@@ -2346,7 +2346,7 @@ class Dataset[T] private[sql](
    * `functions.explode()`:
    *
    * {{{
-   *   ds.select(explode(split('words, " ")).as("word"))
+   *   ds.select(explode(split($"words", " ")).as("word"))
    * }}}
    *
    * or `flatMap()`:

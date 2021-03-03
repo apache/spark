@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Add
-import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -193,5 +193,41 @@ class LimitPushdownSuite extends PlanTest {
       LocalLimit(1, x.groupBy(Symbol("a"))(count(1))),
       LocalLimit(1, y.groupBy(Symbol("b"))(count(1))))).analyze
     comparePlans(expected2, optimized2)
+  }
+
+  test("SPARK-26138: pushdown limit through InnerLike when condition is empty") {
+    Seq(Cross, Inner).foreach { joinType =>
+      val originalQuery = x.join(y, joinType).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, LocalLimit(1, x).join(LocalLimit(1, y), joinType)).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-26138: Should not pushdown limit through InnerLike when condition is not empty") {
+    Seq(Cross, Inner).foreach { joinType =>
+      val originalQuery = x.join(y, joinType, Some("x.a".attr === "y.b".attr)).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, x.join(y, joinType, Some("x.a".attr === "y.b".attr))).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
+
+  test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
+    // Push down when condition is empty
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.join(y, joinType).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, LocalLimit(1, x).join(y, joinType)).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+
+    // No push down when condition is not empty
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.join(y, joinType, Some("x.a".attr === "y.b".attr)).limit(1)
+      val optimized = Optimize.execute(originalQuery.analyze)
+      val correctAnswer = Limit(1, x.join(y, joinType, Some("x.a".attr === "y.b".attr))).analyze
+      comparePlans(optimized, correctAnswer)
+    }
   }
 }

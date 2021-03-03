@@ -1063,6 +1063,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.unsafe.exceptionOnMemoryLeak=true",
+    javaOptions in Test += "-Dspark.hadoop.hadoop.security.key.provider.path=test:///",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=false",
     javaOptions in Test += "-Dderby.system.durability=test",
     javaOptions in Test += "-Dio.netty.tryReflectionSetAccessible=true",

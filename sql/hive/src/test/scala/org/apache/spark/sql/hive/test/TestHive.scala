@@ -223,7 +223,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -651,9 +651,8 @@ private[hive] object TestHiveContext {
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState],
-    options: Map[String, String])
-  extends HiveSessionStateBuilder(session, state, options)
+    state: Option[SessionState])
+  extends HiveSessionStateBuilder(session, state)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
@@ -662,7 +661,7 @@ private[sql] class TestHiveSessionStateBuilder(
     new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
   }
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
 
 private[hive] object HiveTestJars {
