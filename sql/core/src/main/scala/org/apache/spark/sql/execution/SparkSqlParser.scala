@@ -359,6 +359,7 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "file" => AddFileCommand(maybePaths)
           case "jar" => AddJarCommand(maybePaths)
+          case "archive" => AddArhiveCommand(maybePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
@@ -374,6 +375,12 @@ class SparkSqlAstBuilder extends AstBuilder {
               ListJarsCommand(maybePaths.split("\\s+"))
             } else {
               ListJarsCommand()
+            }
+          case "archive" | "archives" =>
+            if (maybePaths.length > 0) {
+              ListArchivesCommand(maybePaths.split("\\s+"))
+            } else {
+              ListArchivesCommand()
             }
           case other => operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }

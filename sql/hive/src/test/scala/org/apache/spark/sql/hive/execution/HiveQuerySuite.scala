@@ -857,6 +857,30 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(sql(s"list file $testFile").count() == 1)
   }
 
+  test("ADD ARCHIVE command") {
+    val testFile =
+      TestHive.getHiveFile("data/files/archives1/archive1.tar.gz").toURI.toString + "#link1"
+    sql(s"ADD ARCHIVE $testFile")
+
+    val checkAddArchive =
+      sparkContext.parallelize(
+        Seq(
+          "link1",
+          "link1/archive1",
+          "link1/archive1/test.txt"), 1).map { name =>
+        (name, new File(SparkFiles.get(name)).canRead)
+      }.collect
+
+    assert(checkAddArchive(0) === ("link1", true))
+    assert(checkAddArchive(1) === ("link1/archive1", true))
+    assert(checkAddArchive(2) === ("link1/archive1/test.txt", true))
+    assert(sql("list archives").
+      filter(_.getString(0).contains("data/files/archives1/archive1.tar.gz")).count() > 0)
+    assert(sql("list archive").
+      filter(_.getString(0).contains("data/files/archives1/archive1.tar.gz")).count() > 0)
+    assert(sql(s"list archive $testFile").count() == 1)
+  }
+
   createQueryTest("dynamic_partition",
     """
       |DROP TABLE IF EXISTS dynamic_part_table;
