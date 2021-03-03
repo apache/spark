@@ -858,27 +858,28 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD ARCHIVE command") {
-    val testFile =
-      TestHive.getHiveFile("data/files/archives1/archive1.tar.gz").toURI.toString + "#link1"
-    sql(s"ADD ARCHIVE $testFile")
+    withTempDir { dir =>
+      val file = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val zipFile = new File(dir, "test.zip")
+      TestUtils.createJar(Seq(file), zipFile)
+      sql(s"ADD ARCHIVE ${zipFile.getAbsolutePath}#foo")
 
-    val checkAddArchive =
-      sparkContext.parallelize(
-        Seq(
-          "link1",
-          "link1/archive1",
-          "link1/archive1/test.txt"), 1).map { name =>
-        (name, new File(SparkFiles.get(name)).canRead)
-      }.collect
+      val checkAddArchive =
+        sparkContext.parallelize(
+          Seq(
+            "foo",
+            s"foo/${file.getName}"), 1).map { name =>
+          (name, new File(SparkFiles.get(name)).canRead)
+        }.collect()
 
-    assert(checkAddArchive(0) === ("link1", true))
-    assert(checkAddArchive(1) === ("link1/archive1", true))
-    assert(checkAddArchive(2) === ("link1/archive1/test.txt", true))
-    assert(sql("list archives").
-      filter(_.getString(0).contains("data/files/archives1/archive1.tar.gz")).count() > 0)
-    assert(sql("list archive").
-      filter(_.getString(0).contains("data/files/archives1/archive1.tar.gz")).count() > 0)
-    assert(sql(s"list archive $testFile").count() == 1)
+      assert(checkAddArchive(0) === ("foo", true))
+      assert(checkAddArchive(1) === (s"foo/${file.getName}", true))
+      assert(sql("list archives").
+        filter(_.getString(0).contains(s"${zipFile.getAbsolutePath}")).count() > 0)
+      assert(sql("list archive").
+        filter(_.getString(0).contains(s"${zipFile.getAbsolutePath}")).count() > 0)
+      assert(sql(s"list archive ${zipFile.getAbsolutePath}").count() == 1)
+    }
   }
 
   createQueryTest("dynamic_partition",
