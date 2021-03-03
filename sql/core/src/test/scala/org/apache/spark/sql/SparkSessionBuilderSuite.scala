@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
@@ -240,7 +241,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
       .getOrCreate()
     assert(session.conf.get("spark.app.name") === "test-app-SPARK-31532-2")
     assert(session.conf.get(GLOBAL_TEMP_DATABASE) === "globaltempdb-spark-31532-2")
-    assert(session.conf.get(WAREHOUSE_PATH) === "SPARK-31532-db-2")
+    assert(session.conf.get(WAREHOUSE_PATH) contains "SPARK-31532-db-2")
   }
 
   test("SPARK-32062: reset listenerRegistered in SparkSession") {
@@ -306,14 +307,14 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     // newly specified values
     val sharedWH = spark.sharedState.conf.get(wh)
     val sharedTD = spark.sharedState.conf.get(td)
-    assert(sharedWH === "./data2",
+    assert(sharedWH contains "data2",
       "The warehouse dir in shared state should be determined by the 1st created spark session")
     assert(sharedTD === "alice",
       "Static sql configs in shared state should be determined by the 1st created spark session")
     assert(spark.sharedState.conf.getOption(custom).isEmpty,
       "Dynamic sql configs is session specific")
 
-    assert(spark.conf.get(wh) === sharedWH,
+    assert(spark.conf.get(wh) contains sharedWH,
       "The warehouse dir in session conf and shared state conf should be consistent")
     assert(spark.conf.get(td) === sharedTD,
       "Static sql configs in session conf and shared state conf should be consistent")
@@ -321,7 +322,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     spark.sql("RESET")
 
-    assert(spark.conf.get(wh) === sharedWH,
+    assert(spark.conf.get(wh) contains sharedWH,
       "The warehouse dir in shared state should be respect after RESET")
     assert(spark.conf.get(td) === sharedTD,
       "Static sql configs in shared state should be respect after RESET")
@@ -331,7 +332,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     val spark2 = SparkSession.builder()
       .config(wh, "./data3")
       .config(custom, "kyaoo").getOrCreate()
-    assert(spark2.conf.get(wh) === sharedWH)
+    assert(spark2.conf.get(wh) contains sharedWH)
     assert(spark2.conf.get(td) === sharedTD)
     assert(spark2.conf.get(custom) === "kyaoo")
   }
@@ -352,7 +353,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     spark.sql(s"SET $custom=c1")
     assert(spark.conf.get(custom) === "c1")
     spark.sql("RESET")
-    assert(spark.conf.get(wh) === "./data0",
+    assert(spark.conf.get(wh) contains "data0",
       "The warehouse dir in shared state should be respect after RESET")
     assert(spark.conf.get(td) === "bob",
       "Static sql configs in shared state should be respect after RESET")
@@ -381,7 +382,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     spark2.sql(s"SET $custom=c1")
     assert(spark2.conf.get(custom) === "c1")
     spark2.sql("RESET")
-    assert(spark2.conf.get(wh) === "./data1")
+    assert(spark2.conf.get(wh) contains "data1")
     assert(spark2.conf.get(td) === "alice")
     assert(spark2.conf.get(custom) === "c2")
 
@@ -411,5 +412,31 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
         .sharedState
     }
     assert(!logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+  }
+
+  Seq(".", "..", "dir0", "dir0/dir1", "/dir0/dir1", "./dir0").foreach { pathStr =>
+    test(s"SPARK-34558: warehouse path ($pathStr) should be qualified for spark/hadoop conf") {
+      val path = new Path(pathStr)
+      val conf = new SparkConf().set(WAREHOUSE_PATH, pathStr)
+      val session = SparkSession.builder()
+        .master("local")
+        .config(conf)
+        .getOrCreate()
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val expected = path.getFileSystem(hadoopConf).makeQualified(path).toString
+      // session related configs
+      assert(hadoopConf.get("hive.metastore.warehouse.dir") === expected)
+      assert(session.conf.get(WAREHOUSE_PATH) === expected)
+      assert(session.sessionState.conf.warehousePath === expected)
+
+      // shared configs
+      assert(session.sharedState.conf.get(WAREHOUSE_PATH) === expected)
+      assert(session.sharedState.hadoopConf.get("hive.metastore.warehouse.dir") === expected)
+
+      // spark context configs
+      assert(session.sparkContext.conf.get(WAREHOUSE_PATH) === expected)
+      assert(session.sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir") ===
+        expected)
+    }
   }
 }

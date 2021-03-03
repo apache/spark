@@ -460,4 +460,29 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) ::
       Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
   }
+
+  test("SPARK-34417 - test fillMap() for column with a dot in the name") {
+    val na = "n/a"
+    checkAnswer(
+      Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("ColWith.Dot", "Col")
+        .na.fill(Map("`ColWith.Dot`" -> na)),
+      Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
+  }
+
+  test("SPARK-34417 - test fillMap() for qualified-column with a dot in the name") {
+    val na = "n/a"
+    checkAnswer(
+      Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("ColWith.Dot", "Col").as("testDF")
+        .na.fill(Map("testDF.`ColWith.Dot`" -> na)),
+      Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
+  }
+
+  test("SPARK-34417 - test fillMap() for column without a dot in the name" +
+    " and dataframe with another column having a dot in the name") {
+    val na = "n/a"
+    checkAnswer(
+      Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("Col", "ColWith.Dot")
+        .na.fill(Map("Col" -> na)),
+      Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
+  }
 }
