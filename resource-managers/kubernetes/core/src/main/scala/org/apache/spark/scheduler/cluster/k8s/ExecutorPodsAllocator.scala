@@ -198,8 +198,8 @@ private[spark] class ExecutorPodsAllocator(
     }
 
     var totalPendingCount = 0
-    // The order we request executors for each ResourceProfile is not guaranteed.
-    totalExpectedExecutorsPerResourceProfileId.asScala.foreach { case (rpId, targetNum) =>
+    totalExpectedExecutorsPerResourceProfileId.asScala.toSeq.sortBy(_._1)
+      .foreach { case (rpId, targetNum) =>
       val podsForRpId = rpIdToExecsAndPodState.getOrElse(rpId, mutable.HashMap.empty)
 
       val currentRunningCount = podsForRpId.values.count {

@@ -389,17 +389,15 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val rp = rpb.build()
 
     // 0) request 3 PODs for the default and 4 PODs for the other resource profile
-    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3, rp -> 4))
+    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 7)
     verify(podOperations).create(podWithAttachedContainerForId(1, defaultProfile.id))
     verify(podOperations).create(podWithAttachedContainerForId(2, defaultProfile.id))
     verify(podOperations).create(podWithAttachedContainerForId(3, defaultProfile.id))
-    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3, rp -> 4))
-    snapshotsStore.notifySubscribers()
     verify(podOperations).create(podWithAttachedContainerForId(4, rp.id))
     verify(podOperations).create(podWithAttachedContainerForId(5, rp.id))
     verify(podOperations).create(podWithAttachedContainerForId(6, rp.id))
     verify(podOperations).create(podWithAttachedContainerForId(7, rp.id))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 7)
 
     // 1) make 1 POD known by the scheduler backend for each resource profile
     when(schedulerBackend.getExecutorIds).thenReturn(Seq("1", "4"))
@@ -439,15 +437,11 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations, times(7)).create(any())
 
     // 5) requesting 1 more executor for each resource
-    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3, rp -> 2))
-    snapshotsStore.notifySubscribers()
-    verify(podOperations).create(podWithAttachedContainerForId(8, defaultProfile.id))
-    assert(podsAllocatorUnderTest.numOutstandingPods.get() == 1)
-
     podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3, rp -> 3))
     snapshotsStore.notifySubscribers()
     assert(podsAllocatorUnderTest.numOutstandingPods.get() == 2)
     verify(podOperations, times(9)).create(any())
+    verify(podOperations).create(podWithAttachedContainerForId(8, defaultProfile.id))
     verify(podOperations).create(podWithAttachedContainerForId(9, rp.id))
   }
 
