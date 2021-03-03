@@ -680,8 +680,10 @@ class UDFTests(ReusedSQLTestCase):
             return e[0]
 
         df = self.spark.createDataFrame([((1.0, 1.0), (1, 1))], ['c1', 'c2'])
-        result = df.select("*", udf(f, DoubleType())("c1").alias('c3'), udf(f, IntegerType())("c2").alias('c4'))
-        self.assertEqual(result.collect(), [Row(c1=Row(_1=1.0, _2=1.0), c2=Row(_1=1, _2=1), c3=1.0, c4=1)])
+        result = df.select("*", udf(f, DoubleType())("c1").alias('c3'),
+                           udf(f, IntegerType())("c2").alias('c4'))
+        self.assertEqual(result.collect(),
+                         [Row(c1=Row(_1=1.0, _2=1.0), c2=Row(_1=1, _2=1), c3=1.0, c4=1)])
 
 
 class UDFInitializationTests(unittest.TestCase):
