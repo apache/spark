@@ -55,6 +55,7 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
     // `GenericRowWithSchema(Array(1, 1),
     //    StructType(Seq(StructField("_1", IntegerType), StructField("_2", IntegerType))))`
     // to be `equal()` and so we need to disable this feature explicitly (`valueCompare=false`).
+    // Please note that cache by reference is still enabled depending on `needConversion`.
     val pickle = new Pickler(needConversion, false)
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     // For each row, add it to the queue.
