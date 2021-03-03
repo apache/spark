@@ -97,6 +97,9 @@ object SparkBuild extends PomBuild {
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+    if (profiles.contains("jdwp-test-debug")) {
+      sys.props.put("test.jdwp.enabled", "true")
+    }
     profiles
   }
 
