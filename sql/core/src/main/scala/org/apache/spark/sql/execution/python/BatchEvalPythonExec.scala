@@ -46,6 +46,15 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute]
     val needConversion = dataTypes.exists(EvaluatePython.needConversionInPython)
 
     // enable memo iff we serialize the row with schema (schema and class should be memorized)
+    // pyrolite 4.21+ can lookup objects in its cache by value, but `GenericRowWithSchema` objects,
+    // that we pass from JVM to Python, don't define their `equals()` to take the type of the
+    // values or the schema of the row into account. This causes like
+    // `GenericRowWithSchema(Array(1.0, 1.0),
+    //    StructType(Seq(StructField("_1", DoubleType), StructField("_2", DoubleType))))`
+    // and
+    // `GenericRowWithSchema(Array(1, 1),
+    //    StructType(Seq(StructField("_1", IntegerType), StructField("_2", IntegerType))))`
+    // to be `equal()` and so we need to disable this feature explicitly (`valueCompare=false`).
     val pickle = new Pickler(needConversion, false)
     // Input iterator to Python: input rows are grouped so we send them in batches to Python.
     // For each row, add it to the queue.
