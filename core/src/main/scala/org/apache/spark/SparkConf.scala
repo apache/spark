@@ -627,7 +627,7 @@ private[spark] object SparkConf extends Logging {
       DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore."),
       DeprecatedConfig("spark.yarn.services", "3.0.0", "Feature no longer available."),
       DeprecatedConfig("spark.executor.plugins", "3.0.0",
-        "Feature replaced with new plugin API. See Monitoring documentation."),
+        "Feature replaced with new plugin API. See Monitoring documentation.")
     ) ++ LegacyConfigsRegister.deprecateConfigs
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
