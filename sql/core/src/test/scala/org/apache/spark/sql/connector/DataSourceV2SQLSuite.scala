@@ -2699,6 +2699,27 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34555: Resolve DataFrame metadata column") {
+    val tbl = s"${catalogAndNamespace}table"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      val table = spark.table(tbl)
+      val dfQuery = table.select(
+        table.col("id"),
+        table.col("data"),
+        table.col("index"),
+        table.col("_partition")
+      )
+
+      checkAnswer(
+        dfQuery,
+        Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+      )
+    }
+  }
+
   test("SPARK-34561: drop/add columns to a dataset of `DESCRIBE TABLE`") {
     val tbl = s"${catalogAndNamespace}tbl"
     withTable(tbl) {
