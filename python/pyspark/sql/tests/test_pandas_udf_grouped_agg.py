@@ -51,7 +51,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         @udf('double')
         def plus_one(v):
             assert isinstance(v, (int, float))
-            return v + 1
+            return float(v + 1)
         return plus_one
 
     @property
@@ -316,16 +316,18 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         expected3 = df.groupby(df.id, df.v % 2).agg(sum(df.v)).orderBy(df.id, df.v % 2)
 
         # groupby one python UDF
-        result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v))
-        expected4 = df.groupby(plus_one(df.id)).agg(sum(df.v))
+        result4 = df.groupby(plus_one(df.id)).agg(sum_udf(df.v)).sort('plus_one(id)')
+        expected4 = df.groupby(plus_one(df.id)).agg(sum(df.v)).sort('plus_one(id)')
 
         # groupby one scalar pandas UDF
         result5 = df.groupby(plus_two(df.id)).agg(sum_udf(df.v)).sort('sum(v)')
         expected5 = df.groupby(plus_two(df.id)).agg(sum(df.v)).sort('sum(v)')
 
         # groupby one expression and one python UDF
-        result6 = df.groupby(df.v % 2, plus_one(df.id)).agg(sum_udf(df.v))
-        expected6 = df.groupby(df.v % 2, plus_one(df.id)).agg(sum(df.v))
+        result6 = (df.groupby(df.v % 2, plus_one(df.id))
+                   .agg(sum_udf(df.v)).sort(['(v % 2)', 'plus_one(id)']))
+        expected6 = (df.groupby(df.v % 2, plus_one(df.id))
+                     .agg(sum(df.v)).sort(['(v % 2)', 'plus_one(id)']))
 
         # groupby one expression and one scalar pandas UDF
         result7 = (df.groupby(df.v % 2, plus_two(df.id))
