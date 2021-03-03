@@ -2120,8 +2120,9 @@ package object config {
 
   private[spark] val MARK_FILE_LOST_ON_EXECUTOR_LOST =
     ConfigBuilder("spark.shuffle.markFileLostOnExecutorLost")
-      .doc("Mark shuffle file lost when executor is lost. People could set this to false when " +
-       "using remote shuffle services because the shuffle file is not stored on the executor.")
+      .doc("Mark shuffle files as lost when an executor is lost. If you are using a remote " +
+       "shuffle service such that shuffle files are not stored on the executor, consider " +
+       "setting this to false.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
