@@ -19,15 +19,13 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{DataWritingCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
-import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive.HiveSessionCatalog
 import org.apache.spark.util.Utils
 
@@ -57,7 +55,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
 
       val command = getWritingCommand(catalog, tableDesc, tableExists = true)
       command.run(sparkSession, child)
-      updateMetrics(sparkSession.sparkContext, command)
+      DataWritingCommand.updateMetrics(sparkSession.sparkContext, command, metrics)
     } else {
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
@@ -72,7 +70,7 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
         val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
         val command = getWritingCommand(catalog, createdTableMeta, tableExists = false)
         command.run(sparkSession, child)
-        updateMetrics(sparkSession.sparkContext, command)
+        DataWritingCommand.updateMetrics(sparkSession.sparkContext, command, metrics)
       } catch {
         case NonFatal(e) =>
           // drop the created table.
@@ -93,13 +91,6 @@ trait CreateHiveTableAsSelectBase extends DataWritingCommand {
   // A subclass should override this with the Class name of the concrete type expected to be
   // returned from `getWritingCommand`.
   def writingCommandClassName: String
-
-  def updateMetrics(sparkContext: SparkContext, command: DataWritingCommand): Unit = {
-    command.metrics.foreach { case (key, metric) => this.metrics(key).set(metric.value) }
-    SQLMetrics.postDriverMetricUpdates(sparkContext,
-      sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
-      metrics.values.toSeq)
-  }
 
   override def argString(maxFields: Int): String = {
     s"[Database: ${tableDesc.database}, " +

@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -72,5 +73,15 @@ object DataWritingCommand {
     outputAttributes.zip(names).map { case (attr, outputName) =>
       attr.withName(outputName)
     }
+  }
+
+  def updateMetrics(
+      sparkContext: SparkContext,
+      command: DataWritingCommand,
+      metrics: Map[String, SQLMetric]): Unit = {
+    command.metrics.foreach { case (key, metric) => metrics(key).set(metric.value) }
+    SQLMetrics.postDriverMetricUpdates(sparkContext,
+      sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+      metrics.values.toSeq)
   }
 }
