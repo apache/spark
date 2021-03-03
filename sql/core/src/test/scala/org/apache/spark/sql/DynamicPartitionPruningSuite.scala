@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.scalatest.GivenWhenThen
+
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
@@ -1404,8 +1405,6 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 
   test("SPARK-34436: DPP support Like/RLike expression") {
-
-
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(
         """
@@ -1432,7 +1431,6 @@ abstract class DynamicPartitionPruningSuiteBase
         """.stripMargin)
 
       checkPartitionPruningPredicate(df, false, true)
-
 
       checkAnswer(df,
         Row(1030, 2) ::
