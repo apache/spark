@@ -365,20 +365,18 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
 
   test("Database Ownership") {
     val catalog = spark.sessionState.catalog
-    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
-      try {
-        val db = "spark_29425_1"
-        sql(s"CREATE DATABASE $db")
-        assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
-          .where("database_description_item='Owner'")
-          .collect().head.getString(1) === Utils.getCurrentUserName())
-        sql(s"ALTER DATABASE $db SET DBPROPERTIES('abc'='xyz')")
-        assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
-          .where("database_description_item='Owner'")
-          .collect().head.getString(1) === Utils.getCurrentUserName())
-      } finally {
-        catalog.reset()
-      }
+    try {
+      val db = "spark_29425_1"
+      sql(s"CREATE DATABASE $db")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("info_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+      sql(s"ALTER DATABASE $db SET DBPROPERTIES('abc'='xyz')")
+      assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
+        .where("info_name='Owner'")
+        .collect().head.getString(1) === Utils.getCurrentUserName())
+    } finally {
+      catalog.reset()
     }
   }
 
