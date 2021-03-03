@@ -1197,11 +1197,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.hadoopConfiguration.get(bufferKey).toInt === 65536,
       "spark configs have higher priority than spark.hadoop configs")
   }
+
   test("SPARK-34225: addFile/addJar shouldn't further encode URI if a URI form string is passed") {
     withTempDir { dir =>
-      val jar = File.createTempFile("testprefix", "test jar1.jar", dir)
+      val jar = File.createTempFile("testprefix", "test jar.jar", dir)
       val jarUrl = jar.toURI.toString
-      val file = File.createTempFile("testprefix", "test file1.txt", dir)
+      val file = File.createTempFile("testprefix", "test file.txt", dir)
       val fileUrl = file.toURI.toString
 
       try {
@@ -1223,6 +1224,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
         sc.stop()
       }
     }
+
+    val sep = File.separator
+    val winJar = s"C:${sep}foo${sep}test jar.jar"
+    val winJarUrl = "file:/C:/foo/test%20jar.jar"
+    val resolvedWinJar = sc.convertPathToFileForWin(winJar).toString
+    val resolvedWinJarUrl = sc.convertPathToFileForWin(winJarUrl).toString
+
+    assert(resolvedWinJar.substring(resolvedWinJar.lastIndexOf("/C:") + 1) === winJar)
+    assert(resolvedWinJarUrl.substring(resolvedWinJarUrl.lastIndexOf("/C:") + 1) === winJar)
   }
 }
 
