@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -32,6 +33,22 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
   test("writing data out metrics dynamic partition: hive") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       testMetricsDynamicPartition("hive", "hive", "t1")
+    }
+  }
+
+  test("SPARK-34567: Add metrics for CreateTableAsSelectCommand") {
+    withTable("t") {
+      val df = sql("CREATE TABLE t AS SELECT 1 as a")
+      val dataWritingCommandExec =
+        df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
+      dataWritingCommandExec.executeCollect()
+      val createTableAsSelect = dataWritingCommandExec.cmd
+      assert(createTableAsSelect.metrics.contains("numFiles"))
+      assert(createTableAsSelect.metrics("numFiles").value == 1)
+      assert(createTableAsSelect.metrics.contains("numOutputBytes"))
+      assert(createTableAsSelect.metrics("numOutputBytes").value == 2)
+      assert(createTableAsSelect.metrics.contains("numOutputRows"))
+      assert(createTableAsSelect.metrics("numOutputRows").value == 1)
     }
   }
 }
