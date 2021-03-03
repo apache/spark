@@ -483,7 +483,7 @@ object SQLConf {
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")
-      .doc("The initial number of shuffle partitions before coalescing. By default it equals to " +
+      .doc("The initial number of shuffle partitions before coalescing. If not set, it equals to " +
         s"${SHUFFLE_PARTITIONS.key}. This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and '${COALESCE_PARTITIONS_ENABLED.key}' " +
         "are both true.")
