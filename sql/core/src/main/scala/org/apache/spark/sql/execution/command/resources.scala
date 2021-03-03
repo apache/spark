@@ -56,7 +56,7 @@ case class AddFileCommand(path: String) extends RunnableCommand {
 /**
  * Adds an archive to the current session so it can be used.
  */
-case class AddArhiveCommand(path: String) extends RunnableCommand {
+case class AddArchiveCommand(path: String) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sparkContext.addArchive(path)
     Seq.empty[Row]
@@ -113,7 +113,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
 
 /**
  * Returns a list of archive paths that are added to resources.
- * If file paths are provided, return the ones that are added to resources.
+ * If archive paths are provided, return the ones that are added to resources.
  */
 case class ListArchivesCommand(archives: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
