@@ -153,6 +153,11 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
+    // Register serializers for Avro GenericContainer classes
+    // We do not handle SpecificRecordBase and SpecificFixed here. They are abstract classes and
+    // we will need to register serializers for their concrete implementations individually.
+    // Also, their serialization requires the use of SpecificDatum(Reader|Writer) instead of
+    // GenericDatum(Reader|Writer).
     def registerAvro[T <: GenericContainer]()(implicit ct: ClassTag[T]): Unit =
       kryo.register(ct.runtimeClass, new GenericAvroSerializer[T](avroSchemas))
     registerAvro[GenericRecord]
