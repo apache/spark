@@ -226,24 +226,31 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-34605: converting java.time.Duration to DayTimeIntervalType") {
     Seq(
-      "PT20.123456S",
-      "P2DT3H4M",
-      "P2D").foreach { intervalStr =>
-      var input = Duration.parse(intervalStr)
-      Seq(1, -1).foreach { sign =>
-        input = input.multipliedBy(sign)
-        val result = CatalystTypeConverters.convertToCatalyst(input)
-        val expected = IntervalUtils.durationToMicros(input)
-        assert(result === expected)
-      }
+      Duration.ZERO,
+      Duration.ofNanos(1),
+      Duration.ofNanos(-1),
+      Duration.ofSeconds(0, Long.MaxValue),
+      Duration.ofSeconds(0, Long.MinValue),
+      Duration.ofDays(106751991),
+      Duration.ofDays(-106751991)).foreach { input =>
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = IntervalUtils.durationToMicros(input)
+      assert(result === expected)
     }
+
+    val errMsg = intercept[ArithmeticException] {
+      IntervalUtils.durationToMicros(Duration.ofSeconds(Long.MaxValue, Long.MaxValue))
+    }.getMessage
+    assert(errMsg.contains("long overflow"))
   }
 
   test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
     Seq(
       0L,
       1L,
-      Int.MaxValue).foreach { input =>
+      999999,
+      -1000000,
+      Long.MaxValue).foreach { input =>
       Seq(1L, -1L).foreach { sign =>
         val us = sign * input
         val duration = IntervalUtils.microsToDuration(us)
