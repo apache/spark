@@ -910,17 +910,4 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
-
-  test("SPARK-34613: Fix view does not capture disable hint config") {
-    withSQLConf(DISABLE_HINTS.key -> "true") {
-      withView("v1") {
-        sql("CREATE VIEW v1 AS SELECT /*+ repartition(1) */ 1")
-        assert(
-          sql("SELECT * FROM v1").queryExecution.analyzed.collect {
-            case e: Repartition => e
-          }.isEmpty
-        )
-      }
-    }
-  }
 }

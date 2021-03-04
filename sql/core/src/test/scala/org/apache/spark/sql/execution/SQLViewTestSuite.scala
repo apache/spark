@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -275,6 +276,19 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           }.getMessage
           assert(e.contains("Table or view not found: t"))
         }
+      }
+    }
+  }
+
+  test("SPARK-34613: Fix view does not capture disable hint config") {
+    withSQLConf(DISABLE_HINTS.key -> "true") {
+      withView("v1") {
+        sql("CREATE VIEW v1 AS SELECT /*+ repartition(1) */ 1")
+        assert(
+          sql("SELECT * FROM v1").queryExecution.analyzed.collect {
+            case e: Repartition => e
+          }.isEmpty
+        )
       }
     }
   }
