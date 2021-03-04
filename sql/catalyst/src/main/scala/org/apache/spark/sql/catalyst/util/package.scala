@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{MetadataBuilder, NumericType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -195,17 +196,18 @@ package object util extends Logging {
   }
 
   val METADATA_COL_ATTR_KEY = "__metadata_col"
-  implicit class MetadataColumnHelper(attr: Attribute) {
-    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
-      attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
-  }
 
   /**
    * Hidden columns are a type of metadata column that are not propagated through subquery aliases,
    * and are candidates during qualified star expansions.
    */
   val HIDDEN_COL_ATTR_KEY = "__hidden_col"
-  implicit class HiddenColumnHelper(attr: Attribute) {
+  val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hiddenOutput")
+
+  implicit class SpecialColumnHelper(attr: Attribute) {
+    def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
+      attr.metadata.getBoolean(METADATA_COL_ATTR_KEY)
+
     def isHiddenCol: Boolean = attr.isMetadataCol &&
       attr.metadata.contains(HIDDEN_COL_ATTR_KEY) &&
       attr.metadata.getBoolean(HIDDEN_COL_ATTR_KEY)

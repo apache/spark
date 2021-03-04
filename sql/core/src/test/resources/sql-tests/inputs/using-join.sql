@@ -1,15 +1,15 @@
 create temporary view nt1 as select * from values
-    ("one", 1),
-    ("two", 2),
-    ("three", 3)
-    as nt1(k, v1);
+  ("one", 1),
+  ("two", 2),
+  ("three", 3)
+  as nt1(k, v1);
 
 create temporary view nt2 as select * from values
-    ("one", 1),
-    ("two", 22),
-    ("one", 5),
-    ("four", 4)
-    as nt2(k, v2);
+  ("one", 1),
+  ("two", 22),
+  ("one", 5),
+  ("four", 4)
+  as nt2(k, v2);
 
 SELECT * FROM nt1 left outer join nt2 using (k);
 

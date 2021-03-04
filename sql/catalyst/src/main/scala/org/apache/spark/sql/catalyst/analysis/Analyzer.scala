@@ -980,7 +980,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * References to metadata columns are resolved using columns from [[LogicalPlan.metadataOutput]],
    * but the relation's output does not include the metadata columns until the relation is replaced
    * with a copy adding them to the output. Unless this rule adds metadata to the relation's output,
-   * relation's output, the analyzer will detect that nothing produces the columns.
+   * the analyzer will detect that nothing produces the columns.
    *
    * This rule only adds metadata columns when a node is resolved but is missing input from its
    * children. This ensures that metadata columns are not added to the plan unless they are used. By
@@ -3295,59 +3295,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Then apply a Project on a normal Join to eliminate natural or using join.
    */
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
-    private def commonNaturalJoinProcessing(
-        left: LogicalPlan,
-        right: LogicalPlan,
-        joinType: JoinType,
-        joinNames: Seq[String],
-        condition: Option[Expression],
-        hint: JoinHint): LogicalPlan = {
-      import org.apache.spark.sql.catalyst.util._
-
-      val leftKeys = joinNames.map { keyName =>
-        left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-          throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, left, "left")
-        }
-      }
-      val rightKeys = joinNames.map { keyName =>
-        right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
-          throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, right, "right")
-        }
-      }
-      val joinPairs = leftKeys.zip(rightKeys)
-
-      val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
-
-      // columns not in joinPairs
-      val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
-      val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
-
-      // the output list looks like: join keys, columns from left, columns from right
-      val (projectList, hiddenList) = joinType match {
-        case LeftOuter =>
-          (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)), rightKeys)
-        case LeftExistence(_) =>
-          (leftKeys ++ lUniqueOutput, Seq.empty)
-        case RightOuter =>
-          (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput, leftKeys)
-        case FullOuter =>
-          // in full outer join, joinCols should be non-null if there is.
-          val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
-          (joinedCols ++
-            lUniqueOutput.map(_.withNullability(true)) ++
-            rUniqueOutput.map(_.withNullability(true)),
-            leftKeys ++ rightKeys)
-        case _ : InnerLike =>
-          (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
-        case _ =>
-          sys.error("Unsupported natural join type " + joinType)
-      }
-      // use Project to hide duplicated common keys
-      val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-      project.setTagValue(project.hiddenOutputTag, hiddenList.map(_.asHiddenCol()))
-      project
-    }
-
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case j @ Join(left, right, UsingJoin(joinType, usingCols), _, hint)
           if left.resolved && right.resolved && j.duplicateResolved =>
@@ -3433,6 +3380,59 @@ class Analyzer(override val catalogManager: CatalogManager)
     if (conf.storeAssignmentPolicy == StoreAssignmentPolicy.LEGACY) {
       throw QueryCompilationErrors.legacyStoreAssignmentPolicyError()
     }
+  }
+
+  private def commonNaturalJoinProcessing(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      joinNames: Seq[String],
+      condition: Option[Expression],
+      hint: JoinHint): LogicalPlan = {
+    import org.apache.spark.sql.catalyst.util._
+
+    val leftKeys = joinNames.map { keyName =>
+      left.output.find(attr => resolver(attr.name, keyName)).getOrElse {
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, left, "left")
+      }
+    }
+    val rightKeys = joinNames.map { keyName =>
+      right.output.find(attr => resolver(attr.name, keyName)).getOrElse {
+        throw QueryCompilationErrors.unresolvedUsingColForJoinError(keyName, right, "right")
+      }
+    }
+    val joinPairs = leftKeys.zip(rightKeys)
+
+    val newCondition = (condition ++ joinPairs.map(EqualTo.tupled)).reduceOption(And)
+
+    // columns not in joinPairs
+    val lUniqueOutput = left.output.filterNot(att => leftKeys.contains(att))
+    val rUniqueOutput = right.output.filterNot(att => rightKeys.contains(att))
+
+    // the output list looks like: join keys, columns from left, columns from right
+    val (projectList, hiddenList) = joinType match {
+      case LeftOuter =>
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput.map(_.withNullability(true)), rightKeys)
+      case LeftExistence(_) =>
+        (leftKeys ++ lUniqueOutput, Seq.empty)
+      case RightOuter =>
+        (rightKeys ++ lUniqueOutput.map(_.withNullability(true)) ++ rUniqueOutput, leftKeys)
+      case FullOuter =>
+        // in full outer join, joinCols should be non-null if there is.
+        val joinedCols = joinPairs.map { case (l, r) => Alias(Coalesce(Seq(l, r)), l.name)() }
+        (joinedCols ++
+          lUniqueOutput.map(_.withNullability(true)) ++
+          rUniqueOutput.map(_.withNullability(true)),
+          leftKeys ++ rightKeys)
+      case _ : InnerLike =>
+        (leftKeys ++ lUniqueOutput ++ rUniqueOutput, rightKeys)
+      case _ =>
+        sys.error("Unsupported natural join type " + joinType)
+    }
+    // use Project to hide duplicated common keys
+    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
+    project.setTagValue(hiddenOutputTag, hiddenList.map(_.asHiddenCol()))
+    project
   }
 
   /**
