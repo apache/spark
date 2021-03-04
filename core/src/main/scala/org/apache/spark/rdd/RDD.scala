@@ -2009,6 +2009,9 @@ abstract class RDD[T: ClassTag](
   @transient protected lazy val isBarrier_ : Boolean =
     dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
 
+  private final lazy val _outputDeterministicLevel: DeterministicLevel.Value =
+    getOutputDeterministicLevel
+
   /**
    * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
    * for the definition.
@@ -2026,7 +2029,7 @@ abstract class RDD[T: ClassTag](
     if (isReliablyCheckpointed) {
       DeterministicLevel.DETERMINATE
     } else {
-      getOutputDeterministicLevel
+      _outputDeterministicLevel
     }
   }
 
