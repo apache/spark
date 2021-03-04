@@ -19,7 +19,7 @@ package org.apache.spark.sql.errors
 
 import java.io.{FileNotFoundException, IOException}
 import java.net.URISyntaxException
-import java.sql.{JDBCType, SQLException, SQLFeatureNotSupportedException}
+import java.sql.{SQLException, SQLFeatureNotSupportedException}
 import java.time.DateTimeException
 
 import org.apache.hadoop.fs.{FileStatus, Path}
