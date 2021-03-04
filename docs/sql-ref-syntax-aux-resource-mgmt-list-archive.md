@@ -1,7 +1,7 @@
 ---
 layout: global
-title: LIST JAR
-displayTitle: LIST JAR
+title: LIST ARCHIVE
+displayTitle: LIST ARCHIVE
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,27 +21,27 @@ license: |
 
 ### Description
 
-`LIST JAR` lists the JARs added by [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html).
+`LIST ARCHIVE` lists the archives added by [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html).
 
 ### Syntax
 
 ```sql
-LIST JAR
+LIST ARCHIVE
 ```
 
 ### Examples
 
 ```sql
-ADD JAR /tmp/test.jar;
-ADD JAR /tmp/test_2.jar;
-LIST JAR;
--- output for LIST JAR
-spark://192.168.1.112:62859/jars/test.jar
-spark://192.168.1.112:62859/jars/test_2.jar
+ADD ARCHIVE /tmp/test.zip;
+ADD ARCHIVE /tmp/test_2.tar.gz;
+LIST ARCHIVE;
+-- output for LIST ARCHIVE
+file:/tmp/test.zip
+file:/tmp/test_2.tar.gz
 
-LIST JAR /tmp/test.jar /some/random.jar /another/random.jar;
+LIST ARCHIVE /tmp/test.zip /some/random.tgz /another/random.tar;
 -- output
-spark://192.168.1.112:62859/jars/test.jar
+file:/tmp/test.zip
 ```
 
 ### Related Statements
@@ -50,4 +50,4 @@ spark://192.168.1.112:62859/jars/test.jar
 * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
 * [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)
 * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
-* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)
+* [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)

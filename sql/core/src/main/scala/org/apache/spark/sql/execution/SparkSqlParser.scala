@@ -339,7 +339,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[AddFileCommand]], [[AddJarCommand]], [[ListFilesCommand]] or [[ListJarsCommand]]
+   * Create a [[AddFileCommand]], [[AddJarCommand]], [[AddArchiveCommand]],
+   * [[ListFilesCommand]], [[ListJarsCommand]] or [[ListArchivesCommand]]
    * command depending on the requested operation on resources.
    * Expected format:
    * {{{
