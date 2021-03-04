@@ -21,7 +21,7 @@ import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
@@ -74,6 +74,7 @@ object CatalystTypeConverters {
       case LongType => LongConverter
       case FloatType => FloatConverter
       case DoubleType => DoubleConverter
+      case DayTimeIntervalType => DurationConverter
       case dataType: DataType => IdentityConverter(dataType)
     }
     converter.asInstanceOf[CatalystTypeConverter[Any, Any, Any]]
@@ -400,6 +401,18 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): Double = row.getDouble(column)
   }
 
+  private object DurationConverter extends CatalystTypeConverter[Duration, Duration, Any] {
+    override def toCatalystImpl(scalaValue: Duration): Long = {
+      IntervalUtils.durationToMicros(scalaValue)
+    }
+    override def toScala(catalystValue: Any): Duration = {
+      if (catalystValue == null) null
+      else IntervalUtils.microsToDuration(catalystValue.asInstanceOf[Long])
+    }
+    override def toScalaImpl(row: InternalRow, column: Int): Duration =
+      IntervalUtils.microsToDuration(row.getLong(column))
+  }
+
   /**
    * Creates a converter function that will convert Scala objects to the specified Catalyst type.
    * Typical use case would be converting a collection of rows that have the same schema. You will
@@ -465,6 +478,7 @@ object CatalystTypeConverters {
         map,
         (key: Any) => convertToCatalyst(key),
         (value: Any) => convertToCatalyst(value))
+    case d: Duration => DurationConverter.toCatalyst(d)
     case other => other
   }
 
