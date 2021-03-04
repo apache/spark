@@ -231,13 +231,7 @@ test_that("gapply() Arrow optimization - type specification (date and timestamp)
 
 test_that("Arrow optimization - unsupported types", {
   skip_if_not_installed("arrow")
-
-  expect_error(checkSchemaInArrow(structType("a FLOAT")), "not support float type")
-  expect_error(checkSchemaInArrow(structType("a BINARY")), "not support binary type")
-  expect_error(checkSchemaInArrow(structType("a ARRAY<INT>")), "not support array type")
   expect_error(checkSchemaInArrow(structType("a MAP<INT, INT>")), "not support map type")
-  expect_error(checkSchemaInArrow(structType("a STRUCT<a: INT>")),
-               "not support nested struct type")
 })
 
 test_that("SPARK-32478: gapply() Arrow optimization - error message for schema mismatch", {
