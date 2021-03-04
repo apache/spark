@@ -1404,7 +1404,7 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
-  test("SPARK-34436: DPP support Like/RLike expression") {
+  test("SPARK-34436: DPP support RLike expression") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
       val df = sql(
         """
