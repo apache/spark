@@ -21,10 +21,11 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{ExplainUtils, SparkPlan}
+import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
@@ -33,7 +34,7 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression]) extends BaseJoinExec {
+    condition: Option[Expression]) extends JoinCodegenSupport {
 
   override def leftKeys: Seq[Expression] = Nil
   override def rightKeys: Seq[Expression] = Nil
@@ -392,5 +393,66 @@ case class BroadcastNestedLoopJoinExec(
         resultProj(r)
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    joinType.isInstanceOf[InnerLike]
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    streamed.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  override def needCopyResult: Boolean = true
+
+  override def doProduce(ctx: CodegenContext): String = {
+    streamed.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    joinType match {
+      case _: InnerLike => codegenInner(ctx, input)
+      case x =>
+        throw new IllegalArgumentException(
+          s"BroadcastNestedLoopJoin code-gen should not take $x as the JoinType")
+    }
+  }
+
+  /**
+   * Returns the variable name for [[Broadcast]] side.
+   */
+  private def prepareBroadcast(ctx: CodegenContext): String = {
+    // Create a name for broadcast side
+    val broadcastArray = broadcast.executeBroadcast[Array[InternalRow]]()
+    val broadcastTerm = ctx.addReferenceObj("broadcastTerm", broadcastArray)
+
+    // Inline mutable state since not many join operations in a task
+    ctx.addMutableState("InternalRow[]", "broadcastArray",
+      v => s"$v = (InternalRow[]) $broadcastTerm.value();", forceInline = true)
+  }
+
+  private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val arrayTerm = prepareBroadcast(ctx)
+    val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, input, streamed, broadcast)
+
+    val resultVars = buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
+    val arrayIndex = ctx.freshName("arrayIndex")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    s"""
+       |int $arrayIndex = 0;
+       |UnsafeRow $buildRow;
+       |while ($arrayIndex < $arrayTerm.length) {
+       |  $buildRow = (UnsafeRow) $arrayTerm[$arrayIndex];
+       |  $checkCondition {
+       |    $numOutput.add(1);
+       |    ${consume(ctx, resultVars)}
+       |  }
+       |  $arrayIndex += 1;
+       |}
+     """.stripMargin
   }
 }
