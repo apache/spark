@@ -30,7 +30,6 @@ import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.catalog.CatalogDatabase
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnevaluableAggregate}
-import org.apache.spark.sql.catalyst.plans.logical.Command
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
@@ -41,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
- * This does not include exceptions thrown during the eager execution of [[Command]]s, which are
+ * This does not include exceptions thrown during the eager execution of commands, which are
  * grouped into [[QueryCompilationErrors]].
  */
 object QueryExecutionErrors {
