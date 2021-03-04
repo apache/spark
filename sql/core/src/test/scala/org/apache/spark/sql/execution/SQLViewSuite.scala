@@ -22,6 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -906,6 +907,19 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
+      }
+    }
+  }
+
+  test("SPARK-34613: Fix view does not capture disable hint config") {
+    withSQLConf(DISABLE_HINTS.key -> "true") {
+      withView("v1") {
+        sql("CREATE VIEW v1 AS SELECT /*+ repartition(1) */ 1")
+        assert(
+          sql("SELECT * FROM v1").queryExecution.analyzed.collect {
+            case e: Repartition => e
+          }.isEmpty
+        )
       }
     }
   }
