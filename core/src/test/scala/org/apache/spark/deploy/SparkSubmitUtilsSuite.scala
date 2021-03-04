@@ -286,7 +286,7 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
       // IvyTestUtils.withRepository does not have an easy way for creating non-jar dependencies
-      // so we let it create the jar dependency in `mylib-0.1.pom`, and the modify the pom
+      // So we let it create the jar dependency in `mylib-0.1.pom`, and then modify the pom
       // to change the type of the transitive to `pom`
       val mainPom = new File(URI.create(repo).resolve("my/great/lib/mylib/0.1/mylib-0.1.pom"))
       val source = Source.fromFile(mainPom)
