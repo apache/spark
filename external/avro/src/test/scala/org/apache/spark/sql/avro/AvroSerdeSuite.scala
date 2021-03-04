@@ -20,6 +20,7 @@ import org.apache.avro.{Schema, SchemaBuilder}
 import org.apache.avro.generic.GenericRecordBuilder
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 /**
@@ -29,13 +30,15 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 class AvroSerdeSuite extends SparkFunSuite {
   import AvroSerdeSuite._
 
+  private val defaultRebaseMode = LegacyBehaviorPolicy.CORRECTED.toString
+
   test("Test basic conversion") {
     val avro = createNestedAvroSchemaWithFields("foo", _.optionalInt("bar"))
     val record = new GenericRecordBuilder(avro)
         .set("foo", new GenericRecordBuilder(avro.getField("foo").schema()).set("bar", 42).build())
         .build()
     val serializer = new AvroSerializer(CATALYST_STRUCT, avro, false)
-    val deserializer = new AvroDeserializer(avro, CATALYST_STRUCT)
+    val deserializer = new AvroDeserializer(avro, CATALYST_STRUCT, defaultRebaseMode)
     assert(serializer.serialize(deserializer.deserialize(record).get) === record)
   }
 
@@ -69,7 +72,7 @@ class AvroSerdeSuite extends SparkFunSuite {
         .add("foo", new StructType().add("bar", IntegerType, nullable = false))
 
     // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
-    new AvroDeserializer(avro, CATALYST_STRUCT)
+    new AvroDeserializer(avro, CATALYST_STRUCT, defaultRebaseMode)
     assertFailedConversionMessage(avro, deserialize = true,
       "Cannot find non-nullable field 'foo.bar' in Avro schema.",
       nonnullCatalyst)
@@ -120,7 +123,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       catalystSchema: StructType = CATALYST_STRUCT): Unit = {
     val e = intercept[IncompatibleSchemaException] {
       if (deserialize) {
-        new AvroDeserializer(avroSchema, catalystSchema)
+        new AvroDeserializer(avroSchema, catalystSchema, defaultRebaseMode)
       } else {
         new AvroSerializer(catalystSchema, avroSchema, false)
       }

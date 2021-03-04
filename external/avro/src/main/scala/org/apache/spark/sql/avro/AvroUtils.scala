@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
 import org.apache.avro.file.{DataFileReader, FileReader}
-import org.apache.avro.file.DataFileConstants.{BZIP2_CODEC, DEFLATE_CODEC, SNAPPY_CODEC, XZ_CODEC}
+import org.apache.avro.file.DataFileConstants.{BZIP2_CODEC, DEFLATE_CODEC, SNAPPY_CODEC, XZ_CODEC, ZSTANDARD_CODEC}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
@@ -54,7 +54,6 @@ private[sql] object AvroUtils extends Logging {
     }
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
-      .map(new Schema.Parser().parse)
       .getOrElse {
         inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
           spark.sessionState.conf.ignoreCorruptFiles)
@@ -94,7 +93,6 @@ private[sql] object AvroUtils extends Logging {
       dataSchema: StructType): OutputWriterFactory = {
     val parsedOptions = new AvroOptions(options, job.getConfiguration)
     val outputAvroSchema: Schema = parsedOptions.schema
-      .map(new Schema.Parser().parse)
       .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
         parsedOptions.recordName, parsedOptions.recordNamespace))
 
@@ -111,7 +109,7 @@ private[sql] object AvroUtils extends Logging {
           logInfo(s"Avro compression level $deflateLevel will be used for $DEFLATE_CODEC codec.")
           job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
           DEFLATE_CODEC
-        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => codec
+        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC | ZSTANDARD_CODEC) => codec
         case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
       }
       job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)

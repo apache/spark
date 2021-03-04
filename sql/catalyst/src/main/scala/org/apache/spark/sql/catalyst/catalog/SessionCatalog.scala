@@ -622,8 +622,7 @@ class SessionCatalog(
   }
 
   /**
-   * Generate a [[View]] operator from the view description if the view stores sql text,
-   * otherwise, it is same to `getRawTempView`
+   * Generate a [[View]] operator from the temporary view stored.
    */
   def getTempView(name: String): Option[LogicalPlan] = synchronized {
     getRawTempView(name).map(getTempViewPlan)
@@ -641,8 +640,7 @@ class SessionCatalog(
   }
 
   /**
-   * Generate a [[View]] operator from the view description if the view stores sql text,
-   * otherwise, it is same to `getRawGlobalTempView`
+   * Generate a [[View]] operator from the global temporary view stored.
    */
   def getGlobalTempView(name: String): Option[LogicalPlan] = {
     getRawGlobalTempView(name).map(getTempViewPlan)
@@ -683,7 +681,7 @@ class SessionCatalog(
     val table = formatTableName(name.table)
     if (name.database.isEmpty) {
       tempViews.get(table).map {
-        case TemporaryViewRelation(metadata) => metadata
+        case TemporaryViewRelation(metadata, _) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table),
@@ -693,7 +691,7 @@ class SessionCatalog(
       }.getOrElse(getTableMetadata(name))
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
       globalTempViewManager.get(table).map {
-        case TemporaryViewRelation(metadata) => metadata
+        case TemporaryViewRelation(metadata, _) => metadata
         case plan =>
           CatalogTable(
             identifier = TableIdentifier(table, Some(globalTempViewManager.database)),
@@ -838,9 +836,11 @@ class SessionCatalog(
 
   private def getTempViewPlan(plan: LogicalPlan): LogicalPlan = {
     plan match {
-      case viewInfo: TemporaryViewRelation =>
-        fromCatalogTable(viewInfo.tableMeta, isTempView = true)
-      case v => v
+      case TemporaryViewRelation(tableMeta, None) =>
+        fromCatalogTable(tableMeta, isTempView = true)
+      case TemporaryViewRelation(tableMeta, Some(plan)) =>
+        View(desc = tableMeta, isTempView = true, child = plan)
+      case other => other
     }
   }
 
@@ -909,12 +909,12 @@ class SessionCatalog(
     isTempView(nameParts.asTableIdentifier)
   }
 
-  private def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
+  def lookupTempView(name: TableIdentifier): Option[LogicalPlan] = {
     val tableName = formatTableName(name.table)
     if (name.database.isEmpty) {
-      tempViews.get(tableName)
+      tempViews.get(tableName).map(getTempViewPlan)
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
-      globalTempViewManager.get(tableName)
+      globalTempViewManager.get(tableName).map(getTempViewPlan)
     } else {
       None
     }
@@ -1409,9 +1409,14 @@ class SessionCatalog(
       Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
     if (clsForUDAF.isAssignableFrom(clazz)) {
       val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      val e = cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-        .newInstance(input,
-          clazz.getConstructor().newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+      val e = cls.getConstructor(
+          classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int], classOf[Option[String]])
+        .newInstance(
+          input,
+          clazz.getConstructor().newInstance().asInstanceOf[Object],
+          Int.box(1),
+          Int.box(1),
+          Some(name))
         .asInstanceOf[ImplicitCastInputTypes]
 
       // Check input argument size

@@ -212,7 +212,7 @@ A typical example of this using S3 is via passing the following options:
 
 ```
 ...
---packages com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6
+--packages org.apache.hadoop:hadoop-aws:3.2.2
 --conf spark.kubernetes.file.upload.path=s3a://<s3-bucket>/path
 --conf spark.hadoop.fs.s3a.access.key=...
 --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem

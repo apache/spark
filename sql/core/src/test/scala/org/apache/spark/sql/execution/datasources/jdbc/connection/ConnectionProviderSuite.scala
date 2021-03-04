@@ -57,17 +57,23 @@ class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSpa
     val db2AppEntry = db2Provider.appEntry(db2Driver, db2Options)
 
     // Make sure no authentication for the databases are set
-    val oldConfig = Configuration.getConfiguration
-    assert(oldConfig.getAppConfigurationEntry(postgresAppEntry) == null)
-    assert(oldConfig.getAppConfigurationEntry(db2AppEntry) == null)
+    val rootConfig = Configuration.getConfiguration
+    assert(rootConfig.getAppConfigurationEntry(postgresAppEntry) == null)
+    assert(rootConfig.getAppConfigurationEntry(db2AppEntry) == null)
 
-    postgresProvider.setAuthenticationConfigIfNeeded(postgresDriver, postgresOptions)
-    db2Provider.setAuthenticationConfigIfNeeded(db2Driver, db2Options)
+    postgresProvider.setAuthenticationConfig(postgresDriver, postgresOptions)
+    val postgresConfig = Configuration.getConfiguration
+
+    db2Provider.setAuthenticationConfig(db2Driver, db2Options)
+    val db2Config = Configuration.getConfiguration
 
     // Make sure authentication for the databases are set
-    val newConfig = Configuration.getConfiguration
-    assert(oldConfig != newConfig)
-    assert(newConfig.getAppConfigurationEntry(postgresAppEntry) != null)
-    assert(newConfig.getAppConfigurationEntry(db2AppEntry) != null)
+    assert(rootConfig != postgresConfig)
+    assert(rootConfig != db2Config)
+    // The topmost config in the chain is linked with all the subsequent entries
+    assert(db2Config.getAppConfigurationEntry(postgresAppEntry) != null)
+    assert(db2Config.getAppConfigurationEntry(db2AppEntry) != null)
+
+    Configuration.setConfiguration(null)
   }
 }

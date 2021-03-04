@@ -179,7 +179,10 @@ case class CreateViewStatement(
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    viewType: ViewType) extends ParsedStatement
+    viewType: ViewType) extends ParsedStatement {
+
+  override def children: Seq[LogicalPlan] = Seq(child)
+}
 
 /**
  * A REPLACE TABLE command, as parsed from SQL.
