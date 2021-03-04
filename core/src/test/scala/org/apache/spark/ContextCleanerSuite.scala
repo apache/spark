@@ -351,6 +351,12 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
       case _ => false
     }, askStorageEndpoints = true).isEmpty)
   }
+
+  test("SPARK-33000: shutdown cleans up checkpointed data when configured to do so") {
+    // TODO: How do I write a test for this?
+  }
+
+
 }
 
 
