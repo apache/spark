@@ -285,7 +285,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       withView("v1") {
         val viewName = createView("v1", "SELECT /*+ repartition(1) */ 1")
         assert(
-          sql("SELECT * FROM v1").queryExecution.analyzed.collect {
+          sql(s"SELECT * FROM $viewName").queryExecution.analyzed.collect {
             case e: Repartition => e
           }.isEmpty
         )
