@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 class DeduplicateWindowExpressionsSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("DeduplicateWindowExpressions", FixedPoint(10), DeduplicateWindowExpressions) :: Nil
+      Batch("DeduplicateWindowExpressions", Once, DeduplicateWindowExpressions) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
