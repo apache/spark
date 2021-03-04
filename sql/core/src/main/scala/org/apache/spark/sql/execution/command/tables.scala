@@ -1077,11 +1077,10 @@ trait ShowCreateTableCommandBase {
  *   SHOW CREATE TABLE [db_name.]table_name
  * }}}
  */
-case class ShowCreateTableCommand(table: TableIdentifier)
+case class ShowCreateTableCommand(
+    table: TableIdentifier,
+    override val output: Seq[Attribute])
     extends RunnableCommand with ShowCreateTableCommandBase {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("createtab_stmt", StringType, nullable = false)()
-  )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1232,11 +1231,10 @@ case class ShowCreateTableCommand(table: TableIdentifier)
  *   SHOW CREATE TABLE table_identifier AS SERDE;
  * }}}
  */
-case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
+case class ShowCreateTableAsSerdeCommand(
+    table: TableIdentifier,
+    override val output: Seq[Attribute])
     extends RunnableCommand with ShowCreateTableCommandBase {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("createtab_stmt", StringType, nullable = false)()
-  )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
