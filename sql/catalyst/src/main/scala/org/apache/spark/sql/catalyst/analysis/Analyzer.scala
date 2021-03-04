@@ -1874,7 +1874,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       resolveColumnByOrdinal: Int => Attribute,
       trimAlias: Boolean,
       throws: Boolean): Expression = {
-    // Resolve expression in one round.
     def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
       if (e.resolved) return e
       e match {
@@ -1916,17 +1915,15 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   /**
    * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
-   * input plan's output attributes. In order to resolve the nested complex type fields correctly,
-   * this function makes use of `throws` parameter to control when to raise an AnalysisException.
+   * input plan's output attributes. In order to resolve the nested fields correctly, this function
+   * makes use of `throws` parameter to control when to raise an AnalysisException.
    *
    * Example :
-   * SELECT a.b FROM t ORDER BY b[0].d
+   * SELECT * FROM t ORDER BY a.b
    *
-   * In the above example, in b needs to be resolved before d can be resolved. Given we are
-   * doing a bottom up traversal, it will first attempt to resolve d and fail as b has not
-   * been resolved yet. If `throws` is false, this function will handle the exception by
-   * returning the original attribute. In this case `d` will be resolved in subsequent passes
-   * after `b` is resolved.
+   * In the above example, after `a` is resolved to a struct-type column, we may fail to resolve `b`
+   * if there is no such nested field named "b". We should not fail and wait for other rules to
+   * resolve it if possible.
    */
   def resolveExpressionByPlanOutput(
       expr: Expression,
