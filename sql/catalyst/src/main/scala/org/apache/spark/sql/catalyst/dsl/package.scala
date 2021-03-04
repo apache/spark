@@ -297,6 +297,11 @@ package object dsl {
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
 
+      /** Creates a new AttributeReference of the day-time interval type */
+      def dayTimeInterval: AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType, nullable = true)()
+      }
+
       /** Creates a new AttributeReference of type binary */
       def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()
 

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -220,6 +220,41 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         1110657).foreach { days =>
         val localDate = DateTimeUtils.daysToLocalDate(days)
         assert(CatalystTypeConverters.createToScalaConverter(DateType)(days) === localDate)
+      }
+    }
+  }
+
+  test("SPARK-34605: converting java.time.Duration to DayTimeIntervalType") {
+    Seq(
+      Duration.ZERO,
+      Duration.ofNanos(1),
+      Duration.ofNanos(-1),
+      Duration.ofSeconds(0, Long.MaxValue),
+      Duration.ofSeconds(0, Long.MinValue),
+      Duration.ofDays(106751991),
+      Duration.ofDays(-106751991)).foreach { input =>
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = IntervalUtils.durationToMicros(input)
+      assert(result === expected)
+    }
+
+    val errMsg = intercept[ArithmeticException] {
+      IntervalUtils.durationToMicros(Duration.ofSeconds(Long.MaxValue, Long.MaxValue))
+    }.getMessage
+    assert(errMsg.contains("long overflow"))
+  }
+
+  test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
+    Seq(
+      0L,
+      1L,
+      999999,
+      -1000000,
+      Long.MaxValue).foreach { input =>
+      Seq(1L, -1L).foreach { sign =>
+        val us = sign * input
+        val duration = IntervalUtils.microsToDuration(us)
+        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType)(us) === duration)
       }
     }
   }

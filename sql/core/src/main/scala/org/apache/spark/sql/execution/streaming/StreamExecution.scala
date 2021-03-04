@@ -323,26 +323,28 @@ abstract class StreamExecution(
       startLatch.countDown()
 
       // While active, repeatedly attempt to run batches.
-      SparkSession.setActiveSession(sparkSession)
+      sparkSessionForStream.withActive {
+        // Adaptive execution can change num shuffle partitions, disallow
+        sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+        // Disable cost-based join optimization as we do not want stateful operations
+        // to be rearranged
+        sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
 
-      updateStatusMessage("Initializing sources")
-      // force initialization of the logical plan so that the sources can be created
-      logicalPlan
+        updateStatusMessage("Initializing sources")
+        // force initialization of the logical plan so that the sources can be created
+        logicalPlan
 
-      // Adaptive execution can change num shuffle partitions, disallow
-      sparkSessionForStream.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
-      // Disable cost-based join optimization as we do not want stateful operations to be rearranged
-      sparkSessionForStream.conf.set(SQLConf.CBO_ENABLED.key, "false")
-      offsetSeqMetadata = OffsetSeqMetadata(
-        batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
+        offsetSeqMetadata = OffsetSeqMetadata(
+          batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionForStream.conf)
 
-      if (state.compareAndSet(INITIALIZING, ACTIVE)) {
-        // Unblock `awaitInitialization`
-        initializationLatch.countDown()
-        runActivatedStream(sparkSessionForStream)
-        updateStatusMessage("Stopped")
-      } else {
-        // `stop()` is already called. Let `finally` finish the cleanup.
+        if (state.compareAndSet(INITIALIZING, ACTIVE)) {
+          // Unblock `awaitInitialization`
+          initializationLatch.countDown()
+          runActivatedStream(sparkSessionForStream)
+          updateStatusMessage("Stopped")
+        } else {
+          // `stop()` is already called. Let `finally` finish the cleanup.
+        }
       }
     } catch {
       case e if isInterruptedByStop(e, sparkSession.sparkContext) =>
