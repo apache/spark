@@ -425,7 +425,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkC
     manager.unregisterShuffle(0)
   }
 
-  test(s"SPARK-34541: Shuffle can be removed when spark.shuffle.useOldFetchProtocol=true") {
+  test(s"SPARK-34541: shuffle can be removed when spark.shuffle.useOldFetchProtocol=true") {
     withTempDir { tmpDir =>
       def getAllFiles: Set[File] =
         FileUtils.listFiles(tmpDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
