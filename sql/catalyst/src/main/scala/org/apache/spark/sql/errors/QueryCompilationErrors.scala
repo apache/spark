@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, Ta
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.InvalidUDFClassException
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SerdeInfo}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, SerdeInfo}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog.{Identifier, NamespaceChange, Table, TableCapability, TableChange, V1Table}
@@ -34,8 +34,9 @@ import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StructType}
 
 /**
- * Object for grouping all error messages of the query compilation.
- * Currently it includes all AnalysisExceptions.
+ * Object for grouping error messages from exceptions thrown during query compilation.
+ * As [[Command]]s are executed eagerly, this also includes errors thrown during the execution of
+ * [[Command]]s, which users can see immediately.
  */
 private[spark] object QueryCompilationErrors {
 
