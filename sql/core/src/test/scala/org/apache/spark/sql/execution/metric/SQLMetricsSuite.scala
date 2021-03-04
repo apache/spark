@@ -796,4 +796,20 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(insert.head.metrics("jobCommitDuration").value > 1)
     }
   }
+
+  test("SPARK-34567: Add metrics for CTAS operator") {
+    withTable("t") {
+      val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+      val dataWritingCommandExec =
+        df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
+      dataWritingCommandExec.executeCollect()
+      val createTableAsSelect = dataWritingCommandExec.cmd
+      assert(createTableAsSelect.metrics.contains("numFiles"))
+      assert(createTableAsSelect.metrics("numFiles").value == 1)
+      assert(createTableAsSelect.metrics.contains("numOutputBytes"))
+      assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
+      assert(createTableAsSelect.metrics.contains("numOutputRows"))
+      assert(createTableAsSelect.metrics("numOutputRows").value == 1)
+    }
+  }
 }

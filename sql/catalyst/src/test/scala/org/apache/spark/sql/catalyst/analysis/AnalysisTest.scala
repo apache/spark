@@ -59,6 +59,19 @@ trait AnalysisTest extends PlanTest {
     }
   }
 
+  protected def checkAnalysisWithoutViewWrapper(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+      val actualPlan = getAnalyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
+      val transformed = actualPlan transformUp {
+        case v: View if v.isDataFrameTempView => v.child
+      }
+      comparePlans(transformed, expectedPlan)
+    }
+  }
+
   protected override def comparePlans(
       plan1: LogicalPlan,
       plan2: LogicalPlan,

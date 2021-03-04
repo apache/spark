@@ -20,3 +20,4 @@ license: |
 ---
 
  * [ANALYZE TABLE statement](sql-ref-syntax-aux-analyze-table.html)
+ * [ANALYZE TABLES statement](sql-ref-syntax-aux-analyze-tables.html)

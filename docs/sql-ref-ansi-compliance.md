@@ -165,6 +165,7 @@ The behavior of some SQL operators can be different under ANSI mode (`spark.sql.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
   - `CAST(string_col AS TIMESTAMP)`: This operator should fail with an exception if the input string can't be parsed.
   - `CAST(string_col AS DATE)`: This operator should fail with an exception if the input string can't be parsed.
+  - `CAST(string_col AS BOOLEAN)`: This operator should fail with an exception if the input string can't be parsed.
 
 ### SQL Keywords
 
@@ -397,6 +398,7 @@ Below is a list of all the keywords in Spark SQL.
 |STRUCT|non-reserved|non-reserved|non-reserved|
 |SUBSTR|non-reserved|non-reserved|non-reserved|
 |SUBSTRING|non-reserved|non-reserved|non-reserved|
+|SYNC|non-reserved|non-reserved|non-reserved|
 |TABLE|reserved|non-reserved|reserved|
 |TABLES|non-reserved|non-reserved|non-reserved|
 |TABLESAMPLE|non-reserved|non-reserved|reserved|

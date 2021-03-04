@@ -700,7 +700,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -715,7 +715,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }
 
       def unapply(values: Set[Any]): Option[Seq[String]] = {
-        val extractables = values.toSeq.map(valueToLiteralString.lift)
+        val extractables = values.filter(_ != null).toSeq.map(valueToLiteralString.lift)
         if (extractables.nonEmpty && extractables.forall(_.isDefined)) {
           Some(extractables.map(_.get))
         } else {
@@ -769,7 +769,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
       case InSet(child, values) if useAdvanced && values.size > inSetThreshold =>
         val dataType = child.dataType
-        val sortedValues = values.toSeq.sorted(TypeUtils.getInterpretedOrdering(dataType))
+        // Skip null here is safe, more details could see at ExtractableLiterals.
+        val sortedValues = values.filter(_ != null).toSeq
+          .sorted(TypeUtils.getInterpretedOrdering(dataType))
         convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
           LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
 

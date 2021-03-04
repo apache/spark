@@ -741,4 +741,17 @@ private[spark] object QueryCompilationErrors {
     new InvalidUDFClassException(s"No handler for UDAF '$name'. " +
       "Use sparkSession.udf.register(...) instead.")
   }
+
+  def databaseFromV1SessionCatalogNotSpecifiedError(): Throwable = {
+    new AnalysisException("Database from v1 session catalog is not specified")
+  }
+
+  def nestedDatabaseUnsupportedByV1SessionCatalogError(catalog: String): Throwable = {
+    new AnalysisException(s"Nested databases are not supported by v1 session catalog: $catalog")
+  }
+
+  def invalidRepartitionExpressionsError(sortOrders: Seq[Any]): Throwable = {
+    new AnalysisException(s"Invalid partitionExprs specified: $sortOrders For range " +
+      "partitioning use REPARTITION_BY_RANGE instead.")
+  }
 }

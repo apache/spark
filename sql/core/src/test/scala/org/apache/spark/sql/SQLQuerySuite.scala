@@ -29,14 +29,14 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{Project, RepartitionByExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.UnionExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.command.FunctionsCommand
-import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, SchemaColumnConvertNotSupportedException}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -47,8 +47,10 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ResetSystemProperties
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+    with ResetSystemProperties {
   import testImplicits._
 
   setupTestData()
@@ -3726,13 +3728,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
     val hiveVersion = "2.3.8"
-    // default transitive=false, only download specified jar
-    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion")
+    // transitive=false, only download specified jar
+    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
     assert(sc.listJars()
       .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
 
-    // test download ivy URL jar return multiple jars
-    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    // default transitive=true, test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
     assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
     assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
@@ -3860,7 +3862,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
         }
       }
-      System.clearProperty("ivy.home")
     }
   }
 
@@ -4018,6 +4019,49 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }
         assert(e2.message.contains("Not allowed to create a permanent view " +
           s"`default`.`$testViewName` by referencing a temporary function `$tempFuncName`"))
+      }
+    }
+  }
+
+  test("SPARK-26138 Pushdown limit through InnerLike when condition is empty") {
+    withTable("t1", "t2") {
+      spark.range(5).repartition(1).write.saveAsTable("t1")
+      spark.range(5).repartition(1).write.saveAsTable("t2")
+      val df = spark.sql("SELECT * FROM t1 CROSS JOIN t2 LIMIT 3")
+      val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+        case l @ LocalLimit(_, _: LogicalRelation) => l
+      }
+      assert(pushedLocalLimits.length === 2)
+      checkAnswer(df, Row(0, 0) :: Row(0, 1) :: Row(0, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-34514: Push down limit through LEFT SEMI and LEFT ANTI join") {
+    withTable("left_table", "nonempty_right_table", "empty_right_table") {
+      spark.range(5).toDF().repartition(1).write.saveAsTable("left_table")
+      spark.range(3).write.saveAsTable("nonempty_right_table")
+      spark.range(0).write.saveAsTable("empty_right_table")
+      Seq("LEFT SEMI", "LEFT ANTI").foreach { joinType =>
+        val joinWithNonEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN nonempty_right_table LIMIT 3")
+        val joinWithEmptyRightDf = spark.sql(
+          s"SELECT * FROM left_table $joinType JOIN empty_right_table LIMIT 3")
+
+        Seq(joinWithNonEmptyRightDf, joinWithEmptyRightDf).foreach { df =>
+          val pushedLocalLimits = df.queryExecution.optimizedPlan.collect {
+            case l @ LocalLimit(_, _: LogicalRelation) => l
+          }
+          assert(pushedLocalLimits.length === 1)
+        }
+
+        val expectedAnswer = Seq(Row(0), Row(1), Row(2))
+        if (joinType == "LEFT SEMI") {
+          checkAnswer(joinWithNonEmptyRightDf, expectedAnswer)
+          checkAnswer(joinWithEmptyRightDf, Seq.empty)
+        } else {
+          checkAnswer(joinWithNonEmptyRightDf, Seq.empty)
+          checkAnswer(joinWithEmptyRightDf, expectedAnswer)
+        }
       }
     }
   }

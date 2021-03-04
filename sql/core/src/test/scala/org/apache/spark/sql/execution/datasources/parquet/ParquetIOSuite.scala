@@ -864,6 +864,42 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
       assert(getMetaData(dir)(SPARK_VERSION_METADATA_KEY) === SPARK_VERSION_SHORT)
     }
   }
+
+  Seq(true, false).foreach { vec =>
+    test(s"SPARK-34167: read LongDecimals with precision < 10, VectorizedReader $vec") {
+      // decimal32-written-as-64-bit.snappy.parquet was generated using a 3rd-party library. It has
+      // 10 rows of Decimal(9, 1) written as LongDecimal instead of an IntDecimal
+      readParquetFile(testFile("test-data/decimal32-written-as-64-bit.snappy.parquet"), vec) {
+        df =>
+          assert(10 == df.collect().length)
+          val first10Df = df.head(10)
+          assert(
+            Seq(792059492, 986842987, 540247998, null, 357991078,
+              494131059, 92536396, 426847157, -999999999, 204486094)
+              .zip(first10Df).forall(d =>
+              d._2.isNullAt(0) && d._1 == null ||
+                d._1 == d._2.getDecimal(0).unscaledValue().intValue()
+            ))
+      }
+      // decimal32-written-as-64-bit-dict.snappy.parquet was generated using a 3rd-party library. It
+      // has 2048 rows of Decimal(3, 1) written as LongDecimal instead of an IntDecimal
+      readParquetFile(
+        testFile("test-data/decimal32-written-as-64-bit-dict.snappy.parquet"), vec) {
+        df =>
+          assert(2048 == df.collect().length)
+          val first10Df = df.head(10)
+          assert(Seq(751, 937, 511, null, 337, 467, 84, 403, -999, 190)
+            .zip(first10Df).forall(d =>
+            d._2.isNullAt(0) && d._1 == null ||
+              d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+
+          val last10Df = df.tail(10)
+          assert(Seq(866, 20, 492, 76, 824, 604, 343, 820, 864, 243)
+            .zip(last10Df).forall(d =>
+            d._1 == d._2.getDecimal(0).unscaledValue().intValue()))
+      }
+    }
+  }
 }
 
 class JobCommitFailureParquetOutputCommitter(outputPath: Path, context: TaskAttemptContext)

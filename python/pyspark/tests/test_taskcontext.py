@@ -23,7 +23,7 @@ import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase, SPARK_HOME
+from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
 
 
 class TaskContextTests(PySparkTestCase):
@@ -244,7 +244,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         for pid in pids:
             self.assertTrue(pid in worker_pids)
 
-    def test_task_context_correct_with_python_worker_reuse(self):
+    def check_task_context_correct_with_python_worker_reuse(self):
         """Verify the task context correct when reused python worker"""
         # start a normal job first to start all workers and get all worker pids
         worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
@@ -263,7 +263,6 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         # normal stage after normal stage
         normal_result = rdd.mapPartitions(context).collect()
         tps, bps, pids = zip(*normal_result)
-        print(tps)
         self.assertTrue(tps == (0, 1))
         self.assertTrue(bps == (-1, -1))
         for pid in pids:
@@ -282,6 +281,14 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         self.assertTrue(bps == (-1, -1))
         for pid in pids:
             self.assertTrue(pid in worker_pids)
+        return True
+
+    def test_task_context_correct_with_python_worker_reuse(self):
+        # Retrying the check as the PIDs from Python workers might be different even
+        # when reusing Python workers is enabled if a Python worker is dead for some reasons
+        # (e.g., socket connection failure) and new Python worker is created.
+        eventually(
+            self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
 
     def tearDown(self):
         self.sc.stop()

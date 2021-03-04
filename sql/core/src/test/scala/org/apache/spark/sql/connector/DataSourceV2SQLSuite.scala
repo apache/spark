@@ -35,9 +35,8 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.internal.connector.SimpleTableProvider
 import org.apache.spark.sql.sources.SimpleScanSource
-import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, LongType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -848,24 +847,6 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("SPARK-33829: Renaming a table should recreate a cache while retaining the old cache info") {
-    withTable("testcat.ns.old", "testcat.ns.new") {
-      def getStorageLevel(tableName: String): StorageLevel = {
-        val table = spark.table(tableName)
-        val optCachedData = spark.sharedState.cacheManager.lookupCachedData(table)
-        assert(optCachedData.isDefined)
-        optCachedData.get.cachedRepresentation.cacheBuilder.storageLevel
-      }
-      sql("CREATE TABLE testcat.ns.old USING foo AS SELECT id, data FROM source")
-      sql("CACHE TABLE testcat.ns.old OPTIONS('storageLevel' 'MEMORY_ONLY')")
-      val oldStorageLevel = getStorageLevel("testcat.ns.old")
-
-      sql("ALTER TABLE testcat.ns.old RENAME TO ns.new")
-      val newStorageLevel = getStorageLevel("testcat.ns.new")
-      assert(oldStorageLevel === newStorageLevel)
-    }
-  }
-
   test("Relation: basic") {
     val t1 = "testcat.ns1.ns2.tbl"
     withTable(t1) {
@@ -1228,8 +1209,8 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
-          ("name", StringType),
-          ("value", StringType)
+          ("info_name", StringType),
+          ("info_value", StringType)
         ))
       val description = descriptionDf.collect()
       assert(description === Seq(
@@ -1241,7 +1222,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetProperties using v2 catalog") {
+  test("ALTER NAMESPACE .. SET PROPERTIES using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test' WITH PROPERTIES ('a'='a','b'='b','c'='c')")
@@ -1257,7 +1238,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetProperties: reserved properties") {
+  test("ALTER NAMESPACE .. SET PROPERTIES reserved properties") {
     import SupportsNamespaces._
     withSQLConf((SQLConf.LEGACY_PROPERTY_NON_RESERVED.key, "false")) {
       CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES.filterNot(_ == PROP_COMMENT).foreach { key =>
@@ -1288,7 +1269,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterNamespaceSetLocation using v2 catalog") {
+  test("ALTER NAMESPACE .. SET LOCATION using v2 catalog") {
     withNamespace("testcat.ns1.ns2") {
       sql("CREATE NAMESPACE IF NOT EXISTS testcat.ns1.ns2 COMMENT " +
         "'test namespace' LOCATION '/tmp/ns_test_1'")
@@ -1895,7 +1876,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("AlterTable: rename table basic test") {
+  test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
       checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
@@ -1905,10 +1886,6 @@ class DataSourceV2SQLSuite
       }
       assert(e.getMessage.contains(
         "Cannot rename a table with ALTER VIEW. Please use ALTER TABLE instead"))
-
-      sql("ALTER TABLE testcat.ns1.ns2.old RENAME TO ns1.new")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq.empty)
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1"), Seq(Row("ns1", "new", false)))
     }
   }
 
@@ -2015,7 +1992,7 @@ class DataSourceV2SQLSuite
   test("CREATE VIEW") {
     val v = "testcat.ns1.ns2.v"
     val e = intercept[AnalysisException] {
-      sql(s"CREATE VIEW $v AS SELECT * FROM tab1")
+      sql(s"CREATE VIEW $v AS SELECT 1")
     }
     assert(e.message.contains("CREATE VIEW is only supported with v1 tables"))
   }
@@ -2515,6 +2492,37 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-34547: metadata columns are resolved last") {
+    val t1 = s"${catalogAndNamespace}tableOne"
+    val t2 = "t2"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      withTempView(t2) {
+        sql(s"CREATE TEMPORARY VIEW $t2 AS SELECT * FROM " +
+          s"VALUES (1, -1), (2, -2), (3, -3) AS $t2(id, index)")
+
+        val sqlQuery = spark.sql(s"SELECT $t1.id, $t2.id, data, index, $t1.index, $t2.index FROM " +
+          s"$t1 JOIN $t2 WHERE $t1.id = $t2.id")
+        val t1Table = spark.table(t1)
+        val t2Table = spark.table(t2)
+        val dfQuery = t1Table.join(t2Table, t1Table.col("id") === t2Table.col("id"))
+          .select(s"$t1.id", s"$t2.id", "data", "index", s"$t1.index", s"$t2.index")
+
+        Seq(sqlQuery, dfQuery).foreach { query =>
+          checkAnswer(query,
+            Seq(
+              Row(1, 1, "a", -1, 0, -1),
+              Row(2, 2, "b", -2, 0, -2),
+              Row(3, 3, "c", -3, 0, -3)
+            )
+          )
+        }
+      }
+    }
+  }
+
   test("SPARK-33505: insert into partitioned table") {
     val t = "testpart.ns1.ns2.tbl"
     withTable(t) {
@@ -2582,6 +2590,103 @@ class DataSourceV2SQLSuite
 
       sql(s"INSERT INTO $t PARTITION(id = 1, city = 'NY') SELECT 'abc'")
       assert(partTable.loadPartitionMetadata(ident).get("location") === loc)
+    }
+  }
+
+  test("SPARK-34468: rename table in place when the destination name has single part") {
+    val tbl = s"${catalogAndNamespace}src_tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      sql(s"INSERT INTO $tbl SELECT 0")
+      checkAnswer(sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"), Nil)
+      sql(s"ALTER TABLE $tbl RENAME TO new_tbl")
+      checkAnswer(
+        sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"),
+        Row("ns1.ns2", "new_tbl", false))
+      checkAnswer(sql(s"SELECT c0 FROM ${catalogAndNamespace}new_tbl"), Row(0))
+    }
+  }
+
+  test("SPARK-34555: Resolve DataFrame metadata column") {
+    val tbl = s"${catalogAndNamespace}table"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string) USING $v2Format " +
+        "PARTITIONED BY (bucket(4, id), id)")
+      sql(s"INSERT INTO $tbl VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      val table = spark.table(tbl)
+      val dfQuery = table.select(
+        table.col("id"),
+        table.col("data"),
+        table.col("index"),
+        table.col("_partition")
+      )
+
+      checkAnswer(
+        dfQuery,
+        Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3"))
+      )
+    }
+  }
+
+  test("SPARK-34561: drop/add columns to a dataset of `DESCRIBE TABLE`") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      val description = sql(s"DESCRIBE TABLE $tbl")
+      val noCommentDataset = description.drop("comment")
+      val expectedSchema = new StructType()
+        .add(
+          name = "col_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column").build())
+        .add(
+          name = "data_type",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "data type of the column").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("col_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34576: drop/add columns to a dataset of `DESCRIBE COLUMN`") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c0 INT) USING $v2Format")
+      val description = sql(s"DESCRIBE TABLE $tbl c0")
+      val noCommentDataset = description.drop("info_value")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_name",
+          dataType = StringType,
+          nullable = false,
+          metadata = new MetadataBuilder().putString("comment", "name of the column info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_name").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
+  }
+
+  test("SPARK-34577: drop/add columns to a dataset of `DESCRIBE NAMESPACE`") {
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      val description = sql(s"DESCRIBE NAMESPACE ns")
+      val noCommentDataset = description.drop("info_name")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_value",
+          dataType = StringType,
+          nullable = true,
+          metadata = new MetadataBuilder()
+            .putString("comment", "value of the namespace info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_value").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
     }
   }
 
