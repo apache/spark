@@ -1281,8 +1281,8 @@ class DataSourceV2SQLSuite
       val descriptionDf = sql("DESCRIBE NAMESPACE testcat.ns1.ns2")
       assert(descriptionDf.schema.map(field => (field.name, field.dataType)) ===
         Seq(
-          ("name", StringType),
-          ("value", StringType)
+          ("info_name", StringType),
+          ("info_value", StringType)
         ))
       val description = descriptionDf.collect()
       assert(description === Seq(
@@ -2760,6 +2760,25 @@ class DataSourceV2SQLSuite
       sql(s"$sqlCommand $sqlParams")
     }
     assert(e.message.contains(s"$sqlCommand is only supported with v1 tables"))
+  }
+
+  test("SPARK-34577: drop/add columns to a dataset of `DESCRIBE NAMESPACE`") {
+    withNamespace("ns") {
+      sql("CREATE NAMESPACE ns")
+      val description = sql(s"DESCRIBE NAMESPACE ns")
+      val noCommentDataset = description.drop("info_name")
+      val expectedSchema = new StructType()
+        .add(
+          name = "info_value",
+          dataType = StringType,
+          nullable = true,
+          metadata = new MetadataBuilder()
+            .putString("comment", "value of the namespace info").build())
+      assert(noCommentDataset.schema === expectedSchema)
+      val isNullDataset = noCommentDataset
+        .withColumn("is_null", noCommentDataset("info_value").isNull)
+      assert(isNullDataset.schema === expectedSchema.add("is_null", BooleanType, false))
+    }
   }
 
   private def testV1CommandSupportingTempView(sqlCommand: String, sqlParams: String): Unit = {

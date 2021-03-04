@@ -216,12 +216,19 @@ class ResolveSessionCatalog(
     case AlterViewUnsetPropertiesStatement(SessionCatalogAndTable(_, tbl), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(tbl.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespace(SessionCatalogAndNamespace(_, ns), _) =>
+    case DescribeNamespace(SessionCatalogAndNamespace(_, ns), extended, output) =>
       if (ns.length != 1) {
         throw new AnalysisException(
           s"The database name is not valid: ${ns.quoted}")
       }
-      DescribeDatabaseCommand(ns.head, d.extended)
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 2)
+        Seq(output.head.withName("database_description_item"),
+          output.last.withName("database_description_value"))
+      } else {
+        output
+      }
+      DescribeDatabaseCommand(ns.head, extended, newOutput)
 
     case AlterNamespaceSetProperties(SessionCatalogAndNamespace(_, ns), properties) =>
       if (ns.length != 1) {

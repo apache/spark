@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
@@ -169,7 +169,8 @@ case class AlterDatabaseSetLocationCommand(databaseName: String, location: Strin
  */
 case class DescribeDatabaseCommand(
     databaseName: String,
-    extended: Boolean)
+    extended: Boolean,
+    override val output: Seq[Attribute])
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -194,11 +195,6 @@ case class DescribeDatabaseCommand(
     } else {
       result
     }
-  }
-
-  override val output: Seq[Attribute] = {
-    AttributeReference("database_description_item", StringType, nullable = false)() ::
-      AttributeReference("database_description_value", StringType, nullable = false)() :: Nil
   }
 }
 
