@@ -2879,7 +2879,10 @@ private[spark] object Utils extends Logging {
         // if a given class is not a local or an anonymous class, so we replace it with
         // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
         // only in either case (JVM Spec 4.8.6).
-        cls.getEnclosingClass != null && cls.getEnclosingMethod == null
+        //
+        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
+        // we reorder the conditions to follow it.
+        cls.getEnclosingMethod == null & cls.getEnclosingClass != null
     }
   }
 
