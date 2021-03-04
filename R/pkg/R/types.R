@@ -94,9 +94,7 @@ checkSchemaInArrow <- function(schema) {
 
   # Both cases below produce a corrupt value for unknown reason. It needs to be investigated.
   field_strings <- sapply(schema$fields(), function(x) x$dataType.toString())
-  if (any(field_strings == "FloatType")) {
-    stop("Arrow optimization in R does not support float type yet.")
-  }
+  
   if (any(field_strings == "BinaryType")) {
     stop("Arrow optimization in R does not support binary type yet.")
   }
