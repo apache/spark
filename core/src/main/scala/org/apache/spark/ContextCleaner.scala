@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.api.ShuffleDriverComponents
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ShutdownHookManager, ThreadUtils, Utils}
 
 /**
  * Classes that represent cleaning tasks.
@@ -206,6 +206,29 @@ private[spark] class ContextCleaner(
       }
     }
   }
+
+  /**
+   * Cleanup resources on shutdown.
+   *
+   * This is important for resources that don't live in memory, like checkpoint data,
+   * that outlive the Spark process. The normal cleanup thread in [[keepCleaning]]
+   * doesn't cleanup things on shutdown because it's interrupted by the shutdown
+   * process itself.
+   */
+  private def cleanupOnShutdown(): Unit = {
+    referenceBuffer.toArray(Array[CleanupTaskWeakReference]())
+    .foreach { ref =>
+      ref.task match {
+        case CleanCheckpoint(rddId) =>
+          doCleanCheckpoint(rddId)
+        case _ =>
+      }
+    }
+  }
+
+  ShutdownHookManager.addShutdownHook(
+    priority = ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY - 1
+  )(cleanupOnShutdown)
 
   /** Perform RDD cleanup. */
   def doCleanupRDD(rddId: Int, blocking: Boolean): Unit = {
