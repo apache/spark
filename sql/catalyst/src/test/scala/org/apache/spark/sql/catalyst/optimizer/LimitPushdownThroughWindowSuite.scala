@@ -74,6 +74,50 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(correctAnswer.analyze))
   }
 
+  test("Push down limit through window for multiple window functions") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c)
+      .orderBy(c.desc)
+      .limit(2)
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rk"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Push down limit through window respect spark.sql.execution.topKSortFallbackThreshold") {
+    Seq(1, 100).foreach { threshold =>
+      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
+        val originalQuery = testRelation
+          .select(a, b, c,
+            windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+          .limit(2)
+        val correctAnswer = if (threshold == 1) {
+          originalQuery
+        } else {
+          testRelation
+            .select(a, b, c)
+            .orderBy(c.desc)
+            .limit(2)
+            .select(a, b, c,
+              windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+        }
+
+        comparePlans(
+          Optimize.execute(originalQuery.analyze),
+          WithoutOptimize.execute(correctAnswer.analyze))
+      }
+    }
+  }
+
   test("Should not push down if partitionSpec is not empty") {
     val originalQuery = testRelation
       .select(a, b, c,
@@ -119,28 +163,25 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-  test("Push down limit through window respect spark.sql.execution.topKSortFallbackThreshold") {
-    Seq(1, 100).foreach { threshold =>
-      withSQLConf(SQLConf.TOP_K_SORT_FALLBACK_THRESHOLD.key -> threshold.toString) {
-        val originalQuery = testRelation
-          .select(a, b, c,
-            windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-          .limit(2)
-        val correctAnswer = if (threshold == 1) {
-          originalQuery
-        } else {
-          testRelation
-            .select(a, b, c)
-            .orderBy(c.desc)
-            .limit(2)
-            .select(a, b, c,
-              windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-        }
+  test("Should not push down if order is different") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
+  }
 
-        comparePlans(
-          Optimize.execute(originalQuery.analyze),
-          WithoutOptimize.execute(correctAnswer.analyze))
-      }
-    }
+  test("Should not push down if order column is different") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(originalQuery.analyze))
   }
 }

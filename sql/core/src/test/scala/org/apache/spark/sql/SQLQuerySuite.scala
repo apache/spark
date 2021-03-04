@@ -4073,19 +4073,29 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         .write
         .saveAsTable("t1")
 
-      val df1 = spark.sql("SELECT a, b, ROW_NUMBER() OVER(ORDER BY a, b) AS rn FROM t1 LIMIT 3")
+      val df1 = spark.sql(
+        """
+          |SELECT a, b, ROW_NUMBER() OVER(ORDER BY a, b) AS rn
+          |FROM t1
+          |LIMIT 3
+          |""".stripMargin)
       val pushedLocalLimits1 = df1.queryExecution.optimizedPlan.collect {
         case l @ LocalLimit(_, _: Sort) => l
       }
       assert(pushedLocalLimits1.length === 1)
       checkAnswer(df1, Seq(Row(null, 2, 1), Row(null, 4, 2), Row(null, 6, 3)))
 
-      val df2 = spark.sql("SELECT a, RANK() OVER(ORDER BY a) AS rk FROM t1 LIMIT 3")
+      val df2 = spark.sql(
+        """
+          |SELECT *, RANK() OVER(ORDER BY a, b) AS rk, SUM(b) OVER(ORDER BY a, b) AS s
+          |FROM t1
+          |LIMIT 2
+          |""".stripMargin)
       val pushedLocalLimits2 = df2.queryExecution.optimizedPlan.collect {
         case l @ LocalLimit(_, _: Sort) => l
       }
       assert(pushedLocalLimits2.length === 1)
-      checkAnswer(df2, Seq(Row(null, 1), Row(null, 1), Row(null, 1)))
+      checkAnswer(df2, Seq(Row(null, 2, 1, 2), Row(null, 4, 2, 6)))
     }
   }
 }
