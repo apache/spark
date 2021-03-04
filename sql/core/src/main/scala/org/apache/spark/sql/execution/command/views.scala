@@ -359,12 +359,12 @@ object ViewHelper {
     "spark.sql.shuffle.",
     "spark.sql.adaptive.")
 
-  private val configPrefixAllowList = Seq(
+  private val configAllowList = Seq(
     SQLConf.DISABLE_HINTS.key
   )
 
   private def shouldCaptureConfig(key: String): Boolean = {
-    configPrefixAllowList.exists(prefix => key.startsWith(prefix)) ||
+    configAllowList.exists(prefix => key.equals(prefix)) ||
       !configPrefixDenyList.exists(prefix => key.startsWith(prefix))
   }
 
