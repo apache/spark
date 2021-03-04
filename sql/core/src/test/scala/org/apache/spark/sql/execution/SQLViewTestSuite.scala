@@ -283,12 +283,13 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("SPARK-34613: Fix view does not capture disable hint config") {
     withSQLConf(DISABLE_HINTS.key -> "true") {
       withView("v1") {
-        createView("v1", "SELECT /*+ repartition(1) */ 1")
+        val viewName = createView("v1", "SELECT /*+ repartition(1) */ 1")
         assert(
           sql("SELECT * FROM v1").queryExecution.analyzed.collect {
             case e: Repartition => e
           }.isEmpty
         )
+        checkViewOutput(viewName, Seq(Row(1)))
       }
     }
   }
