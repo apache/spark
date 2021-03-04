@@ -955,6 +955,10 @@ class LogisticRegression @Since("1.2.0") (
       .setName(s"training blocks (blockSizeInMB=$actualBlockSizeInMB)")
 
     val multinomial = checkMultinomial(numClasses)
+    // for binary LR, we can center the input vector, if and only if:
+    // 1, fitIntercept is true;
+    // 2, no penalty on the intercept, which is always true in existing impl;
+    // 3, no bounds on the intercept.
     val fitWithMean = !multinomial && $(fitIntercept) &&
       (!isSet(lowerBoundsOnIntercepts) || $(lowerBoundsOnIntercepts)(0).isNegInfinity) &&
       (!isSet(upperBoundsOnIntercepts) || $(upperBoundsOnIntercepts)(0).isPosInfinity)
@@ -971,6 +975,10 @@ class LogisticRegression @Since("1.2.0") (
     }
 
     if (fitWithMean) {
+      // orginal initialCoefWithInterceptArray is for problem:
+      // y ~ f(w1* x1 / std_x1, w2* x2 / std_x2, ..., intercept)
+      // we should adjust it to the initial solution for problem:
+      // y ~ f(w1* (x1 - avg_x1) / std_x1, w2* (x2 - avg_x2) / std_x2, ..., intercept)
       var i = 0
       var adapt = 0.0
       while (i < numFeatures) {
@@ -1002,6 +1010,10 @@ class LogisticRegression @Since("1.2.0") (
 
     val solution = if (state == null) null else state.x.toArray
     if (fitWithMean && solution != null) {
+      // the final solution is for problem:
+      // y ~ f(w1* (x1 - avg_x1) / std_x1, w2* (x2 - avg_x2) / std_x2, ..., intercept)
+      // we should adjust it back for original problem:
+      // y ~ f(w1* x1 / std_x1, w2* x2 / std_x2, ..., intercept)
       var i = 0
       var adapt = 0.0
       while (i < numFeatures) {

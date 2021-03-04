@@ -268,11 +268,11 @@ private[ml] class BlockLogisticAggregator(
  * BlockBinaryLogisticAggregator computes the gradient and loss used in Logistic classification
  * for blocks in sparse or dense matrix in an online fashion.
  *
- * Two BlockLogisticAggregators can be merged together to have a summary of loss and gradient of
- * the corresponding joint dataset.
+ * Two BlockBinaryLogisticAggregator can be merged together to have a summary of loss and gradient
+ * of the corresponding joint dataset.
  *
  * NOTE: The feature values are expected to already have be scaled (divided by [[bcFeaturesStd]],
- * NOT centered) before computation.
+ * but NOT centered) before computation.
  *
  * @param bcCoefficients The coefficients corresponding to the features.
  * @param fitIntercept Whether to fit an intercept term.
@@ -323,11 +323,11 @@ private[ml] class BlockBinaryLogisticAggregator(
   }
 
   /**
-   * Add a new training instance block to this BlockLogisticAggregator, and update the loss and
-   * gradient of the objective function.
+   * Add a new training instance block to this BlockBinaryLogisticAggregator, and update the loss
+   * and gradient of the objective function.
    *
    * @param block The instance block of data point to be added.
-   * @return This BlockLogisticAggregator object.
+   * @return This BlockBinaryLogisticAggregator object.
    */
   def add(block: InstanceBlock): this.type = {
     require(block.matrix.isTransposed)
@@ -377,6 +377,7 @@ private[ml] class BlockBinaryLogisticAggregator(
     // predictions are all correct, no gradient signal
     if (arr.forall(_ == 0)) return this
 
+    // update the linear part of gradientSumArray
     block.matrix match {
       case dm: DenseMatrix =>
         BLAS.nativeBLAS.dgemv("N", dm.numCols, dm.numRows, 1.0, dm.values, dm.numCols,
@@ -396,12 +397,16 @@ private[ml] class BlockBinaryLogisticAggregator(
         throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
 
+    lazy val multiplierSum = arr.sum
+    if (fitWithMean) {
+      // above update of the linear part of gradientSumArray dose NOT take the centering
+      // into account, here we need to adjust this part.
+      BLAS.getBLAS(numFeatures).daxpy(numFeatures, -multiplierSum, scaledMean, 1,
+        gradientSumArray, 1)
+    }
+
+    // update the intercept part of gradientSumArray
     if (fitIntercept) {
-      val multiplierSum = arr.sum
-      if (fitWithMean) {
-        BLAS.getBLAS(numFeatures).daxpy(numFeatures, -multiplierSum, scaledMean, 1,
-          gradientSumArray, 1)
-      }
       gradientSumArray(numFeatures) += multiplierSum
     }
 
