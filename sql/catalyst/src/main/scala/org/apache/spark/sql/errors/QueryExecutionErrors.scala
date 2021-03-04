@@ -478,7 +478,7 @@ object QueryExecutionErrors {
   }
 
   def optionIsEmptyError(optionName: String): Throwable = {
-    new IllegalArgumentException(s"Option '$optionName' can not be empty.")
+    new IllegalArgumentException(s"Option `$optionName` can not be empty.")
   }
 
   def invalidJdbcTxnIsolationLevelError(jdbcTxnIsolationLevel: String, value: String): Throwable = {
@@ -549,7 +549,7 @@ object QueryExecutionErrors {
       s"""
          |Found duplicate field(s) "$requiredFieldName": $matchedOrcFields
          |in case-insensitive mode
-       """.stripMargin)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def failedMergeIncompatibleSchemasError(

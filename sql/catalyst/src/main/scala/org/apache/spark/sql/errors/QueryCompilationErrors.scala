@@ -822,7 +822,7 @@ private[spark] object QueryCompilationErrors {
          |Failed to find data source: $provider. Avro is built-in but external data
          |source module since Spark 2.4. Please deploy the application as per
          |the deployment section of "Apache Avro Data Source Guide".
-       """.stripMargin)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def failedFindKafkaDataSourceError(provider: String): Throwable = {
@@ -830,7 +830,7 @@ private[spark] object QueryCompilationErrors {
       s"""
          |Failed to find data source: $provider. Please deploy the application as
          |per the deployment section of "Structured Streaming + Kafka Integration Guide".
-       """.stripMargin)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
@@ -872,7 +872,7 @@ private[spark] object QueryCompilationErrors {
          |as the target table: target table has ${targetPartitionSchema.fields.size}
          |partition column(s) but the inserted data has $providedPartitionsSize
          |partition columns specified.
-       """.stripMargin)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def invalidPartitionColumnError(
@@ -1045,7 +1045,7 @@ private[spark] object QueryCompilationErrors {
          |target table: target table has ${insert.table.output.size} column(s) but the inserted
          |data has ${insert.query.output.length + staticPartCols.size} column(s), including
          |${staticPartCols.size} partition column(s) having constant value(s).
-       """.stripMargin)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def requestedPartitionsMisMatchTablePartitionsError(
