@@ -755,6 +755,16 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(output.toList === List(Int.MaxValue, Int.MaxValue, 4, 3, 2, Int.MinValue, Int.MinValue))
   }
 
+  test("shutdown hook priorities") {
+    import org.apache.spark.util.ShutdownHookManager.{
+      DEFAULT_SHUTDOWN_PRIORITY,
+      SPARK_CONTEXT_SHUTDOWN_PRIORITY,
+      TEMP_DIR_SHUTDOWN_PRIORITY
+    }
+    assert(SPARK_CONTEXT_SHUTDOWN_PRIORITY < DEFAULT_SHUTDOWN_PRIORITY)
+    assert(TEMP_DIR_SHUTDOWN_PRIORITY < SPARK_CONTEXT_SHUTDOWN_PRIORITY)
+  }
+
   test("isInDirectory") {
     val tmpDir = new File(sys.props("java.io.tmpdir"))
     val parentDir = new File(tmpDir, "parent-dir")
