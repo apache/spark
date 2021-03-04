@@ -95,17 +95,6 @@ checkSchemaInArrow <- function(schema) {
   # Both cases below produce a corrupt value for unknown reason. It needs to be investigated.
   field_strings <- sapply(schema$fields(), function(x) x$dataType.toString())
   
-  if (any(field_strings == "BinaryType")) {
-    stop("Arrow optimization in R does not support binary type yet.")
-  }
-  if (any(startsWith(field_strings, "ArrayType"))) {
-    stop("Arrow optimization in R does not support array type yet.")
-  }
-
-  # Arrow optimization in Spark does not yet support both cases below.
-  if (any(startsWith(field_strings, "StructType"))) {
-    stop("Arrow optimization in R does not support nested struct type yet.")
-  }
   if (any(startsWith(field_strings, "MapType"))) {
     stop("Arrow optimization in R does not support map type yet.")
   }
