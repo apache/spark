@@ -50,7 +50,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(df.collect() === Array(Row(9, 4.5)))
   }
 
-  test("GenerateExec should be included in WholeStageCodegen") {
+  testWithWholeStageCodegenOnAndOff("GenerateExec should be" +
+    " included in WholeStageCodegen") { codegenEnabled =>
     import testImplicits._
     val arrayData = Seq(("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown")))
     val df = arrayData.toDF("name", "knownLanguages", "properties")
@@ -61,7 +62,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ => false
+      case _ => !codegenEnabled.toBoolean
     }.isDefined)
     checkAnswer(expDF, Array(Row("James", "Java", Map("hair" -> "black", "eye" -> "brown")),
       Row("James", "Scala", Map("hair" -> "black", "eye" -> "brown"))))
@@ -72,7 +73,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ => false
+      case _ => !codegenEnabled.toBoolean
     }.isDefined)
     checkAnswer(expDF,
       Array(Row("James", List("Java", "Scala"), "hair", "black"),
@@ -84,7 +85,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ => false
+      case _ => !codegenEnabled.toBoolean
     }.isDefined)
     checkAnswer(expDF,
       Array(Row("James", 0, "Java"), Row("James", 1, "Scala")))
@@ -95,7 +96,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ => false
+      case _ => !codegenEnabled.toBoolean
     }.isDefined)
     checkAnswer(expDF,
       Array(Row("James", 0, "hair", "black"), Row("James", 1, "eye", "brown")))
@@ -106,7 +107,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ => false
+      case _ => !codegenEnabled.toBoolean
     }.isDefined)
     checkAnswer(expDF,
       Array(Row("James", Seq("Java", "Scala"), Map("hair" -> "black", "eye" -> "brown"), "Java"),
@@ -118,7 +119,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     assert(plan.find {
       case stage: WholeStageCodegenExec =>
         stage.find(_.isInstanceOf[GenerateExec]).isDefined
-      case _ => false
+      case _ => !codegenEnabled.toBoolean
     }.isDefined)
     checkAnswer(expDF,
       Array(
