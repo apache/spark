@@ -90,6 +90,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Constant folding and strength reduction
         OptimizeRepartition,
         TransposeWindow,
+        DeduplicateWindowExpressions,
         NullPropagation,
         ConstantPropagation,
         FoldablePropagation,
@@ -945,6 +946,45 @@ object TransposeWindow extends Rule[LogicalPlan] {
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
+
+/**
+ * Replaces duplicate window expressions with an alias in a Project above the Window node.
+ */
+object DeduplicateWindowExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case w @ Window(wes, _, _, _) if wes.length > 1 =>
+      val equivalenceMap = mutable.HashMap.empty[Expression, Attribute]
+      val aliases: mutable.ArrayBuffer[Alias] = mutable.ArrayBuffer()
+      val newWes: mutable.ArrayBuffer[NamedExpression] = mutable.ArrayBuffer()
+
+      wes.foreach {
+        case a @ Alias(we, name) =>
+          val equivalent = equivalenceMap.get(we.canonicalized)
+          if (equivalent.isDefined) {
+            aliases += Alias(equivalent.get, name)(
+              exprId = a.exprId,
+              qualifier = a.qualifier,
+              explicitMetadata = a.explicitMetadata,
+              nonInheritableMetadataKeys = a.nonInheritableMetadataKeys
+            )
+          } else {
+            equivalenceMap.put(we.canonicalized, a.toAttribute)
+            newWes += a
+          }
+        case we =>
+          // The window expression is almost always an alias, this case is for safety
+          newWes += we
+      }
+
+      if (aliases.isEmpty) {
+        w
+      } else {
+        val newWindow = w.copy(windowExpressions = newWes.toSeq)
+        Project(newWindow.output ++ aliases, newWindow)
+      }
+  }
+}
+
 
 /**
  * Infers filters from [[Generate]], such that rows that would have been removed
