@@ -477,5 +477,15 @@ trait InsertIntoSQLOnlyTests
         verifyTable(t1, spark.table(view))
       }
     }
+
+    test("SPARK-34599: InsertInto: overwrite - dot in the partition column name - static mode") {
+      import testImplicits._
+      val t1 = "tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (`a.b` string, `c.d` string) USING $v2Format PARTITIONED BY (`a.b`)")
+        sql(s"INSERT OVERWRITE $t1 PARTITION (`a.b` = 'a') (`c.d`) VALUES('b')")
+        verifyTable(t1, Seq("a" -> "b").toDF("id", "data"))
+      }
+    }
   }
 }
