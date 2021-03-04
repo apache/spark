@@ -2016,13 +2016,13 @@ abstract class RDD[T: ClassTag](
    * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
    * for the definition.
    *
-   *l By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is DETERMINATE. For
+   * By default, an reliably checkpointed RDD, or RDD without parents(root RDD) is DETERMINATE. For
    * RDDs with parents, we will generate a deterministic level candidate per parent according to
    * the dependency. The deterministic level of the current RDD is the deterministic level
    * candidate that is deterministic least. Please override [[getOutputDeterministicLevel]] to
    * provide custom logic of calculating output deterministic level.
    */
-  // TODO: make it public so users can set deterministic level to their custom RDDs.
+  // TODO(SPARK-34612): make it public so users can set deterministic level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different deterministic level for
   // different partitions.
   private[spark] final def outputDeterministicLevel: DeterministicLevel.Value = {
