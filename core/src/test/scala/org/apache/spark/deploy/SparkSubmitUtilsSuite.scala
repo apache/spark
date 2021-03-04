@@ -17,10 +17,12 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io.{File, OutputStream, PrintStream, PrintWriter}
+import java.net.URI
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 
 import com.google.common.io.Files
 import org.apache.ivy.core.module.descriptor.MDArtifact
@@ -275,6 +277,37 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       val r = """.*org.apache.spark-spark-submit-parent-.*""".r
       assert(!ivySettings.getDefaultCache.listFiles.map(_.getName)
         .exists(r.findFirstIn(_).isDefined), "resolution files should be cleaned")
+    }
+  }
+
+  test("SPARK-34624: should ignore non-jar dependencies") {
+    val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
+    val dep = "my.great.dep:mydep:0.5"
+
+    IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
+      // IvyTestUtils.withRepository does not have an easy way for creating non-jar dependencies
+      // so we let it create the jar dependency in `mylib-0.1.pom`, and the modify the pom
+      // to change the type of the transitive to `pom`
+      val mainPom = new File(URI.create(repo).resolve("my/great/lib/mylib/0.1/mylib-0.1.pom"))
+      val source = Source.fromFile(mainPom)
+      val modifiedPom = new File(s"$tempIvyPath/modified-mylib-0.1.pom")
+      val sink = new PrintWriter(modifiedPom)
+      source.getLines()
+        .map(l => if (l.trim == "<artifactId>mydep</artifactId>") s"$l<type>pom</type>" else l)
+        // scalastyle:off println
+        .foreach(sink.println)
+        // scalastyle:on println
+      source.close()
+      sink.close()
+      modifiedPom.renameTo(mainPom)
+
+      val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
+      val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+        main.toString,
+        ivySettings,
+        transitive = true,
+        isTest = true)
+      assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency")
     }
   }
 }
