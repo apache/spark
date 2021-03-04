@@ -343,6 +343,130 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkCast(Decimal(1.5), "1.5")
   }
 
+  test("cast from array") {
+    val array = Literal.create(Seq("123", "true", "f", null),
+      ArrayType(StringType, containsNull = true))
+    val array_notNull = Literal.create(Seq("123", "true", "f"),
+      ArrayType(StringType, containsNull = false))
+
+    checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
+
+    {
+      val array = Literal.create(Seq.empty, ArrayType(NullType, containsNull = false))
+      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
+      assert(ret.resolved)
+      checkEvaluation(ret, Seq.empty)
+    }
+
+    {
+      val ret = cast(array, ArrayType(BooleanType, containsNull = false))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(array, IntegerType)
+      assert(ret.resolved === false)
+    }
+  }
+
+  test("cast from map") {
+    val map = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
+      MapType(StringType, StringType, valueContainsNull = true))
+    val map_notNull = Literal.create(
+      Map("a" -> "123", "b" -> "true", "c" -> "f"),
+      MapType(StringType, StringType, valueContainsNull = false))
+
+    checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
+
+    {
+      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(ret.resolved === false)
+    }
+    {
+      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved === false)
+    }
+    {
+      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
+      assert(ret.resolved === false)
+    }
+    {
+      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(map, IntegerType)
+      assert(ret.resolved === false)
+    }
+  }
+
+  test("cast from struct") {
+    checkNullCast(
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", IntegerType))),
+      StructType(Seq(
+        StructField("a", StringType),
+        StructField("b", StringType))))
+
+    val struct = Literal.create(
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f"),
+        null),
+      StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true),
+        StructField("d", StringType, nullable = true))))
+    val struct_notNull = Literal.create(
+      InternalRow(
+        UTF8String.fromString("123"),
+        UTF8String.fromString("true"),
+        UTF8String.fromString("f")),
+      StructType(Seq(
+        StructField("a", StringType, nullable = false),
+        StructField("b", StringType, nullable = false),
+        StructField("c", StringType, nullable = false))))
+
+    {
+      val ret = cast(struct, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false),
+        StructField("d", BooleanType, nullable = true))))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(struct_notNull, StructType(Seq(
+        StructField("a", BooleanType, nullable = true),
+        StructField("b", BooleanType, nullable = true),
+        StructField("c", BooleanType, nullable = false))))
+      assert(ret.resolved === false)
+    }
+
+    {
+      val ret = cast(struct, StructType(Seq(
+        StructField("a", StringType, nullable = true),
+        StructField("b", StringType, nullable = true),
+        StructField("c", StringType, nullable = true))))
+      assert(ret.resolved === false)
+    }
+    {
+      val ret = cast(struct, IntegerType)
+      assert(ret.resolved === false)
+    }
+  }
+
   test("cast struct with a timestamp field") {
     val originalSchema = new StructType().add("tsField", TimestampType, nullable = false)
     // nine out of ten times I'm casting a struct, it's to normalize its fields nullability
@@ -800,13 +924,11 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     checkCastToBooleanError(Literal(""), BooleanType)
   }
 
-  test("cast from array") {
+  test("cast from array II") {
     val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
     val array_notNull = Literal.create(Seq("123", "true", "f"),
       ArrayType(StringType, containsNull = false))
-
-    checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
 
     {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
@@ -816,35 +938,14 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
     }
 
     {
-      val array = Literal.create(Seq.empty, ArrayType(NullType, containsNull = false))
-      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
-      assert(ret.resolved)
-      checkEvaluation(ret, Seq.empty)
-    }
-
-    {
-      val ret = cast(array, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === false)
-    }
-
-    {
       val to: DataType = ArrayType(BooleanType, containsNull = true)
       val ret = cast(array_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(array_notNull, to)
     }
-    {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(array, IntegerType)
-      assert(ret.resolved === false)
-    }
   }
 
-  test("cast from map") {
+  test("cast from map II") {
     val map = Literal.create(
       Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
@@ -860,36 +961,16 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved)
       checkCastToBooleanError(map, to)
     }
-    {
-      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved === false)
-    }
+
     {
       val to: DataType = MapType(StringType, BooleanType, valueContainsNull = true)
       val ret = cast(map_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(map_notNull, to)
     }
-    {
-      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(map, IntegerType)
-      assert(ret.resolved === false)
-    }
   }
 
-  test("cast from struct") {
+  test("cast from struct II") {
     checkNullCast(
       StructType(Seq(
         StructField("a", StringType),
@@ -929,14 +1010,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       assert(ret.resolved)
       checkCastToBooleanError(struct, to)
     }
-    {
-      val ret = cast(struct, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false),
-        StructField("d", BooleanType, nullable = true))))
-      assert(ret.resolved === false)
-    }
 
     {
       val to: DataType = StructType(Seq(
@@ -946,25 +1019,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       val ret = cast(struct_notNull, to)
       assert(ret.resolved)
       checkCastToBooleanError(struct_notNull, to)
-    }
-    {
-      val ret = cast(struct_notNull, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(struct, StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", StringType, nullable = true),
-        StructField("c", StringType, nullable = true))))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(struct, IntegerType)
-      assert(ret.resolved === false)
     }
   }
 
@@ -1203,13 +1257,11 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(cast("", BooleanType), null)
   }
 
-  test("cast from array") {
+  test("cast from array II") {
     val array = Literal.create(Seq("123", "true", "f", null),
       ArrayType(StringType, containsNull = true))
     val array_notNull = Literal.create(Seq("123", "true", "f"),
       ArrayType(StringType, containsNull = false))
-
-    checkNullCast(ArrayType(StringType), ArrayType(IntegerType))
 
     {
       val ret = cast(array, ArrayType(BooleanType, containsNull = true))
@@ -1218,34 +1270,13 @@ class CastSuite extends CastSuiteBase {
     }
 
     {
-      val array = Literal.create(Seq.empty, ArrayType(NullType, containsNull = false))
-      val ret = cast(array, ArrayType(IntegerType, containsNull = false))
-      assert(ret.resolved)
-      checkEvaluation(ret, Seq.empty)
-    }
-
-    {
-      val ret = cast(array, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === false)
-    }
-
-    {
       val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = true))
       assert(ret.resolved)
       checkEvaluation(ret, Seq(null, true, false))
     }
-    {
-      val ret = cast(array_notNull, ArrayType(BooleanType, containsNull = false))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(array, IntegerType)
-      assert(ret.resolved === false)
-    }
   }
 
-  test("cast from map") {
+  test("cast from map II") {
     val map = Literal.create(
       Map("a" -> "123", "b" -> "true", "c" -> "f", "d" -> null),
       MapType(StringType, StringType, valueContainsNull = true))
@@ -1253,42 +1284,20 @@ class CastSuite extends CastSuiteBase {
       Map("a" -> "123", "b" -> "true", "c" -> "f"),
       MapType(StringType, StringType, valueContainsNull = false))
 
-    checkNullCast(MapType(StringType, IntegerType), MapType(StringType, StringType))
-
     {
       val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false, "d" -> null))
     }
-    {
-      val ret = cast(map, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved === false)
-    }
+
     {
       val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = true))
       assert(ret.resolved)
       checkEvaluation(ret, Map("a" -> null, "b" -> true, "c" -> false))
     }
-    {
-      val ret = cast(map_notNull, MapType(StringType, BooleanType, valueContainsNull = false))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(map_notNull, MapType(IntegerType, StringType, valueContainsNull = true))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(map, IntegerType)
-      assert(ret.resolved === false)
-    }
   }
 
-  test("cast from struct") {
+  test("cast from struct II") {
     checkNullCast(
       StructType(Seq(
         StructField("a", StringType),
@@ -1327,14 +1336,6 @@ class CastSuite extends CastSuiteBase {
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false, null))
     }
-    {
-      val ret = cast(struct, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false),
-        StructField("d", BooleanType, nullable = true))))
-      assert(ret.resolved === false)
-    }
 
     {
       val ret = cast(struct_notNull, StructType(Seq(
@@ -1343,25 +1344,6 @@ class CastSuite extends CastSuiteBase {
         StructField("c", BooleanType, nullable = true))))
       assert(ret.resolved)
       checkEvaluation(ret, InternalRow(null, true, false))
-    }
-    {
-      val ret = cast(struct_notNull, StructType(Seq(
-        StructField("a", BooleanType, nullable = true),
-        StructField("b", BooleanType, nullable = true),
-        StructField("c", BooleanType, nullable = false))))
-      assert(ret.resolved === false)
-    }
-
-    {
-      val ret = cast(struct, StructType(Seq(
-        StructField("a", StringType, nullable = true),
-        StructField("b", StringType, nullable = true),
-        StructField("c", StringType, nullable = true))))
-      assert(ret.resolved === false)
-    }
-    {
-      val ret = cast(struct, IntegerType)
-      assert(ret.resolved === false)
     }
   }
 
