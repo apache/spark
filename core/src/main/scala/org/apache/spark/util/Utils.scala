@@ -2882,7 +2882,7 @@ private[spark] object Utils extends Logging {
         //
         // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
         // we reorder the conditions to follow it.
-        cls.getEnclosingMethod == null & cls.getEnclosingClass != null
+        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
     }
   }
 
