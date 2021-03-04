@@ -369,11 +369,11 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       val db = "spark_29425_1"
       sql(s"CREATE DATABASE $db")
       assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
-        .where("database_description_item='Owner'")
+        .where("info_name='Owner'")
         .collect().head.getString(1) === Utils.getCurrentUserName())
       sql(s"ALTER DATABASE $db SET DBPROPERTIES('abc'='xyz')")
       assert(sql(s"DESCRIBE DATABASE EXTENDED $db")
-        .where("database_description_item='Owner'")
+        .where("info_name='Owner'")
         .collect().head.getString(1) === Utils.getCurrentUserName())
     } finally {
       catalog.reset()
