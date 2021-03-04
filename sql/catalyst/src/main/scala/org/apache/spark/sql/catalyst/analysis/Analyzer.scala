@@ -1371,7 +1371,11 @@ class Analyzer(override val catalogManager: CatalogManager)
           relation.output.flatMap { col =>
             outputNameToStaticName.get(col.name).flatMap(staticPartitions.get) match {
               case Some(staticValue) =>
-                Some(Alias(Cast(Literal(staticValue), col.dataType), col.name)())
+                // SPARK-30844: try our best to follow StoreAssignmentPolicy for static partition
+                // values but not completely follow because we can't do static type checking due to
+                // the reason that the parser has erased the type info of static partition values
+                // and converted them to string.
+                Some(Alias(AnsiCast(Literal(staticValue), col.dataType), col.name)())
               case _ if queryColumns.hasNext =>
                 Some(queryColumns.next)
               case _ =>
@@ -1399,7 +1403,9 @@ class Analyzer(override val catalogManager: CatalogManager)
               // ResolveOutputRelation runs, using the query's column names that will match the
               // table names at that point. because resolution happens after a future rule, create
               // an UnresolvedAttribute.
-              EqualNullSafe(UnresolvedAttribute(attr.name), Cast(Literal(value), attr.dataType))
+              EqualNullSafe(
+                UnresolvedAttribute.quoted(attr.name),
+                Cast(Literal(value), attr.dataType))
             case None =>
               throw QueryCompilationErrors.unknownStaticPartitionColError(name)
           }

@@ -210,6 +210,11 @@
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
 
+    <test.jdwp.address>localhost:0</test.jdwp.address>
+    <test.jdwp.suspend>y</test.jdwp.suspend>
+    <test.jdwp.server>y</test.jdwp.server>
+    <test.debug.suite>false</test.debug.suite>
+
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
 
@@ -3442,6 +3447,15 @@
           <arch>aarch64</arch>
         </os>
       </activation>
+    </profile>
+    <profile>
+      <id>jdwp-test-debug</id>
+      <properties>
+        <jdwp.arg.line>-agentlib:jdwp=transport=dt_socket,suspend=${test.jdwp.suspend},server=${test.jdwp.server},address=${test.jdwp.address}</jdwp.arg.line>
+        <debugArgLine>${jdwp.arg.line}</debugArgLine>
+        <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
+        <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
+      </properties>
     </profile>
   </profiles>
 </project>

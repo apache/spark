@@ -41,7 +41,7 @@ INSERT INTO [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) ]
 * **partition_spec**
 
     An optional parameter that specifies a comma-separated list of key and value pairs
-    for partitions.
+    for partitions. Note that one can use a typed literal (e.g., date'2019-01-02') in the partition spec.
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
@@ -206,6 +206,19 @@ SELECT * FROM students;
 +-------------+--------------------------+----------+
 ```
 
+#### Insert Using a Typed Date Literal for a Partition Column Value
+```sql
+CREATE TABLE students (name STRING, address  STRING) PARTITIONED BY (birthday DATE);
+
+INSERT INTO students PARTITION (birthday = date'2019-01-02')
+    VALUES ('Amy Smith', '123 Park Ave, San Jose');
+
+SELECT * FROM students;
++-------------+-------------------------+-----------+
+|         name|                  address|   birthday|
++-------------+-------------------------+-----------+
+|    Amy Smith|   123 Park Ave, San Jose| 2019-01-02|
++-------------+-------------------------+-----------+
 #### Insert with a column list
 
 ```sql

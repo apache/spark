@@ -547,7 +547,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
     if (uniqueChildren.size == 1) {
       u.children.head
     } else {
-      u.copy(children = uniqueChildren)
+      u.copy(children = uniqueChildren.toSeq)
     }
   }
 

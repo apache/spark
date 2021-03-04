@@ -581,8 +581,6 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output = DescribeCommandSchema.describeTableAttributes()
-
   protected def describeSchema(
       schema: StructType,
       buffer: ArrayBuffer[Row],
@@ -609,7 +607,8 @@ abstract class DescribeCommandBase extends RunnableCommand {
 case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean)
+    isExtended: Boolean,
+    override val output: Seq[Attribute])
   extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -721,6 +720,8 @@ case class DescribeTableCommand(
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase {
 
+  override val output = DescribeCommandSchema.describeTableAttributes()
+
   override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -742,10 +743,10 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
 case class DescribeColumnCommand(
     table: TableIdentifier,
     colNameParts: Seq[String],
-    isExtended: Boolean)
+    isExtended: Boolean,
+    override val output: Seq[Attribute])
   extends RunnableCommand {
 
-  override val output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
