@@ -548,7 +548,7 @@ case class DataSource(
           partitionColumns = resolvedPartCols,
           outputColumnNames = outputColumnNames)
         resolved.run(sparkSession, physicalPlan)
-        DataWritingCommand.updateMetrics(sparkSession.sparkContext, resolved, metrics)
+        DataWritingCommand.propogateMetrics(sparkSession.sparkContext, resolved, metrics)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ =>

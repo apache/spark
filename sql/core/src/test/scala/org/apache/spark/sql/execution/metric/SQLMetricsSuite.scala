@@ -784,7 +784,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
-  test("SPARK-34567: Add metrics for CreateTableAsSelectCommand") {
+  test("SPARK-34567: Add metrics for CTAS operator") {
     withTable("t") {
       val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
       val dataWritingCommandExec =
@@ -794,7 +794,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       assert(createTableAsSelect.metrics.contains("numFiles"))
       assert(createTableAsSelect.metrics("numFiles").value == 1)
       assert(createTableAsSelect.metrics.contains("numOutputBytes"))
-      assert(createTableAsSelect.metrics("numOutputBytes").value == 437)
+      assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
       assert(createTableAsSelect.metrics.contains("numOutputRows"))
       assert(createTableAsSelect.metrics("numOutputRows").value == 1)
     }

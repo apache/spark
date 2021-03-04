@@ -37,7 +37,7 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
     }
   }
 
-  test("SPARK-34567: Add metrics for CreateTableAsSelectCommand") {
+  test("SPARK-34567: Add metrics for CTAS operator") {
     Seq(false, true).foreach { canOptimized =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_CTAS.key -> canOptimized.toString) {
         withTable("t") {
@@ -54,8 +54,7 @@ class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton
           assert(createTableAsSelect.metrics.contains("numFiles"))
           assert(createTableAsSelect.metrics("numFiles").value == 1)
           assert(createTableAsSelect.metrics.contains("numOutputBytes"))
-          val outputSize = if (canOptimized) 437 else 272
-          assert(createTableAsSelect.metrics("numOutputBytes").value == outputSize)
+          assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
           assert(createTableAsSelect.metrics.contains("numOutputRows"))
           assert(createTableAsSelect.metrics("numOutputRows").value == 1)
         }
