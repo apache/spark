@@ -362,7 +362,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-34605: construct literals from arrays of java.time.Duration") {
-    val duration0 = Duration.parse("P2DT3H4M")
+    val duration0 = Duration.ofDays(2).plusHours(3).plusMinutes(4)
     checkEvaluation(Literal(Array(duration0)), Array(duration0))
     val duration1 = Duration.ofHours(-1024)
     checkEvaluation(Literal(Array(duration0, duration1)), Array(duration0, duration1))
