@@ -25,8 +25,8 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -146,7 +146,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
-    case _ => throw new UnsupportedOperationException(s"DataType: ${dataType.catalogString}")
+    case _ => throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dataType)
   }
 
   /**
@@ -199,8 +199,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
       case other =>
         buildLeafSearchArgument(dataTypeMap, other, builder).getOrElse {
-          throw new SparkException(
-            "The input filter of OrcFilters.buildSearchArgument should be fully convertible.")
+          throw QueryExecutionErrors.inputFilterNotFullyConvertibleError(
+            "OrcFilters.buildSearchArgument")
         }
     }
   }
