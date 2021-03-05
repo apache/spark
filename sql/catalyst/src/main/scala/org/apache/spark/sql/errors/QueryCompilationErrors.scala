@@ -1040,12 +1040,10 @@ private[spark] object QueryCompilationErrors {
   def columnNumberOfInsertedDataMisMatchTargetTableError(
       tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
     new AnalysisException(
-      s"""
-         |$tableName requires that the data to be inserted have the same number of columns as the
-         |target table: target table has ${insert.table.output.size} column(s) but the inserted
-         |data has ${insert.query.output.length + staticPartCols.size} column(s), including
-         |${staticPartCols.size} partition column(s) having constant value(s).
-       """.stripMargin.replaceAll("\n", " "))
+      s"$tableName requires that the data to be inserted have the same number of columns as " +
+        s"the target table: target table has ${insert.table.output.size} column(s) but the " +
+        s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
+        s"including ${staticPartCols.size} partition column(s) having constant value(s).")
   }
 
   def requestedPartitionsMisMatchTablePartitionsError(
