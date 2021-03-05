@@ -1144,7 +1144,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     }
 
     val tvf = UnresolvedTableValuedFunction(
-      func.funcName.getText, func.expression.asScala.map(expression).toSeq, aliases)
+      getFunctionIdentifier(func.functionName),
+      func.expression.asScala.map(expression).toSeq,
+      aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 
