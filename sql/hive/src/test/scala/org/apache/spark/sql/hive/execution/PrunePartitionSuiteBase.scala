@@ -78,7 +78,7 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase with
 
   private def getCleanStringRepresentation(exp: Expression): String = exp match {
     case attr: AttributeReference =>
-      attr.sql.replaceAll("spark_catalog.default.t.", "")
+      attr.sql.replaceAll("`spark_catalog`.`default`.`t`.", "")
     case l: Literal =>
       l.sql
     case e: BinaryOperator =>

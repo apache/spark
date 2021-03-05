@@ -880,7 +880,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             val e = intercept[AnalysisException] {
               sql("SELECT * FROM v3")
             }.getMessage
-            assert(e.contains("expression 'spark_catalog.default.t.`c1`' is neither present " +
+            assert(e.contains(
+              "expression '`spark_catalog`.`default`.`t`.`c1`' is neither present " +
               "in the group by, nor is it an aggregate function. Add to group by or wrap in " +
               "first() (or first_value) if you don't care which value you get."))
           }
