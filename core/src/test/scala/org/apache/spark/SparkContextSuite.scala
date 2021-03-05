@@ -1200,23 +1200,35 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-34225: addFile/addJar shouldn't further encode URI if a URI form string is passed") {
     withTempDir { dir =>
-      val jar = File.createTempFile("testprefix", "test jar.jar", dir)
-      val jarUrl = jar.toURI.toString
-      val file = File.createTempFile("testprefix", "test file.txt", dir)
-      val fileUrl = file.toURI.toString
+      val jar1 = File.createTempFile("testprefix", "test jar.jar", dir)
+      val jarUrl1 = jar1.toURI.toString
+      val file1 = File.createTempFile("testprefix", "test file.txt", dir)
+      val fileUrl1 = file1.toURI.toString
+      val jar2 = File.createTempFile("testprefix", "test %20jar.jar", dir)
+      val file2 = File.createTempFile("testprefix", "test %20file.txt", dir)
 
       try {
         sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-        sc.addJar(jarUrl)
-        sc.addFile(fileUrl)
+        sc.addJar(jarUrl1)
+        sc.addFile(fileUrl1)
+        sc.addJar(jar2.toString)
+        sc.addFile(file2.toString)
         sc.parallelize(Array(1), 1).map { x =>
-          val gottenJar = new File(SparkFiles.get(jar.getName))
-          if (!gottenJar.exists()) {
-            throw new SparkException("file doesn't exist : " + jar)
+          val gottenJar1 = new File(SparkFiles.get(jar1.getName))
+          if (!gottenJar1.exists()) {
+            throw new SparkException("file doesn't exist : " + jar1)
           }
-          val gottenFile = new File(SparkFiles.get(file.getName))
-          if (!gottenFile.exists()) {
-            throw new SparkException("file doesn't exist : " + file)
+          val gottenFile1 = new File(SparkFiles.get(file1.getName))
+          if (!gottenFile1.exists()) {
+            throw new SparkException("file doesn't exist : " + file1)
+          }
+          val gottenJar2 = new File(SparkFiles.get(jar2.getName))
+          if (!gottenJar2.exists()) {
+            throw new SparkException("file doesn't exist : " + jar2)
+          }
+          val gottenFile2 = new File(SparkFiles.get(file2.getName))
+          if (!gottenFile2.exists()) {
+            throw new SparkException("file doesn't exist : " + file2)
           }
           x
         }.collect()
