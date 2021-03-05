@@ -1838,6 +1838,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
+    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
+    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
+    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
+  )
+
   /**
    * Literal functions do not require the user to specify braces when calling them
    * When an attributes is not resolvable, we try to resolve it as a literal function.
@@ -1849,17 +1856,19 @@ class Analyzer(override val catalogManager: CatalogManager)
     if (nameParts.length != 1) return None
     val isNamedExpression = plan match {
       case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
+      case GroupingSets(_, _, _, aggregateExpressions) => aggregateExpressions.contains(attribute)
       case Project(projectList, _) => projectList.contains(attribute)
       case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
       case _ => false
     }
-    val wrapper: Expression => Expression =
-      if (isNamedExpression) f => Alias(f, toPrettySQL(f))() else identity
-    // support CURRENT_DATE and CURRENT_TIMESTAMP
-    val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
+    val wrapper: (Expression, String) => Expression =
+      if (isNamedExpression) (f, n) => Alias(f, n)() else (f, _) => f
     val name = nameParts.head
-    val func = literalFunctions.find(e => caseInsensitiveResolution(e.prettyName, name))
-    func.map(wrapper)
+    val func = literalFunctions.find { case (fn, _, _) => caseInsensitiveResolution(fn, name) }
+    func.map { case (_, f, fn) =>
+      val funcExpr = f()
+      wrapper(funcExpr, fn(funcExpr))
+    }
   }
 
   /**
@@ -2218,10 +2227,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
-            withPosition(u) {
-              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
-            }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
               v1SessionCatalog.lookupFunction(name, children) match {
