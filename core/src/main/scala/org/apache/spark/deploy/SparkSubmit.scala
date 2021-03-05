@@ -1089,7 +1089,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
-private[spark] object SparkSubmitUtils {
+private[spark] object SparkSubmitUtils extends Logging {
 
   // Exposed for testing
   var printStream = SparkSubmit.printStream
@@ -1203,7 +1203,14 @@ private[spark] object SparkSubmitUtils {
   def resolveDependencyPaths(
       artifacts: Array[AnyRef],
       cacheDirectory: File): Seq[String] = {
-    artifacts.map(_.asInstanceOf[Artifact]).filter(_.getExt == "jar").map { artifactInfo =>
+    artifacts.map(_.asInstanceOf[Artifact]).filter { artifactInfo =>
+      if (artifactInfo.getExt == "jar") {
+        true
+      } else {
+        logInfo(s"Skipping non-jar dependency ${artifactInfo.getId}")
+        false
+      }
+    }.map { artifactInfo =>
       val artifact = artifactInfo.getModuleRevisionId
       val extraAttrs = artifactInfo.getExtraAttributes
       val classifier = if (extraAttrs.containsKey("classifier")) {

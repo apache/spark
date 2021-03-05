@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream, PrintWriter}
+import java.io.{File, OutputStream, PrintStream}
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
 
-import com.google.common.io.Files
 import org.apache.ivy.core.module.descriptor.MDArtifact
 import org.apache.ivy.core.settings.IvySettings
 import org.apache.ivy.plugins.resolver.{AbstractResolver, ChainResolver, FileSystemResolver, IBiblioResolver}
@@ -247,8 +247,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
          |</ivysettings>
          |""".stripMargin
 
-    val settingsFile = new File(tempIvyPath, "ivysettings.xml")
-    Files.write(settingsText, settingsFile, StandardCharsets.UTF_8)
+    val settingsFile = Paths.get(tempIvyPath, "ivysettings.xml")
+    Files.write(settingsFile, settingsText.getBytes(StandardCharsets.UTF_8))
     val settings = SparkSubmitUtils.loadIvySettings(settingsFile.toString, None, None)
     settings.setDefaultIvyUserDir(new File(tempIvyPath))  // NOTE - can't set this through file
 
@@ -282,24 +282,17 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   test("SPARK-34624: should ignore non-jar dependencies") {
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
-    val dep = "my.great.dep:mydep:0.5"
+    val dep = "my.great.dep:mydep:0.1"
 
     IvyTestUtils.withRepository(main, Some(dep), None) { repo =>
       // IvyTestUtils.withRepository does not have an easy way for creating non-jar dependencies
       // So we let it create the jar dependency in `mylib-0.1.pom`, and then modify the pom
       // to change the type of the transitive to `pom`
-      val mainPom = new File(URI.create(repo).resolve("my/great/lib/mylib/0.1/mylib-0.1.pom"))
-      val source = Source.fromFile(mainPom)
-      val modifiedPom = new File(s"$tempIvyPath/modified-mylib-0.1.pom")
-      val sink = new PrintWriter(modifiedPom)
-      source.getLines()
+      val mainPom = Paths.get(URI.create(repo)).resolve("my/great/lib/mylib/0.1/mylib-0.1.pom")
+      val lines = Files.lines(mainPom).iterator.asScala
         .map(l => if (l.trim == "<artifactId>mydep</artifactId>") s"$l<type>pom</type>" else l)
-        // scalastyle:off println
-        .foreach(sink.println)
-        // scalastyle:on println
-      source.close()
-      sink.close()
-      modifiedPom.renameTo(mainPom)
+        .toList
+      Files.write(mainPom, lines.asJava)
 
       val ivySettings = SparkSubmitUtils.buildIvySettings(Some(repo), Some(tempIvyPath))
       val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
@@ -307,7 +300,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
         ivySettings,
         transitive = true,
         isTest = true)
-      assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency")
+      assert(!jarPath.exists(_.indexOf("mydep") >= 0), "should not find pom dependency." +
+        s" Resolved jars are: $jarPath")
     }
   }
 }
