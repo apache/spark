@@ -412,9 +412,9 @@ case class BroadcastNestedLoopJoinExec(
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     joinType match {
       case _: InnerLike => codegenInner(ctx, input)
-      case x =>
+      case _ =>
         throw new IllegalArgumentException(
-          s"BroadcastNestedLoopJoin code-gen should not take $x as the JoinType")
+          s"BroadcastNestedLoopJoin code-gen should not take $joinType as the JoinType")
     }
   }
 
@@ -427,12 +427,12 @@ case class BroadcastNestedLoopJoinExec(
     val broadcastTerm = ctx.addReferenceObj("broadcastTerm", broadcastArray)
 
     // Inline mutable state since not many join operations in a task
-    ctx.addMutableState("InternalRow[]", "broadcastArray",
+    ctx.addMutableState("InternalRow[]", "buildRowArray",
       v => s"$v = (InternalRow[]) $broadcastTerm.value();", forceInline = true)
   }
 
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val arrayTerm = prepareBroadcast(ctx)
+    val buildRowArrayTerm = prepareBroadcast(ctx)
     val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, input, streamed, broadcast)
 
     val resultVars = buildSide match {
@@ -445,8 +445,8 @@ case class BroadcastNestedLoopJoinExec(
     s"""
        |int $arrayIndex = 0;
        |UnsafeRow $buildRow;
-       |while ($arrayIndex < $arrayTerm.length) {
-       |  $buildRow = (UnsafeRow) $arrayTerm[$arrayIndex];
+       |while ($arrayIndex < $buildRowArrayTerm.length) {
+       |  $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
        |  $checkCondition {
        |    $numOutput.add(1);
        |    ${consume(ctx, resultVars)}

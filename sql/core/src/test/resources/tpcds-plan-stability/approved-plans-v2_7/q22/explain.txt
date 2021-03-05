@@ -4,7 +4,7 @@ TakeOrderedAndProject (25)
    +- Exchange (23)
       +- * HashAggregate (22)
          +- * Expand (21)
-            +- BroadcastNestedLoopJoin Inner BuildRight (20)
+            +- * BroadcastNestedLoopJoin Inner BuildRight (20)
                :- * Project (16)
                :  +- * BroadcastHashJoin Inner BuildRight (15)
                :     :- * Project (10)
@@ -34,10 +34,10 @@ PartitionFilters: [isnotnull(inv_date_sk#3), dynamicpruningexpression(inv_date_s
 PushedFilters: [IsNotNull(inv_item_sk)]
 ReadSchema: struct<inv_item_sk:int,inv_quantity_on_hand:int>
 
-(2) ColumnarToRow [codegen id : 3]
+(2) ColumnarToRow [codegen id : 4]
 Input [3]: [inv_item_sk#1, inv_quantity_on_hand#2, inv_date_sk#3]
 
-(3) Filter [codegen id : 3]
+(3) Filter [codegen id : 4]
 Input [3]: [inv_item_sk#1, inv_quantity_on_hand#2, inv_date_sk#3]
 Condition : isnotnull(inv_item_sk#1)
 
@@ -63,12 +63,12 @@ Input [2]: [d_date_sk#5, d_month_seq#6]
 Input [1]: [d_date_sk#5]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
 
-(9) BroadcastHashJoin [codegen id : 3]
+(9) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_date_sk#3]
 Right keys [1]: [d_date_sk#5]
 Join condition: None
 
-(10) Project [codegen id : 3]
+(10) Project [codegen id : 4]
 Output [2]: [inv_item_sk#1, inv_quantity_on_hand#2]
 Input [4]: [inv_item_sk#1, inv_quantity_on_hand#2, inv_date_sk#3, d_date_sk#5]
 
@@ -90,12 +90,12 @@ Condition : isnotnull(i_item_sk#8)
 Input [5]: [i_item_sk#8, i_brand#9, i_class#10, i_category#11, i_product_name#12]
 Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#13]
 
-(15) BroadcastHashJoin [codegen id : 3]
+(15) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [inv_item_sk#1]
 Right keys [1]: [i_item_sk#8]
 Join condition: None
 
-(16) Project [codegen id : 3]
+(16) Project [codegen id : 4]
 Output [5]: [inv_quantity_on_hand#2, i_brand#9, i_class#10, i_category#11, i_product_name#12]
 Input [7]: [inv_item_sk#1, inv_quantity_on_hand#2, i_item_sk#8, i_brand#9, i_class#10, i_category#11, i_product_name#12]
 
@@ -105,21 +105,21 @@ Batched: true
 Location [not included in comparison]/{warehouse_dir}/warehouse]
 ReadSchema: struct<>
 
-(18) ColumnarToRow [codegen id : 4]
+(18) ColumnarToRow [codegen id : 3]
 Input: []
 
 (19) BroadcastExchange
 Input: []
 Arguments: IdentityBroadcastMode, [id=#14]
 
-(20) BroadcastNestedLoopJoin
+(20) BroadcastNestedLoopJoin [codegen id : 4]
 Join condition: None
 
-(21) Expand [codegen id : 5]
+(21) Expand [codegen id : 4]
 Input [5]: [inv_quantity_on_hand#2, i_brand#9, i_class#10, i_category#11, i_product_name#12]
 Arguments: [List(inv_quantity_on_hand#2, i_product_name#12, i_brand#9, i_class#10, i_category#11, 0), List(inv_quantity_on_hand#2, i_product_name#12, i_brand#9, i_class#10, null, 1), List(inv_quantity_on_hand#2, i_product_name#12, i_brand#9, null, null, 3), List(inv_quantity_on_hand#2, i_product_name#12, null, null, null, 7), List(inv_quantity_on_hand#2, null, null, null, null, 15)], [inv_quantity_on_hand#2, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
 
-(22) HashAggregate [codegen id : 5]
+(22) HashAggregate [codegen id : 4]
 Input [6]: [inv_quantity_on_hand#2, i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
 Keys [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
 Functions [1]: [partial_avg(inv_quantity_on_hand#2)]
@@ -130,7 +130,7 @@ Results [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_gr
 Input [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
 Arguments: hashpartitioning(i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, 5), ENSURE_REQUIREMENTS, [id=#24]
 
-(24) HashAggregate [codegen id : 6]
+(24) HashAggregate [codegen id : 5]
 Input [7]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19, sum#22, count#23]
 Keys [5]: [i_product_name#15, i_brand#16, i_class#17, i_category#18, spark_grouping_id#19]
 Functions [1]: [avg(inv_quantity_on_hand#2)]
