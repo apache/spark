@@ -202,7 +202,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.
+Aggregate expression required for pivot, but '`coursesales`.`earnings`' did not appear in any aggregate function.
 
 
 -- !query
@@ -217,7 +217,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.
+Aggregate expression required for pivot, but '`__auto_generated_subquery_name`.`year`' did not appear in any aggregate function.
 
 
 -- !query

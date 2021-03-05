@@ -933,7 +933,7 @@ class DataSourceV2SQLSuite
       val ex = intercept[AnalysisException] {
         sql(s"SELECT ns1.ns2.ns3.tbl.id from $t")
       }
-      assert(ex.getMessage.contains("cannot resolve '`ns1.ns2.ns3.tbl.id`"))
+      assert(ex.getMessage.contains("cannot resolve '`ns1`.`ns2`.`ns3`.`tbl`.`id`"))
     }
   }
 
