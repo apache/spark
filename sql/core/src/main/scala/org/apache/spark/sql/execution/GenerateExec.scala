@@ -144,9 +144,12 @@ case class GenerateExec(
       Seq.empty
     }
 
+    val requiredInput = input.zip(child.output).filter {
+      case(_, output) => parent.inputSet.contains(output)
+    }.map(_._1)
     boundGenerator match {
-      case e: CollectionGenerator => codeGenCollection(ctx, e, values, row)
-      case g => codeGenTraversableOnce(ctx, g, values, row)
+      case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput, row)
+      case g => codeGenTraversableOnce(ctx, g, requiredInput, row)
     }
   }
 
@@ -226,9 +229,7 @@ case class GenerateExec(
       "0"
     }
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val requiredInput = input.zip(child.output).filter {
-      case(_, output) => parent.inputSet.contains(output)
-    }.map(_._1) ++ position ++ values
+    val requiredInput = input ++ position ++ values
     s"""
        |${data.code}
        |$initMapData
