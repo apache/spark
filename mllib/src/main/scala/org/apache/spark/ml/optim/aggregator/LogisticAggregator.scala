@@ -265,13 +265,13 @@ private[ml] class BlockLogisticAggregator(
 
 
 /**
- * BlockBinaryLogisticAggregator computes the gradient and loss used in Logistic classification
- * for blocks in sparse or dense matrix in an online fashion.
+ * BinaryLogisticBlockAggregator computes the gradient and loss used in binary Logistic
+ * classification for blocks in sparse or dense matrix in an online fashion.
  *
- * Two BlockBinaryLogisticAggregator can be merged together to have a summary of loss and gradient
+ * Two BinaryLogisticBlockAggregator can be merged together to have a summary of loss and gradient
  * of the corresponding joint dataset.
  *
- * NOTE: The feature values are expected to already have be scaled (divided by [[bcFeaturesStd]],
+ * NOTE: The feature values are expected to already have be scaled (divided by bcFeaturesStd,
  * but NOT centered) before computation.
  *
  * @param bcCoefficients The coefficients corresponding to the features.
@@ -279,12 +279,12 @@ private[ml] class BlockLogisticAggregator(
  * @param fitWithMean Whether to center the data with mean before training. If true, we MUST adjust
  *                    the intercept of both initial coefficients and final solution in the caller.
  */
-private[ml] class BlockBinaryLogisticAggregator(
+private[ml] class BinaryLogisticBlockAggregator(
     bcFeaturesStd: Broadcast[Array[Double]],
     bcFeaturesMean: Broadcast[Array[Double]],
     fitIntercept: Boolean,
     fitWithMean: Boolean)(bcCoefficients: Broadcast[Vector])
-  extends DifferentiableLossAggregator[InstanceBlock, BlockBinaryLogisticAggregator] with Logging {
+  extends DifferentiableLossAggregator[InstanceBlock, BinaryLogisticBlockAggregator] with Logging {
 
   if (fitWithMean) {
     require(fitIntercept, s"for training without intercept, should not center the vectors")
@@ -312,10 +312,10 @@ private[ml] class BlockBinaryLogisticAggregator(
     null
   }
 
-  // pre-computed prediction of an empty vector.
-  // with this as an offset, for a sparse vector, we only need to
+  // Pre-computed dot product of an empty vector and linear weights, plus intercept.
+  // With this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
-  private lazy val emptyPrediction = if (fitWithMean) {
+  private lazy val emptyDot = if (fitWithMean) {
     val dot = BLAS.getBLAS(numFeatures).ddot(numFeatures, linear.values, 1, scaledMean, 1)
     coefficientsArray.last - dot
   } else {
@@ -323,11 +323,11 @@ private[ml] class BlockBinaryLogisticAggregator(
   }
 
   /**
-   * Add a new training instance block to this BlockBinaryLogisticAggregator, and update the loss
+   * Add a new training instance block to this BinaryLogisticBlockAggregator, and update the loss
    * and gradient of the objective function.
    *
    * @param block The instance block of data point to be added.
-   * @return This BlockBinaryLogisticAggregator object.
+   * @return This BinaryLogisticBlockAggregator object.
    */
   def add(block: InstanceBlock): this.type = {
     require(block.matrix.isTransposed)
@@ -342,7 +342,7 @@ private[ml] class BlockBinaryLogisticAggregator(
     // arr/vec here represents margins or negative dotProducts
     val arr = Array.ofDim[Double](size)
     if (fitWithMean) {
-      java.util.Arrays.fill(arr, emptyPrediction)
+      java.util.Arrays.fill(arr, emptyDot)
     } else if (fitIntercept) {
       java.util.Arrays.fill(arr, coefficientsArray.last)
     }
@@ -353,6 +353,7 @@ private[ml] class BlockBinaryLogisticAggregator(
     // then, arr/vec represents multiplier
     var localLossSum = 0.0
     var localWeightSum = 0.0
+    var multiplierSum = 0.0
     var i = 0
     while (i < size) {
       val weight = block.getWeight(i)
@@ -368,6 +369,7 @@ private[ml] class BlockBinaryLogisticAggregator(
         }
         val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
         arr(i) = multiplier
+        multiplierSum += multiplier
       } else { arr(i) = 0.0 }
       i += 1
     }
@@ -397,7 +399,6 @@ private[ml] class BlockBinaryLogisticAggregator(
         throw new IllegalArgumentException(s"Unknown matrix type ${m.getClass}.")
     }
 
-    lazy val multiplierSum = arr.sum
     if (fitWithMean) {
       // above update of the linear part of gradientSumArray dose NOT take the centering
       // into account, here we need to adjust this part.
@@ -405,8 +406,8 @@ private[ml] class BlockBinaryLogisticAggregator(
         gradientSumArray, 1)
     }
 
-    // update the intercept part of gradientSumArray
     if (fitIntercept) {
+      // update the intercept part of gradientSumArray
       gradientSumArray(numFeatures) += multiplierSum
     }
 
