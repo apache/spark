@@ -506,7 +506,6 @@ private[spark] object UIUtils extends Logging {
         <a data-toggle="tooltip" title={if (forJob) ToolTips.JOB_DAG else ToolTips.STAGE_DAG}
            data-placement="top">
           DAG Visualization
-
         </a>
       </span>
       <div id="dag-viz-graph"></div>
