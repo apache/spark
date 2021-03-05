@@ -222,7 +222,8 @@ case class Alias(child: Expression, name: String)(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIdentifier(_)).mkString(".") + "." else ""
     s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
   }
 }
@@ -347,7 +348,8 @@ case class AttributeReference(
   }
 
   override def sql: String = {
-    val qualifierPrefix = if (qualifier.nonEmpty) qualifier.mkString(".") + "." else ""
+    val qualifierPrefix =
+      if (qualifier.nonEmpty) qualifier.map(quoteIdentifier(_)).mkString(".") + "." else ""
     s"$qualifierPrefix${quoteIdentifier(name)}"
   }
 }

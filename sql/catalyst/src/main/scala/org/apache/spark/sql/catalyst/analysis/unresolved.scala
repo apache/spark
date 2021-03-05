@@ -21,7 +21,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
@@ -141,7 +140,7 @@ case class UnresolvedTableValuedFunction(
  */
 case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Unevaluable {
 
-  def name: String =
+  def name: String = nameParts.map(quoteIdentifier(_)).mkString(".")
     nameParts.map(n => if (n.contains(".")) s"`$n`" else n).mkString(".")
 
   override def exprId: ExprId = throw new UnresolvedException("exprId")
@@ -159,10 +158,7 @@ case class UnresolvedAttribute(nameParts: Seq[String]) extends Attribute with Un
 
   override def toString: String = s"'$name"
 
-  override def sql: String = name match {
-    case ParserUtils.escapedIdentifier(_) | ParserUtils.qualifiedEscapedIdentifier(_, _) => name
-    case _ => quoteIdentifier(name)
-  }
+  override def sql: String = name
 }
 
 object UnresolvedAttribute {
