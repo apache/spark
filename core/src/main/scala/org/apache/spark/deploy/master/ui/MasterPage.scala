@@ -284,7 +284,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
     <tr>
       <td>
-        <a href={"app?appId=" + app.id}>{app.id}</a>
+        <a href={"app/?appId=" + app.id}>{app.id}</a>
         {killLink}
       </td>
       <td>
