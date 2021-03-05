@@ -838,7 +838,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       5 x 1 sparse Matrix of class "dgCMatrix"
                           s0
       (Intercept) -0.1609517
-      data.V3     -0.5641013
+      data.V3     -0.5843178
       data.V4      0.8936137
       data.V5     -0.3820793
       data.V6      1.6347469
