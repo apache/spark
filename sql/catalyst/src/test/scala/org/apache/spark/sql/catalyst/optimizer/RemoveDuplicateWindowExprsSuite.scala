@@ -24,10 +24,10 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class DeduplicateWindowExpressionsSuite extends PlanTest {
+class RemoveDuplicateWindowExprsSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("DeduplicateWindowExpressions", Once, DeduplicateWindowExpressions) :: Nil
+      Batch("RemoveDuplicateWindowExprs", Once, RemoveDuplicateWindowExprs) :: Nil
   }
 
   val testRelation = LocalRelation($"a".int, $"b".int)
@@ -76,5 +76,4 @@ class DeduplicateWindowExpressionsSuite extends PlanTest {
 
     comparePlans(optimized, query)
   }
-
 }

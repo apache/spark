@@ -90,7 +90,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         // Constant folding and strength reduction
         OptimizeRepartition,
         TransposeWindow,
-        DeduplicateWindowExpressions,
+        RemoveDuplicateWindowExprs,
         NullPropagation,
         ConstantPropagation,
         FoldablePropagation,
@@ -950,7 +950,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
 /**
  * Replaces duplicate window expressions with an alias in a Project above the Window node.
  */
-object DeduplicateWindowExpressions extends Rule[LogicalPlan] {
+object RemoveDuplicateWindowExprs extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case w @ Window(wes, _, _, _) if wes.length > 1 =>
       val equivalenceMap = mutable.HashMap.empty[Expression, Attribute]
