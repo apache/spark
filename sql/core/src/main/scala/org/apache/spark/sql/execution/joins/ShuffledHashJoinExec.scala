@@ -59,6 +59,8 @@ case class ShuffledHashJoinExec(
     case _ => super.outputOrdering
   }
 
+//  override protected lazy val numMatchedRows = longMetric("numMatchedRows")
+
   /**
    * This is called by generated Java class, should be public.
    */
@@ -164,7 +166,10 @@ case class ShuffledHashJoinExec(
           val keyIndex = matched.getKeyIndex
           val buildRow = matched.getValue
           val joinRow = joinRowWithBuild(buildRow)
-          if (boundCondition(joinRow)) {
+          if ({
+            numMatchedRows += 1
+            boundCondition(joinRow)
+          }) {
             matchedKeys.set(keyIndex)
             joinRow
           } else {
@@ -253,7 +258,10 @@ case class ShuffledHashJoinExec(
               val keyIndex = buildRowWithKeyIndex.getKeyIndex
               val buildRow = buildRowWithKeyIndex.getValue
               valueIndex += 1
-              if (boundCondition(joinRowWithBuild(buildRow))) {
+              if ({
+                numMatchedRows += 1
+                boundCondition(joinRowWithBuild(buildRow))
+              }) {
                 markRowMatched(keyIndex, valueIndex)
                 found = true
                 return true

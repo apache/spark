@@ -135,13 +135,10 @@ case class SortMergeJoinExec(
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
-          (r: InternalRow) => {
-            numMatchedRows += 1
-            Predicate.create(cond, left.output ++ right.output).eval(r)
-          }
+          Predicate.create(cond, left.output ++ right.output).eval _
         }.getOrElse {
           (_: InternalRow) => {
-            numMatchedRows += 1
+            // numMatchedRows += 1
             true
           }
         }
@@ -190,7 +187,10 @@ case class SortMergeJoinExec(
                   }
                 }
                 joinRow(currentLeftRow, rightMatchesIterator.next())
-                if (boundCondition(joinRow)) {
+                if ({
+                  numMatchedRows += 1
+                  boundCondition(joinRow)
+                }) {
                   numOutputRows += 1
                   return true
                 }
@@ -214,7 +214,8 @@ case class SortMergeJoinExec(
           )
           val rightNullRow = new GenericInternalRow(right.output.length)
           new LeftOuterIterator(
-            smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows).toScala
+            smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows, numMatchedRows)
+            .toScala
 
         case RightOuter =>
           val smjScanner = new SortMergeJoinScanner(
@@ -229,7 +230,8 @@ case class SortMergeJoinExec(
           )
           val leftNullRow = new GenericInternalRow(left.output.length)
           new RightOuterIterator(
-            smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows).toScala
+            smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows, numMatchedRows)
+            .toScala
 
         case FullOuter =>
           val leftNullRow = new GenericInternalRow(left.output.length)
@@ -242,7 +244,8 @@ case class SortMergeJoinExec(
             rightIter = RowIterator.fromScala(rightIter),
             boundCondition,
             leftNullRow,
-            rightNullRow)
+            rightNullRow,
+            numMatchedRows)
 
           new FullOuterIterator(
             smjScanner,
@@ -273,7 +276,10 @@ case class SortMergeJoinExec(
                   val rightMatchesIterator = currentRightMatches.generateIterator()
                   while (rightMatchesIterator.hasNext) {
                     joinRow(currentLeftRow, rightMatchesIterator.next())
-                    if (boundCondition(joinRow)) {
+                    if ({
+                      numMatchedRows += 1
+                      boundCondition(joinRow)
+                    }) {
                       numOutputRows += 1
                       return true
                     }
@@ -314,7 +320,10 @@ case class SortMergeJoinExec(
                 val rightMatchesIterator = currentRightMatches.generateIterator()
                 while (!found && rightMatchesIterator.hasNext) {
                   joinRow(currentLeftRow, rightMatchesIterator.next())
-                  if (boundCondition(joinRow)) {
+                  if ({
+                    numMatchedRows += 1
+                    boundCondition(joinRow)
+                  }) {
                     found = true
                   }
                 }
@@ -355,7 +364,10 @@ case class SortMergeJoinExec(
                   val rightMatchesIterator = currentRightMatches.generateIterator()
                   while (!found && rightMatchesIterator.hasNext) {
                     joinRow(currentLeftRow, rightMatchesIterator.next())
-                    if (boundCondition(joinRow)) {
+                    if ({
+                      numMatchedRows += 1
+                      boundCondition(joinRow)
+                    }) {
                       found = true
                     }
                   }
@@ -867,9 +879,10 @@ private class LeftOuterIterator(
     rightNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numOutputRows: SQLMetric)
+    numOutputRows: SQLMetric,
+    numMatchedRows: SQLMetric)
   extends OneSideOuterIterator(
-    smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
+    smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows, numMatchedRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
@@ -883,8 +896,10 @@ private class RightOuterIterator(
     leftNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numOutputRows: SQLMetric)
-  extends OneSideOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
+    numOutputRows: SQLMetric,
+    numMatchedRows: SQLMetric)
+  extends OneSideOuterIterator(
+    smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows, numMatchedRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
   protected override def setBufferedSideOutput(row: InternalRow): Unit = joinedRow.withLeft(row)
@@ -911,7 +926,8 @@ private abstract class OneSideOuterIterator(
     bufferedSideNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numOutputRows: SQLMetric) extends RowIterator {
+    numOutputRows: SQLMetric,
+    numMatchedRows: SQLMetric) extends RowIterator {
 
   // A row to store the joined result, reused many times
   protected[this] val joinedRow: JoinedRow = new JoinedRow()
@@ -962,7 +978,10 @@ private abstract class OneSideOuterIterator(
 
     while (!foundMatch && rightMatchesIterator.hasNext) {
       setBufferedSideOutput(rightMatchesIterator.next())
-      foundMatch = boundCondition(joinedRow)
+      foundMatch = {
+        numMatchedRows += 1
+        boundCondition(joinedRow)
+      }
     }
     foundMatch
   }
@@ -984,7 +1003,8 @@ private class SortMergeFullOuterJoinScanner(
     rightIter: RowIterator,
     boundCondition: InternalRow => Boolean,
     leftNullRow: InternalRow,
-    rightNullRow: InternalRow)  {
+    rightNullRow: InternalRow,
+    numMatchedRows: SQLMetric)  {
   private[this] val joinedRow: JoinedRow = new JoinedRow()
   private[this] var leftRow: InternalRow = _
   private[this] var leftRowKey: InternalRow = _
@@ -1079,7 +1099,10 @@ private class SortMergeFullOuterJoinScanner(
     while (leftIndex < leftMatches.size) {
       while (rightIndex < rightMatches.size) {
         joinedRow(leftMatches(leftIndex), rightMatches(rightIndex))
-        if (boundCondition(joinedRow)) {
+        if ({
+          numMatchedRows += 1
+          boundCondition(joinedRow)
+        }) {
           leftMatched.set(leftIndex)
           rightMatched.set(rightIndex)
           rightIndex += 1

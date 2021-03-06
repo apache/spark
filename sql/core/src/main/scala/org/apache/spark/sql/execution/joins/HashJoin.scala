@@ -137,17 +137,18 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
 
-  private lazy val numMatchedRows = longMetric("numMatchedRows")
+  protected val numMatchedRows = longMetric("numMatchedRows")
 
-  @transient protected[this] lazy val boundCondition: InternalRow => Boolean =
+  @transient protected lazy val boundCondition: InternalRow => Boolean =
     if (condition.isDefined) {
-      (r: InternalRow) => {
-        numMatchedRows += 1
-        Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval(r)
-      }
+      Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
+//      (r: InternalRow) => {
+//        numMatchedRows += 1
+//        Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval(r)
+//      }
     } else {
       (_: InternalRow) => {
-        numMatchedRows += 1
+//        numMatchedRows += 1
         true
       }
     }
@@ -175,7 +176,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         joinRow.withLeft(srow)
         val matched = hashedRelation.getValue(joinKeys(srow))
         if (matched != null) {
-          Some(joinRow.withRight(matched)).filter(boundCondition)
+          Some(joinRow.withRight(matched)).filter({
+            numMatchedRows += 1
+            boundCondition
+          })
         } else {
           None
         }
@@ -185,7 +189,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         joinRow.withLeft(srow)
         val matches = hashedRelation.get(joinKeys(srow))
         if (matches != null) {
-          matches.map(joinRow.withRight).filter(boundCondition)
+          matches.map(joinRow.withRight).filter({
+            numMatchedRows += 1
+            boundCondition
+          })
         } else {
           Seq.empty
         }
@@ -205,7 +212,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         val rowKey = keyGenerator(currentRow)
         joinedRow.withLeft(currentRow)
         val matched = hashedRelation.getValue(rowKey)
-        if (matched != null && boundCondition(joinedRow.withRight(matched))) {
+        if (matched != null && {
+          numMatchedRows += 1
+          boundCondition(joinedRow.withRight(matched))
+        }) {
           joinedRow
         } else {
           joinedRow.withRight(nullRow)
@@ -221,7 +231,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
           override def advanceNext(): Boolean = {
             while (buildIter != null && buildIter.hasNext) {
               val nextBuildRow = buildIter.next()
-              if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+              if ({
+                numMatchedRows += 1
+                boundCondition(joinedRow.withRight(nextBuildRow))
+              }) {
                 found = true
                 return true
               }
@@ -252,14 +265,20 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
         !key.anyNull && matched != null &&
-          (condition.isEmpty || boundCondition(joinedRow(current, matched)))
+          (condition.isEmpty || {
+            numMatchedRows += 1
+            boundCondition(joinedRow(current, matched))
+          })
       }
     } else {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val buildIter = hashedRelation.get(key)
         !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
-          (row: InternalRow) => boundCondition(joinedRow(current, row))
+          (row: InternalRow) => {
+            numMatchedRows += 1
+            boundCondition(joinedRow(current, row))
+          }
         })
       }
     }
@@ -277,7 +296,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
         val exists = !key.anyNull && matched != null &&
-          (condition.isEmpty || boundCondition(joinedRow(current, matched)))
+          (condition.isEmpty || {
+            numMatchedRows += 1
+            boundCondition(joinedRow(current, matched))
+          })
         result.setBoolean(0, exists)
         joinedRow(current, result)
       }
@@ -286,7 +308,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         val key = joinKeys(current)
         lazy val buildIter = hashedRelation.get(key)
         val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
-          (row: InternalRow) => boundCondition(joinedRow(current, row))
+          (row: InternalRow) => {
+            numMatchedRows += 1
+            boundCondition(joinedRow(current, row))
+          }
         })
         result.setBoolean(0, exists)
         joinedRow(current, result)
@@ -310,14 +335,20 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
         key.anyNull || matched == null ||
-          (condition.isDefined && !boundCondition(joinedRow(current, matched)))
+          (condition.isDefined && !{
+            numMatchedRows += 1
+            boundCondition(joinedRow(current, matched))
+          })
       }
     } else {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val buildIter = hashedRelation.get(key)
         key.anyNull || buildIter == null || (condition.isDefined && !buildIter.exists {
-          row => boundCondition(joinedRow(current, row))
+          row => {
+            numMatchedRows += 1
+            boundCondition(joinedRow(current, row))
+          }
         })
       }
     }

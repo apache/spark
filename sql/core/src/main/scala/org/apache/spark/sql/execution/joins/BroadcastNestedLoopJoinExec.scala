@@ -94,13 +94,9 @@ case class BroadcastNestedLoopJoinExec(
 
   @transient private lazy val boundCondition: InternalRow => Boolean =
     if (condition.isDefined) {
-      (r: InternalRow) => {
-        numMatchedRows += 1
-        Predicate.create(condition.get, streamed.output ++ broadcast.output).eval(r)
-      }
+      Predicate.create(condition.get, streamed.output ++ broadcast.output).eval _
     } else {
       (_: InternalRow) => {
-        numMatchedRows += 1
         true
       }
     }
@@ -114,7 +110,10 @@ case class BroadcastNestedLoopJoinExec(
       val joinedRow = new JoinedRow
 
       streamedIter.flatMap { streamedRow =>
-        val joinedRows = buildRows.iterator.map(r => joinedRow(streamedRow, r))
+        val joinedRows = buildRows.iterator.map(r => {
+          numMatchedRows += 1
+          joinedRow(streamedRow, r)
+        })
         if (condition.isDefined) {
           joinedRows.filter(boundCondition)
         } else {
@@ -159,7 +158,10 @@ case class BroadcastNestedLoopJoinExec(
           while (nextIndex < buildRows.length) {
             resultRow = joinedRow(streamRow, buildRows(nextIndex))
             nextIndex += 1
-            if (boundCondition(resultRow)) {
+            if ({
+              numMatchedRows += 1
+              boundCondition(resultRow)
+            }) {
               foundMatch = true
               return true
             }
@@ -203,7 +205,10 @@ case class BroadcastNestedLoopJoinExec(
 
       if (condition.isDefined) {
         streamedIter.filter(l =>
-          buildRows.exists(r => boundCondition(joinedRow(l, r))) == exists
+          buildRows.exists(r => {
+            numMatchedRows += 1
+            boundCondition(joinedRow(l, r))
+          }) == exists
         )
       } else if (buildRows.nonEmpty == exists) {
         streamedIter
@@ -222,7 +227,10 @@ case class BroadcastNestedLoopJoinExec(
       if (condition.isDefined) {
         val resultRow = new GenericInternalRow(Array[Any](null))
         streamedIter.map { row =>
-          val result = buildRows.exists(r => boundCondition(joinedRow(row, r)))
+          val result = buildRows.exists(r => {
+            numMatchedRows += 1
+            boundCondition(joinedRow(row, r))
+          })
           resultRow.setBoolean(0, result)
           joinedRow(row, resultRow)
         }
@@ -257,7 +265,10 @@ case class BroadcastNestedLoopJoinExec(
       streamedIter.foreach { streamedRow =>
         var i = 0
         while (i < buildRows.length) {
-          if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
+          if ({
+            numMatchedRows += 1
+            boundCondition(joinedRow(streamedRow, buildRows(i)))
+          }) {
             matched.set(i)
           }
           i += 1
@@ -334,7 +345,10 @@ case class BroadcastNestedLoopJoinExec(
         val matchedRows = new CompactBuffer[InternalRow]
 
         while (i < buildRows.length) {
-          if (boundCondition(joinedRow(streamedRow, buildRows(i)))) {
+          if ({
+            numMatchedRows += 1
+            boundCondition(joinedRow(streamedRow, buildRows(i)))
+          }) {
             matchedRows += joinedRow.copy()
             foundMatch = true
           }
