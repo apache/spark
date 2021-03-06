@@ -214,7 +214,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     OuterScopes.addOuterScope(MalformedClassObject)
     encodeDecodeTest(
       MalformedClassObject.MalformedNameExample(42),
-      "nested Scala class should work")
+      "nested Scala class should work",
+      useFallback = true)
   }
 
   object OuterLevelWithVeryVeryVeryLongClassName1 {
@@ -284,7 +285,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
         .OuterLevelWithVeryVeryVeryLongClassName19
         .OuterLevelWithVeryVeryVeryLongClassName20
         .MalformedNameExample(42),
-      "deeply nested Scala class should work")
+      "deeply nested Scala class should work",
+      useFallback = true)
   }
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
@@ -555,7 +557,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
-      testName: String): Unit = {
+      testName: String,
+      useFallback: Boolean = false): Unit = {
     testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input") {
       val encoder = implicitly[ExpressionEncoder[T]]
 
@@ -650,9 +653,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     r
   }
 
-  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any): Unit = {
-    test(testName) {
-      verifyNotLeakingReflectionObjects(testFun)
+  private def testAndVerifyNotLeakingReflectionObjects(
+      testName: String, useFallback: Boolean = false)(testFun: => Any): Unit = {
+    if (useFallback) {
+      testFallback(testName) {
+        verifyNotLeakingReflectionObjects(testFun)
+      }
+    } else {
+      test(testName) {
+        verifyNotLeakingReflectionObjects(testFun)
+      }
     }
   }
 }
