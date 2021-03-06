@@ -851,7 +851,14 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   override def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus] = {
     logDebug(s"Fetching all output statuses for shuffle $shuffleId")
     val statuses = getStatuses(shuffleId, conf)
-    MapOutputTracker.checkMapStatuses(statuses, shuffleId)
+    try {
+      MapOutputTracker.checkMapStatuses(statuses, shuffleId)
+    } catch {
+      case e: MetadataFetchFailedException =>
+        // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
+        mapStatuses.clear()
+        throw e
+    }
     statuses
   }
 
@@ -1023,9 +1030,7 @@ private[spark] object MapOutputTracker extends Logging {
     val iter = statuses.iterator.zipWithIndex
     for ((status, mapIndex) <- iter.slice(startMapIndex, endMapIndex)) {
       if (status == null) {
-        val errorMessage = s"Missing an output location for shuffle $shuffleId"
-        logError(errorMessage)
-        throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
+        throwMetadataFetchFailedException(shuffleId, startPartition)
       } else {
         for (part <- startPartition until endPartition) {
           val size = status.getSizeForBlock(part)
@@ -1044,10 +1049,14 @@ private[spark] object MapOutputTracker extends Logging {
     assert (statuses != null)
     for (status <- statuses) {
       if (status == null) {
-        val errorMessage = s"Missing an output location for shuffle $shuffleId"
-        logError(errorMessage)
-        throw new MetadataFetchFailedException(shuffleId, 0, errorMessage)
+        throwMetadataFetchFailedException(shuffleId, 0)
       }
     }
+  }
+
+  private def throwMetadataFetchFailedException(shuffleId: Int, startPartition: Int): Unit = {
+    val errorMessage = s"Missing an output location for shuffle $shuffleId"
+    logError(errorMessage)
+    throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
   }
 }

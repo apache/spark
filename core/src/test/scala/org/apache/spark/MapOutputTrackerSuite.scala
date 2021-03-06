@@ -73,7 +73,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
           (BlockManagerId("b", "hostB", 1000),
             ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
     val allStatuses = tracker.getAllMapOutputStatuses(10)
-    assert(allStatuses.toSet === Set(mapStatus1, mapStatus2))
+    assert(allStatuses === Array(mapStatus1, mapStatus2))
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()
     rpcEnv.shutdown()
@@ -92,7 +92,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.registerMapOutput(10, 0, mapStatus1)
     tracker.registerMapOutput(10, 1, mapStatus2)
     val allStatuses = tracker.getAllMapOutputStatuses(10)
-    assert(allStatuses.toSet === Set(mapStatus1, mapStatus2))
+    assert(allStatuses === Array(mapStatus1, mapStatus2))
     assert(0 == tracker.getNumCachedSerializedBroadcast)
     tracker.stop()
     rpcEnv.shutdown()
@@ -387,7 +387,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
                 (ShuffleBlockId(10, 6, 2), size1000, 1)))
         )
     )
-    assert(tracker.getAllMapOutputStatuses(10).toSet === Set(mapStatus1, mapStatus2))
+    assert(tracker.getAllMapOutputStatuses(10) === Array(mapStatus1, mapStatus2))
 
     tracker.unregisterShuffle(10)
     tracker.stop()

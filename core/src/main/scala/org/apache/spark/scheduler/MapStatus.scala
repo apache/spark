@@ -171,12 +171,8 @@ private[spark] class CompressedMapStatus(
     out.writeInt(compressedSizes.length)
     out.write(compressedSizes)
     out.writeLong(_mapTaskId)
-    if (_metadata.isEmpty) {
-      out.writeBoolean(false)
-    } else {
-      out.writeBoolean(true)
-      out.writeObject(_metadata.get)
-    }
+    out.writeBoolean(_metadata.isDefined)
+    _metadata.foreach(out.writeObject)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -253,12 +249,8 @@ private[spark] class HighlyCompressedMapStatus private (
       out.writeByte(kv._2)
     }
     out.writeLong(_mapTaskId)
-    if (_metadata.isEmpty) {
-      out.writeBoolean(false)
-    } else {
-      out.writeBoolean(true)
-      out.writeObject(_metadata.get)
-    }
+    out.writeBoolean(_metadata.isDefined)
+    _metadata.foreach(out.writeObject)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
