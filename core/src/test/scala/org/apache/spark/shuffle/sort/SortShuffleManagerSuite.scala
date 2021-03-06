@@ -130,4 +130,5 @@ class SortShuffleManagerSuite extends SparkFunSuite with Matchers {
       mapSideCombine = true
     )))
   }
+
 }
