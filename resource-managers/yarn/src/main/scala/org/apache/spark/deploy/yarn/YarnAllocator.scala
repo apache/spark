@@ -263,7 +263,7 @@ private[yarn] class YarnAllocator(
   private def getPendingAtLocation(
       location: String): Map[Int, Seq[ContainerRequest]] = synchronized {
     val allContainerRequests = new mutable.HashMap[Int, Seq[ContainerRequest]]
-    rpIdToResourceProfile.keys.map { id =>
+    rpIdToResourceProfile.keys.foreach { id =>
       val profResource = rpIdToYarnResource.get(id)
       val result = amClient.getMatchingRequests(getContainerPriority(id), location, profResource)
         .asScala.flatMap(_.asScala)

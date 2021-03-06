@@ -210,13 +210,13 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("(NOT) LIKE (ANY | SOME | ALL) expressions") {
     Seq("any", "some").foreach { quantifier =>
-      assertEqual(s"a like $quantifier ('foo%', 'b%')", ('a like "foo%") || ('a like "b%"))
-      assertEqual(s"a not like $quantifier ('foo%', 'b%')", !('a like "foo%") || !('a like "b%"))
-      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !(('a like "foo%") || ('a like "b%")))
+      assertEqual(s"a like $quantifier ('foo%', 'b%')", 'a likeAny("foo%", "b%"))
+      assertEqual(s"a not like $quantifier ('foo%', 'b%')", 'a notLikeAny("foo%", "b%"))
+      assertEqual(s"not (a like $quantifier ('foo%', 'b%'))", !('a likeAny("foo%", "b%")))
     }
-    assertEqual("a like all ('foo%', 'b%')", ('a like "foo%") && ('a like "b%"))
-    assertEqual("a not like all ('foo%', 'b%')", !('a like "foo%") && !('a like "b%"))
-    assertEqual("not (a like all ('foo%', 'b%'))", !(('a like "foo%") && ('a like "b%")))
+    assertEqual("a like all ('foo%', 'b%')", 'a likeAll("foo%", "b%"))
+    assertEqual("a not like all ('foo%', 'b%')", 'a notLikeAll("foo%", "b%"))
+    assertEqual("not (a like all ('foo%', 'b%'))", !('a likeAll("foo%", "b%")))
 
     Seq("any", "some", "all").foreach { quantifier =>
       intercept(s"a like $quantifier()", "Expected something between '(' and ')'")
@@ -590,7 +590,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
         // tests that have different result regarding the conf
         if (escape) {
-          // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing fallbacks to
+          // When SQLConf.ESCAPED_STRING_LITERALS is enabled, string literal parsing falls back to
           // Spark 1.6 behavior.
 
           // 'LIKE' string literals.
@@ -780,7 +780,7 @@ class ExpressionParserSuite extends AnalysisTest {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
     assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
     intercept(complexName.unquotedString, "mismatched input")
-    // Function identifier contains countious backticks should be treated correctly.
+    // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
     assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
   }

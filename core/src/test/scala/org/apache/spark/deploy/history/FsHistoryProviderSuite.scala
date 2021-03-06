@@ -926,8 +926,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with Matchers with Logging {
     oldProvider.listing.setMetadata(meta)
     oldProvider.stop()
 
-    val mistatchedVersionProvider = new FsHistoryProvider(conf)
-    assert(mistatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
+    val mismatchedVersionProvider = new FsHistoryProvider(conf)
+    assert(mismatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
   }
 
   test("invalidate cached UI") {

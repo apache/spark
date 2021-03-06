@@ -61,7 +61,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val testResourceArgs: JObject = ("" -> "")
       val ja = JArray(List(testResourceArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
-      var error = intercept[SparkException] {
+      val error = intercept[SparkException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -146,7 +146,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
-      var error = intercept[IllegalArgumentException] {
+      val error = intercept[IllegalArgumentException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -160,7 +160,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val ja = Extraction.decompose(Seq(fpga))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
-      var error = intercept[SparkException] {
+      val error = intercept[SparkException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -199,7 +199,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       val ja = Extraction.decompose(Seq(gpuArgs))
       val f1 = createTempJsonFile(tmpDir, "resources", ja)
 
-      var error = intercept[IllegalArgumentException] {
+      val error = intercept[IllegalArgumentException] {
         val parsedResources = backend.parseOrFindResources(Some(f1))
       }.getMessage()
 
@@ -302,7 +302,7 @@ class CoarseGrainedExecutorBackendSuite extends SparkFunSuite
       // We don't really verify the data, just pass it around.
       val data = ByteBuffer.wrap(Array[Byte](1, 2, 3, 4))
       val taskDescription = new TaskDescription(taskId, 2, "1", "TASK 1000000", 19,
-        1, mutable.Map.empty, mutable.Map.empty, new Properties,
+        1, mutable.Map.empty, mutable.Map.empty, mutable.Map.empty, new Properties,
         Map(GPU -> new ResourceInformation(GPU, Array("0", "1"))), data)
       val serializedTaskDescription = TaskDescription.encode(taskDescription)
       backend.executor = mock[Executor]

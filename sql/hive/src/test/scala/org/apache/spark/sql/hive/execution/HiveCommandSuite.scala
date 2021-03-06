@@ -129,7 +129,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     checkAnswer(
       sql(s"SHOW TBLPROPERTIES parquet_tab1('my_key1')"),
-      Row("v1") :: Nil
+      Row("my_key1", "v1") :: Nil
     )
   }
 
@@ -137,18 +137,28 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message.contains("Table or view not found for 'SHOW TBLPROPERTIES': badtable"))
+    assert(message.contains("Table or view not found: badtable"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
       sql("SHOW TBLPROPERTIES parquet_tab1('invalid.prop.key')"),
-      Row("Table default.parquet_tab1 does not have property: invalid.prop.key") :: Nil
+      Row("invalid.prop.key",
+        "Table default.parquet_tab1 does not have property: invalid.prop.key") :: Nil
     )
   }
 
-  test("show tblproperties for hive table") {
-    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Val"))
-    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("prop2Val"))
+  test("SPARK-34240 Unify output of SHOW TBLPROPERTIES and pass output attributes properly") {
+    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2").filter("key != 'transient_lastDdlTime'"),
+      Row("prop1Key", "prop1Val") :: Row("`prop2Key`", "prop2Val") :: Nil)
+    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Key", "prop1Val"))
+    checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"), Row("`prop2Key`", "prop2Val"))
+    withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2").filter("key != 'transient_lastDdlTime'"),
+        Row("prop1Key", "prop1Val") :: Row("`prop2Key`", "prop2Val") :: Nil)
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('prop1Key')"), Row("prop1Val"))
+      checkAnswer(sql("SHOW TBLPROPERTIES parquet_tab2('`prop2Key`')"),
+        Row("prop2Val"))
+    }
   }
 
   Seq(true, false).foreach { local =>
@@ -304,72 +314,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("INSERT INTO part_table PARTITION(YEar) SELECT 1, 2019")
         checkAnswer(sql("SELECT * FROM part_table"), Row(1, 2019))
       }
-    }
-  }
-
-  test("Truncate Table") {
-    withTable("non_part_table", "part_table") {
-      sql(
-        """
-          |CREATE TABLE non_part_table (employeeID INT, employeeName STRING)
-          |ROW FORMAT DELIMITED
-          |FIELDS TERMINATED BY '|'
-          |LINES TERMINATED BY '\n'
-        """.stripMargin)
-
-      val testData = hiveContext.getHiveFile("data/files/employee.dat").toURI
-
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
-      checkAnswer(
-        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
-        Row(16, "john") :: Nil)
-
-      val testResults = sql("SELECT * FROM non_part_table").collect()
-
-      sql("TRUNCATE TABLE non_part_table")
-      checkAnswer(sql("SELECT * FROM non_part_table"), Seq.empty[Row])
-
-      sql(
-        """
-          |CREATE TABLE part_table (employeeID INT, employeeName STRING)
-          |PARTITIONED BY (c STRING, d STRING)
-          |ROW FORMAT DELIMITED
-          |FIELDS TERMINATED BY '|'
-          |LINES TERMINATED BY '\n'
-        """.stripMargin)
-
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="1")""")
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
-        testResults)
-
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
-        testResults)
-
-      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="2", d="2")""")
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '2'"),
-        testResults)
-
-      sql("TRUNCATE TABLE part_table PARTITION(c='1', d='1')")
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
-        Seq.empty[Row])
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
-        testResults)
-
-      sql("TRUNCATE TABLE part_table PARTITION(c='1')")
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1'"),
-        Seq.empty[Row])
-
-      sql("TRUNCATE TABLE part_table")
-      checkAnswer(
-        sql("SELECT employeeID, employeeName FROM part_table"),
-        Seq.empty[Row])
     }
   }
 

@@ -160,6 +160,12 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     checkStats(globalLimit, stats)
   }
 
+  test("tail estimation") {
+    checkStats(Tail(Literal(1), plan), Statistics(sizeInBytes = 12, rowCount = Some(1)))
+    checkStats(Tail(Literal(20), plan), plan.stats.copy(attributeStats = AttributeMap(Nil)))
+    checkStats(Tail(Literal(0), plan), Statistics(sizeInBytes = 1, rowCount = Some(0)))
+  }
+
   test("sample estimation") {
     val sample = Sample(0.0, 0.5, withReplacement = false, (math.random * 1000).toLong, plan)
     checkStats(sample, Statistics(sizeInBytes = 60, rowCount = Some(5)))
@@ -202,6 +208,35 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
       plan,
       expectedStatsCboOn = Statistics.DUMMY,
       expectedStatsCboOff = Statistics.DUMMY)
+  }
+
+  test("SPARK-33954: Some operator missing rowCount when enable CBO") {
+    checkStats(
+      plan.repartition(10),
+      expectedStatsCboOn = Statistics(sizeInBytes = 120, rowCount = Some(10)),
+      expectedStatsCboOff = Statistics(sizeInBytes = 120))
+  }
+
+  test("SPARK-34031: Union operator missing rowCount when enable CBO") {
+    val union = Union(plan :: plan :: plan :: Nil)
+    val childrenSize = union.children.size
+    val sizeInBytes = plan.size.get * childrenSize
+    val rowCount = Some(plan.rowCount * childrenSize)
+    checkStats(
+      union,
+      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
+  }
+
+  test("SPARK-34121: Intersect operator missing rowCount when enable CBO") {
+    val intersect = Intersect(plan, plan, false)
+    val childrenSize = intersect.children.size
+    val sizeInBytes = plan.size.get
+    val rowCount = Some(plan.rowCount)
+    checkStats(
+      intersect,
+      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
 
   test("row size and column stats estimation for sort") {

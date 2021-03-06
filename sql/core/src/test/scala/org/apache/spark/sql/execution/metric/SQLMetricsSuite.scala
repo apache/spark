@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
@@ -181,7 +182,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
           assert(probes.toDouble > 1.0)
         } else {
           val mainValue = probes.split("\n").apply(1).stripPrefix("(").stripSuffix(")")
-          // Extract min, med, max from the string and strip off everthing else.
+          // Extract min, med, max from the string and strip off everything else.
           val index = mainValue.indexOf(" (", 0)
           mainValue.slice(0, index).split(", ").foreach {
             probe => assert(probe.toDouble > 1.0)
@@ -209,14 +210,41 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     // 2 partitions and each partition contains 2 keys
     val df2 = testData2.groupBy('a).agg(collect_set('a))
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> (("ObjectHashAggregate", Map("number of output rows" -> 4L))),
+      2L -> (("ObjectHashAggregate", Map(
+        "number of output rows" -> 4L,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))),
       1L -> (("Exchange", Map(
         "shuffle records written" -> 4L,
         "records read" -> 4L,
         "local blocks read" -> 4L,
         "remote blocks read" -> 0L))),
-      0L -> (("ObjectHashAggregate", Map("number of output rows" -> 3L))))
+      0L -> (("ObjectHashAggregate", Map(
+        "number of output rows" -> 3L,
+        "number of tasks fall-backed to sort-based aggregation" -> 0L))))
     )
+
+    // 2 partitions and each partition contains 2 keys, with fallback to sort-based aggregation
+    withSQLConf(SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1") {
+      val df3 = testData2.groupBy('a).agg(collect_set('a))
+      testSparkPlanMetrics(df3, 1, Map(
+        2L -> (("ObjectHashAggregate", Map(
+          "number of output rows" -> 4L,
+          "number of tasks fall-backed to sort-based aggregation" -> 2L))),
+        0L -> (("ObjectHashAggregate", Map(
+          "number of output rows" -> 3L,
+          "number of tasks fall-backed to sort-based aggregation" -> 1L))))
+      )
+      testSparkPlanMetricsWithPredicates(df3, 1, Map(
+        2L -> (("ObjectHashAggregate", Map(
+          "spill size" -> {
+            _.toString.matches(sizeMetricPattern)
+          }))),
+        0L -> (("ObjectHashAggregate", Map(
+          "spill size" -> {
+            _.toString.matches(sizeMetricPattern)
+          }))))
+      )
+    }
   }
 
   test("Sort metrics") {
@@ -705,7 +733,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       sql("CREATE TEMPORARY VIEW inMemoryTable AS SELECT 1 AS c1")
       sql("CACHE TABLE inMemoryTable")
       testSparkPlanMetrics(spark.table("inMemoryTable"), 1,
-        Map(1L -> (("Scan In-memory table `inMemoryTable`", Map.empty)))
+        Map(1L -> (("Scan In-memory table inMemoryTable", Map.empty)))
       )
 
       sql("CREATE TEMPORARY VIEW ```a``b``` AS SELECT 2 AS c1")
@@ -753,6 +781,22 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         assert(exchanges.size === 1)
         testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
       }
+    }
+  }
+
+  test("SPARK-34567: Add metrics for CTAS operator") {
+    withTable("t") {
+      val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+      val dataWritingCommandExec =
+        df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
+      dataWritingCommandExec.executeCollect()
+      val createTableAsSelect = dataWritingCommandExec.cmd
+      assert(createTableAsSelect.metrics.contains("numFiles"))
+      assert(createTableAsSelect.metrics("numFiles").value == 1)
+      assert(createTableAsSelect.metrics.contains("numOutputBytes"))
+      assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
+      assert(createTableAsSelect.metrics.contains("numOutputRows"))
+      assert(createTableAsSelect.metrics("numOutputRows").value == 1)
     }
   }
 }

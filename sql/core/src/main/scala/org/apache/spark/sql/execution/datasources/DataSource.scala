@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -50,7 +51,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{HadoopFSUtils, ThreadUtils, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -211,7 +212,7 @@ case class DataSource(
         s"Unable to infer schema for $format. It must be specified manually.")
     }
 
-    // We just print a waring message if the data schema and partition schema have the duplicate
+    // We just print a warning message if the data schema and partition schema have the duplicate
     // columns. This is because we allow users to do so in the previous Spark releases and
     // we have the existing tests for the cases (e.g., `ParquetHadoopFsRelationSuite`).
     // See SPARK-18108 and SPARK-21144 for related discussions.
@@ -518,7 +519,8 @@ case class DataSource(
       mode: SaveMode,
       data: LogicalPlan,
       outputColumnNames: Seq[String],
-      physicalPlan: SparkPlan): BaseRelation = {
+      physicalPlan: SparkPlan,
+      metrics: Map[String, SQLMetric]): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
@@ -546,6 +548,7 @@ case class DataSource(
           partitionColumns = resolvedPartCols,
           outputColumnNames = outputColumnNames)
         resolved.run(sparkSession, physicalPlan)
+        DataWritingCommand.propogateMetrics(sparkSession.sparkContext, resolved, metrics)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ =>
@@ -811,7 +814,7 @@ object DataSource extends Logging {
     val allPaths = globbedPaths ++ nonGlobPaths
     if (checkFilesExist) {
       val (filteredOut, filteredIn) = allPaths.partition { path =>
-        InMemoryFileIndex.shouldFilterOut(path.getName)
+        HadoopFSUtils.shouldFilterOutPathName(path.getName)
       }
       if (filteredIn.isEmpty) {
         logWarning(
@@ -822,7 +825,7 @@ object DataSource extends Logging {
       }
     }
 
-    allPaths.toSeq
+    allPaths
   }
 
   /**
@@ -844,10 +847,10 @@ object DataSource extends Logging {
    */
   def validateSchema(schema: StructType): Unit = {
     def hasEmptySchema(schema: StructType): Boolean = {
-      schema.size == 0 || schema.find {
+      schema.size == 0 || schema.exists {
         case StructField(_, b: StructType, _, _) => hasEmptySchema(b)
         case _ => false
-      }.isDefined
+      }
     }
 
 

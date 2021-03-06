@@ -421,7 +421,7 @@ to handle the Spark Context setup and tear down.
 
 In addition to viewing the metrics in the UI, they are also available as JSON.  This gives developers
 an easy way to create new visualizations and monitoring tools for Spark.  The JSON is available for
-both running applications, and in the history server.  The endpoints are mounted at `/api/v1`.  Eg.,
+both running applications, and in the history server.  The endpoints are mounted at `/api/v1`.  For example,
 for the history server, they would typically be accessible at `http://<server-url>:18080/api/v1`, and
 for a running application, at `http://localhost:4040/api/v1`.
 
@@ -755,7 +755,7 @@ A list of the available metrics, with a short description:
 Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
 Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
 The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
-The Prometheus endpoint is experimental and conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+The Prometheus endpoint is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
 In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
 `spark.eventLog.logStageExecutorMetrics` is true.  
 Executor memory metrics are also exposed via the Spark metrics system based on the [Dropwizard metrics library](http://metrics.dropwizard.io/4.1.1).
@@ -951,11 +951,11 @@ These endpoints have been strongly versioned to make it easier to develop applic
 * Individual fields will never be removed for any given endpoint
 * New endpoints may be added
 * New fields may be added to existing endpoints
-* New versions of the api may be added in the future as a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
+* New versions of the api may be added in the future as a separate endpoint (e.g., `api/v2`).  New versions are *not* required to be backwards compatible.
 * Api versions may be dropped, but only after at least one minor release of co-existing with a new api version.
 
 Note that even when examining the UI of running applications, the `applications/[app-id]` portion is
-still required, though there is only one application available.  Eg. to see the list of jobs for the
+still required, though there is only one application available.  E.g. to see the list of jobs for the
 running app, you would go to `http://localhost:4040/api/v1/applications/[app-id]/jobs`.  This is to
 keep the paths consistent in both modes.
 
@@ -1276,7 +1276,6 @@ These metrics are exposed by Spark executors.
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=plugin.\<Plugin Class Name>

@@ -332,7 +332,7 @@ class ContinuousExecution(
 
     synchronized {
       // Record offsets before updating `committedOffsets`
-      recordTriggerOffsets(from = committedOffsets, to = availableOffsets)
+      recordTriggerOffsets(from = committedOffsets, to = availableOffsets, latest = latestOffsets)
       if (queryExecutionThread.isAlive) {
         commitLog.add(epoch, CommitMetadata())
         val offset =

@@ -308,7 +308,7 @@ class ParamTests(SparkSessionTestCase):
             LogisticRegression
         )
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             ValueError,
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]

@@ -105,16 +105,16 @@ private[hive] class SparkGetColumnsOperation(
       val databasePattern = Pattern.compile(CLIServiceUtils.patternToRegex(schemaName))
       if (databasePattern.matcher(globalTempViewDb).matches()) {
         catalog.globalTempViewManager.listViewNames(tablePattern).foreach { globalTempView =>
-          catalog.globalTempViewManager.get(globalTempView).foreach { plan =>
-            addToRowSet(columnPattern, globalTempViewDb, globalTempView, plan.schema)
+          catalog.getRawGlobalTempView(globalTempView).map(catalog.getTempViewSchema).foreach {
+            schema => addToRowSet(columnPattern, globalTempViewDb, globalTempView, schema)
           }
         }
       }
 
       // Temporary views
       catalog.listLocalTempViews(tablePattern).foreach { localTempView =>
-        catalog.getTempView(localTempView.table).foreach { plan =>
-          addToRowSet(columnPattern, null, localTempView.table, plan.schema)
+        catalog.getRawTempView(localTempView.table).map(catalog.getTempViewSchema).foreach {
+          schema => addToRowSet(columnPattern, null, localTempView.table, schema)
         }
       }
       setState(OperationState.FINISHED)
@@ -133,6 +133,7 @@ private[hive] class SparkGetColumnsOperation(
     case dt @ (BooleanType | _: NumericType | DateType | TimestampType |
                CalendarIntervalType | NullType) =>
       Some(dt.defaultSize)
+    case CharType(n) => Some(n)
     case StructType(fields) =>
       val sizeArr = fields.map(f => getColumnSize(f.dataType))
       if (sizeArr.contains(None)) {
@@ -176,6 +177,8 @@ private[hive] class SparkGetColumnsOperation(
     case DoubleType => java.sql.Types.DOUBLE
     case _: DecimalType => java.sql.Types.DECIMAL
     case StringType => java.sql.Types.VARCHAR
+    case VarcharType(_) => java.sql.Types.VARCHAR
+    case CharType(_) => java.sql.Types.CHAR
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE
     case TimestampType => java.sql.Types.TIMESTAMP

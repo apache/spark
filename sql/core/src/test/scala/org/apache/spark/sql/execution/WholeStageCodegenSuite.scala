@@ -71,28 +71,25 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
   }
 
   test("ShuffledHashJoin should be included in WholeStageCodegen") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "30",
-        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
-        SQLConf.PREFER_SORTMERGEJOIN.key -> "false") {
-      val df1 = spark.range(5).select($"id".as("k1"))
-      val df2 = spark.range(15).select($"id".as("k2"))
-      val df3 = spark.range(6).select($"id".as("k3"))
+    val df1 = spark.range(5).select($"id".as("k1"))
+    val df2 = spark.range(15).select($"id".as("k2"))
+    val df3 = spark.range(6).select($"id".as("k3"))
 
-      // test one shuffled hash join
-      val oneJoinDF = df1.join(df2, $"k1" === $"k2")
-      assert(oneJoinDF.queryExecution.executedPlan.collect {
-        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
-      }.size === 1)
-      checkAnswer(oneJoinDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4)))
+    // test one shuffled hash join
+    val oneJoinDF = df1.join(df2.hint("SHUFFLE_HASH"), $"k1" === $"k2")
+    assert(oneJoinDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
+    }.size === 1)
+    checkAnswer(oneJoinDF, Seq(Row(0, 0), Row(1, 1), Row(2, 2), Row(3, 3), Row(4, 4)))
 
-      // test two shuffled hash joins
-      val twoJoinsDF = df1.join(df2, $"k1" === $"k2").join(df3, $"k1" === $"k3")
-      assert(twoJoinsDF.queryExecution.executedPlan.collect {
-        case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
-      }.size === 2)
-      checkAnswer(twoJoinsDF,
-        Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
-    }
+    // test two shuffled hash joins
+    val twoJoinsDF = df1.join(df2.hint("SHUFFLE_HASH"), $"k1" === $"k2")
+      .join(df3.hint("SHUFFLE_HASH"), $"k1" === $"k3")
+    assert(twoJoinsDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(_ : ShuffledHashJoinExec) => true
+    }.size === 2)
+    checkAnswer(twoJoinsDF,
+      Seq(Row(0, 0, 0), Row(1, 1, 1), Row(2, 2, 2), Row(3, 3, 3), Row(4, 4, 4)))
   }
 
   test("Sort should be included in WholeStageCodegen") {
@@ -398,8 +395,8 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     // Case2: The parent of a LocalTableScanExec supports WholeStageCodegen.
     // In this case, the LocalTableScanExec should be within a WholeStageCodegen domain
     // and no more InputAdapter is inserted as the direct parent of the LocalTableScanExec.
-    val aggedDF = Seq(1, 2, 3).toDF.groupBy("value").sum()
-    val executedPlan = aggedDF.queryExecution.executedPlan
+    val aggregatedDF = Seq(1, 2, 3).toDF.groupBy("value").sum()
+    val executedPlan = aggregatedDF.queryExecution.executedPlan
 
     // HashAggregateExec supports WholeStageCodegen and it's the parent of
     // LocalTableScanExec so LocalTableScanExec should be within a WholeStageCodegen domain.
@@ -448,7 +445,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
             "GROUP BY k").foreach { query =>
           val e = intercept[Exception] {
             sql(query).collect
-          }.getCause
+          }
           assert(e.isInstanceOf[IllegalStateException])
           assert(e.getMessage.contains(expectedErrMsg))
         }

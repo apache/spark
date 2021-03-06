@@ -61,9 +61,10 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
-    cacheManager.lookupCachedData(plan).map { cachedData =>
+    val planToLookup = sparkSession.sessionState.executePlan(plan).analyzed
+    cacheManager.lookupCachedData(planToLookup).map { cachedData =>
       val columnsToAnalyze = getColumnsToAnalyze(
-        tableIdent, cachedData.plan, columnNames, allColumns)
+        tableIdent, cachedData.cachedRepresentation, columnNames, allColumns)
       cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
       cachedData
     }.isDefined

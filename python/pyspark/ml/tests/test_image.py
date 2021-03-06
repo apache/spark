@@ -47,19 +47,19 @@ class ImageFileFormatTest(SparkSessionTestCase):
         self.assertEqual(ImageSchema.undefinedImageType, "Undefined")
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 TypeError,
                 "image argument should be pyspark.sql.types.Row; however",
                 lambda: ImageSchema.toNDArray("a"))
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 ValueError,
                 "image argument should have attributes specified in",
                 lambda: ImageSchema.toNDArray(Row(a=1)))
 
         with QuietTest(self.sc):
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 TypeError,
                 "array argument should be numpy.ndarray; however, it got",
                 lambda: ImageSchema.toImage("a"))

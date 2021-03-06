@@ -61,7 +61,7 @@ struct<>
 -- !query
 SHOW TABLES
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean>
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
 show_t2
@@ -71,7 +71,7 @@ show_t3
 -- !query
 SHOW TABLES IN showdb
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean>
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
 show_t2
@@ -81,7 +81,7 @@ show_t3
 -- !query
 SHOW TABLES 'show_t*'
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean>
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
 show_t2
@@ -91,7 +91,7 @@ show_t3
 -- !query
 SHOW TABLES LIKE 'show_t1*|show_t2*'
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean>
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
 show_t2
@@ -100,7 +100,7 @@ show_t2
 -- !query
 SHOW TABLES IN showdb 'show_t*'
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean>
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
 show_t2
@@ -110,7 +110,7 @@ show_t3
 -- !query
 SHOW TABLES IN showdb LIKE 'show_t*'
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean>
+struct<namespace:string,tableName:string,isTemporary:boolean>
 -- !query output
 show_t1
 show_t2
@@ -120,7 +120,7 @@ show_t3
 -- !query
 SHOW TABLE EXTENDED LIKE 'show_t*'
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean,information:string>
+struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
 -- !query output
 	show_t3	true	Table: show_t3
 Created Time [not included in comparison]
@@ -178,7 +178,7 @@ SHOW TABLE EXTENDED
 -- !query
 SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us', d=1)
 -- !query schema
-struct<database:string,tableName:string,isTemporary:boolean,information:string>
+struct<namespace:string,tableName:string,isTemporary:boolean,information:string>
 -- !query output
 showdb	show_t1	false	Partition Values: [c=Us, d=1]
 Location [not included in comparison]/{warehouse_dir}/showdb.db/show_t1/c=Us/d=1
@@ -206,7 +206,7 @@ SHOW TABLE EXTENDED LIKE 'show_t*' PARTITION(c='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'show_t*' not found in database 'showdb';
+Table or view 'show_t*' not found in database 'showdb'
 
 
 -- !query
@@ -215,7 +215,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(c='Us')
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`showdb`.`show_t1`';
+Partition spec is invalid. The spec (c) must match the partition spec (c, d) defined in table '`showdb`.`show_t1`'
 
 
 -- !query
@@ -224,7 +224,7 @@ SHOW TABLE EXTENDED LIKE 'show_t1' PARTITION(a='Us', d=1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Partition spec is invalid. The spec (a, d) must match the partition spec (c, d) defined in table '`showdb`.`show_t1`';
+a is not a valid partition column in table `showdb`.`show_t1`.
 
 
 -- !query
@@ -235,7 +235,7 @@ struct<>
 org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 Partition not found in table 'show_t1' database 'showdb':
 c -> Ch
-d -> 1;
+d -> 1
 
 
 -- !query

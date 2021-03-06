@@ -98,6 +98,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
     // optional fields
     conf.set(JARS, Seq("mayonnaise.jar", "ketchup.jar"))
     conf.set(FILES.key, "fireball.png")
+    conf.set(ARCHIVES.key, "fireballs.zip")
     conf.set("spark.driver.memory", s"${Utils.DEFAULT_DRIVER_MEM_MB}m")
     conf.set(DRIVER_CORES, 180)
     conf.set("spark.driver.extraJavaOptions", " -Dslices=5 -Dcolor=mostly_red")
@@ -246,6 +247,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |  },
       |  "mainClass" : "org.apache.spark.examples.SparkPie",
       |  "sparkProperties" : {
+      |    "spark.archives" : "fireballs.zip",
       |    "spark.driver.extraLibraryPath" : "pickle.jar",
       |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
       |    "spark.driver.supervise" : "false",
@@ -272,6 +274,7 @@ class SubmitRestProtocolSuite extends SparkFunSuite {
       |  },
       |  "mainClass" : "org.apache.spark.examples.SparkPie",
       |  "sparkProperties" : {
+      |    "spark.archives" : "fireballs.zip",
       |    "spark.driver.extraLibraryPath" : "pickle.jar",
       |    "spark.jars" : "mayonnaise.jar,ketchup.jar",
       |    "spark.driver.supervise" : "false",

@@ -32,7 +32,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
       > SELECT _FUNC_();
        0
   """,
-  since = "1.4.0")
+  since = "1.4.0",
+  group = "misc_funcs")
 case class SparkPartitionID() extends LeafExpression with Nondeterministic {
 
   override def nullable: Boolean = false

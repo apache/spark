@@ -226,8 +226,8 @@ private object DateTimeFormatterHelper {
       // string at res(0). So when the first element here is empty string we do not need append `'`
       // literal to the DateTimeFormatterBuilder.
       case ("", idx) if idx != 0 => builder.appendLiteral("'")
-      case (pattenPart, idx) if idx % 2 == 0 =>
-        var rest = pattenPart
+      case (patternPart, idx) if idx % 2 == 0 =>
+        var rest = patternPart
         while (rest.nonEmpty) {
           rest match {
             case extractor(prefix, secondFraction, suffix) =>

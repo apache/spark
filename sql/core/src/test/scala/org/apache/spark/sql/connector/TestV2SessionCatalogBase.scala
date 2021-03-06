@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table, V1Table}
+import org.apache.spark.sql.connector.catalog.{DelegatingCatalogExtension, Identifier, Table, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
@@ -70,8 +70,22 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
       schema: StructType,
       partitions: Array[Transform],
       properties: util.Map[String, String]): Table = {
-    val created = super.createTable(ident, schema, partitions, properties)
-    val t = newTable(created.name(), schema, partitions, properties)
+    val key = TestV2SessionCatalogBase.SIMULATE_ALLOW_EXTERNAL_PROPERTY
+    val propsWithLocation = if (properties.containsKey(key)) {
+      // Always set a location so that CREATE EXTERNAL TABLE won't fail with LOCATION not specified.
+      if (!properties.containsKey(TableCatalog.PROP_LOCATION)) {
+        val newProps = new util.HashMap[String, String]()
+        newProps.putAll(properties)
+        newProps.put(TableCatalog.PROP_LOCATION, "file:/abc")
+        newProps
+      } else {
+        properties
+      }
+    } else {
+      properties
+    }
+    val created = super.createTable(ident, schema, partitions, propsWithLocation)
+    val t = newTable(created.name(), schema, partitions, propsWithLocation)
     addTable(ident, t)
     t
   }
@@ -89,4 +103,8 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
     tables.clear()
     tableCreated.set(false)
   }
+}
+
+object TestV2SessionCatalogBase {
+  val SIMULATE_ALLOW_EXTERNAL_PROPERTY = "spark.sql.test.simulateAllowExternal"
 }

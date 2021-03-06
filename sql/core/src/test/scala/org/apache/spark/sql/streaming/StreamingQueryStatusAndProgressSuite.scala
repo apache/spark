@@ -75,6 +75,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |    "description" : "source",
         |    "startOffset" : 123,
         |    "endOffset" : 456,
+        |    "latestOffset" : 789,
         |    "numInputRows" : 678,
         |    "inputRowsPerSecond" : 10.0
         |  } ],
@@ -121,6 +122,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |    "description" : "source",
          |    "startOffset" : 123,
          |    "endOffset" : 456,
+         |    "latestOffset" : 789,
          |    "numInputRows" : 678
          |  } ],
          |  "sink" : {
@@ -333,6 +335,7 @@ object StreamingQueryStatusAndProgressSuite {
         description = "source",
         startOffset = "123",
         endOffset = "456",
+        latestOffset = "789",
         numInputRows = 678,
         inputRowsPerSecond = 10.0,
         processedRowsPerSecond = Double.PositiveInfinity  // should not be present in the json
@@ -361,6 +364,7 @@ object StreamingQueryStatusAndProgressSuite {
         description = "source",
         startOffset = "123",
         endOffset = "456",
+        latestOffset = "789",
         numInputRows = 678,
         inputRowsPerSecond = Double.NaN, // should not be present in the json
         processedRowsPerSecond = Double.NegativeInfinity // should not be present in the json

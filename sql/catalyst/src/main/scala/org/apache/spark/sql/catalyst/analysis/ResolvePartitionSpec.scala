@@ -20,11 +20,12 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddPartition, AlterTableDropPartition, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, V2PartitionCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsPartitionManagement
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
+import org.apache.spark.sql.util.PartitioningUtils.{normalizePartitionSpec, requireExactMatchedPartitionSpec}
 
 /**
  * Resolve [[UnresolvedPartitionSpec]] to [[ResolvedPartitionSpec]] in partition related commands.
@@ -32,41 +33,50 @@ import org.apache.spark.sql.util.PartitioningUtils.normalizePartitionSpec
 object ResolvePartitionSpec extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r @ AlterTableAddPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _) =>
-      r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
-
-    case r @ AlterTableDropPartition(
-        ResolvedTable(_, _, table: SupportsPartitionManagement), partSpecs, _, _, _) =>
-      r.copy(parts = resolvePartitionSpecs(table.name, partSpecs, table.partitionSchema()))
+    case command: V2PartitionCommand if command.childrenResolved && !command.resolved =>
+      command.table match {
+        case r @ ResolvedTable(_, _, table: SupportsPartitionManagement, _) =>
+          command.transformExpressions {
+            case partSpecs: UnresolvedPartitionSpec =>
+              val partitionSchema = table.partitionSchema()
+              resolvePartitionSpec(
+                r.name,
+                partSpecs,
+                partitionSchema,
+                command.allowPartialPartitionSpec)
+          }
+        case _ => command
+      }
   }
 
-  private def resolvePartitionSpecs(
+  private def resolvePartitionSpec(
       tableName: String,
-      partSpecs: Seq[PartitionSpec],
-      partSchema: StructType): Seq[ResolvedPartitionSpec] =
-    partSpecs.map {
-      case unresolvedPartSpec: UnresolvedPartitionSpec =>
-        ResolvedPartitionSpec(
-          convertToPartIdent(tableName, unresolvedPartSpec.spec, partSchema),
-          unresolvedPartSpec.location)
-      case resolvedPartitionSpec: ResolvedPartitionSpec =>
-        resolvedPartitionSpec
-    }
-
-  private def convertToPartIdent(
-      tableName: String,
-      partitionSpec: TablePartitionSpec,
-      partSchema: StructType): InternalRow = {
+      partSpec: UnresolvedPartitionSpec,
+      partSchema: StructType,
+      allowPartitionSpec: Boolean): ResolvedPartitionSpec = {
     val normalizedSpec = normalizePartitionSpec(
-      partitionSpec,
-      partSchema.map(_.name),
+      partSpec.spec,
+      partSchema,
       tableName,
       conf.resolver)
+    if (!allowPartitionSpec) {
+      requireExactMatchedPartitionSpec(tableName, normalizedSpec, partSchema.fieldNames)
+    }
+    val partitionNames = normalizedSpec.keySet
+    val requestedFields = partSchema.filter(field => partitionNames.contains(field.name))
+    ResolvedPartitionSpec(
+      requestedFields.map(_.name),
+      convertToPartIdent(normalizedSpec, requestedFields),
+      partSpec.location)
+  }
 
-    val partValues = partSchema.map { part =>
-      val raw = normalizedSpec.get(part.name).orNull
-      Cast(Literal.create(raw, StringType), part.dataType, Some(conf.sessionLocalTimeZone)).eval()
+  private[sql] def convertToPartIdent(
+      partitionSpec: TablePartitionSpec,
+      schema: Seq[StructField]): InternalRow = {
+    val partValues = schema.map { part =>
+      val raw = partitionSpec.get(part.name).orNull
+      val dt = CharVarcharUtils.replaceCharVarcharWithString(part.dataType)
+      Cast(Literal.create(raw, StringType), dt, Some(conf.sessionLocalTimeZone)).eval()
     }
     InternalRow.fromSeq(partValues)
   }

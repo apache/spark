@@ -75,7 +75,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_sum(CAST(earnings AS BIGINT)):bigint,dotNET_avg(CAST(earnings AS BIGINT)):double,Java_sum(CAST(earnings AS BIGINT)):bigint,Java_avg(CAST(earnings AS BIGINT)):double>
+struct<year:int,dotNET_sum(earnings):bigint,dotNET_avg(earnings):double,Java_sum(earnings):bigint,Java_avg(earnings):double>
 -- !query output
 2012	15000	7500.0	20000	20000.0
 2013	48000	48000.0	30000	30000.0
@@ -104,7 +104,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<dotNET_sum(CAST(earnings AS BIGINT)):bigint,dotNET_min(year):int,Java_sum(CAST(earnings AS BIGINT)):bigint,Java_min(year):int>
+struct<dotNET_sum(earnings):bigint,dotNET_min(year):int,Java_sum(earnings):bigint,Java_min(year):int>
 -- !query output
 63000	2012	50000	2012
 
@@ -139,7 +139,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_sum(CAST(earnings AS BIGINT)):bigint,dotNET_min(s):int,Java_sum(CAST(earnings AS BIGINT)):bigint,Java_min(s):int>
+struct<year:int,dotNET_sum(earnings):bigint,dotNET_min(s):int,Java_sum(earnings):bigint,Java_min(s):int>
 -- !query output
 2012	15000	1	20000	1
 2013	48000	2	30000	2
@@ -202,7 +202,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.;
+Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.
 
 
 -- !query
@@ -217,7 +217,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.;
+Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.
 
 
 -- !query
@@ -244,7 +244,7 @@ PIVOT (
   FOR course IN ('dotNET', 'Java')
 )
 -- !query schema
-struct<year:int,dotNET_CEIL(sum(CAST(earnings AS BIGINT))):bigint,dotNET_a1:double,Java_CEIL(sum(CAST(earnings AS BIGINT))):bigint,Java_a1:double>
+struct<year:int,dotNET_CEIL(sum(earnings)):bigint,dotNET_a1:double,Java_CEIL(sum(earnings)):bigint,Java_a1:double>
 -- !query output
 2012	15000	7501.0	20000	20001.0
 2013	48000	48001.0	30000	30001.0
@@ -262,7 +262,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.;
+It is not allowed to use an aggregate function in the argument of another aggregate function. Please use the inner aggregate function in a sub-query.
 
 
 -- !query
@@ -313,7 +313,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>;
+Invalid pivot value 'dotNET': value data type string does not match pivot column data type struct<course:string,year:int>
 
 
 -- !query
@@ -339,7 +339,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literal expressions required for pivot values, found 'course#x';
+Literal expressions required for pivot values, found 'course#x'
 
 
 -- !query
@@ -458,7 +458,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'm#x'. Pivot columns must be comparable.;
+Invalid pivot column 'm#x'. Pivot columns must be comparable.
 
 
 -- !query
@@ -475,7 +475,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.;
+Invalid pivot column 'named_struct(course, course#x, m, m#x)'. Pivot columns must be comparable.
 
 
 -- !query

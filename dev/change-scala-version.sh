@@ -67,4 +67,9 @@ sed_i '1,/<scala\.binary\.version>[0-9]*\.[0-9]*</s/<scala\.binary\.version>[0-9
 
 # Update source of scaladocs
 echo "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+if [ $TO_VERSION = "2.13" ]; then
+  sed_i '/\-Pscala-'$TO_VERSION'/!s:build/sbt:build/sbt \-Pscala\-'$TO_VERSION':' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+else
+  sed_i 's:build/sbt \-Pscala\-'$FROM_VERSION':build/sbt:' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"
+fi
 sed_i 's/scala\-'$FROM_VERSION'/scala\-'$TO_VERSION'/' "$BASEDIR/docs/_plugins/copy_api_dirs.rb"

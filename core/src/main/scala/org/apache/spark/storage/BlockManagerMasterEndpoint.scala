@@ -357,7 +357,7 @@ class BlockManagerMasterEndpoint(
         blockLocations.remove(blockId)
         logWarning(s"No more replicas available for $blockId !")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
-        // As a heursitic, assume single executor failure to find out the number of replicas that
+        // As a heuristic, assume single executor failure to find out the number of replicas that
         // existed before failure
         val maxReplicas = locations.size + 1
         val i = (new Random(blockId.hashCode)).nextInt(locations.size)

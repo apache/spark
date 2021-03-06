@@ -494,7 +494,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
        [1] -0.0457441 -0.6833928
        [1] 1.8121235  -0.1747493  -0.5815417
 
-       R code for deivance calculation:
+       R code for deviance calculation:
        data = cbind(y=c(0,1,0,0,0,1), x1=c(18, 12, 15, 13, 15, 16), x2=c(1,0,0,2,1,1))
        summary(glm(y~x1+x2, family=poisson, data=data.frame(data)))$deviance
        [1] 3.70055
@@ -1661,7 +1661,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
   }
 
   test("evaluate with labels that are not doubles") {
-    // Evaulate with a dataset that contains Labels not as doubles to verify correct casting
+    // Evaluate with a dataset that contains Labels not as doubles to verify correct casting
     val dataset = Seq(
       Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(19.0, 1.0, Vectors.dense(1.0, 7.0)),

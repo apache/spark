@@ -251,6 +251,9 @@ private[spark] class DAGScheduler(
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
 
+  private val blockManagerMasterDriverHeartbeatTimeout =
+    sc.getConf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -295,7 +298,8 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       executorUpdates))
     blockManagerMaster.driverHeartbeatEndPoint.askSync[Boolean](
-      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
+      BlockManagerHeartbeat(blockManagerId),
+      new RpcTimeout(blockManagerMasterDriverHeartbeatTimeout, "BlockManagerHeartbeat"))
   }
 
   /**
@@ -409,9 +413,9 @@ private[spark] class DAGScheduler(
   /**
    * Check to make sure we don't launch a barrier stage with unsupported RDD chain pattern. The
    * following patterns are not supported:
-   * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (eg.
+   * 1. Ancestor RDDs that have different number of partitions from the resulting RDD (e.g.
    * union()/coalesce()/first()/take()/PartitionPruningRDD);
-   * 2. An RDD that depends on multiple barrier RDDs (eg. barrierRdd1.zip(barrierRdd2)).
+   * 2. An RDD that depends on multiple barrier RDDs (e.g. barrierRdd1.zip(barrierRdd2)).
    */
   private def checkBarrierStageWithRDDChainPattern(rdd: RDD[_], numTasksInStage: Int): Unit = {
     if (rdd.isBarrier() &&
@@ -459,7 +463,7 @@ private[spark] class DAGScheduler(
 
   /**
    * We don't support run a barrier stage with dynamic resource allocation enabled, it shall lead
-   * to some confusing behaviors (eg. with dynamic resource allocation enabled, it may happen that
+   * to some confusing behaviors (e.g. with dynamic resource allocation enabled, it may happen that
    * we acquire some executors (but not enough to launch all the tasks in a barrier stage) and
    * later release them due to executor idle time expire, and then acquire again).
    *
@@ -1555,7 +1559,7 @@ private[spark] class DAGScheduler(
       event.reason)
 
     if (!stageIdToStage.contains(task.stageId)) {
-      // The stage may have already finished when we get this event -- eg. maybe it was a
+      // The stage may have already finished when we get this event -- e.g. maybe it was a
       // speculative task. It is important that we send the TaskEnd event in any case, so listeners
       // are properly notified and can chose to handle it. For instance, some listeners are
       // doing their own accounting and if they don't get the task end event they think
@@ -1916,7 +1920,9 @@ private[spark] class DAGScheduler(
             // killAllTaskAttempts will fail if a SchedulerBackend does not implement killTask.
             val reason = s"Task $task from barrier stage $failedStage (${failedStage.name}) " +
               "failed."
-            taskScheduler.killAllTaskAttempts(stageId, interruptThread = false, reason)
+            val job = jobIdToActiveJob.get(failedStage.firstJobId)
+            val shouldInterrupt = job.exists(j => shouldInterruptTaskThread(j))
+            taskScheduler.killAllTaskAttempts(stageId, shouldInterrupt, reason)
           } catch {
             case e: UnsupportedOperationException =>
               // Cannot continue with barrier stage if failed to cancel zombie barrier tasks.

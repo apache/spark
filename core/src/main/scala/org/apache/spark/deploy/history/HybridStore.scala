@@ -52,7 +52,7 @@ private[history] class HybridStore extends KVStore {
   // A background thread that dumps data from inMemoryStore to levelDB
   private var backgroundThread: Thread = null
 
-  // A hash map that stores all classes that had been writen to inMemoryStore
+  // A hash map that stores all classes that had been written to inMemoryStore
   // Visible for testing
   private[history] val klassMap = new ConcurrentHashMap[Class[_], Boolean]
 

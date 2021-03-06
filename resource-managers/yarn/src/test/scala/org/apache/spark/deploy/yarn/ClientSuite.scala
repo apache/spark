@@ -583,53 +583,6 @@ class ClientSuite extends SparkFunSuite with Matchers {
     }
   }
 
-  test("SPARK-33185 Parse YARN AppAttempts valid JSON response") {
-    val appIdSuffix = "1500000000000_1234567"
-    val containerId = s"container_e1_${appIdSuffix}_01_000001"
-    val nodeHost = "node.example.com"
-    val jsonString =
-      s"""
-        |{"appAttempts": {
-        |  "appAttempt": [ {
-        |    "id":1,
-        |    "startTime":1600000000000,
-        |    "finishedTime":1600000100000,
-        |    "containerId":"$containerId",
-        |    "nodeHttpAddress":"$nodeHost:8042",
-        |    "nodeId":"node.example.com:8041",
-        |    "logsLink":"http://$nodeHost:8042/node/containerlogs/$containerId/username",
-        |    "blacklistedNodes":"",
-        |    "nodesBlacklistedBySystem":"",
-        |    "appAttemptId":"appattempt_${appIdSuffix}_000001"
-        |  }]
-        |}}
-        |""".stripMargin
-    val logLinkMap = Client.parseAppAttemptsJsonResponse(jsonString)
-    assert(logLinkMap.keySet === Set("stdout", "stderr"))
-    assert(logLinkMap("stdout") ===
-        s"http://$nodeHost:8042/node/containerlogs/$containerId/username/stdout?start=-4096")
-    assert(logLinkMap("stderr") ===
-        s"http://$nodeHost:8042/node/containerlogs/$containerId/username/stderr?start=-4096")
-  }
-
-  test("SPARK-33185 Parse YARN AppAttempts invalid JSON response") {
-    // No "appAttempt" present
-    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts": { } }""") === Map())
-
-    // "appAttempt" is empty
-    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts": { "appAttempt": [ ] } }""")
-        === Map())
-
-    // logsLink is missing
-    assert(Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"id":1}]}}""")
-        === Map())
-
-    // logsLink is present but empty
-    assert(
-      Client.parseAppAttemptsJsonResponse("""{"appAttempts":{"appAttempt":[{"logsLink":""}]}}""")
-          === Map())
-  }
-
   private val matching = Seq(
     ("files URI match test1", "file:///file1", "file:///file2"),
     ("files URI match test2", "file:///c:file1", "file://c:file2"),

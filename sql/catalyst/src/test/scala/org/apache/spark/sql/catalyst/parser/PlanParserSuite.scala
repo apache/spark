@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 /**
  * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
@@ -295,7 +295,7 @@ class PlanParserSuite extends AnalysisTest {
         partition: Map[String, Option[String]],
         overwrite: Boolean = false,
         ifPartitionNotExists: Boolean = false): LogicalPlan =
-      InsertIntoStatement(table("s"), partition, plan, overwrite, ifPartitionNotExists)
+      InsertIntoStatement(table("s"), partition, Nil, plan, overwrite, ifPartitionNotExists)
 
     // Single inserts
     assertEqual(s"insert overwrite table s $sql",
@@ -607,20 +607,24 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20841 Support table column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM testData AS t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("testData"))
+        )
       ).select(star()))
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("col1", "col2"),
-        SubqueryAlias(
-          "t",
-          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y"))
+        )
       ).select(star()))
   }
 
@@ -629,12 +633,25 @@ class PlanParserSuite extends AnalysisTest {
     val src2 = UnresolvedRelation(TableIdentifier("src2")).as("s2")
     assertEqual(
       "SELECT * FROM (src1 s1 INNER JOIN src2 s2 ON s1.id = s2.id) dst(a, b, c, d)",
-      UnresolvedSubqueryColumnAliases(
-        Seq("a", "b", "c", "d"),
-        SubqueryAlias(
-          "dst",
-          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      SubqueryAlias(
+        "dst",
+        UnresolvedSubqueryColumnAliases(
+          Seq("a", "b", "c", "d"),
+          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id")))
+        )
       ).select(star()))
+  }
+
+  test("SPARK-34335 Support referencing subquery with column aliases by table alias") {
+    assertEqual(
+      "SELECT t.col1, t.col2 FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      SubqueryAlias(
+        "t",
+        UnresolvedSubqueryColumnAliases(
+          Seq("col1", "col2"),
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      ).select($"t.col1", $"t.col2")
+    )
   }
 
   test("inline table") {
@@ -713,7 +730,7 @@ class PlanParserSuite extends AnalysisTest {
     comparePlans(
       parsePlan(
         "INSERT INTO s SELECT /*+ REPARTITION(100), COALESCE(500), COALESCE(10) */ * FROM t"),
-      InsertIntoStatement(table("s"), Map.empty,
+      InsertIntoStatement(table("s"), Map.empty, Nil,
         UnresolvedHint("REPARTITION", Seq(Literal(100)),
           UnresolvedHint("COALESCE", Seq(Literal(500)),
             UnresolvedHint("COALESCE", Seq(Literal(10)),
@@ -1030,5 +1047,116 @@ class PlanParserSuite extends AnalysisTest {
     assertEqual("select a, b;", OneRowRelation().select('a, 'b))
     assertEqual("select a, b from db.c;;;", table("db", "c").select('a, 'b))
     assertEqual("select a, b from db.c; ;;  ;", table("db", "c").select('a, 'b))
+  }
+
+  test("SPARK-32106: TRANSFORM plan") {
+    // verify schema less
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat'
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        Seq('a, 'b, 'c),
+        "cat",
+        Seq(AttributeReference("key", StringType)(),
+          AttributeReference("value", StringType)()),
+        UnresolvedRelation(TableIdentifier("testData")),
+        ScriptInputOutputSchema(List.empty, List.empty, None, None,
+          List.empty, List.empty, None, None, true))
+    )
+
+    // verify without output schema
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat' AS (a, b, c)
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        Seq('a, 'b, 'c),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedRelation(TableIdentifier("testData")),
+        ScriptInputOutputSchema(List.empty, List.empty, None, None,
+          List.empty, List.empty, None, None, false)))
+
+    // verify with output schema
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |USING 'cat' AS (a int, b string, c long)
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        Seq('a, 'b, 'c),
+        "cat",
+        Seq(AttributeReference("a", IntegerType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", LongType)()),
+        UnresolvedRelation(TableIdentifier("testData")),
+        ScriptInputOutputSchema(List.empty, List.empty, None, None,
+          List.empty, List.empty, None, None, false)))
+
+    // verify with ROW FORMAT DELIMETED
+    assertEqual(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0002'
+        |  MAP KEYS TERMINATED BY '\u0003'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'null'
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT DELIMITED
+        |  FIELDS TERMINATED BY '\t'
+        |  COLLECTION ITEMS TERMINATED BY '\u0004'
+        |  MAP KEYS TERMINATED BY '\u0005'
+        |  LINES TERMINATED BY '\n'
+        |  NULL DEFINED AS 'NULL'
+        |FROM testData
+      """.stripMargin,
+      ScriptTransformation(
+        Seq('a, 'b, 'c),
+        "cat",
+        Seq(AttributeReference("a", StringType)(),
+          AttributeReference("b", StringType)(),
+          AttributeReference("c", StringType)()),
+        UnresolvedRelation(TableIdentifier("testData")),
+        ScriptInputOutputSchema(
+          Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "\u0002"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "\u0003"),
+            ("TOK_TABLEROWFORMATNULL", "null"),
+            ("TOK_TABLEROWFORMATLINES", "\n")),
+          Seq(("TOK_TABLEROWFORMATFIELD", "\t"),
+            ("TOK_TABLEROWFORMATCOLLITEMS", "\u0004"),
+            ("TOK_TABLEROWFORMATMAPKEYS", "\u0005"),
+            ("TOK_TABLEROWFORMATNULL", "NULL"),
+            ("TOK_TABLEROWFORMATLINES", "\n")), None, None,
+          List.empty, List.empty, None, None, false)))
+
+    // verify with ROW FORMAT SERDE
+    intercept(
+      """
+        |SELECT TRANSFORM(a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |  WITH SERDEPROPERTIES(
+        |    "separatorChar" = "\t",
+        |    "quoteChar" = "'",
+        |    "escapeChar" = "\\")
+        |  USING 'cat' AS (a, b, c)
+        |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+        |  WITH SERDEPROPERTIES(
+        |    "separatorChar" = "\t",
+        |    "quoteChar" = "'",
+        |    "escapeChar" = "\\")
+        |FROM testData
+      """.stripMargin,
+      "TRANSFORM with serde is only supported in hive mode")
   }
 }
