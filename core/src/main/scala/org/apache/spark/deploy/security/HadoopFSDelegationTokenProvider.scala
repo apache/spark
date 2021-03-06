@@ -104,7 +104,7 @@ private[deploy] class HadoopFSDelegationTokenProvider
       hadoopConf: Configuration,
       sparkConf: SparkConf): Credentials = {
 
-    // The filesystems excluded from token renewal
+    // The hosts on which the file systems to be excluded from token renewal
     val fsToExclude = sparkConf.get(KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE)
       .map(new Path(_).getFileSystem(hadoopConf).getUri.getHost)
       .toSet
