@@ -51,6 +51,15 @@ trait CodegenInterpretedPlanTest extends PlanTest {
       super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
     }
   }
+
+  protected def testFallback(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.FALLBACK.toString
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+      super.test(testName, testTags: _*)(testFun)(pos)
+    }
+  }
 }
 
 /**
