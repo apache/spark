@@ -184,7 +184,7 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   FROM t
 ) tmp;
 
--- SPARK-34634 self join using CTE contains transform
+-- SPARK-34634: self join using CTE contains transform
 WITH temp AS (
   SELECT TRANSFORM(a) USING 'cat' AS (b string) FROM t
 )
