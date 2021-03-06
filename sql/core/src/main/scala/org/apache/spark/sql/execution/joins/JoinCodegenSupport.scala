@@ -29,8 +29,12 @@ import org.apache.spark.sql.execution.{CodegenSupport, SparkPlan}
 trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
 
   /**
-   * Generate the (non-equi) condition used to filter joined rows. This is used in Inner, Left Semi
-   * and Left Anti joins.
+   * Generate the (non-equi) condition used to filter joined rows.
+   * This is used in Inner, Left Semi and Left Anti joins.
+   *
+   * @return Variable name for row of build side.
+   *         Generated code for condition.
+   *         Generated code for variables of build side.
    */
   protected def getJoinCondition(
       ctx: CodegenContext,
@@ -41,12 +45,13 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
     val buildVars = genBuildSideVars(ctx, buildRow, buildPlan)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      val outputs = streamedPlan.output ++ buildPlan.output
+      val vars = input ++ buildVars
+      // evaluate the variables used by condition
+      val eval = evaluateRequiredVariables(outputs, vars, expr.references)
       // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      ctx.currentVars = vars
+      val ev = BindReferences.bindReference(expr, outputs).genCode(ctx)
       val skipRow = s"${ev.isNull} || !${ev.value}"
       s"""
          |$eval
@@ -60,7 +65,7 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
   }
 
   /**
-   * Generates the code for variable of build side.
+   * Generates the code for variables of build side.
    */
   protected def genBuildSideVars(
       ctx: CodegenContext,

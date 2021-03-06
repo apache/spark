@@ -443,15 +443,12 @@ case class BroadcastNestedLoopJoinExec(
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     s"""
-       |int $arrayIndex = 0;
-       |UnsafeRow $buildRow;
-       |while ($arrayIndex < $buildRowArrayTerm.length) {
-       |  $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+       |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
+       |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
        |  $checkCondition {
        |    $numOutput.add(1);
        |    ${consume(ctx, resultVars)}
        |  }
-       |  $arrayIndex += 1;
        |}
      """.stripMargin
   }
