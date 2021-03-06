@@ -152,6 +152,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForPeriod(path: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      ObjectType(classOf[java.time.Period]),
+      "monthsToPeriod",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   /**
    * When we build the `deserializer` for an encoder, we set up a lot of "unresolved" stuff
    * and lost the required data type, which may lead to runtime error if the real type doesn't

@@ -54,6 +54,7 @@ import org.apache.spark.sql.types._
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
  *   DayTimeIntervalType -> java.time.Duration
+ *   YearMonthIntervalType -> java.time.Period
  *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
@@ -111,6 +112,8 @@ object RowEncoder {
       }
 
     case DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
+
+    case YearMonthIntervalType => createSerializerForJavaPeriod(inputObject)
 
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
@@ -231,6 +234,7 @@ object RowEncoder {
         ObjectType(classOf[java.sql.Date])
       }
     case DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
+    case YearMonthIntervalType => ObjectType(classOf[java.time.Period])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -287,6 +291,8 @@ object RowEncoder {
       }
 
     case DayTimeIntervalType => createDeserializerForDuration(input)
+
+    case YearMonthIntervalType => createDeserializerForPeriod(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 
