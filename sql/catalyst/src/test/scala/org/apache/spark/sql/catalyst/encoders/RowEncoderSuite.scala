@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -340,6 +340,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val readback = fromRow(encoder, row)
       assert(readback.get(0).equals(localDate))
     }
+  }
+
+  test("SPARK-34605: encoding/decoding DayTimeIntervalType to/from java.time.Duration") {
+    val schema = new StructType().add("d", DayTimeIntervalType)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val duration = java.time.Duration.ofDays(1)
+    val row = toRow(encoder, Row(duration))
+    assert(row.getLong(0) === IntervalUtils.durationToMicros(duration))
+    val readback = fromRow(encoder, row)
+    assert(readback.get(0).equals(duration))
   }
 
   for {

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{FilterExec, RangeExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
@@ -780,6 +781,22 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         assert(exchanges.size === 1)
         testMetricsInSparkPlanOperator(exchanges.head, Map("numOutputRows" -> 2))
       }
+    }
+  }
+
+  test("SPARK-34567: Add metrics for CTAS operator") {
+    withTable("t") {
+      val df = sql("CREATE TABLE t USING PARQUET AS SELECT 1 as a")
+      val dataWritingCommandExec =
+        df.queryExecution.executedPlan.asInstanceOf[DataWritingCommandExec]
+      dataWritingCommandExec.executeCollect()
+      val createTableAsSelect = dataWritingCommandExec.cmd
+      assert(createTableAsSelect.metrics.contains("numFiles"))
+      assert(createTableAsSelect.metrics("numFiles").value == 1)
+      assert(createTableAsSelect.metrics.contains("numOutputBytes"))
+      assert(createTableAsSelect.metrics("numOutputBytes").value > 0)
+      assert(createTableAsSelect.metrics.contains("numOutputRows"))
+      assert(createTableAsSelect.metrics("numOutputRows").value == 1)
     }
   }
 }

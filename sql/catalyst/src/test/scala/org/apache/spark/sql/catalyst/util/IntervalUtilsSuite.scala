@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
@@ -378,5 +379,26 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     intercept[ArithmeticException](multiplyExact(maxMonth, 2))
     intercept[ArithmeticException](divideExact(maxDay, 0.5))
+  }
+
+  test("SPARK-34605: microseconds to duration") {
+    assert(microsToDuration(0).isZero)
+    assert(microsToDuration(-1).toNanos === -1000)
+    assert(microsToDuration(1).toNanos === 1000)
+    assert(microsToDuration(Long.MaxValue).toDays === 106751991)
+    assert(microsToDuration(Long.MinValue).toDays === -106751991)
+  }
+
+  test("SPARK-34605: duration to microseconds") {
+    assert(durationToMicros(Duration.ZERO) === 0)
+    assert(durationToMicros(Duration.ofSeconds(-1)) === -1000000)
+    assert(durationToMicros(Duration.ofNanos(123456)) === 123)
+    assert(durationToMicros(Duration.ofDays(106751991)) ===
+      (Long.MaxValue / MICROS_PER_DAY) * MICROS_PER_DAY)
+
+    val errMsg = intercept[ArithmeticException] {
+      durationToMicros(Duration.ofDays(106751991 + 1))
+    }.getMessage
+    assert(errMsg.contains("long overflow"))
   }
 }

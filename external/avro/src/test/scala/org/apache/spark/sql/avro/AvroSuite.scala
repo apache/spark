@@ -479,6 +479,7 @@ abstract class AvroSuite
       val xzDir = s"$dir/xz"
       val deflateDir = s"$dir/deflate"
       val snappyDir = s"$dir/snappy"
+      val zstandardDir = s"$dir/zstandard"
 
       val df = spark.read.format("avro").load(testAvro)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "uncompressed")
@@ -492,17 +493,21 @@ abstract class AvroSuite
       df.write.format("avro").save(deflateDir)
       spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "snappy")
       df.write.format("avro").save(snappyDir)
+      spark.conf.set(SQLConf.AVRO_COMPRESSION_CODEC.key, "zstandard")
+      df.write.format("avro").save(zstandardDir)
 
       val uncompressSize = FileUtils.sizeOfDirectory(new File(uncompressDir))
       val bzip2Size = FileUtils.sizeOfDirectory(new File(bzip2Dir))
       val xzSize = FileUtils.sizeOfDirectory(new File(xzDir))
       val deflateSize = FileUtils.sizeOfDirectory(new File(deflateDir))
       val snappySize = FileUtils.sizeOfDirectory(new File(snappyDir))
+      val zstandardSize = FileUtils.sizeOfDirectory(new File(zstandardDir))
 
       assert(uncompressSize > deflateSize)
       assert(snappySize > deflateSize)
       assert(snappySize > bzip2Size)
       assert(bzip2Size > xzSize)
+      assert(uncompressSize > zstandardSize)
     }
   }
 
