@@ -49,7 +49,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
-  private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
+  private val listenerBus =
+    new StreamingQueryListenerBus(Some(sparkSession.sparkContext.listenerBus))
 
   @GuardedBy("activeQueriesSharedLock")
   private val activeQueries = new mutable.HashMap[UUID, StreamingQuery]

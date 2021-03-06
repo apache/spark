@@ -21,20 +21,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsMetadataColumns, Table}
-import org.apache.spark.sql.types.StructType
 
 case class DescribeTableExec(
     output: Seq[Attribute],
     table: Table,
     isExtended: Boolean) extends V2CommandExec {
-
-  private val toRow = {
-    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
-  }
-
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     addSchema(rows)
@@ -99,8 +92,4 @@ case class DescribeTableExec(
   }
 
   private def emptyRow(): InternalRow = toCatalystRow("", "", "")
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
-  }
 }

@@ -172,16 +172,18 @@ object SetCommand {
 case class ResetCommand(config: Option[String]) extends RunnableCommand with IgnoreCachedData {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val defaults = sparkSession.sharedState.conf
+    val globalInitialConfigs = sparkSession.sharedState.conf
     config match {
       case Some(key) =>
         sparkSession.conf.unset(key)
-        defaults.getOption(key).foreach(sparkSession.conf.set(key, _))
+        sparkSession.initialSessionOptions.get(key)
+          .orElse(globalInitialConfigs.getOption(key))
+          .foreach(sparkSession.conf.set(key, _))
       case None =>
         sparkSession.sessionState.conf.clear()
-        defaults.getAll.foreach { case (k, v) =>
-          sparkSession.sessionState.conf.setConfString(k, v)
-        }
+        SQLConf.mergeSparkConf(sparkSession.sessionState.conf, globalInitialConfigs)
+        SQLConf.mergeNonStaticSQLConfigs(sparkSession.sessionState.conf,
+          sparkSession.initialSessionOptions)
     }
     Seq.empty[Row]
   }

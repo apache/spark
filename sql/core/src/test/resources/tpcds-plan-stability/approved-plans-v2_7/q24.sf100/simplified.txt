@@ -7,7 +7,7 @@ WholeStageCodegen (12)
             Filter [sum(netpaid)]
               Subquery #1
                 WholeStageCodegen (14)
-                  HashAggregate [sum,count] [avg(netpaid),(CAST(0.05 AS DECIMAL(21,6)) * CAST(avg(netpaid) AS DECIMAL(21,6))),sum,count]
+                  HashAggregate [sum,count] [avg(netpaid),(0.05 * avg(netpaid)),sum,count]
                     InputAdapter
                       Exchange #10
                         WholeStageCodegen (13)
@@ -61,10 +61,11 @@ WholeStageCodegen (12)
                                                                                       ColumnarToRow
                                                                                         InputAdapter
                                                                                           Scan parquet default.customer [c_customer_sk,c_current_addr_sk,c_first_name,c_last_name,c_birth_country]
-                                                                          Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
-                                                                            ColumnarToRow
-                                                                              InputAdapter
-                                                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                          Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                                            Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                                              ColumnarToRow
+                                                                                InputAdapter
+                                                                                  Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                           InputAdapter
                                                             WholeStageCodegen (7)
                                                               Sort [i_item_sk]
@@ -81,10 +82,11 @@ WholeStageCodegen (12)
                                                 InputAdapter
                                                   Exchange [sr_ticket_number,sr_item_sk] #18
                                                     WholeStageCodegen (10)
-                                                      Filter [sr_ticket_number,sr_item_sk]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
+                                                      Project [sr_item_sk,sr_ticket_number]
+                                                        Filter [sr_ticket_number,sr_item_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]
               HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum(netpaid),sum,isEmpty]
                 InputAdapter
                   Exchange [c_last_name,c_first_name,s_store_name] #2
@@ -133,10 +135,11 @@ WholeStageCodegen (12)
                                                                       ColumnarToRow
                                                                         InputAdapter
                                                                           Scan parquet default.customer [c_customer_sk,c_current_addr_sk,c_first_name,c_last_name,c_birth_country]
-                                                          Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                          Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid]
+                                                            Filter [ss_ticket_number,ss_item_sk,ss_store_sk,ss_customer_sk]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_net_paid,ss_sold_date_sk]
                                                       InputAdapter
                                                         BroadcastExchange #8
                                                           WholeStageCodegen (4)
@@ -150,7 +153,8 @@ WholeStageCodegen (12)
                                             InputAdapter
                                               Exchange [sr_ticket_number,sr_item_sk] #9
                                                 WholeStageCodegen (7)
-                                                  Filter [sr_ticket_number,sr_item_sk]
-                                                    ColumnarToRow
-                                                      InputAdapter
-                                                        Scan parquet default.store_returns [sr_item_sk,sr_ticket_number]
+                                                  Project [sr_item_sk,sr_ticket_number]
+                                                    Filter [sr_ticket_number,sr_item_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.store_returns [sr_item_sk,sr_ticket_number,sr_returned_date_sk]

@@ -107,6 +107,10 @@ package object dsl {
       LikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def notLikeAll(others: Expression*): Expression =
       NotLikeAll(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def likeAny(others: Expression*): Expression =
+      LikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
+    def notLikeAny(others: Expression*): Expression =
+      NotLikeAny(expr, others.map(_.eval(EmptyRow).asInstanceOf[UTF8String]))
     def contains(other: Expression): Expression = Contains(expr, other)
     def startsWith(other: Expression): Expression = StartsWith(expr, other)
     def endsWith(other: Expression): Expression = EndsWith(expr, other)
@@ -126,14 +130,16 @@ package object dsl {
       if (expr.resolved && expr.dataType.sameType(to)) {
         expr
       } else {
-        Cast(expr, to)
+        val cast = Cast(expr, to)
+        cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+        cast
       }
     }
 
     def asc: SortOrder = SortOrder(expr, Ascending)
-    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Set.empty)
+    def asc_nullsLast: SortOrder = SortOrder(expr, Ascending, NullsLast, Seq.empty)
     def desc: SortOrder = SortOrder(expr, Descending)
-    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Set.empty)
+    def desc_nullsFirst: SortOrder = SortOrder(expr, Descending, NullsFirst, Seq.empty)
     def as(alias: String): NamedExpression = Alias(expr, alias)()
     def as(alias: Symbol): NamedExpression = Alias(expr, alias.name)()
   }
@@ -244,6 +250,9 @@ package object dsl {
       override def expr: Expression = Literal(s)
       def attr: UnresolvedAttribute = analysis.UnresolvedAttribute(s)
     }
+    implicit class DslAttr(attr: UnresolvedAttribute) extends ImplicitAttribute {
+      def s: String = attr.name
+    }
 
     abstract class ImplicitAttribute extends ImplicitOperators {
       def s: String
@@ -287,6 +296,11 @@ package object dsl {
 
       /** Creates a new AttributeReference of type timestamp */
       def timestamp: AttributeReference = AttributeReference(s, TimestampType, nullable = true)()
+
+      /** Creates a new AttributeReference of the day-time interval type */
+      def dayTimeInterval: AttributeReference = {
+        AttributeReference(s, DayTimeIntervalType, nullable = true)()
+      }
 
       /** Creates a new AttributeReference of type binary */
       def binary: AttributeReference = AttributeReference(s, BinaryType, nullable = true)()
@@ -431,7 +445,7 @@ package object dsl {
           partition: Map[String, Option[String]] = Map.empty,
           overwrite: Boolean = false,
           ifPartitionNotExists: Boolean = false): LogicalPlan =
-        InsertIntoStatement(table, partition, logicalPlan, overwrite, ifPartitionNotExists)
+        InsertIntoStatement(table, partition, Nil, logicalPlan, overwrite, ifPartitionNotExists)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
 
@@ -452,6 +466,16 @@ package object dsl {
 
       def hint(name: String, parameters: Any*): LogicalPlan =
         UnresolvedHint(name, parameters, logicalPlan)
+
+      def sample(
+          lowerBound: Double,
+          upperBound: Double,
+          withReplacement: Boolean,
+          seed: Long): LogicalPlan = {
+        Sample(lowerBound, upperBound, withReplacement, seed, logicalPlan)
+      }
+
+      def deduplicate(colNames: Attribute*): LogicalPlan = Deduplicate(colNames, logicalPlan)
     }
   }
 }

@@ -50,7 +50,10 @@ object DateTimeUtils {
 
   val TIMEZONE_OPTION = "timeZone"
 
-  def getZoneId(timeZoneId: String): ZoneId = ZoneId.of(timeZoneId, ZoneId.SHORT_IDS)
+  def getZoneId(timeZoneId: String): ZoneId = {
+    // To support the (+|-)h:mm format because it was supported before Spark 3.0.
+    ZoneId.of(timeZoneId.replaceFirst("(\\+|\\-)(\\d):", "$10$2:"), ZoneId.SHORT_IDS)
+  }
   def getTimeZone(timeZoneId: String): TimeZone = TimeZone.getTimeZone(getZoneId(timeZoneId))
 
   /**
@@ -189,7 +192,7 @@ object DateTimeUtils {
    * precision, so this conversion is lossy.
    */
   def microsToMillis(micros: Long): Long = {
-    // When the timestamp is negative i.e before 1970, we need to adjust the millseconds portion.
+    // When the timestamp is negative i.e before 1970, we need to adjust the milliseconds portion.
     // Example - 1965-01-01 10:11:12.123456 is represented as (-157700927876544) in micro precision.
     // In millis precision the above needs to be represented as (-157700927877).
     Math.floorDiv(micros, MICROS_PER_MILLIS)
@@ -365,11 +368,8 @@ object DateTimeUtils {
   }
 
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
-    val timestamp = stringToTimestamp(s, timeZoneId)
-    if (timestamp.isEmpty) {
+    stringToTimestamp(s, timeZoneId).getOrElse {
       throw new DateTimeException(s"Cannot cast $s to TimestampType.")
-    } else {
-      timestamp.get
     }
   }
 
@@ -463,6 +463,12 @@ object DateTimeUtils {
       Some(localDateToDays(localDate))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  def stringToDateAnsi(s: UTF8String, zoneId: ZoneId): Int = {
+    stringToDate(s, zoneId).getOrElse {
+      throw new DateTimeException(s"Cannot cast $s to DateType.")
     }
   }
 
@@ -667,9 +673,10 @@ object DateTimeUtils {
   private val FRIDAY = 1
   private val SATURDAY = 2
 
-  /*
+  /**
    * Returns day of week from String. Starting from Thursday, marked as 0.
    * (Because 1970-01-01 is Thursday).
+   * @throws IllegalArgumentException if the input is not a valid day of week.
    */
   def getDayOfWeekFromString(string: UTF8String): Int = {
     val dowString = string.toString.toUpperCase(Locale.ROOT)
@@ -681,7 +688,8 @@ object DateTimeUtils {
       case "TH" | "THU" | "THURSDAY" => THURSDAY
       case "FR" | "FRI" | "FRIDAY" => FRIDAY
       case "SA" | "SAT" | "SATURDAY" => SATURDAY
-      case _ => -1
+      case _ =>
+        throw new IllegalArgumentException(s"""Illegal input for day of week: $string""")
     }
   }
 

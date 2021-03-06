@@ -167,7 +167,7 @@ class DynamicPartitionDataWriter(
 
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
-  private var currentPartionValues: Option[UnsafeRow] = None
+  private var currentPartitionValues: Option[UnsafeRow] = None
   private var currentBucketId: Option[Int] = None
 
   /** Extracts the partition values out of an input row. */
@@ -247,11 +247,11 @@ class DynamicPartitionDataWriter(
     val nextPartitionValues = if (isPartitioned) Some(getPartitionValues(record)) else None
     val nextBucketId = if (isBucketed) Some(getBucketId(record)) else None
 
-    if (currentPartionValues != nextPartitionValues || currentBucketId != nextBucketId) {
+    if (currentPartitionValues != nextPartitionValues || currentBucketId != nextBucketId) {
       // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-      if (isPartitioned && currentPartionValues != nextPartitionValues) {
-        currentPartionValues = Some(nextPartitionValues.get.copy())
-        statsTrackers.foreach(_.newPartition(currentPartionValues.get))
+      if (isPartitioned && currentPartitionValues != nextPartitionValues) {
+        currentPartitionValues = Some(nextPartitionValues.get.copy())
+        statsTrackers.foreach(_.newPartition(currentPartitionValues.get))
       }
       if (isBucketed) {
         currentBucketId = nextBucketId
@@ -259,7 +259,7 @@ class DynamicPartitionDataWriter(
       }
 
       fileCounter = 0
-      newOutputWriter(currentPartionValues, currentBucketId)
+      newOutputWriter(currentPartitionValues, currentBucketId)
     } else if (description.maxRecordsPerFile > 0 &&
       recordsInFile >= description.maxRecordsPerFile) {
       // Exceeded the threshold in terms of the number of records per file.
@@ -268,7 +268,7 @@ class DynamicPartitionDataWriter(
       assert(fileCounter < MAX_FILE_COUNTER,
         s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
-      newOutputWriter(currentPartionValues, currentBucketId)
+      newOutputWriter(currentPartitionValues, currentBucketId)
     }
     val outputRow = getOutputRow(record)
     currentWriter.write(outputRow)

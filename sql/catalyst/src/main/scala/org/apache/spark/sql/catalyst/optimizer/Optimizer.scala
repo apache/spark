@@ -88,6 +88,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         EliminateLimits,
         CombineUnions,
         // Constant folding and strength reduction
+        OptimizeRepartition,
         TransposeWindow,
         NullPropagation,
         ConstantPropagation,
@@ -99,9 +100,11 @@ abstract class Optimizer(catalogManager: CatalogManager)
         LikeSimplification,
         BooleanSimplification,
         SimplifyConditionals,
+        PushFoldableIntoBranches,
         RemoveDispensableExpressions,
         SimplifyBinaryComparison,
         ReplaceNullWithFalseInPredicate,
+        SimplifyConditionalsInPredicate,
         PruneFilters,
         SimplifyCasts,
         SimplifyCaseConversionExpressions,
@@ -112,7 +115,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         RemoveNoopOperators,
         OptimizeUpdateFields,
         SimplifyExtractValueOps,
-        OptimizeJsonExprs,
+        OptimizeCsvJsonExprs,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -143,8 +146,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       ComputeCurrentTime,
-      GetCurrentDatabaseAndCatalog(catalogManager),
-      ReplaceDeduplicateWithAggregate) ::
+      GetCurrentDatabaseAndCatalog(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -154,7 +156,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
     // - Call CombineUnions again in Batch("Operator Optimizations"),
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
-      CombineUnions) ::
+      RemoveNoopOperators,
+      CombineUnions,
+      RemoveNoopUnion) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
@@ -180,11 +184,15 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate) ::
+      ReplaceDistinctWithAggregate,
+      ReplaceDeduplicateWithAggregate) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
     operatorOptimizationBatch) :+
+    // This batch rewrites plans after the operator optimization and
+    // before any batches that depend on stats.
+    Batch("Pre CBO Rules", Once, preCBORules: _*) :+
     // This batch pushes filters and projections into scan nodes. Before this batch, the logical
     // plan may contain nodes that do not report stats. Anything that uses stats must run after
     // this batch.
@@ -290,6 +298,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
   def earlyScanPushDownRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
+   * Override to provide additional rules for rewriting plans after operator optimization rules and
+   * before any cost-based optimization rules that depend on stats.
+   */
+  def preCBORules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
    * Returns (defaultBatches - (excludedRules - nonExcludableRules)), the rule batches that
    * eventually run in the Optimizer.
    *
@@ -338,11 +352,17 @@ abstract class Optimizer(catalogManager: CatalogManager)
  */
 object EliminateDistinct extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
-    case ae: AggregateExpression if ae.isDistinct =>
-      ae.aggregateFunction match {
-        case _: Max | _: Min => ae.copy(isDistinct = false)
-        case _ => ae
-      }
+    case ae: AggregateExpression if ae.isDistinct && isDuplicateAgnostic(ae.aggregateFunction) =>
+      ae.copy(isDistinct = false)
+  }
+
+  private def isDuplicateAgnostic(af: AggregateFunction): Boolean = af match {
+    case _: Max => true
+    case _: Min => true
+    case _: BitAndAgg => true
+    case _: BitOrAgg => true
+    case _: CollectSet => true
+    case _ => false
   }
 }
 
@@ -405,7 +425,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
     // If the alias name is different from attribute name, we can't strip it either, or we
     // may accidentally change the output schema name of the root plan.
     case a @ Alias(attr: Attribute, name)
-      if a.metadata == Metadata.empty &&
+      if (a.metadata == Metadata.empty || a.metadata == attr.metadata) &&
         name == attr.name &&
         !excludeList.contains(attr) &&
         !excludeList.contains(a) =>
@@ -479,7 +499,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Eliminate no-op Projects
     case p @ Project(_, child) if child.sameOutput(p) => child
 
@@ -489,7 +509,58 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
+ * Smplify the children of `Union` or remove no-op `Union` from the query plan that
+ * do not make any modifications to the query.
+ */
+object RemoveNoopUnion extends Rule[LogicalPlan] {
+  /**
+   * This only removes the `Project` that has only attributes or aliased attributes
+   * from its child.
+   */
+  private def removeAliasOnlyProject(plan: LogicalPlan): LogicalPlan = plan match {
+    case p @ Project(projectList, child) =>
+      val aliasOnly = projectList.length == child.output.length &&
+        projectList.zip(child.output).forall {
+          case (Alias(left: Attribute, _), right) => left.semanticEquals(right)
+          case (left: Attribute, right) => left.semanticEquals(right)
+          case _ => false
+        }
+      if (aliasOnly) {
+        child
+      } else {
+        p
+      }
+    case _ => plan
+  }
+
+  private def simplifyUnion(u: Union): LogicalPlan = {
+    val uniqueChildren = mutable.ArrayBuffer.empty[LogicalPlan]
+    val uniqueChildrenKey = mutable.HashSet.empty[LogicalPlan]
+
+    u.children.foreach { c =>
+      val key = removeAliasOnlyProject(c).canonicalized
+      if (!uniqueChildrenKey.contains(key)) {
+        uniqueChildren += c
+        uniqueChildrenKey += key
+      }
+    }
+    if (uniqueChildren.size == 1) {
+      u.children.head
+    } else {
+      u.copy(children = uniqueChildren.toSeq)
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case d @ Distinct(u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
+    case d @ Deduplicate(_, u: Union) =>
+      d.withNewChildren(Seq(simplifyUnion(u)))
+  }
+}
+
+/**
+ * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -526,17 +597,28 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit.
     case LocalLimit(exp, u: Union) =>
       LocalLimit(exp, u.copy(children = u.children.map(maybePushLocalLimit(exp, _))))
-    // Add extra limits below OUTER JOIN. For LEFT OUTER and RIGHT OUTER JOIN we push limits to
-    // the left and right sides, respectively. It's not safe to push limits below FULL OUTER
-    // JOIN in the general case without a more invasive rewrite.
-    // We also need to ensure that this limit pushdown rule will not eventually introduce limits
-    // on both sides if it is applied multiple times. Therefore:
+    // Add extra limits below JOIN:
+    // 1. For LEFT OUTER and RIGHT OUTER JOIN, we push limits to the left and right sides,
+    //    respectively.
+    // 2. For INNER and CROSS JOIN, we push limits to both the left and right sides if join
+    //    condition is empty.
+    // 3. For LEFT SEMI and LEFT ANTI JOIN, we push limits to the left side if join condition
+    //    is empty.
+    // It's not safe to push limits below FULL OUTER JOIN in the general case without a more
+    // invasive rewrite. We also need to ensure that this limit pushdown rule will not eventually
+    // introduce limits on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    case LocalLimit(exp, join @ Join(left, right, joinType, _, _)) =>
+    case LocalLimit(exp, join @ Join(left, right, joinType, conditionOpt, _)) =>
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
         case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
+        case _: InnerLike if conditionOpt.isEmpty =>
+          join.copy(
+            left = maybePushLocalLimit(exp, left),
+            right = maybePushLocalLimit(exp, right))
+        case LeftSemi | LeftAnti if conditionOpt.isEmpty =>
+          join.copy(left = maybePushLocalLimit(exp, left))
         case _ => join
       }
       LocalLimit(exp, newJoin)
@@ -807,6 +889,19 @@ object CollapseRepartition extends Rule[LogicalPlan] {
 }
 
 /**
+ * Replace RepartitionByExpression numPartitions to 1 if all partition expressions are foldable
+ * and user not specify.
+ */
+object OptimizeRepartition extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case r @ RepartitionByExpression(partitionExpressions, _, numPartitions)
+      if partitionExpressions.nonEmpty && partitionExpressions.forall(_.foldable) &&
+        numPartitions.isEmpty =>
+      r.copy(optNumPartitions = Some(1))
+  }
+}
+
+/**
  * Replaces first(col) to nth_value(col, 1) for better performance.
  */
 object OptimizeWindowFunctions extends Rule[LogicalPlan] {
@@ -844,7 +939,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
  *   of the child window expression, transpose them.
  */
 object TransposeWindow extends Rule[LogicalPlan] {
-  private def compatibleParititions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
+  private def compatiblePartitions(ps1 : Seq[Expression], ps2: Seq[Expression]): Boolean = {
     ps1.length < ps2.length && ps2.take(ps1.length).permutations.exists(ps1.zip(_).forall {
       case (l, r) => l.semanticEquals(r)
     })
@@ -855,7 +950,7 @@ object TransposeWindow extends Rule[LogicalPlan] {
         if w1.references.intersect(w2.windowOutputSet).isEmpty &&
            w1.expressions.forall(_.deterministic) &&
            w2.expressions.forall(_.deterministic) &&
-           compatibleParititions(ps1, ps2) =>
+           compatiblePartitions(ps1, ps2) =>
       Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
   }
 }
@@ -981,6 +1076,9 @@ object CombineUnions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case u: Union => flattenUnion(u, false)
     case Distinct(u: Union) => Distinct(flattenUnion(u, true))
+    // Only handle distinct-like 'Deduplicate', where the keys == output
+    case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
+      Deduplicate(keys, flattenUnion(u, true))
   }
 
   private def flattenUnion(union: Union, flattenDistinct: Boolean): Union = {
@@ -998,6 +1096,11 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Distinct(Union(children, byName, allowMissingCol))
             if flattenDistinct && byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)
+        // Only handle distinct-like 'Deduplicate', where the keys == output
+        case Deduplicate(keys: Seq[Attribute], u: Union)
+            if flattenDistinct && u.byName == topByName &&
+              u.allowMissingCol == topAllowMissingCol && AttributeSet(keys) == u.outputSet =>
+          stack.pushAll(u.children.reverse)
         case Union(children, byName, allowMissingCol)
             if byName == topByName && allowMissingCol == topAllowMissingCol =>
           stack.pushAll(children.reverse)

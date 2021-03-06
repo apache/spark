@@ -103,7 +103,7 @@ public class GetColumnsOperation extends MetadataOperation {
       "Schema of table that is the scope of a reference attribute "
       + "(null if the DATA_TYPE isn't REF)")
   .addPrimitiveColumn("SCOPE_TABLE", Type.STRING_TYPE,
-      "Table name that this the scope of a reference attribure "
+      "Table name that this the scope of a reference attribute "
       + "(null if the DATA_TYPE isn't REF)")
   .addPrimitiveColumn("SOURCE_DATA_TYPE", Type.SMALLINT_TYPE,
       "Source type of a distinct type or user-generated Ref type, "

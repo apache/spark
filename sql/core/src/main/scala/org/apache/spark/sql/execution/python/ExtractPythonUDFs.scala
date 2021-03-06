@@ -102,7 +102,7 @@ object ExtractGroupingPythonUDFFromAggregate extends Rule[LogicalPlan] {
           case p: PythonUDF =>
             // This is just a sanity check, the rule PullOutNondeterministic should
             // already pull out those nondeterministic expressions.
-            assert(p.udfDeterministic, "Non-determinstic PythonUDFs should not appear " +
+            assert(p.udfDeterministic, "Non-deterministic PythonUDFs should not appear " +
               "in grouping expression")
             val canonicalized = p.canonicalized.asInstanceOf[PythonUDF]
             if (attributeMap.contains(canonicalized)) {
@@ -174,7 +174,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def collectEvaluableUDFsFromExpressions(expressions: Seq[Expression]): Seq[PythonUDF] = {
-    // If fisrt UDF is SQL_SCALAR_PANDAS_ITER_UDF, then only return this UDF,
+    // If first UDF is SQL_SCALAR_PANDAS_ITER_UDF, then only return this UDF,
     // otherwise check if subsequent UDFs are of the same type as the first UDF. (since we can only
     // extract UDFs of the same eval type)
 
@@ -268,7 +268,7 @@ object ExtractPythonUDFs extends Rule[LogicalPlan] with PredicateHelper {
             case PythonEvalType.SQL_SCALAR_PANDAS_UDF | PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF =>
               ArrowEvalPython(validUdfs, resultAttrs, child, evalType)
             case _ =>
-              throw new AnalysisException("Unexcepted UDF evalType")
+              throw new AnalysisException("Unexpected UDF evalType")
           }
 
           attributeMap ++= validUdfs.map(canonicalizeDeterministic).zip(resultAttrs)

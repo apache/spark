@@ -16,6 +16,10 @@
  */
 package org.apache.spark.deploy.k8s.integrationtest
 
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.Minutes
+import org.scalatest.time.Span
+
 import org.apache.spark.internal.config
 
 private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
@@ -38,14 +42,13 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
         "Decommission executors",
         "Final accumulator value is: 100"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
@@ -69,13 +72,12 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_DECOMISSIONING_CLEANUP,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
         "Decommission executors"),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
@@ -104,17 +106,49 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
     runSparkApplicationAndVerifyCompletion(
       appResource = PYSPARK_SCALE,
       mainClass = "",
-      expectedLogOnCompletion = Seq(
+      expectedDriverLogOnCompletion = Seq(
         "Finished waiting, stopping Spark",
-        "Decommission executors"),
+        "Decommission executors",
+        "Remove reason statistics: (gracefully decommissioned: 1, decommision unfinished: 0, " +
+          "driver killed: 0, unexpectedly exited: 0)."),
       appArgs = Array.empty[String],
       driverPodChecker = doBasicDriverPyPodCheck,
       executorPodChecker = doBasicExecutorPyPodCheck,
-      appLocator = appLocator,
+      isJVM = false,
+      pyFiles = None,
+      executorPatience = Some(None, Some(DECOMMISSIONING_FINISHED_TIMEOUT)),
+      decommissioningTest = false)
+  }
+
+  test("Test decommissioning timeouts", k8sTestTag) {
+    sparkAppConf
+      .set(config.DECOMMISSION_ENABLED.key, "true")
+      .set("spark.kubernetes.container.image", pyImage)
+      .set(config.STORAGE_DECOMMISSION_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_SHUFFLE_BLOCKS_ENABLED.key, "true")
+      .set(config.STORAGE_DECOMMISSION_RDD_BLOCKS_ENABLED.key, "true")
+      // Ensure we have somewhere to migrate our data too
+      .set("spark.executor.instances", "3")
+      // Set super high so the timeout is triggered
+      .set("spark.storage.decommission.replicationReattemptInterval", "8640000")
+      // Set super low so the timeout is triggered
+      .set(config.EXECUTOR_DECOMMISSION_FORCE_KILL_TIMEOUT.key, "10")
+
+    runSparkApplicationAndVerifyCompletion(
+      appResource = PYSPARK_DECOMISSIONING,
+      mainClass = "",
+      expectedDriverLogOnCompletion = Seq(
+        "Finished waiting, stopping Spark",
+        "Decommission executors",
+        "failed to decommission in 10, killing",
+        "killed by driver."),
+      appArgs = Array.empty[String],
+      driverPodChecker = doBasicDriverPyPodCheck,
+      executorPodChecker = doBasicExecutorPyPodCheck,
       isJVM = false,
       pyFiles = None,
       executorPatience = None,
-      decommissioningTest = false)
+      decommissioningTest = true)
   }
 }
 
@@ -123,4 +157,5 @@ private[spark] object DecommissionSuite {
   val PYSPARK_DECOMISSIONING: String = TEST_LOCAL_PYSPARK + "decommissioning.py"
   val PYSPARK_DECOMISSIONING_CLEANUP: String = TEST_LOCAL_PYSPARK + "decommissioning_cleanup.py"
   val PYSPARK_SCALE: String = TEST_LOCAL_PYSPARK + "autoscale.py"
+  val DECOMMISSIONING_FINISHED_TIMEOUT = PatienceConfiguration.Timeout(Span(4, Minutes))
 }

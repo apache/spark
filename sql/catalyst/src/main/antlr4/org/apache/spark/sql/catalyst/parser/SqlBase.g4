@@ -21,7 +21,7 @@ grammar SqlBase;
    * When false, INTERSECT is given the greater precedence over the other set
    * operations (UNION, EXCEPT and MINUS) as per the SQL standard.
    */
-  public boolean legacy_setops_precedence_enbled = false;
+  public boolean legacy_setops_precedence_enabled = false;
 
   /**
    * When false, a literal with an exponent would be converted into
@@ -134,6 +134,8 @@ statement
         (AS? query)?                                                   #replaceTable
     | ANALYZE TABLE multipartIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq | FOR ALL COLUMNS)?    #analyze
+    | ANALYZE TABLES ((FROM | IN) multipartIdentifier)? COMPUTE STATISTICS
+        (identifier)?                                                  #analyzeTables
     | ALTER TABLE multipartIdentifier
         ADD (COLUMN | COLUMNS)
         columns=qualifiedColTypeWithPositionList                       #addTableColumns
@@ -198,7 +200,7 @@ statement
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=multipartIdentifier)?
-        LIKE pattern=STRING partitionSpec?                             #showTable
+        LIKE pattern=STRING partitionSpec?                             #showTableExtended
     | SHOW TBLPROPERTIES table=multipartIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=multipartIdentifier
@@ -229,7 +231,8 @@ statement
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         multipartIdentifier partitionSpec?                             #loadData
     | TRUNCATE TABLE multipartIdentifier partitionSpec?                #truncateTable
-    | MSCK REPAIR TABLE multipartIdentifier                            #repairTable
+    | MSCK REPAIR TABLE multipartIdentifier
+        (option=(ADD|DROP|SYNC) PARTITIONS)?                           #repairTable
     | op=(ADD | LIST) identifier (STRING | .*?)                        #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET TIME ZONE interval                                           #setTimeZone
@@ -332,8 +335,8 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?                         #insertOverwriteTable
-    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)?                                #insertIntoTable
+    : INSERT OVERWRITE TABLE? multipartIdentifier (partitionSpec (IF NOT EXISTS)?)?  identifierList?        #insertOverwriteTable
+    | INSERT INTO TABLE? multipartIdentifier partitionSpec? (IF NOT EXISTS)? identifierList?                #insertIntoTable
     | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
     | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
@@ -466,11 +469,11 @@ multiInsertQueryBody
 
 queryTerm
     : queryPrimary                                                                       #queryTermDefault
-    | left=queryTerm {legacy_setops_precedence_enbled}?
+    | left=queryTerm {legacy_setops_precedence_enabled}?
         operator=(INTERSECT | UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm  #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=INTERSECT setQuantifier? right=queryTerm                                #setOperation
-    | left=queryTerm {!legacy_setops_precedence_enbled}?
+    | left=queryTerm {!legacy_setops_precedence_enabled}?
         operator=(UNION | EXCEPT | SETMINUS) setQuantifier? right=queryTerm              #setOperation
     ;
 
@@ -803,7 +806,8 @@ primaryExpression
     | '(' namedExpression (',' namedExpression)+ ')'                                           #rowConstructor
     | '(' query ')'                                                                            #subqueryExpression
     | functionName '(' (setQuantifier? argument+=expression (',' argument+=expression)*)? ')'
-       (FILTER '(' WHERE where=booleanExpression ')')? (OVER windowSpec)?                      #functionCall
+       (FILTER '(' WHERE where=booleanExpression ')')?
+       (nullsOption=(IGNORE | RESPECT) NULLS)? ( OVER windowSpec)?                             #functionCall
     | identifier '->' expression                                                               #lambda
     | '(' identifier (',' identifier)+ ')' '->' expression                                     #lambda
     | value=primaryExpression '[' index=valueExpression ']'                                    #subscript
@@ -1143,6 +1147,7 @@ ansiNonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1171,6 +1176,7 @@ ansiNonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLES
     | TABLESAMPLE
     | TBLPROPERTIES
@@ -1397,6 +1403,7 @@ nonReserved
     | REPAIR
     | REPLACE
     | RESET
+    | RESPECT
     | RESTRICT
     | REVOKE
     | RLIKE
@@ -1426,6 +1433,7 @@ nonReserved
     | STRUCT
     | SUBSTR
     | SUBSTRING
+    | SYNC
     | TABLE
     | TABLES
     | TABLESAMPLE
@@ -1651,6 +1659,7 @@ RENAME: 'RENAME';
 REPAIR: 'REPAIR';
 REPLACE: 'REPLACE';
 RESET: 'RESET';
+RESPECT: 'RESPECT';
 RESTRICT: 'RESTRICT';
 REVOKE: 'REVOKE';
 RIGHT: 'RIGHT';
@@ -1683,6 +1692,7 @@ STRATIFY: 'STRATIFY';
 STRUCT: 'STRUCT';
 SUBSTR: 'SUBSTR';
 SUBSTRING: 'SUBSTRING';
+SYNC: 'SYNC';
 TABLE: 'TABLE';
 TABLES: 'TABLES';
 TABLESAMPLE: 'TABLESAMPLE';

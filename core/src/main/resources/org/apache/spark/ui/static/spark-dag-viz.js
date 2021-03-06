@@ -180,6 +180,12 @@ function renderDagViz(forJob) {
     svg.selectAll("g[id=" + stageClusterId + "] g." + opClusterId).classed("barrier", true)
   });
 
+  metadataContainer().selectAll(".indeterminate-rdd").each(function(v) {
+    var rddId = d3.select(this).text().trim();
+    var nodeId = VizConstants.nodePrefix + rddId;
+    svg.selectAll("g." + nodeId).classed("indeterminate", true);
+  });
+
   resizeSvg(svg);
   interpretLineBreak(svg);
 }
@@ -334,7 +340,7 @@ function preprocessGraphLayout(g, forJob) {
 }
 
 /*
- * Helper function to size the SVG appropriately such that all elements are displyed.
+ * Helper function to size the SVG appropriately such that all elements are displayed.
  * This assumes that all outermost elements are clusters (rectangles).
  */
 function resizeSvg(svg) {

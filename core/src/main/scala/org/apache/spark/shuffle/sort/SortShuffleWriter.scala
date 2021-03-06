@@ -20,12 +20,11 @@ package org.apache.spark.shuffle.sort
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
+import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.util.collection.ExternalSorter
 
 private[spark] class SortShuffleWriter[K, V, C](
-    shuffleBlockResolver: IndexShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
     mapId: Long,
     context: TaskContext,
@@ -44,6 +43,8 @@ private[spark] class SortShuffleWriter[K, V, C](
   private var stopping = false
 
   private var mapStatus: MapStatus = null
+
+  private var partitionLengths: Array[Long] = _
 
   private val writeMetrics = context.taskMetrics().shuffleWriteMetrics
 
@@ -67,7 +68,7 @@ private[spark] class SortShuffleWriter[K, V, C](
     val mapOutputWriter = shuffleExecutorComponents.createMapOutputWriter(
       dep.shuffleId, mapId, dep.partitioner.numPartitions)
     sorter.writePartitionedMapOutput(dep.shuffleId, mapId, mapOutputWriter)
-    val partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
+    partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths, mapId)
   }
 
@@ -93,6 +94,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       }
     }
   }
+
+  override def getPartitionLengths(): Array[Long] = partitionLengths
 }
 
 private[spark] object SortShuffleWriter {

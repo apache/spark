@@ -1,5 +1,5 @@
-TakeOrderedAndProject [promotions,total,(CAST((CAST(CAST(promotions AS DECIMAL(15,4)) AS DECIMAL(15,4)) / CAST(CAST(total AS DECIMAL(15,4)) AS DECIMAL(15,4))) AS DECIMAL(35,20)) * CAST(CAST(100 AS DECIMAL(3,0)) AS DECIMAL(35,20)))]
-  WholeStageCodegen (16)
+WholeStageCodegen (16)
+  Sort [promotions,total]
     Project [promotions,total]
       InputAdapter
         BroadcastNestedLoopJoin
@@ -19,10 +19,12 @@ TakeOrderedAndProject [promotions,total,(CAST((CAST(CAST(promotions AS DECIMAL(1
                                     BroadcastHashJoin [ss_item_sk,i_item_sk]
                                       Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_promo_sk,ss_ext_sales_price]
                                         BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                          Filter [ss_store_sk,ss_promo_sk,ss_sold_date_sk,ss_customer_sk,ss_item_sk]
+                                          Filter [ss_store_sk,ss_promo_sk,ss_customer_sk,ss_item_sk]
                                             ColumnarToRow
                                               InputAdapter
-                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_promo_sk,ss_ext_sales_price]
+                                                Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_promo_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                  SubqueryBroadcast [d_date_sk] #1
+                                                    ReusedExchange [d_date_sk] #2
                                           InputAdapter
                                             BroadcastExchange #2
                                               WholeStageCodegen (1)
@@ -87,10 +89,11 @@ TakeOrderedAndProject [promotions,total,(CAST((CAST(CAST(promotions AS DECIMAL(1
                                   BroadcastHashJoin [ss_item_sk,i_item_sk]
                                     Project [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
                                       BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                        Filter [ss_store_sk,ss_sold_date_sk,ss_customer_sk,ss_item_sk]
+                                        Filter [ss_store_sk,ss_customer_sk,ss_item_sk]
                                           ColumnarToRow
                                             InputAdapter
-                                              Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price]
+                                              Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ext_sales_price,ss_sold_date_sk]
+                                                ReusedSubquery [d_date_sk] #1
                                         InputAdapter
                                           ReusedExchange [d_date_sk] #2
                                     InputAdapter

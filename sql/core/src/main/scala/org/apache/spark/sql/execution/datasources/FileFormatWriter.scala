@@ -164,7 +164,7 @@ object FileFormatWriter extends Logging {
 
     SQLExecution.checkSQLExecutionId(sparkSession)
 
-    // propagate the decription UUID into the jobs, so that committers
+    // propagate the description UUID into the jobs, so that committers
     // get an ID guaranteed to be unique.
     job.getConfiguration.set("spark.sql.sources.writeJobUUID", description.uuid)
 
@@ -217,8 +217,9 @@ object FileFormatWriter extends Logging {
 
       val commitMsgs = ret.map(_.commitMsg)
 
-      committer.commitJob(job, commitMsgs)
-      logInfo(s"Write Job ${description.uuid} committed.")
+      logInfo(s"Start to commit write Job ${description.uuid}.")
+      val (_, duration) = Utils.timeTakenMs { committer.commitJob(job, commitMsgs) }
+      logInfo(s"Write Job ${description.uuid} committed. Elapsed time: $duration ms.")
 
       processStats(description.statsTrackers, ret.map(_.summary.stats))
       logInfo(s"Finished processing stats for write job ${description.uuid}.")

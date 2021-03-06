@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, REPARTITION, REPARTITION_WITH_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -112,8 +113,8 @@ class AdaptiveQueryExecSuite
 
   private def findReusedExchange(plan: SparkPlan): Seq[ReusedExchangeExec] = {
     collectWithSubqueries(plan) {
-      case ShuffleQueryStageExec(_, e: ReusedExchangeExec) => e
-      case BroadcastQueryStageExec(_, e: ReusedExchangeExec) => e
+      case ShuffleQueryStageExec(_, e: ReusedExchangeExec, _) => e
+      case BroadcastQueryStageExec(_, e: ReusedExchangeExec, _) => e
     }
   }
 
@@ -755,11 +756,11 @@ class AdaptiveQueryExecSuite
         Utils.deleteRecursively(tableDir)
         df1.write.parquet(tableDir.getAbsolutePath)
 
-        val agged = spark.table("bucketed_table").groupBy("i").count()
+        val aggregated = spark.table("bucketed_table").groupBy("i").count()
         val error = intercept[Exception] {
-          agged.count()
+          aggregated.count()
         }
-        assert(error.getCause().toString contains "Invalid bucket file")
+        assert(error.toString contains "Invalid bucket file")
         assert(error.getSuppressed.size === 0)
       }
     }
@@ -962,9 +963,9 @@ class AdaptiveQueryExecSuite
       withSQLConf(SQLConf.UI_EXPLAIN_MODE.key -> mode,
           SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-        val dfApdaptive = sql("SELECT * FROM testData JOIN testData2 ON key = a WHERE value = '1'")
+        val dfAdaptive = sql("SELECT * FROM testData JOIN testData2 ON key = a WHERE value = '1'")
         try {
-          checkAnswer(dfApdaptive, Row(1, "1", 1, 1) :: Row(1, "1", 1, 2) :: Nil)
+          checkAnswer(dfAdaptive, Row(1, "1", 1, 1) :: Row(1, "1", 1, 2) :: Nil)
           spark.sparkContext.listenerBus.waitUntilEmpty()
           assert(checkDone)
         } finally {
@@ -1229,6 +1230,28 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("SPARK-34533: Eliminate left anti join to empty relation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTable("emptyTestData") {
+        spark.range(0).write.saveAsTable("emptyTestData")
+        Seq(
+          // broadcast non-empty right side
+          ("SELECT /*+ broadcast(testData3) */ * FROM testData LEFT ANTI JOIN testData3", true),
+          // broadcast empty right side
+          ("SELECT /*+ broadcast(emptyTestData) */ * FROM testData LEFT ANTI JOIN emptyTestData",
+            false),
+          // broadcast left side
+          ("SELECT /*+ broadcast(testData) */ * FROM testData LEFT ANTI JOIN testData3", false)
+        ).foreach { case (query, isEliminated) =>
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          assert(findTopLevelBaseJoin(plan).size == 1)
+          assert(findTopLevelBaseJoin(adaptivePlan).isEmpty == isEliminated)
+        }
+      }
+    }
+  }
+
   test("SPARK-32753: Only copy tags to node with no tags") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("v1") {
@@ -1430,5 +1453,56 @@ class AdaptiveQueryExecSuite
         assert(smjWithNum2.head.isSkewJoin)
       }
     }
+  }
+
+  test("SPARK-34091: Batch shuffle fetch in AQE partition coalescing") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10000",
+      SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "true") {
+      withTable("t1") {
+        spark.range(100).selectExpr("id + 1 as a").write.format("parquet").saveAsTable("t1")
+        val query = "SELECT SUM(a) FROM t1 GROUP BY a"
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val metricName = SQLShuffleReadMetricsReporter.LOCAL_BLOCKS_FETCHED
+        val blocksFetchedMetric = collectFirst(adaptivePlan) {
+          case p if p.metrics.contains(metricName) => p.metrics(metricName)
+        }
+        assert(blocksFetchedMetric.isDefined)
+        val blocksFetched = blocksFetchedMetric.get.value
+        withSQLConf(SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key -> "false") {
+          val (_, adaptivePlan2) = runAdaptiveAndVerifyResult(query)
+          val blocksFetchedMetric2 = collectFirst(adaptivePlan2) {
+            case p if p.metrics.contains(metricName) => p.metrics(metricName)
+          }
+          assert(blocksFetchedMetric2.isDefined)
+          val blocksFetched2 = blocksFetchedMetric2.get.value
+          assert(blocksFetched < blocksFetched2)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33933: Materialize BroadcastQueryStage first in AQE") {
+    val testAppender = new LogAppender("aqe query stage materialization order test")
+    val df = spark.range(1000).select($"id" % 26, $"id" % 10)
+      .toDF("index", "pv")
+    val dim = Range(0, 26).map(x => (x, ('a' + x).toChar.toString))
+      .toDF("index", "name")
+    val testDf = df.groupBy("index")
+      .agg(sum($"pv").alias("pv"))
+      .join(dim, Seq("index"))
+    withLogAppender(testAppender, level = Some(Level.DEBUG)) {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+        val result = testDf.collect()
+        assert(result.length == 26)
+      }
+    }
+    val materializeLogs = testAppender.loggingEvents
+      .map(_.getRenderedMessage)
+      .filter(_.startsWith("Materialize query stage"))
+      .toArray
+    assert(materializeLogs(0).startsWith("Materialize query stage BroadcastQueryStageExec"))
+    assert(materializeLogs(1).startsWith("Materialize query stage ShuffleQueryStageExec"))
   }
 }

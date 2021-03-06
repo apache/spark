@@ -55,6 +55,7 @@ private[spark] class TaskDescription(
     val partitionId: Int,
     val addedFiles: Map[String, Long],
     val addedJars: Map[String, Long],
+    val addedArchives: Map[String, Long],
     val properties: Properties,
     val resources: immutable.Map[String, ResourceInformation],
     val serializedTask: ByteBuffer) {
@@ -98,6 +99,9 @@ private[spark] object TaskDescription {
 
     // Write jars.
     serializeStringLongMap(taskDescription.addedJars, dataOut)
+
+    // Write archives.
+    serializeStringLongMap(taskDescription.addedArchives, dataOut)
 
     // Write properties.
     dataOut.writeInt(taskDescription.properties.size())
@@ -167,6 +171,9 @@ private[spark] object TaskDescription {
     // Read jars.
     val taskJars = deserializeStringLongMap(dataIn)
 
+    // Read archives.
+    val taskArchives = deserializeStringLongMap(dataIn)
+
     // Read properties.
     val properties = new Properties()
     val numProperties = dataIn.readInt()
@@ -185,6 +192,6 @@ private[spark] object TaskDescription {
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
-      taskJars, properties, resources, serializedTask)
+      taskJars, taskArchives, properties, resources, serializedTask)
   }
 }

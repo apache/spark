@@ -51,7 +51,7 @@ SELECT a, COUNT(b) FILTER (WHERE a >= 2) FROM testData
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and 'testdata.`a`' is not an aggregate function. Wrap '(count(testdata.`b`) FILTER (WHERE (testdata.`a` >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)' in windowing function(s) or wrap 'testdata.`a`' in first() (or first_value) if you don't care which value you get.;
+grouping expressions sequence is empty, and 'testdata.`a`' is not an aggregate function. Wrap '(count(testdata.`b`) FILTER (WHERE (testdata.`a` >= 2)) AS `count(b) FILTER (WHERE (a >= 2))`)' in windowing function(s) or wrap 'testdata.`a`' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -81,7 +81,7 @@ struct<count(id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint
 -- !query
 SELECT COUNT(id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")) FROM emp
 -- !query schema
-struct<count(id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-01-01 00:00:00))):bigint>
+struct<count(id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00))):bigint>
 -- !query output
 2
 
@@ -89,7 +89,7 @@ struct<count(id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-
 -- !query
 SELECT COUNT(id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") = "2001-01-01") FROM emp
 -- !query schema
-struct<count(id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd) = 2001-01-01)):bigint>
+struct<count(id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) = 2001-01-01)):bigint>
 -- !query output
 2
 
@@ -97,7 +97,7 @@ struct<count(id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM
 -- !query
 SELECT COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") = "2001-01-01 00:00:00") FROM emp
 -- !query schema
-struct<count(DISTINCT id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
+struct<count(DISTINCT id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
 -- !query output
 2
 
@@ -105,7 +105,7 @@ struct<count(DISTINCT id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP)
 -- !query
 SELECT COUNT(DISTINCT id), COUNT(DISTINCT id) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") = "2001-01-01 00:00:00") FROM emp
 -- !query schema
-struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
+struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) = 2001-01-01 00:00:00)):bigint>
 -- !query output
 8	2
 
@@ -113,7 +113,7 @@ struct<count(DISTINCT id):bigint,count(DISTINCT id) FILTER (WHERE (date_format(C
 -- !query
 SELECT COUNT(DISTINCT id) FILTER (WHERE hiredate = to_timestamp("2001-01-01 00:00:00")), COUNT(DISTINCT id) FILTER (WHERE hiredate = to_date('2001-01-01 00:00:00')) FROM emp
 -- !query schema
-struct<count(DISTINCT id) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) = to_timestamp(2001-01-01 00:00:00))):bigint,count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint>
+struct<count(DISTINCT id) FILTER (WHERE (hiredate = to_timestamp(2001-01-01 00:00:00))):bigint,count(DISTINCT id) FILTER (WHERE (hiredate = to_date(2001-01-01 00:00:00))):bigint>
 -- !query output
 2	2
 
@@ -231,7 +231,7 @@ SELECT a, COUNT(b) FILTER (WHERE a != 2) FROM testData GROUP BY b
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.`a`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;
+expression 'testdata.`a`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -274,7 +274,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(salary) FILTER (WHERE hiredate > to_timestamp("2003-01-01 00:00:00")) FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(salary) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) > to_timestamp(2003-01-01 00:00:00))):double>
+struct<dept_id:int,sum(salary) FILTER (WHERE (hiredate > to_timestamp(2003-01-01 00:00:00))):double>
 -- !query output
 10	200.0
 100	400.0
@@ -287,7 +287,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") > "2003-01-01") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd) > 2003-01-01)):double>
+struct<dept_id:int,sum(salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) > 2003-01-01)):double>
 -- !query output
 10	200.0
 100	400.0
@@ -300,7 +300,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") > "2001-01-01 00:00:00") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
+struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
 -- !query output
 10	300.0
 100	400.0
@@ -313,7 +313,7 @@ NULL	NULL
 -- !query
 SELECT dept_id, SUM(DISTINCT salary), SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") > "2001-01-01 00:00:00") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
+struct<dept_id:int,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
 -- !query output
 10	300.0	300.0
 100	400.0	400.0
@@ -326,7 +326,7 @@ NULL	400.0	NULL
 -- !query
 SELECT dept_id, SUM(DISTINCT salary) FILTER (WHERE hiredate > date "2001-01-01"), SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd HH:mm:ss") > "2001-01-01 00:00:00") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (hiredate > DATE '2001-01-01')):double,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
+struct<dept_id:int,sum(DISTINCT salary) FILTER (WHERE (hiredate > DATE '2001-01-01')):double,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd HH:mm:ss) > 2001-01-01 00:00:00)):double>
 -- !query output
 10	300.0	300.0
 100	400.0	400.0
@@ -339,7 +339,7 @@ NULL	NULL	NULL
 -- !query
 SELECT dept_id, COUNT(id), SUM(DISTINCT salary), SUM(DISTINCT salary) FILTER (WHERE date_format(hiredate, "yyyy-MM-dd") > "2001-01-01") FROM emp GROUP BY dept_id
 -- !query schema
-struct<dept_id:int,count(id):bigint,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(CAST(hiredate AS TIMESTAMP), yyyy-MM-dd) > 2001-01-01)):double>
+struct<dept_id:int,count(id):bigint,sum(DISTINCT salary):double,sum(DISTINCT salary) FILTER (WHERE (date_format(hiredate, yyyy-MM-dd) > 2001-01-01)):double>
 -- !query output
 10	3	300.0	300.0
 100	2	400.0	400.0
@@ -386,7 +386,7 @@ foo	1350.0
 -- !query
 SELECT 'foo', SUM(salary) FILTER (WHERE hiredate >= to_timestamp("2003-01-01")) FROM emp GROUP BY 1
 -- !query schema
-struct<foo:string,sum(salary) FILTER (WHERE (CAST(hiredate AS TIMESTAMP) >= to_timestamp(2003-01-01))):double>
+struct<foo:string,sum(salary) FILTER (WHERE (hiredate >= to_timestamp(2003-01-01))):double>
 -- !query output
 foo	1350.0
 
@@ -711,7 +711,7 @@ SELECT a + 2, COUNT(b) FILTER (WHERE b IN (1, 2)) FROM testData GROUP BY a + 1
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-expression 'testdata.`a`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.;
+expression 'testdata.`a`' is neither present in the group by, nor is it an aggregate function. Add to group by or wrap in first() (or first_value) if you don't care which value you get.
 
 
 -- !query
@@ -795,14 +795,17 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Project [state#x]
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+:                 +- Project [dept_id#x, dept_name#x, state#x]
+:                    +- SubqueryAlias DEPT
+:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-;
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+            +- SubqueryAlias EMP
+               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
@@ -821,14 +824,17 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Project [state#x]
 :     +- Filter (dept_id#x = outer(dept_id#x))
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+:                 +- Project [dept_id#x, dept_name#x, state#x]
+:                    +- SubqueryAlias DEPT
+:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-;
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+            +- SubqueryAlias EMP
+               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
@@ -846,14 +852,17 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Distinct
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+:                 +- Project [dept_id#x, dept_name#x, state#x]
+:                    +- SubqueryAlias DEPT
+:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-;
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+            +- SubqueryAlias EMP
+               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query
@@ -871,14 +880,17 @@ IN/EXISTS predicate sub-queries can only be used in Filter/Join and a few comman
 :  +- Distinct
 :     +- Project [dept_id#x]
 :        +- SubqueryAlias dept
-:           +- Project [dept_id#x, dept_name#x, state#x]
-:              +- SubqueryAlias DEPT
-:                 +- LocalRelation [dept_id#x, dept_name#x, state#x]
+:           +- View (`DEPT`, [dept_id#x,dept_name#x,state#x])
+:              +- Project [cast(dept_id#x as int) AS dept_id#x, cast(dept_name#x as string) AS dept_name#x, cast(state#x as string) AS state#x]
+:                 +- Project [dept_id#x, dept_name#x, state#x]
+:                    +- SubqueryAlias DEPT
+:                       +- LocalRelation [dept_id#x, dept_name#x, state#x]
 +- SubqueryAlias emp
-   +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-      +- SubqueryAlias EMP
-         +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
-;
+   +- View (`EMP`, [id#x,emp_name#x,hiredate#x,salary#x,dept_id#x])
+      +- Project [cast(id#x as int) AS id#x, cast(emp_name#x as string) AS emp_name#x, cast(hiredate#x as date) AS hiredate#x, cast(salary#x as double) AS salary#x, cast(dept_id#x as int) AS dept_id#x]
+         +- Project [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
+            +- SubqueryAlias EMP
+               +- LocalRelation [id#x, emp_name#x, hiredate#x, salary#x, dept_id#x]
 
 
 -- !query

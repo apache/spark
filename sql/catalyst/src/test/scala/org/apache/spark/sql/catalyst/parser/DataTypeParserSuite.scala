@@ -56,10 +56,10 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
   checkDataType("string", StringType)
-  checkDataType("ChaR(5)", StringType)
-  checkDataType("ChaRacter(5)", StringType)
-  checkDataType("varchAr(20)", StringType)
-  checkDataType("cHaR(27)", StringType)
+  checkDataType("ChaR(5)", CharType(5))
+  checkDataType("ChaRacter(5)", CharType(5))
+  checkDataType("varchAr(20)", VarcharType(20))
+  checkDataType("cHaR(27)", CharType(27))
   checkDataType("BINARY", BinaryType)
   checkDataType("void", NullType)
   checkDataType("interval", CalendarIntervalType)
@@ -103,9 +103,9 @@ class DataTypeParserSuite extends SparkFunSuite {
         StructType(
           StructField("deciMal", DecimalType.USER_DEFAULT, true) ::
           StructField("anotherDecimal", DecimalType(5, 2), true) :: Nil), true) ::
-      StructField("MAP", MapType(TimestampType, StringType), true) ::
+      StructField("MAP", MapType(TimestampType, VarcharType(10)), true) ::
       StructField("arrAy", ArrayType(DoubleType, true), true) ::
-      StructField("anotherArray", ArrayType(StringType, true), true) :: Nil)
+      StructField("anotherArray", ArrayType(CharType(9), true), true) :: Nil)
   )
   // Use backticks to quote column names having special characters.
   checkDataType(
@@ -113,7 +113,7 @@ class DataTypeParserSuite extends SparkFunSuite {
     StructType(
       StructField("x+y", IntegerType, true) ::
       StructField("!@#$%^&*()", StringType, true) ::
-      StructField("1_2.345<>:\"", StringType, true) :: Nil)
+      StructField("1_2.345<>:\"", VarcharType(20), true) :: Nil)
   )
   // Empty struct.
   checkDataType("strUCt<>", StructType(Nil))
@@ -124,8 +124,8 @@ class DataTypeParserSuite extends SparkFunSuite {
   unsupported("struct<x int, y string>")
 
   test("Do not print empty parentheses for no params") {
-    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
-    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+    assert(intercept("unknown").getMessage.contains("unknown is not supported"))
+    assert(intercept("unknown(1,2,3)").getMessage.contains("unknown(1,2,3) is not supported"))
   }
 
   // DataType parser accepts certain reserved keywords.

@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 trait SharedSparkSession extends SQLTestUtils with SharedSparkSessionBase {
 
   /**
-   * Suites extending [[SharedSparkSession]] are sharing resources (eg. SparkSession) in their
+   * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
    * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
    * the automatic thread snapshot is performed, so the audit code could fail to report threads
    * leaked by that shared session.

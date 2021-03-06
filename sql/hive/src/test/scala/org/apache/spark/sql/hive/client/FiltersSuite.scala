@@ -100,6 +100,14 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("intcol", IntegerType) in (Literal(1), Literal(null))) :: Nil,
     "(intcol = 1)")
 
+  filterTest("NOT: int and string filters",
+    (a("intcol", IntegerType) =!= Literal(1)) :: (Literal("a") =!= a("strcol", IntegerType)) :: Nil,
+    """intcol != 1 and "a" != strcol""")
+
+  filterTest("NOT: date filter",
+    (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
+    "datecol != 2019-01-01")
+
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
   filterTest("SPARK-24879 IN predicates with only NULLs will not cause a NPE",
@@ -168,6 +176,29 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
         InSet(a("datecol", DateType),
           Range(1, 20).map(d => Literal(d, DateType).eval(EmptyRow)).toSet),
         "(datecol >= 1970-01-02 and datecol <= 1970-01-20)")
+    }
+  }
+
+  test("SPARK-34515: Fix NPE if InSet contains null value during getPartitionsByFilter") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "2") {
+      val filter = InSet(a("p", IntegerType), Set(null, 1, 2))
+      val converted = shim.convertFilters(testTable, Seq(filter), conf.sessionLocalTimeZone)
+      assert(converted == "(p >= 1 and p <= 2)")
+    }
+  }
+
+  test("SPARK-34538: Skip InSet null value during push filter to Hive metastore") {
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
+      val intFilter = InSet(a("p", IntegerType), Set(null, 1, 2))
+      val intConverted = shim.convertFilters(testTable, Seq(intFilter), conf.sessionLocalTimeZone)
+      assert(intConverted == "(p = 1 or p = 2)")
+    }
+
+    withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD.key -> "3") {
+      val dateFilter = InSet(a("p", DateType), Set(null,
+        Literal(Date.valueOf("2020-01-01")).eval(), Literal(Date.valueOf("2021-01-01")).eval()))
+      val dateConverted = shim.convertFilters(testTable, Seq(dateFilter), conf.sessionLocalTimeZone)
+      assert(dateConverted == "(p = 2020-01-01 or p = 2021-01-01)")
     }
   }
 

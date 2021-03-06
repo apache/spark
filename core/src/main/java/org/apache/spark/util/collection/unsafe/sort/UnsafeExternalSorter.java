@@ -104,11 +104,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       int initialSize,
       long pageSizeBytes,
       int numElementsForSpillThreshold,
-      UnsafeInMemorySorter inMemorySorter) throws IOException {
+      UnsafeInMemorySorter inMemorySorter,
+      long existingMemoryConsumption) throws IOException {
     UnsafeExternalSorter sorter = new UnsafeExternalSorter(taskMemoryManager, blockManager,
       serializerManager, taskContext, recordComparatorSupplier, prefixComparator, initialSize,
         pageSizeBytes, numElementsForSpillThreshold, inMemorySorter, false /* ignored */);
     sorter.spill(Long.MAX_VALUE, sorter);
+    taskContext.taskMetrics().incMemoryBytesSpilled(existingMemoryConsumption);
+    sorter.totalSpillBytes += existingMemoryConsumption;
     // The external sorter will be used to insert records, in-memory sorter is not needed.
     sorter.inMemSorter = null;
     return sorter;
@@ -496,6 +499,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   public void merge(UnsafeExternalSorter other) throws IOException {
     other.spill();
+    totalSpillBytes += other.totalSpillBytes;
     spillWriters.addAll(other.spillWriters);
     // remove them from `spillWriters`, or the files will be deleted in `cleanupResources`.
     other.spillWriters.clear();

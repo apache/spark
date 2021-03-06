@@ -175,9 +175,9 @@ public class HiveSessionImpl implements HiveSession {
     @Override
     protected int processCmd(String cmd) {
       int rc = 0;
-      String cmd_trimed = cmd.trim();
+      String cmd_trimmed = cmd.trim();
       try {
-        executeStatementInternal(cmd_trimed, null, false, 0);
+        executeStatementInternal(cmd_trimmed, null, false, 0);
       } catch (HiveSQLException e) {
         rc = -1;
         LOG.warn("Failed to execute HQL command in global .hiverc file.", e);
