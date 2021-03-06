@@ -181,6 +181,7 @@ class LinearRegression(_JavaRegressor, _LinearRegressionParams, JavaMLWritable, 
     >>> abs(model.transform(test1).head().newPrediction - 1.0) < 0.001
     True
     >>> lr.setParams(featuresCol="vector")
+    LinearRegression...
     >>> lr_path = temp_path + "/lr"
     >>> lr.save(lr_path)
     >>> lr2 = LinearRegression.load(lr_path)
