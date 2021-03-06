@@ -20,7 +20,7 @@ package org.apache.spark.io
 import java.io._
 import java.util.Locale
 
-import com.github.luben.zstd.{NoPool, RecyclingBufferPool, ZstdInputStream, ZstdOutputStream}
+import com.github.luben.zstd.{NoPool, RecyclingBufferPool, ZstdInputStreamNoFinalizer, ZstdOutputStreamNoFinalizer}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream, LZ4Factory}
 import net.jpountz.xxhash.XXHashFactory
@@ -226,21 +226,22 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     // Wrap the zstd output stream in a buffered output stream, so that we can
     // avoid overhead excessive of JNI call while trying to compress small amount of data.
-    val os = new ZstdOutputStream(s, bufferPool).setLevel(level)
+    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool).setLevel(level)
     new BufferedOutputStream(os, bufferSize)
   }
 
   override private[spark] def compressedContinuousOutputStream(s: OutputStream) = {
     // SPARK-29322: Set "closeFrameOnFlush" to 'true' to let continuous input stream not being
     // stuck on reading open frame.
-    val os = new ZstdOutputStream(s, bufferPool).setLevel(level).setCloseFrameOnFlush(true)
+    val os = new ZstdOutputStreamNoFinalizer(s, bufferPool)
+      .setLevel(level).setCloseFrameOnFlush(true)
     new BufferedOutputStream(os, bufferSize)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = {
     // Wrap the zstd input stream in a buffered input stream so that we can
     // avoid overhead excessive of JNI call while trying to uncompress small amount of data.
-    new BufferedInputStream(new ZstdInputStream(s, bufferPool), bufferSize)
+    new BufferedInputStream(new ZstdInputStreamNoFinalizer(s, bufferPool), bufferSize)
   }
 
   override def compressedContinuousInputStream(s: InputStream): InputStream = {
@@ -248,6 +249,7 @@ class ZStdCompressionCodec(conf: SparkConf) extends CompressionCodec {
     // Reading). By default `isContinuous` is false, and when we try to read from open frames,
     // `compressedInputStream` method above throws truncated error exception. This method set
     // `isContinuous` true to allow reading from open frames.
-    new BufferedInputStream(new ZstdInputStream(s, bufferPool).setContinuous(true), bufferSize)
+    new BufferedInputStream(
+      new ZstdInputStreamNoFinalizer(s, bufferPool).setContinuous(true), bufferSize)
   }
 }
