@@ -3437,7 +3437,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
     // use Project to hide duplicated common keys
     val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(hiddenOutputTag, hiddenList.map(_.asHiddenCol()))
+    project.setTagValue(Project.hiddenOutputTag, hiddenList.map(_.asHiddenCol()))
     project
   }
 

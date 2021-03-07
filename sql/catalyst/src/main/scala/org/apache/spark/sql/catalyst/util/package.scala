@@ -202,7 +202,6 @@ package object util extends Logging {
    * and are candidates during qualified star expansions.
    */
   val HIDDEN_COL_ATTR_KEY = "__hidden_col"
-  val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hiddenOutput")
 
   implicit class SpecialColumnHelper(attr: Attribute) {
     def isMetadataCol: Boolean = attr.metadata.contains(METADATA_COL_ATTR_KEY) &&
