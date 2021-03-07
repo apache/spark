@@ -222,9 +222,14 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
     val childrenSize = union.children.size
     val sizeInBytes = plan.size.get * childrenSize
     val rowCount = Some(plan.rowCount * childrenSize)
+    val attributeStats = AttributeMap(
+      Seq(
+        attribute -> ColumnStat(min = Some(1), max = Some(10))))
     checkStats(
       union,
-      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount),
+      expectedStatsCboOn = Statistics(sizeInBytes = sizeInBytes,
+        rowCount = rowCount,
+        attributeStats = attributeStats),
       expectedStatsCboOff = Statistics(sizeInBytes = sizeInBytes))
   }
 
