@@ -26,7 +26,6 @@ import org.apache.spark.sql.Column
 // scalastyle:off: object.name
 object functions {
 // scalastyle:on: object.name
-
   /**
    * Converts a binary column of avro format into its corresponding catalyst value. The specified
    * schema must match the read data, otherwise the behavior is undefined: it may fail or return
@@ -51,18 +50,31 @@ object functions {
    * To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
    * set via the option avroSchema.
    *
+   * Since SPARK-34652 also its possible to get the latest schema of the topic
+   * from SchemaRegistry, it needs to pass the `schemaRegistryUrl` to the options
+   * and set `t-value` or `t-key`  on the jsonFormatSchema filed for topic t.
+   *
    * @param data the binary column.
    * @param jsonFormatSchema the avro schema in JSON string format.
    * @param options options to control how the Avro record is parsed.
    *
    * @since 3.0.0
    */
+  @throws(classOf[java.io.IOException])
   @Experimental
   def from_avro(
       data: Column,
       jsonFormatSchema: String,
       options: java.util.Map[String, String]): Column = {
-    new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))
+    if (options.containsKey("schemaRegistryUrl")) {
+      val schemaRegistryEndpoint = "%s/subjects/%s/versions/latest/schema"
+      val url = schemaRegistryEndpoint.format(options.get("schemaRegistryUrl"), jsonFormatSchema)
+      val schema = scala.io.Source.fromURL(url).mkString
+
+      new Column(AvroDataToCatalyst(data.expr, schema, options.asScala.toMap))
+    }
+    else {
+      new Column(AvroDataToCatalyst(data.expr, jsonFormatSchema, options.asScala.toMap))}
   }
 
   /**
