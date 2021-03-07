@@ -22,6 +22,10 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{REPARTITION, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 
+/**
+ * Pushes (partial) aggregates bellow manually inserted repartition nodes
+ * to reduce the amount of data exchanged.
+ */
 object PushDownAggregates extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     if (conf.getConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED)) {

@@ -23,7 +23,6 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-
 abstract class PushDownAggregatesSuiteBase
     extends QueryTest
     with SharedSparkSession
@@ -38,57 +37,53 @@ abstract class PushDownAggregatesSuiteBase
   }
 
   test("Partial aggregate is pushed bellow manually inserted repartition") {
-    withTempPath { path =>
-      spark.range(1000)
-        .select('id % 7 as "a")
-        .repartition()
-        .write.format("parquet").save(path.getAbsolutePath)
+    spark.range(1000)
+      .select($"id" % 7 as "a")
+      .createOrReplaceTempView("view")
 
-      withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "false") {
-        val df1 = spark.read.parquet(path.getAbsolutePath)
-          .repartition('a)
-          .groupBy('a)
+    withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "false") {
+      val df1 = spark.read.table("view")
+        .repartition($"a")
+        .groupBy($"a")
+        .count()
+
+      assertExchangeBetweenAggregates(df1, expected = false)
+      val result = df1.collect()
+
+      withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "true") {
+        val df2 = spark.read.table("view")
+          .repartition($"a")
+          .groupBy($"a")
           .count()
 
-        assertExchangeBetweenAggregates(df1, false)
-        val result = df1.collect()
-        withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "true") {
-          val df2 = spark.read.parquet(path.getAbsolutePath)
-            .repartition('a)
-            .groupBy('a)
-            .count()
-
-          assertExchangeBetweenAggregates(df2, true)
-          checkAnswer(df2, result)
-        }
+        assertExchangeBetweenAggregates(df2, expected = true)
+        checkAnswer(df2, result)
       }
     }
   }
 
   test("Partial aggregate is pushed bellow manually inserted repartitionByRange") {
-    withTempPath { path =>
-      spark.range(1000)
-        .select('id % 7 as "a")
-        .repartition()
-        .write.format("parquet").save(path.getAbsolutePath)
+    spark.range(1000)
+      .select($"id" % 7 as "a")
+      .createOrReplaceTempView("view")
 
-      withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "false") {
-        val df1 = spark.read.parquet(path.getAbsolutePath)
-          .repartitionByRange('a)
-          .groupBy('a)
+    withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "false") {
+      val df1 = spark.read.table("view")
+        .repartitionByRange($"a")
+        .groupBy($"a")
+        .count()
+
+      assertExchangeBetweenAggregates(df1, expected = false)
+      val result = df1.collect()
+
+      withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "true") {
+        val df2 = spark.read.table("view")
+          .repartitionByRange($"a")
+          .groupBy($"a")
           .count()
 
-        assertExchangeBetweenAggregates(df1, false)
-        val result = df1.collect()
-        withSQLConf(SQLConf.PUSH_DOWN_AGGREGATES_ENABLED.key -> "true") {
-          val df2 = spark.read.parquet(path.getAbsolutePath)
-            .repartitionByRange('a)
-            .groupBy('a)
-            .count()
-
-          assertExchangeBetweenAggregates(df2, true)
-          checkAnswer(df2, result)
-        }
+        assertExchangeBetweenAggregates(df2, expected = true)
+        checkAnswer(df2, result)
       }
     }
   }
