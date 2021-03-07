@@ -485,4 +485,25 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
         .na.fill(Map("Col" -> na)),
       Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
   }
+
+  test("SPARK-34649 - replace value of a column with dot in the name") {
+    checkAnswer(
+      Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
+        .na.replace("`Col.1`", Map( "n/a" -> "unknown")),
+      Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
+  }
+
+  test("SPARK-34649 - replace value of a qualified-column with dot in the name") {
+    checkAnswer(
+      Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2").as("testDf")
+        .na.replace("testDf.`Col.1`", Map( "n/a" -> "unknown")),
+      Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
+  }
+
+  test("SPARK-34649 - replace value of a dataframe having dot in the all column names") {
+    checkAnswer(
+      Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
+        .na.replace("*", Map( "n/a" -> "unknown")),
+      Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
+  }
 }

@@ -327,7 +327,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    */
   def replace[T](col: String, replacement: Map[T, T]): DataFrame = {
     if (col == "*") {
-      replace0(df.columns, replacement)
+      replace0(df.columns.map { colName => s"`${colName}`" }, replacement)
     } else {
       replace0(Seq(col), replacement)
     }
@@ -359,6 +359,16 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       return df
     }
 
+    val replaceableAttrs = AttributeSet(cols.map { colName =>
+      // Check column name exists
+      val attr = df.resolve(colName) match {
+        case a: Attribute => a
+        case _ => throw new UnsupportedOperationException(
+          s"Nested field ${colName} is not supported.")
+      }
+      attr
+    })
+
     // Convert the NumericType in replacement map to DoubleType,
     // while leaving StringType, BooleanType and null untouched.
     val replacementMap: Map[_, _] = replacement.map {
@@ -379,15 +389,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       case _: String => StringType
     }
 
-    val columnEquals = df.sparkSession.sessionState.analyzer.resolver
-    val projections = df.schema.fields.map { f =>
-      val shouldReplace = cols.exists(colName => columnEquals(colName, f.name))
-      if (f.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType && shouldReplace) {
-        replaceCol(f, replacementMap)
-      } else if (f.dataType == targetColumnType && shouldReplace) {
-        replaceCol(f, replacementMap)
+    val output = df.queryExecution.analyzed.output
+    val projections = output.map { attr =>
+      if (replaceableAttrs.contains(attr) && (attr.dataType == targetColumnType ||
+        (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
+        replaceCol(attr, replacementMap)
       } else {
-        df.col(f.name)
+        Column(attr)
       }
     }
     df.select(projections : _*)
@@ -453,13 +461,12 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * TODO: This can be optimized to use broadcast join when replacementMap is large.
    */
-  private def replaceCol[K, V](col: StructField, replacementMap: Map[K, V]): Column = {
-    val keyExpr = df.col(col.name).expr
-    def buildExpr(v: Any) = Cast(Literal(v), keyExpr.dataType)
+  private def replaceCol[K, V](attr: Attribute, replacementMap: Map[K, V]): Column = {
+    def buildExpr(v: Any) = Cast(Literal(v), attr.dataType)
     val branches = replacementMap.flatMap { case (source, target) =>
       Seq(Literal(source), buildExpr(target))
     }.toSeq
-    new Column(CaseKeyWhen(keyExpr, branches :+ keyExpr)).as(col.name)
+    new Column(CaseKeyWhen(attr, branches :+ attr)).as(attr.name)
   }
 
   private def convertToDouble(v: Any): Double = v match {
