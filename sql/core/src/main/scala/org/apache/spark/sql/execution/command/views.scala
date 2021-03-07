@@ -22,8 +22,9 @@ import scala.collection.mutable
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
@@ -115,48 +116,27 @@ case class CreateViewCommand(
 
     if (viewType == LocalTempView) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && needsToUncache(catalog.getRawTempView(name.table), aliasedPlan)) {
-        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
-        checkCyclicViewReference(analyzedPlan, Seq(name), name)
-        CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
-      }
-      // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
-      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(
-          prepareTemporaryView(
-            name,
-            sparkSession,
-            analyzedPlan,
-            aliasedPlan.schema,
-            originalText))
-      } else {
-        TemporaryViewRelation(
-          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
-          Some(aliasedPlan))
-      }
+      val tableDefinition = createTemporaryViewRelation(
+        name,
+        sparkSession,
+        replace,
+        catalog.getRawTempView(name.table),
+        originalText,
+        aliasedPlan,
+        analyzedPlan)
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && needsToUncache(catalog.getRawGlobalTempView(name.table), aliasedPlan)) {
-        logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-        checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
-        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
-      }
-      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(
-          prepareTemporaryView(
-            viewIdent,
-            sparkSession,
-            analyzedPlan,
-            aliasedPlan.schema,
-            originalText))
-      } else {
-        TemporaryViewRelation(
-          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
-          Some(aliasedPlan))
-      }
+      val tableDefinition = createTemporaryViewRelation(
+        viewIdent,
+        sparkSession,
+        replace,
+        catalog.getRawGlobalTempView(name.table),
+        originalText,
+        aliasedPlan,
+        analyzedPlan)
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
       val tableMetadata = catalog.getTableMetadata(name)
@@ -190,20 +170,6 @@ case class CreateViewCommand(
       catalog.createTable(prepareTable(sparkSession, analyzedPlan), ignoreIfExists = false)
     }
     Seq.empty[Row]
-  }
-
-  /**
-   * Checks if need to uncache the temp view being replaced.
-   */
-  private def needsToUncache(
-      rawTempView: Option[LogicalPlan],
-      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
-    // The temp view doesn't exist, no need to uncache.
-    case None => false
-    // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
-    // same-result plans.
-    case Some(TemporaryViewRelation(_, Some(p))) => !p.sameResult(aliasedPlan)
-    case Some(p) => !p.sameResult(aliasedPlan)
   }
 
   /**
@@ -284,14 +250,21 @@ case class AlterViewAsCommand(
   }
 
   private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
-    val tableDefinition = if (conf.storeAnalyzedPlanForView) {
-      analyzedPlan
+    val catalog = session.sessionState.catalog
+    val rawTempView = if (name.database.isEmpty) {
+      catalog.getRawTempView(name.table)
     } else {
-      checkCyclicViewReference(analyzedPlan, Seq(name), name)
-      TemporaryViewRelation(
-        prepareTemporaryView(
-          name, session, analyzedPlan, analyzedPlan.schema, Some(originalText)))
+      catalog.getRawGlobalTempView(name.table)
     }
+    assert(rawTempView.isDefined)
+    val tableDefinition = createTemporaryViewRelation(
+      name,
+      session,
+      replace = false,
+      rawTempView = rawTempView,
+      originalText = Some(originalText),
+      aliasedPlan = analyzedPlan,
+      analyzedPlan = analyzedPlan)
     session.sessionState.catalog.alterTempViewDefinition(name, tableDefinition)
   }
 
@@ -345,7 +318,7 @@ case class ShowViewsCommand(
   }
 }
 
-object ViewHelper {
+object ViewHelper extends SQLConfHelper with Logging {
 
   private val configPrefixDenyList = Seq(
     SQLConf.MAX_NESTED_VIEW_DEPTH.key,
@@ -592,6 +565,49 @@ object ViewHelper {
     (collectTempViews(child), collectTempFunctions(child))
   }
 
+  def createTemporaryViewRelation(
+      name: TableIdentifier,
+      session: SparkSession,
+      replace: Boolean,
+      rawTempView: Option[LogicalPlan],
+      originalText: Option[String],
+      aliasedPlan: LogicalPlan,
+      analyzedPlan: LogicalPlan): TemporaryViewRelation = {
+    val needsToUncache = needsToUncacheTempView(rawTempView, aliasedPlan)
+    if (replace && needsToUncache) {
+      logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      CommandUtils.uncacheTableOrView(session, name.quotedString)
+    }
+    if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+      TemporaryViewRelation(
+        prepareTemporaryView(
+          name,
+          session,
+          analyzedPlan,
+          aliasedPlan.schema,
+          originalText.get))
+    } else {
+      TemporaryViewRelation(
+        prepareTemporaryViewFromDataFrame(name, aliasedPlan),
+        Some(aliasedPlan))
+    }
+  }
+
+  /**
+   * Checks if we need to uncache the temp view being replaced by checking if the raw temp
+   * view will return the same result as the given aliased plan.
+   */
+  private def needsToUncacheTempView(
+      rawTempView: Option[LogicalPlan],
+      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
+    // The temp view doesn't exist, no need to uncache.
+    case None => false
+    // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
+    // same-result plans.
+    case Some(TemporaryViewRelation(_, Some(p))) => !p.sameResult(aliasedPlan)
+    case Some(p) => !p.sameResult(aliasedPlan)
+  }
 
   /**
    * Returns a [[CatalogTable]] that contains information for temporary view.
@@ -599,12 +615,12 @@ object ViewHelper {
    * column names) and store them as properties in the CatalogTable, and also creates
    * the proper schema for the view.
    */
-  def prepareTemporaryView(
+  private def prepareTemporaryView(
       viewName: TableIdentifier,
       session: SparkSession,
       analyzedPlan: LogicalPlan,
       viewSchema: StructType,
-      originalText: Option[String]): CatalogTable = {
+      originalText: String): CatalogTable = {
 
     val catalog = session.sessionState.catalog
     val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, analyzedPlan)
@@ -618,7 +634,7 @@ object ViewHelper {
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = viewSchema,
-      viewText = originalText,
+      viewText = Some(originalText),
       properties = newProperties)
   }
 
@@ -626,7 +642,7 @@ object ViewHelper {
    * Returns a [[CatalogTable]] that contains information for the temporary view created
    * from a dataframe.
    */
-  def prepareTemporaryViewFromDataFrame(
+  private def prepareTemporaryViewFromDataFrame(
       viewName: TableIdentifier,
       analyzedPlan: LogicalPlan): CatalogTable = {
     CatalogTable(
