@@ -623,14 +623,18 @@ object LimitPushDown extends Rule[LogicalPlan] {
       }
       LocalLimit(exp, newJoin)
 
-    // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty
-    // and the same order is used. For example:
-    // SELECT *, ROW_NUMBER() OVER(ORDER BY a) AS rn, RANK() OVER(ORDER BY a) AS rk FROM t LIMIT 5
-    case LocalLimit(limitExpr @ IntegerLiteral(limit), window @ Window(_, Nil, orderSpec, child))
-        if limit < conf.topKSortFallbackThreshold && child.maxRows.forall(_ > limit) &&
-            !child.isInstanceOf[Window] =>
+    // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
+    case LocalLimit(limitExpr @ IntegerLiteral(limit),
+        window @ Window(_, Nil, orderSpec, child))
+      if child.maxRows.forall(_ > limit) && limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
+    // There is a Project between LocalLimit and Window if they do not have the same output.
+    case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
+        window @ Window(_, Nil, orderSpec, child)))
+      if child.maxRows.forall(_ > limit) && limit < conf.topKSortFallbackThreshold =>
+      // Sort is needed here because we need global sort.
+      project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
   }
 }
 

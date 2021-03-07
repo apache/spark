@@ -4088,7 +4088,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       val df2 = spark.sql(
         """
-          |SELECT *, RANK() OVER(ORDER BY a, b) AS rk, SUM(b) OVER(ORDER BY a, b) AS s
+          |SELECT b, RANK() OVER(ORDER BY a, b) AS rk, SUM(b) OVER(ORDER BY a, b) AS s
           |FROM t1
           |LIMIT 2
           |""".stripMargin)
@@ -4096,7 +4096,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         case l @ LocalLimit(_, _: Sort) => l
       }
       assert(pushedLocalLimits2.length === 1)
-      checkAnswer(df2, Seq(Row(null, 2, 1, 2), Row(null, 4, 2, 6)))
+      checkAnswer(df2, Seq(Row(2, 1, 2), Row(4, 2, 6)))
     }
   }
 }

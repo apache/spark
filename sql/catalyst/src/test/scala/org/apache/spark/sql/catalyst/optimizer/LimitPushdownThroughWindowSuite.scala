@@ -118,6 +118,61 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     }
   }
 
+  test("Push down to first window if order is different") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
+      .orderBy(c.asc)
+      .limit(2)
+      .select(a, b, c, $"rn".attr,
+        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Push down to first window if order column is different") {
+    val originalQuery = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"),
+        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b, c,
+        windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
+      .orderBy(c.asc)
+      .limit(2)
+      .select(a, b, c, $"rn".attr,
+        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
+  test("Push down if there is a Project between LocalLimit and Window") {
+    val originalQuery = testRelation
+      .select(a, b,
+        windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
+      .select(a, $"rn".attr)
+      .limit(2)
+    val correctAnswer = testRelation
+      .select(a, b)
+      .orderBy(b.desc)
+      .limit(2)
+      .select(a, windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"))
+
+    comparePlans(
+      Optimize.execute(originalQuery.analyze),
+      WithoutOptimize.execute(correctAnswer.analyze))
+  }
+
   test("Should not push down if partitionSpec is not empty") {
     val originalQuery = testRelation
       .select(a, b, c,
@@ -158,28 +213,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
         windowExpr(new Rank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rk"))
       .limit(20)
 
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(originalQuery.analyze))
-  }
-
-  test("Should not push down if order is different") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
-        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
-      .limit(2)
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(originalQuery.analyze))
-  }
-
-  test("Should not push down if order column is different") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, b.desc :: Nil, windowFrame)).as("rn"),
-        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
-      .limit(2)
     comparePlans(
       Optimize.execute(originalQuery.analyze),
       WithoutOptimize.execute(originalQuery.analyze))
