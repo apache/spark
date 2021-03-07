@@ -1255,6 +1255,16 @@ class SparkContext(object):
         conf.setAll(self._conf.getAll())
         return conf
 
+    def hadoopConfiguration(self):
+        """
+        Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
+
+        As it will be reused in all Hadoop RDDs, it's better not to modify it unless you
+        plan to set some global configurations for all Hadoop RDDs.
+        Return :class:`Configuration` object
+        """
+        return self._jsc.hadoopConfiguration()
+
     @property
     def resources(self):
         resources = {}
