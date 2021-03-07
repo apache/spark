@@ -32,9 +32,8 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
    * Generate the (non-equi) condition used to filter joined rows.
    * This is used in Inner, Left Semi and Left Anti joins.
    *
-   * @return Variable name for row of build side.
-   *         Generated code for condition.
-   *         Generated code for variables of build side.
+   * @return Tuple of variable name for row of build side, generated code for condition,
+   *         and generated code for variables of build side.
    */
   protected def getJoinCondition(
       ctx: CodegenContext,
