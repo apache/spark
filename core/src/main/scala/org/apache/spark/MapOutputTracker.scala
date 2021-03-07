@@ -371,7 +371,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * manager could use this method to get the information and figure out where the shuffle data
    * is located.
    * @param shuffleId
-   * @return An array of all map status objects.
+   * @return An array of all map status metadata objects.
    */
   def getAllMapOutputStatusMetadata(shuffleId: Int): Array[Serializable]
 
