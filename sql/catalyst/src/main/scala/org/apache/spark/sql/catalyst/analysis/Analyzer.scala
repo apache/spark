@@ -879,7 +879,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private def unwrapRelationPlan(plan: LogicalPlan): LogicalPlan = {
     EliminateSubqueryAliases(plan) match {
-      case v: View if v.isDataFrameTempView => v.child
+      case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       case other => other
     }
   }

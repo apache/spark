@@ -86,7 +86,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   }
 
   private def getTempViewRawPlan(plan: Option[LogicalPlan]): Option[LogicalPlan] = plan match {
-    case Some(v: View) if v.isDataFrameTempView => Some(v.child)
+    case Some(v: View) if v.isTempViewStoringAnalyzedPlan => Some(v.child)
     case other => other
   }
 

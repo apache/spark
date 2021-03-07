@@ -66,7 +66,7 @@ trait AnalysisTest extends PlanTest {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
       val actualPlan = getAnalyzer.executeAndCheck(inputPlan, new QueryPlanningTracker)
       val transformed = actualPlan transformUp {
-        case v: View if v.isDataFrameTempView => v.child
+        case v: View if v.isTempViewStoringAnalyzedPlan => v.child
       }
       comparePlans(transformed, expectedPlan)
     }

@@ -116,7 +116,7 @@ case class CreateViewCommand(
     if (viewType == LocalTempView) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       if (replace && needsToUncache(catalog.getRawTempView(name.table), aliasedPlan)) {
-        logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+        logDebug(s"Try to uncache ${name.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(name), name)
         CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
       }
@@ -131,7 +131,7 @@ case class CreateViewCommand(
             originalText))
       } else {
         TemporaryViewRelation(
-          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
+          prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan),
           Some(aliasedPlan))
       }
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
@@ -140,7 +140,7 @@ case class CreateViewCommand(
       val viewIdent = TableIdentifier(name.table, Option(db))
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
       if (replace && needsToUncache(catalog.getRawGlobalTempView(name.table), aliasedPlan)) {
-        logInfo(s"Try to uncache ${viewIdent.quotedString} before replacing.")
+        logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
         checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
         CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
       }
@@ -154,7 +154,7 @@ case class CreateViewCommand(
             originalText))
       } else {
         TemporaryViewRelation(
-          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
+          prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan),
           Some(aliasedPlan))
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
@@ -284,10 +284,16 @@ case class AlterViewAsCommand(
   }
 
   private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
+    checkCyclicViewReference(analyzedPlan, Seq(name), name)
+
+    logDebug(s"Try to uncache ${name.quotedString} before altering.")
+    CommandUtils.uncacheTableOrView(session, name.quotedString)
+
     val tableDefinition = if (conf.storeAnalyzedPlanForView) {
-      analyzedPlan
+      TemporaryViewRelation(
+        prepareTemporaryViewStoringAnalyzedPlan(name, analyzedPlan),
+        Some(analyzedPlan))
     } else {
-      checkCyclicViewReference(analyzedPlan, Seq(name), name)
       TemporaryViewRelation(
         prepareTemporaryView(
           name, session, analyzedPlan, analyzedPlan.schema, Some(originalText)))
@@ -301,6 +307,9 @@ case class AlterViewAsCommand(
     // Detect cyclic view reference on ALTER VIEW.
     val viewIdent = viewMeta.identifier
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
+
+    logDebug(s"Try to uncache ${viewIdent.quotedString} before altering.")
+    CommandUtils.uncacheTableOrView(session, viewIdent.quotedString)
 
     val newProperties = generateViewProperties(
       viewMeta.properties, session, analyzedPlan, analyzedPlan.schema.fieldNames)
@@ -623,10 +632,10 @@ object ViewHelper {
   }
 
   /**
-   * Returns a [[CatalogTable]] that contains information for the temporary view created
-   * from a dataframe.
+   * Returns a [[CatalogTable]] that contains information for the temporary view storing
+   * an analyzed plan.
    */
-  def prepareTemporaryViewFromDataFrame(
+  def prepareTemporaryViewStoringAnalyzedPlan(
       viewName: TableIdentifier,
       analyzedPlan: LogicalPlan): CatalogTable = {
     CatalogTable(
@@ -634,6 +643,6 @@ object ViewHelper {
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = analyzedPlan.schema,
-      properties = Map((VIEW_CREATED_FROM_DATAFRAME, "true")))
+      properties = Map((VIEW_STORING_ANALYZED_PLAN, "true")))
   }
 }
