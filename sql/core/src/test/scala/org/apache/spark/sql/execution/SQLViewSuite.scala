@@ -909,15 +909,4 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
-
-  test("terry") {
-    withTempView("v1") {
-      sql("CREATE TEMPORARY VIEW tv1 AS SELECT 1")
-      sql("CACHE TABLE tv1")
-      assert(spark.catalog.isCached("tv1"))
-      sql("ALTER VIEW tv1 as SELECT 2")
-      assert(!spark.catalog.isCached("tv1"))
-      sql("select * from tv1").show
-    }
-  }
 }
