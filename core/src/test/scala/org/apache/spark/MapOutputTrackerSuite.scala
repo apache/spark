@@ -72,9 +72,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
         ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0))),
           (BlockManagerId("b", "hostB", 1000),
             ArrayBuffer((ShuffleBlockId(10, 6, 0), size10000, 1)))).toSet)
-    val allStatuses = tracker.getAllMapOutputStatuses(10)
-    assert(allStatuses === Array(mapStatus1, mapStatus2))
     assert(0 == tracker.getNumCachedSerializedBroadcast)
+    val allStatusMetadata = tracker.getAllMapOutputStatusMetadata(10)
+    assert(0 == allStatusMetadata.size)
     tracker.stop()
     rpcEnv.shutdown()
   }
@@ -91,9 +91,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(10000L, 1000L), 6, Some(1001))
     tracker.registerMapOutput(10, 0, mapStatus1)
     tracker.registerMapOutput(10, 1, mapStatus2)
-    val allStatuses = tracker.getAllMapOutputStatuses(10)
-    assert(allStatuses === Array(mapStatus1, mapStatus2))
     assert(0 == tracker.getNumCachedSerializedBroadcast)
+    val allStatusMetadata = tracker.getAllMapOutputStatusMetadata(10)
+    assert(0 == allStatusMetadata.size)
     tracker.stop()
     rpcEnv.shutdown()
   }
@@ -112,12 +112,12 @@ class MapOutputTrackerSuite extends SparkFunSuite {
       Array(compressedSize10000, compressedSize1000), 6))
     assert(tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0).nonEmpty)
-    assert(tracker.getAllMapOutputStatuses(10).nonEmpty)
     assert(0 == tracker.getNumCachedSerializedBroadcast)
+    assert(0 == tracker.getAllMapOutputStatusMetadata(10).size)
     tracker.unregisterShuffle(10)
     assert(!tracker.containsShuffle(10))
     assert(tracker.getMapSizesByExecutorId(10, 0).isEmpty)
-    assert(tracker.getAllMapOutputStatuses(11).isEmpty)
+    assert(0 == tracker.getAllMapOutputStatusMetadata(11).size)
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -145,7 +145,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     // this should cause it to fail, and the scheduler will ignore the failure due to the
     // stage already being aborted.
     intercept[FetchFailedException] { tracker.getMapSizesByExecutorId(10, 1) }
-    intercept[FetchFailedException] { tracker.getAllMapOutputStatuses(10) }
+    intercept[FetchFailedException] { tracker.getAllMapOutputStatusMetadata(10) }
 
     tracker.stop()
     rpcEnv.shutdown()
@@ -176,12 +176,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     assert(mapWorkerTracker.getMapSizesByExecutorId(10, 0).toSeq ===
       Seq((BlockManagerId("a", "hostA", 1000),
         ArrayBuffer((ShuffleBlockId(10, 5, 0), size1000, 0)))))
-    val allMapOutputStatuses = mapWorkerTracker.getAllMapOutputStatuses(10)
-    assert(allMapOutputStatuses.length === 1)
-    assert(allMapOutputStatuses(0).location === mapStatus.location)
-    assert(allMapOutputStatuses(0).getSizeForBlock(0) === mapStatus.getSizeForBlock(0))
-    assert(allMapOutputStatuses(0).mapId === mapStatus.mapId)
-    assert(allMapOutputStatuses(0).metadata === mapStatus.metadata)
+    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
+    val allMapOutputStatusMetadata = mapWorkerTracker.getAllMapOutputStatusMetadata(10)
+    assert(0 == allMapOutputStatusMetadata.size)
 
     val masterTrackerEpochBeforeLossOfMapOutput = masterTracker.getEpoch
     masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000))
@@ -216,12 +213,9 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val mapStatus = MapStatus(BlockManagerId("a", "hostA", 1000), Array(1000L), 5,
       Some("metadata1"))
     masterTracker.registerMapOutput(10, 0, mapStatus)
-    val allMapOutputStatuses = mapWorkerTracker.getAllMapOutputStatuses(10)
-    assert(allMapOutputStatuses.length === 1)
-    assert(allMapOutputStatuses(0).location === mapStatus.location)
-    assert(allMapOutputStatuses(0).getSizeForBlock(0) === mapStatus.getSizeForBlock(0))
-    assert(allMapOutputStatuses(0).mapId === mapStatus.mapId)
-    assert(allMapOutputStatuses(0).metadata === mapStatus.metadata)
+    val allMapOutputStatusMetadata = mapWorkerTracker.getAllMapOutputStatusMetadata(10)
+    assert(allMapOutputStatusMetadata.size === 1)
+    assert(allMapOutputStatusMetadata(0) === mapStatus.metadata)
 
     masterTracker.stop()
     mapWorkerTracker.stop()
@@ -387,7 +381,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
                 (ShuffleBlockId(10, 6, 2), size1000, 1)))
         )
     )
-    assert(tracker.getAllMapOutputStatuses(10) === Array(mapStatus1, mapStatus2))
+    assert(0 == tracker.getAllMapOutputStatusMetadata(10))
 
     tracker.unregisterShuffle(10)
     tracker.stop()

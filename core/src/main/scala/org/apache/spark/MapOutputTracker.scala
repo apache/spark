@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, ObjectInputStream, ObjectOutputStream, Serializable}
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -27,9 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
-
 import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
-
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -368,13 +366,14 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       endPartition: Int): Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])]
 
   /**
-   * Get all map output statuses for the given shuffle id. This could be used by custom shuffle
-   * manager to get map output information. For example, remote shuffle service shuffle manager
-   * could use this method to get the information and figure out where the shuffle data is located.
+   * Get all map output status metadata for the given shuffle id. This could be used by custom
+   * shuffle manager to get map output information. For example, remote shuffle service shuffle
+   * manager could use this method to get the information and figure out where the shuffle data
+   * is located.
    * @param shuffleId
    * @return An array of all map status objects.
    */
-  def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus]
+  def getAllMapOutputStatusMetadata(shuffleId: Int): Array[Serializable]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -783,13 +782,13 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
-  def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus] = {
-    logDebug(s"Fetching all output statuses for shuffle $shuffleId")
+  def getAllMapOutputStatusMetadata(shuffleId: Int): Array[Serializable] = {
+    logDebug(s"Fetching all output status metadata for shuffle $shuffleId")
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
           MapOutputTracker.checkMapStatuses(statuses, shuffleId)
-          statuses.clone
+          statuses.flatMap(_.metadata)
         }
       case None => Array.empty
     }
@@ -848,8 +847,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     }
   }
 
-  override def getAllMapOutputStatuses(shuffleId: Int): Array[MapStatus] = {
-    logDebug(s"Fetching all output statuses for shuffle $shuffleId")
+  override def getAllMapOutputStatusMetadata(shuffleId: Int): Array[Serializable] = {
+    logDebug(s"Fetching all output status metadata for shuffle $shuffleId")
     val statuses = getStatuses(shuffleId, conf)
     try {
       MapOutputTracker.checkMapStatuses(statuses, shuffleId)
@@ -859,7 +858,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         mapStatuses.clear()
         throw e
     }
-    statuses
+    statuses.flatMap(_.metadata)
   }
 
   /**
