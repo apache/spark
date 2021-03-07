@@ -47,8 +47,10 @@ import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.util.ResetSystemProperties
 
-class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+    with ResetSystemProperties {
   import testImplicits._
 
   setupTestData()
@@ -3726,13 +3728,13 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
     val hiveVersion = "2.3.8"
-    // default transitive=false, only download specified jar
-    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion")
+    // transitive=false, only download specified jar
+    sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
     assert(sc.listJars()
       .exists(_.contains(s"org.apache.hive.hcatalog_hive-hcatalog-core-$hiveVersion.jar")))
 
-    // test download ivy URL jar return multiple jars
-    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0?transitive=true")
+    // default transitive=true, test download ivy URL jar return multiple jars
+    sql("ADD JAR ivy://org.scala-js:scalajs-test-interface_2.12:1.2.0")
     assert(sc.listJars().exists(_.contains("scalajs-library_2.12")))
     assert(sc.listJars().exists(_.contains("scalajs-test-interface_2.12")))
 
@@ -3860,7 +3862,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2.0)))
         }
       }
-      System.clearProperty("ivy.home")
     }
   }
 

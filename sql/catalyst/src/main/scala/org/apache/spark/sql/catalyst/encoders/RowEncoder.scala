@@ -53,6 +53,8 @@ import org.apache.spark.sql.types._
  *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
+ *   DayTimeIntervalType -> java.time.Duration
+ *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
  *   MapType -> scala.collection.Map
@@ -107,6 +109,8 @@ object RowEncoder {
       } else {
         createSerializerForSqlDate(inputObject)
       }
+
+    case DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
 
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
@@ -226,6 +230,7 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Date])
       }
+    case DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -280,6 +285,8 @@ object RowEncoder {
       } else {
         createDeserializerForSqlDate(input)
       }
+
+    case DayTimeIntervalType => createDeserializerForDuration(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 

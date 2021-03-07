@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, ZoneOffset}
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -348,5 +348,23 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val literalStr = Literal.create(timestamp).toString
       assert(literalStr === "2021-02-03 17:50:03.456")
     }
+  }
+
+  test("SPARK-34605: construct literals from java.time.Duration") {
+    Seq(
+      Duration.ofNanos(0),
+      Duration.ofSeconds(-1),
+      Duration.ofNanos(123456000),
+      Duration.ofDays(106751991),
+      Duration.ofDays(-106751991)).foreach { duration =>
+      checkEvaluation(Literal(duration), duration)
+    }
+  }
+
+  test("SPARK-34605: construct literals from arrays of java.time.Duration") {
+    val duration0 = Duration.ofDays(2).plusHours(3).plusMinutes(4)
+    checkEvaluation(Literal(Array(duration0)), Array(duration0))
+    val duration1 = Duration.ofHours(-1024)
+    checkEvaluation(Literal(Array(duration0, duration1)), Array(duration0, duration1))
   }
 }

@@ -170,7 +170,8 @@ object DataType {
 
   private val otherTypes = {
     Seq(NullType, DateType, TimestampType, BinaryType, IntegerType, BooleanType, LongType,
-      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType)
+      DoubleType, FloatType, ShortType, ByteType, StringType, CalendarIntervalType,
+      DayTimeIntervalType)
       .map(t => t.typeName -> t).toMap
   }
 

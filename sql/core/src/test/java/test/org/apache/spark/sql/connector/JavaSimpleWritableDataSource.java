@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.SimpleCounter;
 import org.apache.spark.sql.connector.TestingV2Source;
-import org.apache.spark.sql.connector.catalog.SessionConfigSupport;
 import org.apache.spark.sql.connector.catalog.SupportsWrite;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
@@ -50,12 +49,7 @@ import org.apache.spark.util.SerializableConfiguration;
  * Each task writes data to `target/_temporary/uniqueId/$jobId-$partitionId-$attemptNumber`.
  * Each job moves files from `target/_temporary/uniqueId/` to `target`.
  */
-public class JavaSimpleWritableDataSource implements TestingV2Source, SessionConfigSupport {
-
-  @Override
-  public String keyPrefix() {
-    return "javaSimpleWritableDataSource";
-  }
+public class JavaSimpleWritableDataSource implements TestingV2Source {
 
   static class MyScanBuilder extends JavaSimpleScanBuilder {
 
