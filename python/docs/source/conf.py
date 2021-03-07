@@ -177,7 +177,24 @@ html_css_files = [
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
 # directly to the root of the documentation.
-#html_extra_path = []
+redirects_dir = 'redirects'
+html_extra_path = [redirects_dir]
+
+os.makedirs(redirects_dir, exist_ok=True)
+for moved_page in ['', '.ml', '.mllib', '.sql', '.streaming']:
+    moved_file = f'pyspark{moved_page}.html'
+    redirect_file = os.path.join(redirects_dir, moved_file)
+    new_url = f'reference/{moved_file}'
+    with open(redirect_file, 'w') as fw:
+        fw.write(f'''<html>
+  <head>
+    <meta http-equiv="refresh" content="5; url={new_url}" />
+    <title>Page has been moved</title>
+  </head>
+  <body>
+    This page has been moved to <a href="{new_url}">a new location</a>, you will be redirected automatically.
+  </body>
+</html>''')
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
