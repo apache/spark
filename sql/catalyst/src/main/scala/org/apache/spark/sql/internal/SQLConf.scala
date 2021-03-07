@@ -1328,7 +1328,7 @@ object SQLConf {
     .doc("Whether to push down aggregates through manually inserted exchanges.")
     .version("3.2.0")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val STATE_STORE_PROVIDER_CLASS =
     buildConf("spark.sql.streaming.stateStore.providerClass")
