@@ -4077,8 +4077,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       val df1 = spark.sql(
         """
           |SELECT a, b, ROW_NUMBER() OVER(ORDER BY a, b) AS rn
-          |FROM t1
-          |LIMIT 3
+          |FROM t1 LIMIT 3
           |""".stripMargin)
       val pushedLocalLimits1 = df1.queryExecution.optimizedPlan.collect {
         case l @ LocalLimit(_, _: Sort) => l
@@ -4088,15 +4087,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
       val df2 = spark.sql(
         """
-          |SELECT b, RANK() OVER(ORDER BY a, b) AS rk, SUM(b) OVER(ORDER BY a, b) AS s
-          |FROM t1
-          |LIMIT 2
+          |SELECT b, RANK() OVER(ORDER BY a, b) AS rk, DENSE_RANK(b) OVER(ORDER BY a, b) AS s
+          |FROM t1 LIMIT 2
           |""".stripMargin)
       val pushedLocalLimits2 = df2.queryExecution.optimizedPlan.collect {
         case l @ LocalLimit(_, _: Sort) => l
       }
       assert(pushedLocalLimits2.length === 1)
-      checkAnswer(df2, Seq(Row(2, 1, 2), Row(4, 2, 6)))
+      checkAnswer(df2, Seq(Row(2, 1, 1), Row(4, 2, 2)))
     }
   }
 }

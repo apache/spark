@@ -195,23 +195,11 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
       WithoutOptimize.execute(originalQuery.analyze))
   }
 
-  test("Should not push down if it is not RankLike/RowNumber window function") {
+  test("Should not push down if it is not RankLike/RowNumberLike window function") {
     val originalQuery = testRelation
       .select(a, b, c,
         windowExpr(count(b), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .limit(20)
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(originalQuery.analyze))
-  }
-
-  test("Should not push down if more than one window function") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
-        windowExpr(new Rank(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rk"))
-      .limit(20)
+      .limit(2)
 
     comparePlans(
       Optimize.execute(originalQuery.analyze),

@@ -588,6 +588,13 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
+  private def isSupportPushdownThroughWindow(
+      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
+    case Alias(WindowExpression(_: RankLike | _: RowNumberLike,
+        WindowSpecDefinition(Nil, _, _)), _) => true
+    case _ => false
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Adding extra Limits below UNION ALL for children which are not Limit or do not have Limit
     // descendants whose maxRow is larger. This heuristic is valid assuming there does not exist any
@@ -625,14 +632,16 @@ object LimitPushDown extends Rule[LogicalPlan] {
 
     // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
     case LocalLimit(limitExpr @ IntegerLiteral(limit),
-        window @ Window(_, Nil, orderSpec, child))
-      if child.maxRows.forall(_ > limit) && limit < conf.topKSortFallbackThreshold =>
+        window @ Window(windowExpressions, Nil, orderSpec, child))
+      if isSupportPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
+        limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
     // There is a Project between LocalLimit and Window if they do not have the same output.
     case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
-        window @ Window(_, Nil, orderSpec, child)))
-      if child.maxRows.forall(_ > limit) && limit < conf.topKSortFallbackThreshold =>
+        window @ Window(windowExpressions, Nil, orderSpec, child)))
+      if isSupportPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
+        limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
   }
