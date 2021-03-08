@@ -327,9 +327,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    */
   def replace[T](col: String, replacement: Map[T, T]): DataFrame = {
     if (col == "*") {
-      replace0(df.columns.map { colName => s"`${colName}`" }, replacement)
+      replace0(df.logicalPlan.output, replacement)
     } else {
-      replace0(Seq(col), replacement)
+      replace(Seq(col), replacement)
     }
   }
 
@@ -352,14 +352,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * @since 1.3.1
    */
-  def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = replace0(cols, replacement)
-
-  private def replace0[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
-    if (replacement.isEmpty || cols.isEmpty) {
-      return df
-    }
-
-    val replaceableAttrs = AttributeSet(cols.map { colName =>
+  def replace[T](cols: Seq[String], replacement: Map[T, T]): DataFrame = {
+    val attrs = cols.map { colName =>
       // Check column name exists
       val attr = df.resolve(colName) match {
         case a: Attribute => a
@@ -367,7 +361,14 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
           s"Nested field ${colName} is not supported.")
       }
       attr
-    })
+    }
+    replace0(attrs, replacement)
+  }
+
+  private def replace0[T](attrs: Seq[Attribute], replacement: Map[T, T]): DataFrame = {
+    if (replacement.isEmpty || attrs.isEmpty) {
+      return df
+    }
 
     // Convert the NumericType in replacement map to DoubleType,
     // while leaving StringType, BooleanType and null untouched.
@@ -391,7 +392,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
     val output = df.queryExecution.analyzed.output
     val projections = output.map { attr =>
-      if (replaceableAttrs.contains(attr) && (attr.dataType == targetColumnType ||
+      if (attrs.contains(attr) && (attr.dataType == targetColumnType ||
         (attr.dataType.isInstanceOf[NumericType] && targetColumnType == DoubleType))) {
         replaceCol(attr, replacementMap)
       } else {
