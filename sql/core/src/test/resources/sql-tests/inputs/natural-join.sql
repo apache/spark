@@ -56,6 +56,8 @@ SELECT * FROM nt1 natural join nt2 natural join nt3;
 
 SELECT nt1.*, nt2.*, nt3.* FROM nt1 natural join nt2 natural join nt3;
 
+SELECT nt1.*, nt2.*, nt3.* FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k;
+
 SELECT * FROM nt1 natural join nt2 join nt3 on nt1.k = nt3.k;
 
 SELECT * FROM nt1 natural join nt2 join nt3 on nt2.k = nt3.k;
