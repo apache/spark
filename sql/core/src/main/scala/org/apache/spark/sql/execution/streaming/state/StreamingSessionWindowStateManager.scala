@@ -17,96 +17,192 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, JoinedRow, Literal, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateUnsafeRowJoiner}
-import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
+import org.apache.spark.sql.types.{ArrayType, StructType, TimestampType}
 
 /**
  * Base trait for state manager purposed to be used from streaming session window aggregation.
  */
 sealed trait StreamingSessionWindowStateManager extends Serializable {
 
-  /** Extract columns consisting key from input row, and return the new row for key columns. */
   def getKey(row: UnsafeRow): UnsafeRow
-
-  /** Returns session window start and end time for input row. */
-  def getSessionTimes(row: UnsafeRow): (Long, Long)
 
   /**
    * Returns a list of states for the key. These states are candidates for session window
    * merging.
    */
-  def getCandidateStates(key: UnsafeRow, startTime: Long, endTime: Long): Seq[UnsafeRow]
+  def getCandidateStates(key: UnsafeRow): Seq[UnsafeRow]
 
-  /** Put a new value for a non-null key to the target state store. */
-  def putSessionWindowStartTimes(key: UnsafeRow, startTimes: UnsafeRow): Unit
-
-  /** Put a new value for a non-null key to the target state store. */
-  def put(keyWithStartTime: UnsafeRow, value: UnsafeRow): Unit
+  def putCandidateStates(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit
 
   /**
    * Commit all the updates that have been made to the target state store, and return the
    * new version.
    */
-  def commit(): Long
-
-  /** Remove a single non-null key from the target state store. */
-  def remove(keyWithStartTime: UnsafeRow): Unit
-
-  /** Remove a single non-null key from the target state store. */
-  def removeSessionWindowStartTimes(key: UnsafeRow): Unit
+  def commit(): Unit
 }
 
-object StreamingSessionWindowStateManager extends Logging {
+object StreamingSessionWindowStateManager {
   val supportedVersions = Seq(1)
 
   def createStateManager(
-      keyExpressions: Seq[Attribute],
+      keyAttributes: Seq[Attribute],
+      inputValueAttributes: Seq[Attribute],
       inputRowAttributes: Seq[Attribute],
+      stateInfo: Option[StatefulOperatorStateInfo],
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration,
+      partitionId: Int,
       stateFormatVersion: Int): StreamingSessionWindowStateManager = {
     stateFormatVersion match {
-      case 1 => new StreamingSessionWindowStateManagerImplV1(keyExpressions, inputRowAttributes)
+      case 1 => new StreamingSessionWindowStateManagerImplV1(
+        keyAttributes, inputValueAttributes, inputRowAttributes,
+        stateInfo, storeConf, hadoopConf, partitionId)
       case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
     }
   }
 }
 
 abstract class StreamingSessionWindowStateManagerBaseImpl(
-    protected val keyExpressions: Seq[Attribute],
+    protected val keyAttributes: Seq[Attribute],
     protected val inputRowAttributes: Seq[Attribute]) extends StreamingSessionWindowStateManager {
 
-  @transient protected lazy val keyProjector =
-    GenerateUnsafeProjection.generate(keyExpressions, inputRowAttributes)
+  protected val keySchema = StructType.fromAttributes(keyAttributes)
 
-  @transient protected lazy val keyWithStartTimeProjector = {
-    val startTimeAttr = AttributeReference("_startTime", TimestampType)()
-    GenerateUnsafeProjection.generate(keyExpressions ++ Seq(startTimeAttr),
-      inputRowAttributes ++ Seq(startTimeAttr))
-  }
+  // Projection to generate key row from input row
+  protected lazy val keyProjector =
+    UnsafeProjection.create(keyAttributes, inputRowAttributes)
 
   override def getKey(row: UnsafeRow): UnsafeRow = keyProjector(row)
-
-  override def genKeyWithStartTime(row: UnsafeRow, startTime: Long): UnsafeRow = {
-    val rightRow = InternalRow(startTime)
-    val joinedRow = new JoinedRow(row, rightRow)
-    keyWithStartTimeProjector(joinedRow)
-  }
-
-  override def getSessionWindowStartTimes(store: ReadStateStore, key: UnsafeRow): Seq[Long] = {
-
-  }
 }
 
 class StreamingSessionWindowStateManagerImplV1(
     keyExpressions: Seq[Attribute],
-    inputRowAttributes: Seq[Attribute])
+    inputValueAttributes: Seq[Attribute],
+    inputRowAttributes: Seq[Attribute],
+    stateInfo: Option[StatefulOperatorStateInfo],
+    storeConf: StateStoreConf,
+    hadoopConf: Configuration,
+    partitionId: Int)
   extends StreamingSessionWindowStateManagerBaseImpl(keyExpressions, inputRowAttributes) {
 
+  /*
+  =====================================================
+                  Public methods
+  =====================================================
+   */
 
-  private val keySchema = StructType.fromAttributes(keyExpressions)
+  override def getCandidateStates(key: UnsafeRow): Seq[UnsafeRow] = {
+    keyToStartTimes.get(key).map { startTime =>
+      val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
+      keyWithStartTimeToValue.get(keyWithStartTime)
+    }
+  }
+
+  override def putCandidateStates(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit = {
+    val newStartTimes = (keyToStartTimes.get(key) ++ Seq(startTime)).sorted
+    keyToStartTimes.put(key, newStartTimes)
+
+    val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
+    keyWithStartTimeToValue.put(keyWithStartTime, value)
+  }
+
+  override def commit(): Unit = {
+    keyToStartTimes.commit()
+    keyWithStartTimeToValue.commit()
+  }
+
+  /*
+  =====================================================
+            Private methods and inner classes
+  =====================================================
+   */
 
   private val keyToStartTimes = new KeyToStartTimesStore()
   private val keyWithStartTimeToValue = new KeyWithStartTimeToValueStore()
+
+  private class KeyAndStartTimes(var key: UnsafeRow = null, var startTimes: Seq[Long] = Seq.empty) {
+    def withNew(newKey: UnsafeRow, startTimes: Seq[Long]): this.type = {
+      this.key = newKey
+      this.startTimes = startTimes
+      this
+    }
+  }
+
+  private class KeyToStartTimesStore extends StateStoreHandler {
+    private val startTimesSchema = new StructType().add("startTime", ArrayType(TimestampType))
+    private val startTimesToUnsafeRow = UnsafeProjection.create(startTimesSchema)
+    private val valueRow = new SpecificInternalRow(startTimesSchema)
+    protected val stateStore: StateStore = getStateStore(keySchema, startTimesSchema,
+      "KeyToStartTimeStore", stateInfo, partitionId,
+      storeConf, hadoopConf)
+
+    /** Get the start time list for the key */
+    def get(key: UnsafeRow): Seq[Long] = {
+      val startTimesRow = stateStore.get(key)
+      if (startTimesRow != null) {
+        startTimesRow.getArray(0).toSeq(TimestampType)
+      } else {
+        Seq.empty
+      }
+    }
+
+    /** Set the start time list for the key */
+    def put(key: UnsafeRow, startTimes: Seq[Long]): Unit = {
+      require(startTimes.nonEmpty)
+      val array = ArrayData.toArrayData(startTimes.toArray)
+      valueRow.update(0, array)
+      stateStore.put(key, startTimesToUnsafeRow(valueRow))
+    }
+
+    def remove(key: UnsafeRow): Unit = {
+      stateStore.remove(key)
+    }
+
+    def iterator: Iterator[KeyAndStartTimes] = {
+      val keyAndStartTimes = new KeyAndStartTimes()
+      stateStore.getRange(None, None).map { case pair =>
+        keyAndStartTimes.withNew(pair.key, pair.value.getArray(0).toSeq(TimestampType))
+      }
+    }
+  }
+
+  private class KeyWithStartTimeToValueStore extends StateStoreHandler {
+
+    private val keyWithStartTimeExprs = keyAttributes :+ Literal(1L, TimestampType)
+    private val keyWithStartTimeSchema = keySchema.add("_startTime", TimestampType)
+    private val startTimeOrdinalInKeyWithStartTimeRow = keyAttributes.size
+
+    // Projection to generate (key + start time) row from key row
+    protected lazy val keyWithStartTimeProjector =
+      UnsafeProjection.create(keyWithStartTimeExprs, keyAttributes)
+
+    protected val stateStore = getStateStore(keyWithStartTimeSchema,
+      inputValueAttributes.toStructType, "keyWithStartTimeToValue",
+      stateInfo, partitionId, storeConf, hadoopConf)
+
+    /** Get the value for the key */
+    def get(keyWithStartTime: UnsafeRow): UnsafeRow = {
+      stateStore.get(keyWithStartTime)
+    }
+
+    def put(keyWithStartTime: UnsafeRow, value: UnsafeRow): Unit = {
+      stateStore.put(keyWithStartTime, value)
+    }
+
+    /**
+     * Given the key row and start time, returns a row with key and start time.
+     */
+    def genKeyWithStartTime(key: UnsafeRow, startTime: Long): UnsafeRow = {
+      val row = keyWithStartTimeProjector(key)
+      row.setLong(startTimeOrdinalInKeyWithStartTimeRow, startTime)
+      row
+    }
+  }
 }
+
+
