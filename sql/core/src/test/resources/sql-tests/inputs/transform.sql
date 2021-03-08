@@ -183,3 +183,9 @@ SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
     NULL DEFINED AS 'NULL'
   FROM t
 ) tmp;
+
+-- SPARK-34634: self join using CTE contains transform
+WITH temp AS (
+  SELECT TRANSFORM(a) USING 'cat' AS (b string) FROM t
+)
+SELECT t1.b FROM temp t1 JOIN temp t2 ON t1.b = t2.b
