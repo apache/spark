@@ -694,7 +694,7 @@ package object config {
   private[spark] val KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE =
     ConfigBuilder("spark.kerberos.renewal.exclude.hadoopFileSystems")
       .doc("The list of Hadoop filesystem URLs whose hosts will be excluded from " +
-        "delegation token renewal.")
+        "delegation token renewal. This is known to work under YARN for now.")
       .version("3.2.0")
       .stringConf
       .toSequence

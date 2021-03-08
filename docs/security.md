@@ -844,7 +844,7 @@ The following options provides finer-grained control for this feature:
   <td>
     A comma-separated list of Hadoop filesystems for whose hosts will be excluded from from delegation
     token renewal. For example, <code>spark.kerberos.renewal.exclude.hadoopFileSystems=hdfs://nn1.com:8032,
-    hdfs://nn2.com:8032</code>.
+    hdfs://nn2.com:8032</code>. This is known to work under YARN for now.
   </td>
   <td>3.2.0</td>
 </tr>
