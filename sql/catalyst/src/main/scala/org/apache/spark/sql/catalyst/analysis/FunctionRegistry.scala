@@ -26,10 +26,10 @@ import scala.reflect.ClassTag
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.xml._
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
@@ -43,7 +43,9 @@ import org.apache.spark.sql.types._
  *   2) the database name is always case-sensitive here, callers are responsible to
  *      format the database name w.r.t. case-sensitive config.
  */
-trait FunctionRegistry {
+trait FunctionRegistryBase[T] {
+
+  type FunctionBuilder = Seq[Expression] => T
 
   final def registerFunction(name: FunctionIdentifier, builder: FunctionBuilder): Unit = {
     val info = new ExpressionInfo(
@@ -64,7 +66,7 @@ trait FunctionRegistry {
   }
 
   @throws[AnalysisException]("If function does not exist")
-  def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression
+  def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T
 
   /* List all of the registered function names. */
   def listFunction(): Seq[FunctionIdentifier]
@@ -83,15 +85,12 @@ trait FunctionRegistry {
 
   /** Clear all registered functions. */
   def clear(): Unit
-
-  /** Create a copy of this registry with identical functions as this registry. */
-  override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
 }
 
-class SimpleFunctionRegistry extends FunctionRegistry with Logging {
+trait SimpleFunctionRegistryBase[T] extends FunctionRegistryBase[T] with Logging {
 
   @GuardedBy("this")
-  private val functionBuilders =
+  protected val functionBuilders =
     new mutable.HashMap[FunctionIdentifier, (ExpressionInfo, FunctionBuilder)]
 
   // Resolution of the function name is always case insensitive, but the database name
@@ -113,7 +112,7 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
     }
   }
 
-  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
     val func = synchronized {
       functionBuilders.get(normalizeFuncName(name)).map(_._2).getOrElse {
         throw QueryCompilationErrors.functionUndefinedError(name)
@@ -142,27 +141,19 @@ class SimpleFunctionRegistry extends FunctionRegistry with Logging {
   override def clear(): Unit = synchronized {
     functionBuilders.clear()
   }
-
-  override def clone(): SimpleFunctionRegistry = synchronized {
-    val registry = new SimpleFunctionRegistry
-    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
-      registry.registerFunction(name, info, builder)
-    }
-    registry
-  }
 }
 
 /**
  * A trivial catalog that returns an error when a function is requested. Used for testing when all
  * functions are already filled in and the analyzer needs only to resolve attribute references.
  */
-object EmptyFunctionRegistry extends FunctionRegistry {
+trait EmptyFunctionRegistryBase[T] extends FunctionRegistryBase[T] {
   override def registerFunction(
       name: FunctionIdentifier, info: ExpressionInfo, builder: FunctionBuilder): Unit = {
     throw new UnsupportedOperationException
   }
 
-  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): T = {
     throw new UnsupportedOperationException
   }
 
@@ -185,10 +176,33 @@ object EmptyFunctionRegistry extends FunctionRegistry {
   override def clear(): Unit = {
     throw new UnsupportedOperationException
   }
+}
+
+trait FunctionRegistry extends FunctionRegistryBase[Expression] {
+
+  /** Create a copy of this registry with identical functions as this registry. */
+  override def clone(): FunctionRegistry = throw new CloneNotSupportedException()
+}
+
+class SimpleFunctionRegistry
+    extends SimpleFunctionRegistryBase[Expression]
+    with FunctionRegistry {
+
+  override def clone(): SimpleFunctionRegistry = synchronized {
+    val registry = new SimpleFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
+    }
+    registry
+  }
+}
+
+object EmptyFunctionRegistry
+    extends EmptyFunctionRegistryBase[Expression]
+    with FunctionRegistry {
 
   override def clone(): FunctionRegistry = this
 }
-
 
 object FunctionRegistry {
 
@@ -704,4 +718,151 @@ object FunctionRegistry {
     }
     (name, (info, outerBuilder))
   }
+}
+
+trait TableFunctionRegistry extends FunctionRegistryBase[LogicalPlan] {
+
+  /** Create a copy of this registry with identical functions as this registry. */
+  override def clone(): TableFunctionRegistry = throw new CloneNotSupportedException()
+}
+
+class SimpleTableFunctionRegistry
+    extends SimpleFunctionRegistryBase[LogicalPlan]
+    with TableFunctionRegistry {
+
+  override def clone(): SimpleTableFunctionRegistry = synchronized {
+    val registry = new SimpleTableFunctionRegistry
+    functionBuilders.iterator.foreach { case (name, (info, builder)) =>
+      registry.registerFunction(name, info, builder)
+    }
+    registry
+  }
+}
+
+object EmptyTableFunctionRegistry
+    extends EmptyFunctionRegistryBase[LogicalPlan]
+    with TableFunctionRegistry {
+
+  override def clone(): TableFunctionRegistry = this
+}
+
+object TableFunctionRegistry {
+
+  type TableFunctionBuilder = Seq[Expression] => LogicalPlan
+
+  /**
+   * A TVF maps argument lists to resolver functions that accept those arguments. Using a map
+   * here allows for function overloading.
+   */
+  private type TVF = Map[ArgumentList, Seq[Any] => LogicalPlan]
+
+  /**
+   * List of argument names and their types, used to declare a function.
+   */
+  private case class ArgumentList(args: (String, DataType)*) {
+    /**
+     * Try to cast the expressions to satisfy the expected types of this argument list. If there
+     * are any types that cannot be casted, then None is returned.
+     */
+    def implicitCast(values: Seq[Expression]): Option[Seq[Expression]] = {
+      if (args.length == values.length) {
+        val casted = values.zip(args).map { case (value, (_, expectedType)) =>
+          TypeCoercion.implicitCast(value, expectedType)
+        }
+        if (casted.forall(_.isDefined)) {
+          return Some(casted.map(_.get))
+        }
+      }
+      None
+    }
+
+    override def toString: String = {
+      args.map { a =>
+        s"${a._1}: ${a._2.typeName}"
+      }.mkString(", ")
+    }
+  }
+
+  /**
+   * TVF builder.
+   */
+  private def tvf(args: (String, DataType)*)(pf: PartialFunction[Seq[Any], LogicalPlan])
+      : (ArgumentList, Seq[Any] => LogicalPlan) = {
+    (ArgumentList(args: _*),
+      pf orElse {
+        case arguments =>
+          // This is caught again by the apply function and rethrow with richer information about
+          // position, etc, for a better error message.
+          throw new AnalysisException(
+            "Invalid arguments for resolved function: " + arguments.mkString(", "))
+      })
+  }
+
+  private def logicalPlan[T <: LogicalPlan : ClassTag](name: String, function: TVF)
+      : (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val argLists = function.keys.map(_.toString).toSeq.sorted.map(x => s"$name($x)").mkString("\n")
+    val builder = (expressions: Seq[Expression]) => {
+      val argTypes = expressions.map(_.dataType.typeName).mkString(", ")
+      function.flatMap { case (argList, resolver) =>
+        argList.implicitCast(expressions) match {
+          case Some(casted) =>
+            try {
+              Some(resolver(casted.map(_.eval())))
+            } catch {
+              case _: AnalysisException =>
+                throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
+                  name, argLists, argTypes)
+            }
+          case _ => None
+        }
+      }.headOption.getOrElse {
+        throw QueryCompilationErrors.cannotApplyTableValuedFunctionError(
+          name, argLists, argTypes)
+      }
+    }
+    val clazz = scala.reflect.classTag[T].runtimeClass
+    val info = new ExpressionInfo(clazz.getCanonicalName, null, name, argLists,
+      "", "", "", "", "", "")
+    (name, (info, builder))
+  }
+
+  private val range: TVF = Map(
+    /* range(end) */
+    tvf("end" -> LongType) { case Seq(end: Long) =>
+      Range(0, end, 1, None)
+    },
+
+    /* range(start, end) */
+    tvf("start" -> LongType, "end" -> LongType) { case Seq(start: Long, end: Long) =>
+      Range(start, end, 1, None)
+    },
+
+    /* range(start, end, step) */
+    tvf("start" -> LongType, "end" -> LongType, "step" -> LongType) {
+      case Seq(start: Long, end: Long, step: Long) =>
+        Range(start, end, step, None)
+    },
+
+    /* range(start, end, step, numPartitions) */
+    tvf("start" -> LongType, "end" -> LongType, "step" -> LongType,
+      "numPartitions" -> IntegerType) {
+      case Seq(start: Long, end: Long, step: Long, numPartitions: Int) =>
+        Range(start, end, step, Some(numPartitions))
+    }
+  )
+
+  val logicalPlans: Map[String, (ExpressionInfo, TableFunctionBuilder)] = Map(
+    logicalPlan[Range]("range", range)
+  )
+
+  val builtin: SimpleTableFunctionRegistry = {
+    val fr = new SimpleTableFunctionRegistry
+    logicalPlans.foreach {
+      case (name, (info, builder)) =>
+        fr.registerFunction(FunctionIdentifier(name), info, builder)
+    }
+    fr
+  }
+
+  val functionSet: Set[FunctionIdentifier] = builtin.listFunction().toSet
 }

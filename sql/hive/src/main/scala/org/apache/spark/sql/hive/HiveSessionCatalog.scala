@@ -29,10 +29,11 @@ import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, Gener
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
@@ -43,6 +44,7 @@ private[sql] class HiveSessionCatalog(
     globalTempViewManagerBuilder: () => GlobalTempViewManager,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
+    tableFunctionRegistry: TableFunctionRegistry,
     hadoopConf: Configuration,
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader)
@@ -50,6 +52,7 @@ private[sql] class HiveSessionCatalog(
       externalCatalogBuilder,
       globalTempViewManagerBuilder,
       functionRegistry,
+      tableFunctionRegistry,
       hadoopConf,
       parser,
       functionResourceLoader) {
@@ -177,6 +180,14 @@ private[sql] class HiveSessionCatalog(
           functionRegistry.lookupFunction(functionIdentifier, children)
         }
     }
+  }
+
+  override def lookupTableFunction(
+      name: FunctionIdentifier,
+      children: Seq[Expression]): LogicalPlan = {
+    val database = name.database.map(formatDatabaseName)
+    val funcName = name.copy(database = database)
+    super.lookupTableFunction(funcName, children)
   }
 
   // TODO Removes this method after implementing Spark native "histogram_numeric".

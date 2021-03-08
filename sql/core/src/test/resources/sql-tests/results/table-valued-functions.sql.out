@@ -71,10 +71,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 error: table-valued function range with alternatives:
- (end: long)
- (start: long, end: long)
- (start: long, end: long, step: long)
- (start: long, end: long, step: long, numPartitions: integer)
+range(end: long)
+range(start: long, end: long)
+range(start: long, end: long, step: long)
+range(start: long, end: long, step: long, numPartitions: integer)
 cannot be applied to: (integer, integer, integer, integer, integer); line 1 pos 14
 
 
@@ -85,10 +85,10 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 error: table-valued function range with alternatives:
- (end: long)
- (start: long, end: long)
- (start: long, end: long, step: long)
- (start: long, end: long, step: long, numPartitions: integer)
+range(end: long)
+range(start: long, end: long)
+range(start: long, end: long, step: long)
+range(start: long, end: long, step: long, numPartitions: integer)
 cannot be applied to: (integer, null); line 1 pos 14
 
 

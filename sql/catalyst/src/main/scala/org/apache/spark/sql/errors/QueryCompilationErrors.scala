@@ -957,6 +957,7 @@ private[spark] object QueryCompilationErrors {
       "partitioning use REPARTITION_BY_RANGE instead.")
   }
 
+<<<<<<< HEAD
   def partitionColumnNotSpecifiedError(format: String, partitionColumn: String): Throwable = {
     new AnalysisException(s"Failed to resolve the schema for $format for " +
       s"the partition column: $partitionColumn. It must be specified manually.")
@@ -1297,5 +1298,11 @@ private[spark] object QueryCompilationErrors {
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
     throw new AnalysisException("The number of partitions can't be specified with unspecified" +
       " distribution. Invalid writer requirements detected.")
+  }
+
+  def cannotApplyTableValuedFunctionError(
+      name: String, argLists: String, argTypes: String): Throwable = {
+    new AnalysisException(s"error: table-valued function $name with alternatives:\n$argLists\n" +
+      s"cannot be applied to: ($argTypes)")
   }
 }
