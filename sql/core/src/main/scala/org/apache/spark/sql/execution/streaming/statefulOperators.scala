@@ -20,10 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.sql.Timestamp
 import java.util.UUID
 import java.util.concurrent.TimeUnit._
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,9 +34,10 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
+import org.apache.spark.sql.internal.{SQLConf, SessionState}
 import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CompletionIterator, NextIterator, Utils}
+import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration, Utils}
 
 
 /** Used to identify the state store for a given operator. */
@@ -454,25 +453,33 @@ case class SessionWindowStateStoreRestoreExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
 
+  import StreamingSessionWindowHelper._
+
+  private val storeConf = new StateStoreConf(sqlContext.conf)
+  private val hadoopConfBcast = sparkContext.broadcast(
+    new SerializableConfiguration(SessionState.newHadoopConf(
+      sparkContext.hadoopConfiguration, sqlContext.conf)))
+
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     assert(keyExpressions.nonEmpty, "Grouping key must be specified when using sessionWindow")
 
-    // Set stateStore value type as a list of child.output.
-    val childOutputSchema = child.output.toStructType
-    val stateValueSchema = new StructType().add("values", ArrayType(childOutputSchema))
-    child.execute().mapPartitionsWithStateStore(
+    val stateVersion = conf.getConf(SQLConf.STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION)
+    val stateStoreCoord = sqlContext.sessionState.streamingQueryManager.stateStoreCoordinator
+
+    child.execute().mapPartitionsWithStateStoreAwareRDD(
       getStateInfo,
-      keyExpressions.toStructType,
-      stateValueSchema,
-      indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
-      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+      StreamingSessionWindowStateManager.allStateStoreNames(stateVersion),
+      stateStoreCoord) { case (partitionId, iter) =>
+
+      val stateStoreManager = StreamingSessionWindowStateManager.createStateManager(
+        keyExpressions, child.output, child.output, stateInfo, storeConf,
+        hadoopConfBcast.value.value, partitionId, stateVersion)
+
       var preKey: UnsafeRow = null
       iter.flatMap { row =>
-        val key = getKey(row)
-        var savedState: UnsafeRow = null
+        val key = stateStoreManager.getKey(row)
+        var savedState: Seq[UnsafeRow] = null
 
         // For one key, we only get once from state store.
         // e.g. the iterator may contains elements below
@@ -484,7 +491,7 @@ case class SessionWindowStateStoreRestoreExec(
         // for the key a of different window, we only got once
         // from statestore, otherwise will get error result
         if (preKey == null || key != preKey) {
-          savedState = store.get(key)
+          savedState = stateStoreManager.getCandidateStates(key)
 
           // must copy the key. The key is a UnsafeRow and pointer to some memory
           // when next `getKey` invoke the value of the memory will change, so the value of
@@ -500,8 +507,7 @@ case class SessionWindowStateStoreRestoreExec(
           numOutputRows += 1
           Seq(row)
         } else {
-          val outputs = savedState.getArray(0)
-            .toArray[UnsafeRow](childOutputSchema).toIterator.toSeq :+ row
+          val outputs = savedState :+ row
           numOutputRows += outputs.size
           outputs
         }

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
@@ -29,7 +30,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType, TimestampType}
  */
 sealed trait StreamingSessionWindowStateManager extends Serializable {
 
-  def getKey(row: UnsafeRow): UnsafeRow
+  def getKey(row: InternalRow): UnsafeRow
 
   /**
    * Returns a list of states for the key. These states are candidates for session window
@@ -38,6 +39,8 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
   def getCandidateStates(key: UnsafeRow): Seq[UnsafeRow]
 
   def putCandidateStates(key: UnsafeRow, startTime: Long, value: UnsafeRow): Unit
+
+  def allStateStoreNames(): Seq[String]
 
   /**
    * Commit all the updates that have been made to the target state store, and return the
@@ -65,6 +68,13 @@ object StreamingSessionWindowStateManager {
       case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
     }
   }
+
+  def allStateStoreNames(stateFormatVersion: Int): Seq[String] = {
+    stateFormatVersion match {
+      case 1 => Seq("KeyToStartTimeStore", "keyWithStartTimeToValue")
+      case _ => throw new IllegalArgumentException(s"Version $stateFormatVersion is invalid")
+    }
+  }
 }
 
 abstract class StreamingSessionWindowStateManagerBaseImpl(
@@ -77,7 +87,7 @@ abstract class StreamingSessionWindowStateManagerBaseImpl(
   protected lazy val keyProjector =
     UnsafeProjection.create(keyAttributes, inputRowAttributes)
 
-  override def getKey(row: UnsafeRow): UnsafeRow = keyProjector(row)
+  override def getKey(row: InternalRow): UnsafeRow = keyProjector(row)
 }
 
 class StreamingSessionWindowStateManagerImplV1(
@@ -110,6 +120,9 @@ class StreamingSessionWindowStateManagerImplV1(
     val keyWithStartTime = keyWithStartTimeToValue.genKeyWithStartTime(key, startTime)
     keyWithStartTimeToValue.put(keyWithStartTime, value)
   }
+
+  override def allStateStoreNames(): Seq[String] =
+    Seq("KeyToStartTimeStore", "keyWithStartTimeToValue")
 
   override def commit(): Unit = {
     keyToStartTimes.commit()
