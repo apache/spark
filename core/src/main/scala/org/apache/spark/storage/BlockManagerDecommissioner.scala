@@ -100,8 +100,9 @@ private[storage] class BlockManagerDecommissioner(
         try {
           val (shuffleBlockInfo, retryCount) = nextShuffleBlockToMigrate()
           val blocks = bm.migratableResolver.getMigrationBlocks(shuffleBlockInfo)
+          // We only migrate a shuffle block when both index file and data file exist.
           if (blocks.size < 2) {
-            logInfo(s"Ignore empty shuffle block $shuffleBlockInfo")
+            logInfo(s"Ignore deleted shuffle block $shuffleBlockInfo")
           } else {
             logInfo(s"Got migration sub-blocks $blocks. Trying to migrate $shuffleBlockInfo " +
               s"to $peer ($retryCount / $maxReplicationFailuresForDecommission)")
