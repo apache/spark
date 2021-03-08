@@ -79,7 +79,9 @@ object DataTypeTestUtils {
     BooleanType,
     DateType,
     StringType,
-    TimestampType
+    TimestampType,
+    DayTimeIntervalType,
+    YearMonthIntervalType
   )
 
   /**
