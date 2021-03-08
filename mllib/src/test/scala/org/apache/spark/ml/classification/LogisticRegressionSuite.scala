@@ -89,7 +89,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     binaryDatasetWithSmallVar = {
       val nPoints = 10000
       val coefficients = Array(-0.57997, 0.912083, -0.371077, -0.819866, 2.688191)
-      val xMean = Array(5.843, 3.057, 3.758, 1.199)
+      val xMean = Array(5.843, 3.057, 3.758, 10.199)
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.0001)
 
       val testData =
@@ -816,14 +816,17 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     assert(model6.coefficients ~= coefficientsExpected5 relTol 1E-3)
   }
 
-  test("SPARK-34448: binary logistic regression with intercept with features with small var") {
+  test("SPARK-34448: binary logistic regression with intercept, with features with small var") {
     val trainer1 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
       .setWeightCol("weight")
     val trainer2 = new LogisticRegression().setFitIntercept(true).setStandardization(false)
       .setWeightCol("weight")
+    val trainer3 = new LogisticRegression().setFitIntercept(true).setStandardization(true)
+      .setElasticNetParam(0.0001).setRegParam(0.5).setWeightCol("weight")
 
     val model1 = trainer1.fit(binaryDatasetWithSmallVar)
     val model2 = trainer2.fit(binaryDatasetWithSmallVar)
+    val model3 = trainer3.fit(binaryDatasetWithSmallVar)
 
     /*
       Use the following R code to load the data and train the model using glmnet package.
@@ -837,14 +840,25 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
       coefficients
       5 x 1 sparse Matrix of class "dgCMatrix"
                           s0
-      (Intercept) -0.1609517
-      data.V3     -0.5843178
-      data.V4      0.8936137
-      data.V5     -0.3820793
-      data.V6      1.6347469
+      (Intercept) -348.2955812
+      data.V3       -0.8145023
+      data.V4        0.8979252
+      data.V5       -0.6082397
+      data.V6       33.8070109
+
+      coefficientsStd = coef(glmnet(features, label, weights=w, family="binomial", alpha = 0.0001,
+      lambda = 0.5, standardize=T))
+      coefficientsStd
+      5 x 1 sparse Matrix of class "dgCMatrix"
+                            s0
+      (Intercept) -7.403746510
+      data.V3     -0.001443382
+      data.V4      0.001454470
+      data.V5     -0.001097110
+      data.V6      0.048747722
      */
-    val coefficientsR = Vectors.dense(-0.5843178, 0.8936137, -0.3820793, 1.6347469)
-    val interceptR = -0.1609517
+    val coefficientsR = Vectors.dense(-0.8145023, 0.8979252, -0.6082397, 33.8070109)
+    val interceptR = -348.2955812
 
     assert(model1.intercept ~== interceptR relTol 1E-3)
     assert(model1.coefficients ~= coefficientsR relTol 1E-3)
@@ -852,6 +866,12 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     // Without regularization, with or without standardization will converge to the same solution.
     assert(model2.intercept ~== interceptR relTol 1E-3)
     assert(model2.coefficients ~= coefficientsR relTol 1E-3)
+
+    val coefficientsR2 = Vectors.dense(-0.001443382, 0.001454470, -0.001097110, 0.048747722)
+    val interceptR2 = -7.403746510
+
+    assert(model3.intercept ~== interceptR2 relTol 1E-3)
+    assert(model3.coefficients ~= coefficientsR2 relTol 1E-3)
   }
 
   test("binary logistic regression without intercept without regularization") {
