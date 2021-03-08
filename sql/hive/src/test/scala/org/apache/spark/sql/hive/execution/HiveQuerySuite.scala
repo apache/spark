@@ -859,26 +859,42 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("ADD ARCHIVE command") {
     withTempDir { dir =>
-      val file = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
       val zipFile = new File(dir, "test.zip")
-      TestUtils.createJar(Seq(file), zipFile)
+      val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+      // Emulate unsupported archive format with .bz2 suffix.
+      val unsupportedArchive = new File(dir, "test.bz2")
+
+      TestUtils.createJar(Seq(file1), zipFile)
+      TestUtils.createJar(Seq(file2), unsupportedArchive)
+
       sql(s"ADD ARCHIVE ${zipFile.getAbsolutePath}#foo")
+      sql(s"ADD ARCHIVE ${unsupportedArchive.getAbsolutePath}#bar")
 
       val checkAddArchive =
         sparkContext.parallelize(
           Seq(
             "foo",
-            s"foo/${file.getName}"), 1).map { name =>
+            s"foo/${file1.getName}",
+            "nonexistence",
+            "bar",
+            s"bar/${file2.getName}"), 1).map { name =>
           (name, new File(SparkFiles.get(name)).canRead)
         }.collect()
 
       assert(checkAddArchive(0) === ("foo", true))
-      assert(checkAddArchive(1) === (s"foo/${file.getName}", true))
+      assert(checkAddArchive(1) === (s"foo/${file1.getName}", true))
+      assert(checkAddArchive(2) === ("nonexistence", false))
+      assert(checkAddArchive(3) === ("bar", true))
+      assert(checkAddArchive(4) === (s"bar/${file2.getName}", false))
       assert(sql("list archives").
         filter(_.getString(0).contains(s"${zipFile.getAbsolutePath}")).count() > 0)
       assert(sql("list archive").
         filter(_.getString(0).contains(s"${zipFile.getAbsolutePath}")).count() > 0)
       assert(sql(s"list archive ${zipFile.getAbsolutePath}").count() == 1)
+      assert(sql(s"list archives ${zipFile.getAbsolutePath} nonexistence").count() == 1)
+      assert(sql(s"list archives ${zipFile.getAbsolutePath} " +
+        s"${unsupportedArchive.getAbsolutePath}").count() == 2)
     }
   }
 
