@@ -26,7 +26,8 @@ license: |
 ### Syntax
 
 ```sql
-LIST JAR
+LIST { JAR | JARS } file_name [ ... ]
+
 ```
 
 ### Examples

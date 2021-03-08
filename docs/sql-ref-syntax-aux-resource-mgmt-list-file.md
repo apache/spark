@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-LIST FILE
+LIST { FILE | FILES } file_name [ ... ]
 ```
 
 ### Examples
