@@ -461,7 +461,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       Row(0, 0L, 0.toShort, 0.toByte, Float.NaN, Double.NaN) :: Nil)
   }
 
-  test("SPARK-34417 - test fillMap() for column with a dot in the name") {
+  test("SPARK-34417: test fillMap() for column with a dot in the name") {
     val na = "n/a"
     checkAnswer(
       Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("ColWith.Dot", "Col")
@@ -469,7 +469,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
   }
 
-  test("SPARK-34417 - test fillMap() for qualified-column with a dot in the name") {
+  test("SPARK-34417: test fillMap() for qualified-column with a dot in the name") {
     val na = "n/a"
     checkAnswer(
       Seq(("abc", 23L), ("def", 44L), (null, 0L)).toDF("ColWith.Dot", "Col").as("testDF")
@@ -477,7 +477,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
   }
 
-  test("SPARK-34417 - test fillMap() for column without a dot in the name" +
+  test("SPARK-34417: test fillMap() for column without a dot in the name" +
     " and dataframe with another column having a dot in the name") {
     val na = "n/a"
     checkAnswer(
@@ -486,21 +486,21 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
       Row("abc", 23) :: Row("def", 44L) :: Row(na, 0L) :: Nil)
   }
 
-  test("SPARK-34649 - replace value of a column with dot in the name") {
+  test("SPARK-34649: replace value of a column with dot in the name") {
     checkAnswer(
       Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
         .na.replace("`Col.1`", Map( "n/a" -> "unknown")),
       Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
   }
 
-  test("SPARK-34649 - replace value of a qualified-column with dot in the name") {
+  test("SPARK-34649: replace value of a qualified-column with dot in the name") {
     checkAnswer(
       Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2").as("testDf")
         .na.replace("testDf.`Col.1`", Map( "n/a" -> "unknown")),
       Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
   }
 
-  test("SPARK-34649 - replace value of a dataframe having dot in the all column names") {
+  test("SPARK-34649: replace value of a dataframe having dot in the all column names") {
     checkAnswer(
       Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
         .na.replace("*", Map( "n/a" -> "unknown")),
