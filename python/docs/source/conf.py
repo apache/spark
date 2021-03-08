@@ -57,7 +57,7 @@ numpydoc_show_class_members = False
 # These are defined here to allow link substitutions dynamically.
 rst_epilog = """
 .. |binder| replace:: Live Notebook
-.. _binder: https://mybinder.org/v2/gh/apache/spark/{2}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart.ipynb
+.. _binder: https://mybinder.org/v2/gh/apache/spark/{0}?filepath=python%2Fdocs%2Fsource%2Fgetting_started%2Fquickstart.ipynb
 .. |examples| replace:: Examples
 .. _examples: https://github.com/apache/spark/tree/{0}/examples/src/main/python
 .. |downloading| replace:: Downloading
@@ -65,9 +65,8 @@ rst_epilog = """
 .. |building_spark| replace:: Building Spark
 .. _building_spark: https://spark.apache.org/docs/{1}/#downloading
 """.format(
-    os.environ.get("RELEASE_TAG", "master"),
-    os.environ.get("RELEASE_VERSION", "latest"),
     os.environ.get("GIT_HASH", "master"),
+    os.environ.get("RELEASE_VERSION", "latest"),
 )
 
 # Add any paths that contain templates here, relative to this directory.
