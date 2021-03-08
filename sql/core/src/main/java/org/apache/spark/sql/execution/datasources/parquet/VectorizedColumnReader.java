@@ -106,7 +106,7 @@ public class VectorizedColumnReader {
 
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
-  private final LogicalTypeAnnotation originalType;
+  private final LogicalTypeAnnotation logicalTypeAnnotation;
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final ZoneId convertTz;
   private static final ZoneId UTC = ZoneOffset.UTC;
@@ -139,7 +139,7 @@ public class VectorizedColumnReader {
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
-      LogicalTypeAnnotation originalType,
+      LogicalTypeAnnotation logicalTypeAnnotation,
       PageReader pageReader,
       ZoneId convertTz,
       String datetimeRebaseMode,
@@ -147,7 +147,7 @@ public class VectorizedColumnReader {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
     this.convertTz = convertTz;
-    this.originalType = originalType;
+    this.logicalTypeAnnotation = logicalTypeAnnotation;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
     DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
@@ -195,7 +195,7 @@ public class VectorizedColumnReader {
     boolean isSupported = false;
     switch (typeName) {
       case INT32:
-        isSupported = !(originalType instanceof DateLogicalTypeAnnotation) ||
+        isSupported = !(logicalTypeAnnotation instanceof DateLogicalTypeAnnotation) ||
           "CORRECTED".equals(datetimeRebaseMode);
         break;
       case INT64:
@@ -857,7 +857,7 @@ public class VectorizedColumnReader {
   }
 
   private boolean isTimestampTypeMatched(TimeUnit unit) {
-    return originalType instanceof TimestampLogicalTypeAnnotation &&
-        ((TimestampLogicalTypeAnnotation)originalType).getUnit() == unit;
+    return logicalTypeAnnotation instanceof TimestampLogicalTypeAnnotation &&
+        ((TimestampLogicalTypeAnnotation) logicalTypeAnnotation).getUnit() == unit;
   }
 }
