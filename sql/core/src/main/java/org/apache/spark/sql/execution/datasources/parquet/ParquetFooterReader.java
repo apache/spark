@@ -30,8 +30,8 @@ import org.apache.parquet.hadoop.util.HadoopInputFile;
 import java.io.IOException;
 
 /**
- * `ParquetFooterReader` is a Util class which encapsulates the helper
- * method of reading parquet file footer
+ * `ParquetFooterReader` is a util class which encapsulates the helper
+ * methods of reading parquet file footer
  */
 public class ParquetFooterReader {
   public static ParquetMetadata readFooter(Configuration configuration,
