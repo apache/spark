@@ -57,8 +57,14 @@ object DataTypeTestUtils {
   /**
    * All the types that support ordering
    */
-  val ordered: Set[DataType] =
-    numericTypeWithoutDecimal + BooleanType + TimestampType + DateType + StringType + BinaryType
+  val ordered: Set[DataType] = numericTypeWithoutDecimal ++ Set(
+    BooleanType,
+    TimestampType,
+    DateType,
+    StringType,
+    BinaryType,
+    DayTimeIntervalType,
+    YearMonthIntervalType)
 
   /**
    * All the types that we can use in a property check
