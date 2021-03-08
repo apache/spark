@@ -1445,4 +1445,54 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
       }
     }
   }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a temp view is cached") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withTempView("tv") {
+          sql("CREATE TEMPORARY VIEW tv AS SELECT 1")
+          sql("CACHE TABLE tv")
+          assert(spark.catalog.isCached("tv"))
+          assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+          sql("ALTER VIEW tv as SELECT 2")
+          assert(!spark.catalog.isCached("tv"))
+          assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a global temp view is cached") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withGlobalTempView("global_tv") {
+          sql("CREATE GLOBAL TEMPORARY VIEW global_tv AS SELECT 1")
+
+          val db = spark.sharedState.globalTempViewManager.database
+          val gv = s"$db.global_tv"
+          sql(s"CACHE TABLE $gv")
+          assert(spark.catalog.isCached(gv))
+          assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+          sql(s"ALTER VIEW $gv as SELECT 2")
+          assert(!spark.catalog.isCached(gv))
+          assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-34546: ALTER VIEW AS should uncache if a permanent temp view is cached") {
+    withView("view") {
+      sql("CREATE VIEW view AS SELECT 1")
+      sql("CACHE TABLE view")
+      assert(spark.catalog.isCached("view"))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).nonEmpty)
+
+      sql("ALTER VIEW view as SELECT 2")
+      assert(!spark.catalog.isCached("view"))
+      assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
+    }
+  }
 }
