@@ -160,7 +160,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper {
     case Not(expr) => isLikelySelective(expr)
     case And(l, r) => isLikelySelective(l) || isLikelySelective(r)
     case Or(l, r) => isLikelySelective(l) && isLikelySelective(r)
-    case Like(_, _, _) => true
+    case _: StringRegexExpression => true
     case _: BinaryComparison => true
     case _: In | _: InSet => true
     case _: StringPredicate => true

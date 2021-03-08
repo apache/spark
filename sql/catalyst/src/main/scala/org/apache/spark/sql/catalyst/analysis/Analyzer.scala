@@ -1517,6 +1517,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             .nonEmpty =>
           Seq((oldVersion, oldVersion.copy(windowExpressions = newAliases(windowExpressions))))
 
+        case oldVersion @ ScriptTransformation(_, _, output, _, _)
+            if AttributeSet(output).intersect(conflictingAttributes).nonEmpty =>
+          Seq((oldVersion, oldVersion.copy(output = output.map(_.newInstance()))))
+
         case _ => plan.children.flatMap(collectConflictPlans)
       }
 
@@ -1540,65 +1544,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(oldPlan -> Nil)
         }
       }
-    }
-
-    /**
-     * Resolves the attribute and extract value expressions(s) by traversing the
-     * input expression in top down manner. The traversal is done in top-down manner as
-     * we need to skip over unbound lambda function expression. The lambda expressions are
-     * resolved in a different rule [[ResolveLambdaVariables]]
-     *
-     * Example :
-     * SELECT transform(array(1, 2, 3), (x, i) -> x + i)"
-     *
-     * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]]
-     *
-     * Note : In this routine, the unresolved attributes are resolved from the input plan's
-     * children attributes.
-     *
-     * @param e The expression need to be resolved.
-     * @param q The LogicalPlan whose children are used to resolve expression's attribute.
-     * @param trimAlias When true, trim unnecessary alias of `GetStructField`. Note that,
-     *                  we cannot trim the alias of top-level `GetStructField`, as we should
-     *                  resolve `UnresolvedAttribute` to a named expression. The caller side
-     *                  can trim the alias of top-level `GetStructField` if it's safe to do so.
-     * @return resolved Expression.
-     */
-    private def resolveExpressionTopDown(
-        e: Expression,
-        q: LogicalPlan,
-        trimAlias: Boolean = false): Expression = {
-
-      def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
-        if (e.resolved) return e
-        e match {
-          case f: LambdaFunction if !f.bound => f
-          case u @ UnresolvedAttribute(nameParts) =>
-            // Leave unchanged if resolution fails. Hopefully will be resolved next round.
-            val resolved =
-              withPosition(u) {
-                q.resolveChildren(nameParts, resolver)
-                  .orElse(resolveLiteralFunction(nameParts, u, q))
-                  .getOrElse(u)
-              }
-            val result = resolved match {
-              // As the comment of method `resolveExpressionTopDown`'s param `trimAlias` said,
-              // when trimAlias = true, we will trim unnecessary alias of `GetStructField` and
-              // we won't trim the alias of top-level `GetStructField`. Since we will call
-              // CleanupAliases later in Analyzer, trim non top-level unnecessary alias of
-              // `GetStructField` here is safe.
-              case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
-              case others => others
-            }
-            logDebug(s"Resolving $u to $result")
-            result
-          case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
-            ExtractValue(child, fieldExpr, resolver)
-          case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
-        }
-      }
-
-      innerResolve(e, isTopLevel = true)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
@@ -1630,9 +1575,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         j.copy(right = dedupRight(left, right))
       case f @ FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, _, _, left, right) =>
         val leftRes = leftAttributes
-          .map(x => resolveExpressionBottomUp(x, left).asInstanceOf[Attribute])
+          .map(x => resolveExpressionByPlanOutput(x, left).asInstanceOf[Attribute])
         val rightRes = rightAttributes
-          .map(x => resolveExpressionBottomUp(x, right).asInstanceOf[Attribute])
+          .map(x => resolveExpressionByPlanOutput(x, right).asInstanceOf[Attribute])
         f.copy(leftAttributes = leftRes, rightAttributes = rightRes)
       // intersect/except will be rewritten to join at the beginning of optimizer. Here we need to
       // deduplicate the right side plan, so that we won't produce an invalid self-join later.
@@ -1661,7 +1606,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // we still have chance to resolve it based on its descendants
       case s @ Sort(ordering, global, child) if child.resolved && !s.resolved =>
         val newOrdering =
-          ordering.map(order => resolveExpressionBottomUp(order, child).asInstanceOf[SortOrder])
+          ordering.map(order => resolveExpressionByPlanOutput(order, child).asInstanceOf[SortOrder])
         Sort(newOrdering, global, child)
 
       // A special case for Generate, because the output of Generate should not be resolved by
@@ -1669,7 +1614,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case g @ Generate(generator, _, _, _, _, _) if generator.resolved => g
 
       case g @ Generate(generator, join, outer, qualifier, output, child) =>
-        val newG = resolveExpressionBottomUp(generator, child, throws = true)
+        val newG = resolveExpressionByPlanOutput(generator, child, throws = true)
         if (newG.fastEquals(generator)) {
           g
         } else {
@@ -1695,11 +1640,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         }
 
         val resolvedGroupingExprs = a.groupingExpressions
-          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, planForResolve, trimAlias = true))
           .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = a.aggregateExpressions
-          .map(resolveExpressionTopDown(_, planForResolve, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, planForResolve, trimAlias = true))
             .map(_.asInstanceOf[NamedExpression])
 
         a.copy(resolvedGroupingExprs, resolvedAggExprs, a.child)
@@ -1711,15 +1656,15 @@ class Analyzer(override val catalogManager: CatalogManager)
       // of GetStructField here.
       case g: GroupingSets =>
         val resolvedSelectedExprs = g.selectedGroupByExprs
-          .map(_.map(resolveExpressionTopDown(_, g, trimAlias = true))
+          .map(_.map(resolveExpressionByPlanChildren(_, g, trimAlias = true))
             .map(trimTopLevelGetStructFieldAlias))
 
         val resolvedGroupingExprs = g.groupByExprs
-          .map(resolveExpressionTopDown(_, g, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, g, trimAlias = true))
           .map(trimTopLevelGetStructFieldAlias)
 
         val resolvedAggExprs = g.aggregations
-          .map(resolveExpressionTopDown(_, g, trimAlias = true))
+          .map(resolveExpressionByPlanChildren(_, g, trimAlias = true))
             .map(_.asInstanceOf[NamedExpression])
 
         g.copy(resolvedSelectedExprs, resolvedGroupingExprs, g.child, resolvedAggExprs)
@@ -1727,7 +1672,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
-        o.copy(deleteExpr = resolveExpressionBottomUp(o.deleteExpr, o.table))
+        o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
 
       case m @ MergeIntoTable(targetTable, sourceTable, _, _, _)
         if !m.resolved && targetTable.resolved && sourceTable.resolved =>
@@ -1742,10 +1687,12 @@ class Analyzer(override val catalogManager: CatalogManager)
           case _ =>
             val newMatchedActions = m.matchedActions.map {
               case DeleteAction(deleteCondition) =>
-                val resolvedDeleteCondition = deleteCondition.map(resolveExpressionTopDown(_, m))
+                val resolvedDeleteCondition = deleteCondition.map(
+                  resolveExpressionByPlanChildren(_, m))
                 DeleteAction(resolvedDeleteCondition)
               case UpdateAction(updateCondition, assignments) =>
-                val resolvedUpdateCondition = updateCondition.map(resolveExpressionTopDown(_, m))
+                val resolvedUpdateCondition = updateCondition.map(
+                  resolveExpressionByPlanChildren(_, m))
                 // The update value can access columns from both target and source tables.
                 UpdateAction(
                   resolvedUpdateCondition,
@@ -1756,14 +1703,14 @@ class Analyzer(override val catalogManager: CatalogManager)
               case InsertAction(insertCondition, assignments) =>
                 // The insert action is used when not matched, so its condition and value can only
                 // access columns from the source table.
-                val resolvedInsertCondition =
-                  insertCondition.map(resolveExpressionTopDown(_, Project(Nil, m.sourceTable)))
+                val resolvedInsertCondition = insertCondition.map(
+                  resolveExpressionByPlanChildren(_, Project(Nil, m.sourceTable)))
                 InsertAction(
                   resolvedInsertCondition,
                   resolveAssignments(assignments, m, resolveValuesWithSourceOnly = true))
               case o => o
             }
-            val resolvedMergeCondition = resolveExpressionTopDown(m.mergeCondition, m)
+            val resolvedMergeCondition = resolveExpressionByPlanChildren(m.mergeCondition, m)
             m.copy(mergeCondition = resolvedMergeCondition,
               matchedActions = newMatchedActions,
               notMatchedActions = newNotMatchedActions)
@@ -1774,7 +1721,7 @@ class Analyzer(override val catalogManager: CatalogManager)
 
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString(SQLConf.get.maxToStringFields)}")
-        q.mapExpressions(resolveExpressionTopDown(_, q))
+        q.mapExpressions(resolveExpressionByPlanChildren(_, q))
     }
 
     def resolveAssignments(
@@ -1789,16 +1736,16 @@ class Analyzer(override val catalogManager: CatalogManager)
         assignments.map { assign =>
           val resolvedKey = assign.key match {
             case c if !c.resolved =>
-              resolveExpressionTopDown(c, Project(Nil, mergeInto.targetTable))
+              resolveExpressionByPlanChildren(c, Project(Nil, mergeInto.targetTable))
             case o => o
           }
           val resolvedValue = assign.value match {
             // The update values may contain target and/or source references.
             case c if !c.resolved =>
               if (resolveValuesWithSourceOnly) {
-                resolveExpressionTopDown(c, Project(Nil, mergeInto.sourceTable))
+                resolveExpressionByPlanChildren(c, Project(Nil, mergeInto.sourceTable))
               } else {
-                resolveExpressionTopDown(c, mergeInto)
+                resolveExpressionByPlanChildren(c, mergeInto)
               }
             case o => o
           }
@@ -1907,6 +1854,13 @@ class Analyzer(override val catalogManager: CatalogManager)
     exprs.exists(_.find(_.isInstanceOf[UnresolvedDeserializer]).isDefined)
   }
 
+  // support CURRENT_DATE, CURRENT_TIMESTAMP, and grouping__id
+  private val literalFunctions: Seq[(String, () => Expression, Expression => String)] = Seq(
+    (CurrentDate().prettyName, () => CurrentDate(), toPrettySQL(_)),
+    (CurrentTimestamp().prettyName, () => CurrentTimestamp(), toPrettySQL(_)),
+    (VirtualColumn.hiveGroupingIdName, () => GroupingID(Nil), _ => VirtualColumn.hiveGroupingIdName)
+  )
+
   /**
    * Literal functions do not require the user to specify braces when calling them
    * When an attributes is not resolvable, we try to resolve it as a literal function.
@@ -1918,61 +1872,137 @@ class Analyzer(override val catalogManager: CatalogManager)
     if (nameParts.length != 1) return None
     val isNamedExpression = plan match {
       case Aggregate(_, aggregateExpressions, _) => aggregateExpressions.contains(attribute)
+      case GroupingSets(_, _, _, aggregateExpressions) => aggregateExpressions.contains(attribute)
       case Project(projectList, _) => projectList.contains(attribute)
       case Window(windowExpressions, _, _, _) => windowExpressions.contains(attribute)
       case _ => false
     }
-    val wrapper: Expression => Expression =
-      if (isNamedExpression) f => Alias(f, toPrettySQL(f))() else identity
-    // support CURRENT_DATE and CURRENT_TIMESTAMP
-    val literalFunctions = Seq(CurrentDate(), CurrentTimestamp())
+    val wrapper: (Expression, String) => Expression =
+      if (isNamedExpression) (f, n) => Alias(f, n)() else (f, _) => f
     val name = nameParts.head
-    val func = literalFunctions.find(e => caseInsensitiveResolution(e.prettyName, name))
-    func.map(wrapper)
+    val func = literalFunctions.find { case (fn, _, _) => caseInsensitiveResolution(fn, name) }
+    func.map { case (_, f, fn) =>
+      val funcExpr = f()
+      wrapper(funcExpr, fn(funcExpr))
+    }
   }
 
   /**
-   * Resolves the attribute, column value and extract value expressions(s) by traversing the
-   * input expression in bottom-up manner. In order to resolve the nested complex type fields
-   * correctly, this function makes use of `throws` parameter to control when to raise an
-   * AnalysisException.
+   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by
+   * traversing the input expression in top-down manner. It must be top-down because we need to
+   * skip over unbound lambda function expression. The lambda expressions are resolved in a
+   * different place [[ResolveLambdaVariables]].
    *
    * Example :
-   * SELECT a.b FROM t ORDER BY b[0].d
+   * SELECT transform(array(1, 2, 3), (x, i) -> x + i)"
    *
-   * In the above example, in b needs to be resolved before d can be resolved. Given we are
-   * doing a bottom up traversal, it will first attempt to resolve d and fail as b has not
-   * been resolved yet. If `throws` is false, this function will handle the exception by
-   * returning the original attribute. In this case `d` will be resolved in subsequent passes
-   * after `b` is resolved.
+   * In the case above, x and i are resolved as lambda variables in [[ResolveLambdaVariables]].
    */
-  protected[sql] def resolveExpressionBottomUp(
+  private def resolveExpression(
+      expr: Expression,
+      plan: LogicalPlan,
+      resolveColumnByName: Seq[String] => Option[Expression],
+      resolveColumnByOrdinal: Int => Attribute,
+      trimAlias: Boolean,
+      throws: Boolean): Expression = {
+    def innerResolve(e: Expression, isTopLevel: Boolean): Expression = {
+      if (e.resolved) return e
+      e match {
+        case f: LambdaFunction if !f.bound => f
+        case GetColumnByOrdinal(ordinal, _) => resolveColumnByOrdinal(ordinal)
+        case u @ UnresolvedAttribute(nameParts) =>
+          val resolved = withPosition(u) {
+            resolveColumnByName(nameParts)
+              .orElse(resolveLiteralFunction(nameParts, u, plan))
+              .getOrElse(u)
+          }
+          val result = resolved match {
+            // When trimAlias = true, we will trim unnecessary alias of `GetStructField` and
+            // we won't trim the alias of top-level `GetStructField`. Since we will call
+            // CleanupAliases later in Analyzer, trim non top-level unnecessary alias of
+            // `GetStructField` here is safe.
+            case Alias(s: GetStructField, _) if trimAlias && !isTopLevel => s
+            case others => others
+          }
+          logDebug(s"Resolving $u to $result")
+          result
+        case u @ UnresolvedExtractValue(child, fieldName) =>
+          val newChild = innerResolve(child, isTopLevel = false)
+          if (newChild.resolved) {
+            ExtractValue(newChild, fieldName, resolver)
+          } else {
+            u.copy(child = newChild)
+          }
+        case _ => e.mapChildren(innerResolve(_, isTopLevel = false))
+      }
+    }
+
+    try {
+      innerResolve(expr, isTopLevel = true)
+    } catch {
+      case _: AnalysisException if !throws => expr
+    }
+  }
+
+  /**
+   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
+   * input plan's output attributes. In order to resolve the nested fields correctly, this function
+   * makes use of `throws` parameter to control when to raise an AnalysisException.
+   *
+   * Example :
+   * SELECT * FROM t ORDER BY a.b
+   *
+   * In the above example, after `a` is resolved to a struct-type column, we may fail to resolve `b`
+   * if there is no such nested field named "b". We should not fail and wait for other rules to
+   * resolve it if possible.
+   */
+  def resolveExpressionByPlanOutput(
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false): Expression = {
-    if (expr.resolved) return expr
-    // Resolve expression in one round.
-    // If throws == false or the desired attribute doesn't exist
-    // (like try to resolve `a.b` but `a` doesn't exist), fail and return the origin one.
-    // Else, throw exception.
-    try {
-      expr transformUp {
-        case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
-        case u @ UnresolvedAttribute(nameParts) =>
-          val result =
-            withPosition(u) {
-              plan.resolve(nameParts, resolver)
-                .orElse(resolveLiteralFunction(nameParts, u, plan))
-                .getOrElse(u)
-            }
-          logDebug(s"Resolving $u to $result")
-          result
-        case UnresolvedExtractValue(child, fieldName) if child.resolved =>
-          ExtractValue(child, fieldName, resolver)
-      }
-    } catch {
-      case a: AnalysisException if !throws => expr
-    }
+    resolveExpression(
+      expr,
+      plan,
+      resolveColumnByName = nameParts => {
+        plan.resolve(nameParts, resolver)
+      },
+      resolveColumnByOrdinal = ordinal => {
+        assert(ordinal >= 0 && ordinal < plan.output.length)
+        plan.output(ordinal)
+      },
+      trimAlias = false,
+      throws = throws)
+  }
+
+  /**
+   * Resolves `UnresolvedAttribute`, `GetColumnByOrdinal` and extract value expressions(s) by the
+   * input plan's children output attributes.
+   *
+   * @param e The expression need to be resolved.
+   * @param q The LogicalPlan whose children are used to resolve expression's attribute.
+   * @param trimAlias When true, trim unnecessary alias of GetStructField`. Note that,
+   *                  we cannot trim the alias of top-level `GetStructField`, as we should
+   *                  resolve `UnresolvedAttribute` to a named expression. The caller side
+   *                  can trim the alias of top-level `GetStructField` if it's safe to do so.
+   * @return resolved Expression.
+   */
+  def resolveExpressionByPlanChildren(
+      e: Expression,
+      q: LogicalPlan,
+      trimAlias: Boolean = false): Expression = {
+    resolveExpression(
+      e,
+      q,
+      resolveColumnByName = nameParts => {
+        q.resolveChildren(nameParts, resolver)
+      },
+      resolveColumnByOrdinal = ordinal => {
+        val candidates = q.children.flatMap(_.output)
+        assert(ordinal >= 0 && ordinal < candidates.length)
+        candidates.apply(ordinal)
+      },
+      trimAlias = trimAlias,
+      throws = true)
   }
 
   /**
@@ -2108,7 +2138,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         plan match {
           case p: Project =>
             // Resolving expressions against current plan.
-            val maybeResolvedExprs = exprs.map(resolveExpressionBottomUp(_, p))
+            val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, p))
             // Recursively resolving expressions on the child of current plan.
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, p.child)
             // If some attributes used by expressions are resolvable only on the rewritten child
@@ -2117,7 +2147,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             (newExprs, Project(p.projectList ++ missingAttrs, newChild))
 
           case a @ Aggregate(groupExprs, aggExprs, child) =>
-            val maybeResolvedExprs = exprs.map(resolveExpressionBottomUp(_, a))
+            val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, a))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, child)
             val missingAttrs = (AttributeSet(newExprs) -- a.outputSet).intersect(newChild.outputSet)
             if (missingAttrs.forall(attr => groupExprs.exists(_.semanticEquals(attr)))) {
@@ -2129,20 +2159,20 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
 
           case g: Generate =>
-            val maybeResolvedExprs = exprs.map(resolveExpressionBottomUp(_, g))
+            val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, g))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, g.child)
             (newExprs, g.copy(unrequiredChildIndex = Nil, child = newChild))
 
           // For `Distinct` and `SubqueryAlias`, we can't recursively resolve and add attributes
           // via its children.
           case u: UnaryNode if !u.isInstanceOf[Distinct] && !u.isInstanceOf[SubqueryAlias] =>
-            val maybeResolvedExprs = exprs.map(resolveExpressionBottomUp(_, u))
+            val maybeResolvedExprs = exprs.map(resolveExpressionByPlanOutput(_, u))
             val (newExprs, newChild) = resolveExprsAndAddMissingAttrs(maybeResolvedExprs, u.child)
             (newExprs, u.withNewChildren(Seq(newChild)))
 
           // For other operators, we can't recursively resolve and add attributes via its children.
           case other =>
-            (exprs.map(resolveExpressionBottomUp(_, other)), other)
+            (exprs.map(resolveExpressionByPlanOutput(_, other)), other)
         }
       }
     }
@@ -2213,10 +2243,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
-            withPosition(u) {
-              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
-            }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
               v1SessionCatalog.lookupFunction(name, children) match {
@@ -3459,7 +3485,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           }
 
           validateTopLevelTupleFields(deserializer, inputs)
-          val resolved = resolveExpressionBottomUp(
+          val resolved = resolveExpressionByPlanOutput(
             deserializer, LocalRelation(inputs), throws = true)
           val result = resolved transformDown {
             case UnresolvedMapObjects(func, inputData, cls) if inputData.resolved =>
