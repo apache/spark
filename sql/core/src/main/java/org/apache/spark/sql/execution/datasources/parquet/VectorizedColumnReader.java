@@ -115,11 +115,14 @@ public class VectorizedColumnReader {
 
   private boolean isDecimalTypeMatched(DataType dt) {
     DecimalType d = (DecimalType) dt;
-    DecimalLogicalTypeAnnotation dm =
-      (DecimalLogicalTypeAnnotation)descriptor.getPrimitiveType().getLogicalTypeAnnotation();
-    // It's OK if the required decimal precision is larger than or equal to the physical decimal
-    // precision in the Parquet metadata, as long as the decimal scale is the same.
-    return dm != null && dm.getPrecision() <= d.precision() && dm.getScale() == d.scale();
+    LogicalTypeAnnotation typeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
+    if (typeAnnotation instanceof DecimalLogicalTypeAnnotation) {
+      DecimalLogicalTypeAnnotation decimalType = (DecimalLogicalTypeAnnotation) typeAnnotation;
+      // It's OK if the required decimal precision is larger than or equal to the physical decimal
+      // precision in the Parquet metadata, as long as the decimal scale is the same.
+      return decimalType.getPrecision() <= d.precision() && decimalType.getScale() == d.scale();
+    }
+    return false;
   }
 
   private boolean canReadAsIntDecimal(DataType dt) {
