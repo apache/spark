@@ -193,6 +193,17 @@ for moved_page in ['', '.ml', '.mllib', '.sql', '.streaming']:
   </head>
   <body>
     This page has been moved to <a href="{new_url}">a new location</a>, you will be redirected automatically.
+
+    <script type='text/javascript'>
+    const hash = window.location.hash;
+    if (hash !== "") {{
+      const meta = document.getElementsByTagName("meta")[0];
+      const link = document.getElementsByTagName("a")[0];
+      const redirect = `reference/api/${{hash.slice(1)}}.html`;
+      meta.setAttribute("content", `5; url=${{redirect}}`);
+      link.setAttribute("href", redirect);
+    }}
+    </script>
   </body>
 </html>''')
 
