@@ -506,4 +506,20 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
         .na.replace("*", Map( "n/a" -> "unknown")),
       Row("abc", 23) :: Row("def", 44L) :: Row("unknown", 0L) :: Nil)
   }
+
+  test("SPARK-34649: replace value of a column not present in the dataframe") {
+    val df = Seq(("abc", 23), ("def", 44), ("n/a", 0)).toDF("Col.1", "Col.2")
+    val exception = intercept[AnalysisException] {
+      df.na.replace("aa", Map( "n/a" -> "unknown"))
+    }
+    assert(exception.getMessage.equals("Cannot resolve column name \"aa\" among (c.0, c.1)"))
+  }
+
+  test("SPARK-34649: replace value of a nested column") {
+    val df = createDFWithNestedColumns
+    val exception = intercept[UnsupportedOperationException] {
+      df.na.replace("c1.c1-1", Map("b1" ->"a1"))
+    }
+    assert(exception.getMessage.equals("Nested field c1.c1-1 is not supported."))
+  }
 }
