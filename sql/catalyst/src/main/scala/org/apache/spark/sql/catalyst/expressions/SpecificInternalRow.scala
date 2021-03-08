@@ -193,8 +193,8 @@ final class MutableAny extends MutableValue {
 final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGenericInternalRow {
 
   private[this] def dataTypeToMutableValue(dataType: DataType): MutableValue = dataType match {
-    // We use INT for DATE internally
-    case IntegerType | DateType => new MutableInt
+    // We use INT for DATE and YearMonthIntervalType internally
+    case IntegerType | DateType | YearMonthIntervalType => new MutableInt
     // We use Long for Timestamp and DayTimeInterval internally
     case LongType | TimestampType | DayTimeIntervalType => new MutableLong
     case FloatType => new MutableFloat

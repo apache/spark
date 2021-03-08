@@ -144,6 +144,14 @@ object Encoders {
   def DURATION: Encoder[java.time.Duration] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.Period` class
+   * to the internal representation of nullable Catalyst's YearMonthIntervalType.
+   *
+   * @since 3.2.0
+   */
+  def PERIOD: Encoder[java.time.Period] = ExpressionEncoder()
+
+  /**
    * Creates an encoder for Java Bean of type T.
    *
    * T must be publicly accessible.

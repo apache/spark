@@ -24,6 +24,7 @@ import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Period;
 import java.util.*;
 import javax.annotation.Nonnull;
 
@@ -418,6 +419,14 @@ public class JavaDatasetSuite implements Serializable {
     Encoder<Duration> encoder = Encoders.DURATION();
     List<Duration> data = Arrays.asList(Duration.ofDays(0));
     Dataset<Duration> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testPeriodEncoder() {
+    Encoder<Period> encoder = Encoders.PERIOD();
+    List<Period> data = Arrays.asList(Period.ofYears(10));
+    Dataset<Period> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 
