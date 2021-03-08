@@ -926,7 +926,7 @@ object CollapseWindow extends Rule[LogicalPlan] {
       )
   }
 
-  def windowsCompatible(w1: Window, w2: Window): Boolean = {
+  private def windowsCompatible(w1: Window, w2: Window): Boolean = {
     w1.partitionSpec == w2.partitionSpec &&
       w1.orderSpec == w2.orderSpec &&
       w1.references.intersect(w2.windowOutputSet).isEmpty &&
