@@ -74,6 +74,6 @@ class RewriteSubquerySuite extends PlanTest {
     val query = relation.where(('a === 1 || 'b === 2) && ('c === 3 && 'd === 4)).select('a)
     val tracker = new QueryPlanningTracker
     Optimize.executeAndTrack(query.analyze, tracker)
-    assert(tracker.rules.get(RewritePredicateSubquery.ruleName).get.numEffectiveInvocations == 0)
+    assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
   }
 }
