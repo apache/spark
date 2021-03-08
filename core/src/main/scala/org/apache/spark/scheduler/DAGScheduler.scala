@@ -251,6 +251,9 @@ private[spark] class DAGScheduler(
 
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(sc.getConf)
 
+  private val blockManagerMasterDriverHeartbeatTimeout =
+    sc.getConf.get(config.STORAGE_BLOCKMANAGER_MASTER_DRIVER_HEARTBEAT_TIMEOUT).millis
+
   /**
    * Called by the TaskSetManager to report task's starting.
    */
@@ -295,7 +298,8 @@ private[spark] class DAGScheduler(
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, accumUpdates,
       executorUpdates))
     blockManagerMaster.driverHeartbeatEndPoint.askSync[Boolean](
-      BlockManagerHeartbeat(blockManagerId), new RpcTimeout(10.minutes, "BlockManagerHeartbeat"))
+      BlockManagerHeartbeat(blockManagerId),
+      new RpcTimeout(blockManagerMasterDriverHeartbeatTimeout, "BlockManagerHeartbeat"))
   }
 
   /**

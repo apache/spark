@@ -36,8 +36,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
 
   private def newTrackerMaster(sparkConf: SparkConf = conf) = {
-    val broadcastManager = new BroadcastManager(true, sparkConf,
-      new SecurityManager(sparkConf))
+    val broadcastManager = new BroadcastManager(true, sparkConf)
     new MapOutputTrackerMaster(
       sparkConf,
       new NoOpShuffleOutputTracker,

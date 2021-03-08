@@ -41,7 +41,7 @@ case class BroadcastNestedLoopJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  /** BuildRight means the right relation <=> the broadcast relation. */
+  /** BuildRight means the right relation is the broadcast relation. */
   private val (streamed, broadcast) = buildSide match {
     case BuildRight => (left, right)
     case BuildLeft => (right, left)
@@ -49,7 +49,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
-    s"$nodeName $joinType ${buildSide} ($opId)".trim
+    s"$nodeName $joinType $buildSide ($opId)".trim
   }
 
   override def requiredChildDistribution: Seq[Distribution] = buildSide match {
@@ -59,10 +59,22 @@ case class BroadcastNestedLoopJoinExec(
       UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
+  override def outputPartitioning: Partitioning = (joinType, buildSide) match {
+    case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
+         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputPartitioning
+    case _ => UnknownPartitioning(left.outputPartitioning.numPartitions)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {
+    case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
+         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputOrdering
+    case _ => Nil
+  }
+
   private[this] def genResultProjection: UnsafeProjection = joinType match {
-    case LeftExistence(j) =>
+    case LeftExistence(_) =>
       UnsafeProjection.create(output, output)
-    case other =>
+    case _ =>
       // Always put the stream side on left to simplify implementation
       // both of left and right side could be null
       UnsafeProjection.create(
@@ -183,7 +195,7 @@ case class BroadcastNestedLoopJoinExec(
    * The implementation for these joins:
    *
    *   LeftSemi with BuildRight
-   *   Anti with BuildRight
+   *   LeftAnti with BuildRight
    */
   private def leftExistenceJoin(
       relation: Broadcast[Array[InternalRow]],
@@ -238,7 +250,6 @@ case class BroadcastNestedLoopJoinExec(
    *   ExistenceJoin with BuildLeft
    */
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
-    /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val streamRdd = streamed.execute()
 
     val matchedBuildRows = streamRdd.mapPartitionsInternal { streamedIter =>
@@ -275,7 +286,7 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
         return sparkContext.makeRDD(buf)
-      case j: ExistenceJoin =>
+      case _: ExistenceJoin =>
         val buf: CompactBuffer[InternalRow] = new CompactBuffer()
         var i = 0
         val rel = relation.value
@@ -296,7 +307,7 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
         return sparkContext.makeRDD(notMatched)
-      case o =>
+      case _ =>
     }
 
     val notMatchedBroadcastRows: Seq[InternalRow] = {
@@ -358,7 +369,7 @@ case class BroadcastNestedLoopJoinExec(
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, BuildRight) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
-      case (j: ExistenceJoin, BuildRight) =>
+      case (_: ExistenceJoin, BuildRight) =>
         existenceJoin(broadcastedRelation)
       case _ =>
         /**

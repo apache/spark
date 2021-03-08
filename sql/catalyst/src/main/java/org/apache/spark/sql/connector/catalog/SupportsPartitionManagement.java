@@ -41,6 +41,8 @@ import org.apache.spark.sql.types.StructType;
  *     even if it is supported.
  * ${@link #replacePartitionMetadata}:
  *     point a partition to a new location, which will swap one location's data for the other
+ * ${@link #truncatePartition}:
+ *     remove partition data from the table
  *
  * @since 3.1.0
  */
@@ -157,5 +159,20 @@ public interface SupportsPartitionManagement extends Table {
                PartitionAlreadyExistsException,
                NoSuchPartitionException {
       throw new UnsupportedOperationException("Partition renaming is not supported");
+    }
+
+    /**
+     * Truncate a partition in the table by completely removing partition data.
+     *
+     * @param ident a partition identifier
+     * @return true if the partition was truncated successfully otherwise false
+     * @throws NoSuchPartitionException If the partition identifier to alter doesn't exist
+     * @throws UnsupportedOperationException If partition truncation is not supported
+     *
+     * @since 3.2.0
+     */
+    default boolean truncatePartition(InternalRow ident)
+        throws NoSuchPartitionException, UnsupportedOperationException {
+      throw new UnsupportedOperationException("Partition truncate is not supported");
     }
 }

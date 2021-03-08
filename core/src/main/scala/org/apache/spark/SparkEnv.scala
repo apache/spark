@@ -315,7 +315,7 @@ object SparkEnv extends Logging {
       }
     }
 
-    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
+    val broadcastManager = new BroadcastManager(isDriver, conf)
     val shuffleDataIo = new MemoizingShuffleDataIO(ShuffleDataIOUtils.loadShuffleDataIO(conf))
 
     val mapOutputTracker = if (isDriver) {
@@ -403,14 +403,13 @@ object SparkEnv extends Logging {
       // Don't start metrics system right now for Driver.
       // We need to wait for the task scheduler to give us an app ID.
       // Then we can start the metrics system.
-      MetricsSystem.createMetricsSystem(MetricsSystemInstances.DRIVER, conf, securityManager)
+      MetricsSystem.createMetricsSystem(MetricsSystemInstances.DRIVER, conf)
     } else {
       // We need to set the executor ID before the MetricsSystem is created because sources and
       // sinks specified in the metrics configuration file will want to incorporate this executor's
       // ID into the metrics they report.
       conf.set(EXECUTOR_ID, executorId)
-      val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.EXECUTOR, conf,
-        securityManager)
+      val ms = MetricsSystem.createMetricsSystem(MetricsSystemInstances.EXECUTOR, conf)
       ms.start(conf.get(METRICS_STATIC_SOURCES_ENABLED))
       ms
     }

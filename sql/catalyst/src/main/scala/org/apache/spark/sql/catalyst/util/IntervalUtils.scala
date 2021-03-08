@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.Duration
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -762,4 +764,31 @@ object IntervalUtils {
 
     new CalendarInterval(totalMonths, totalDays, micros)
   }
+
+  /**
+   * Converts this duration to the total length in microseconds.
+   * <p>
+   * If this duration is too large to fit in a [[Long]] microseconds, then an
+   * exception is thrown.
+   * <p>
+   * If this duration has greater than microsecond precision, then the conversion
+   * will drop any excess precision information as though the amount in nanoseconds
+   * was subject to integer division by one thousand.
+   *
+   * @return The total length of the duration in microseconds
+   * @throws ArithmeticException If numeric overflow occurs
+   */
+  def durationToMicros(duration: Duration): Long = {
+    val us = Math.multiplyExact(duration.getSeconds, MICROS_PER_SECOND)
+    val result = Math.addExact(us, duration.getNano / NANOS_PER_MICROS)
+    result
+  }
+
+  /**
+   * Obtains a [[Duration]] representing a number of microseconds.
+   *
+   * @param micros The number of microseconds, positive or negative
+   * @return A [[Duration]], not null
+   */
+  def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
 }

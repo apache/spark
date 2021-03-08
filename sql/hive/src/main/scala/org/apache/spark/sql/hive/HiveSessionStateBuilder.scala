@@ -39,9 +39,8 @@ import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLo
  */
 class HiveSessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState],
-    options: Map[String, String])
-  extends BaseSessionStateBuilder(session, parentState, options) {
+    parentState: Option[SessionState])
+  extends BaseSessionStateBuilder(session, parentState) {
 
   private def externalCatalog: ExternalCatalogWithListener = session.sharedState.externalCatalog
 
@@ -79,8 +78,7 @@ class HiveSessionStateBuilder(
         new ResolveSQLOnFile(session) +:
         new FallBackFileSourceV2(session) +:
         ResolveEncodersInScalaAgg +:
-        new ResolveSessionCatalog(
-          catalogManager, catalog.isTempView, catalog.isTempFunction) +:
+        new ResolveSessionCatalog(catalogManager) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -117,7 +115,7 @@ class HiveSessionStateBuilder(
     }
   }
 
-  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _, Map.empty)
+  override protected def newBuilder: NewBuilder = new HiveSessionStateBuilder(_, _)
 }
 
 class HiveSessionResourceLoader(

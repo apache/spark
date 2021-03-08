@@ -116,6 +116,16 @@ object functions {
   /**
    * Creates a [[Column]] of literal value.
    *
+   * An alias of `typedlit`, and it is encouraged to use `typedlit` directly.
+   *
+   * @group normal_funcs
+   * @since 2.2.0
+   */
+  def typedLit[T : TypeTag](literal: T): Column = typedlit(literal)
+
+  /**
+   * Creates a [[Column]] of literal value.
+   *
    * The passed in object is returned directly if it is already a [[Column]].
    * If the object is a Scala Symbol, it is converted into a [[Column]] also.
    * Otherwise, a new [[Column]] is created to represent the literal value.
@@ -123,9 +133,9 @@ object functions {
    * can handle parameterized scala types e.g.: List, Seq and Map.
    *
    * @group normal_funcs
-   * @since 2.2.0
+   * @since 3.2.0
    */
-  def typedLit[T : TypeTag](literal: T): Column = literal match {
+  def typedlit[T : TypeTag](literal: T): Column = literal match {
     case c: Column => c
     case s: Symbol => new ColumnName(s.name)
     case _ => Column(Literal.create(literal))
@@ -388,24 +398,37 @@ object functions {
   /**
    * Aggregate function: returns the number of distinct items in a group.
    *
+   * An alias of `count_distinct`, and it is encouraged to use `count_distinct` directly.
+   *
    * @group agg_funcs
    * @since 1.3.0
    */
   @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column =
-    // For usage like countDistinct("*"), we should let analyzer expand star and
-    // resolve function.
-    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
+  def countDistinct(expr: Column, exprs: Column*): Column = count_distinct(expr, exprs: _*)
 
   /**
    * Aggregate function: returns the number of distinct items in a group.
+   *
+   * An alias of `count_distinct`, and it is encouraged to use `count_distinct` directly.
    *
    * @group agg_funcs
    * @since 1.3.0
    */
   @scala.annotation.varargs
   def countDistinct(columnName: String, columnNames: String*): Column =
-    countDistinct(Column(columnName), columnNames.map(Column.apply) : _*)
+    count_distinct(Column(columnName), columnNames.map(Column.apply) : _*)
+
+  /**
+   * Aggregate function: returns the number of distinct items in a group.
+   *
+   * @group agg_funcs
+   * @since 3.2.0
+   */
+  @scala.annotation.varargs
+  def count_distinct(expr: Column, exprs: Column*): Column =
+    // For usage like countDistinct("*"), we should let analyzer expand star and
+    // resolve function.
+    Column(UnresolvedFunction("count", (expr +: exprs).map(_.expr), isDistinct = true))
 
   /**
    * Aggregate function: returns the population covariance for two columns.
@@ -707,6 +730,15 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns the product of all numerical elements in a group.
+   *
+   * @group agg_funcs
+   * @since 3.2.0
+   */
+  def product(e: Column): Column =
+    withAggregateFunction { new Product(e.expr) }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs
@@ -796,6 +828,7 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
+  @deprecated("Use sum_distinct", "3.2.0")
   def sumDistinct(e: Column): Column = withAggregateFunction(Sum(e.expr), isDistinct = true)
 
   /**
@@ -804,7 +837,16 @@ object functions {
    * @group agg_funcs
    * @since 1.3.0
    */
-  def sumDistinct(columnName: String): Column = sumDistinct(Column(columnName))
+  @deprecated("Use sum_distinct", "3.2.0")
+  def sumDistinct(columnName: String): Column = sum_distinct(Column(columnName))
+
+  /**
+   * Aggregate function: returns the sum of distinct values in the expression.
+   *
+   * @group agg_funcs
+   * @since 3.2.0
+   */
+  def sum_distinct(e: Column): Column = withAggregateFunction(Sum(e.expr), isDistinct = true)
 
   /**
    * Aggregate function: alias for `var_samp`.
@@ -1411,17 +1453,16 @@ object functions {
    * @group normal_funcs
    * @since 1.4.0
    */
-  def bitwiseNOT(e: Column): Column = withExpr { BitwiseNot(e.expr) }
+  @deprecated("Use bitwise_not", "3.2.0")
+  def bitwiseNOT(e: Column): Column = bitwise_not(e)
 
   /**
-   * Get the value of the bit (0 or 1) at the specified position.
-   * The positions are numbered from right to left, starting at zero.
-   * The position argument cannot be negative.
+   * Computes bitwise NOT (~) of a number.
    *
-   * @group bitwise_funcs
+   * @group normal_funcs
    * @since 3.2.0
    */
-  def bitwiseGet(e: Column, pos: Column): Column = withExpr { BitwiseGet(e.expr, pos.expr) }
+  def bitwise_not(e: Column): Column = withExpr { BitwiseNot(e.expr) }
 
   /**
    * Parses the expression string into the column that it represents, similar to
@@ -2152,7 +2193,17 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftLeft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
+  @deprecated("Use shiftleft", "3.2.0")
+  def shiftLeft(e: Column, numBits: Int): Column = shiftleft(e, numBits)
+
+  /**
+   * Shift the given value numBits left. If the given value is a long value, this function
+   * will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.2.0
+   */
+  def shiftleft(e: Column, numBits: Int): Column = withExpr { ShiftLeft(e.expr, lit(numBits).expr) }
 
   /**
    * (Signed) shift the given value numBits right. If the given value is a long value, it will
@@ -2161,7 +2212,17 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftRight(e: Column, numBits: Int): Column = withExpr {
+  @deprecated("Use shiftright", "3.2.0")
+  def shiftRight(e: Column, numBits: Int): Column = shiftright(e, numBits)
+
+  /**
+   * (Signed) shift the given value numBits right. If the given value is a long value, it will
+   * return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.2.0
+   */
+  def shiftright(e: Column, numBits: Int): Column = withExpr {
     ShiftRight(e.expr, lit(numBits).expr)
   }
 
@@ -2172,7 +2233,17 @@ object functions {
    * @group math_funcs
    * @since 1.5.0
    */
-  def shiftRightUnsigned(e: Column, numBits: Int): Column = withExpr {
+  @deprecated("Use shiftrightunsigned", "3.2.0")
+  def shiftRightUnsigned(e: Column, numBits: Int): Column = shiftrightunsigned(e, numBits)
+
+  /**
+   * Unsigned shift the given value numBits right. If the given value is a long value,
+   * it will return a long value else it will return an integer value.
+   *
+   * @group math_funcs
+   * @since 3.2.0
+   */
+  def shiftrightunsigned(e: Column, numBits: Int): Column = withExpr {
     ShiftRightUnsigned(e.expr, lit(numBits).expr)
   }
 
@@ -2839,6 +2910,31 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
+   * (Scala-specific) Creates a datetime interval
+   *
+   * @param years Number of years
+   * @param months Number of months
+   * @param weeks Number of weeks
+   * @param days Number of days
+   * @param hours Number of hours
+   * @param mins Number of mins
+   * @param secs Number of secs
+   * @return A datetime interval
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def make_interval(
+      years: Column = lit(0),
+      months: Column = lit(0),
+      weeks: Column = lit(0),
+      days: Column = lit(0),
+      hours: Column = lit(0),
+      mins: Column = lit(0),
+      secs: Column = lit(0)): Column = withExpr {
+    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
+  }
+
+  /**
    * Returns the date that is `numMonths` after `startDate`.
    *
    * @param startDate A date, timestamp or string. If a string, the data must be in a format that
@@ -3400,7 +3496,7 @@ object functions {
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
-   *   df.groupBy(window($"time", "1 minute", "10 seconds", "5 seconds"), $"stockId")
+   *   df.groupBy(window($"timestamp", "1 minute", "10 seconds", "5 seconds"), $"stockId")
    *     .agg(mean("price"))
    * }}}
    *
@@ -3456,7 +3552,7 @@ object functions {
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
-   *   df.groupBy(window($"time", "1 minute", "10 seconds"), $"stockId")
+   *   df.groupBy(window($"timestamp", "1 minute", "10 seconds"), $"stockId")
    *     .agg(mean("price"))
    * }}}
    *
@@ -3501,7 +3597,7 @@ object functions {
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
-   *   df.groupBy(window($"time", "1 minute"), $"stockId")
+   *   df.groupBy(window($"timestamp", "1 minute"), $"stockId")
    *     .agg(mean("price"))
    * }}}
    *
@@ -5085,6 +5181,17 @@ object functions {
 
   /**
    * Call an user-defined function.
+   *
+   * @group udf_funcs
+   * @since 1.5.0
+   */
+  @scala.annotation.varargs
+  @deprecated("Use call_udf")
+  def callUDF(udfName: String, cols: Column*): Column =
+    call_udf(udfName, cols: _*)
+
+  /**
+   * Call an user-defined function.
    * Example:
    * {{{
    *  import org.apache.spark.sql._
@@ -5092,14 +5199,14 @@ object functions {
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
    *  val spark = df.sparkSession
    *  spark.udf.register("simpleUDF", (v: Int) => v * v)
-   *  df.select($"id", callUDF("simpleUDF", $"value"))
+   *  df.select($"id", call_udf("simpleUDF", $"value"))
    * }}}
    *
    * @group udf_funcs
-   * @since 1.5.0
+   * @since 3.2.0
    */
   @scala.annotation.varargs
-  def callUDF(udfName: String, cols: Column*): Column = withExpr {
+  def call_udf(udfName: String, cols: Column*): Column = withExpr {
     UnresolvedFunction(udfName, cols.map(_.expr), isDistinct = false)
   }
 }

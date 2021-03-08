@@ -202,12 +202,23 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
 
       val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView(v2) {
+      withGlobalTempView("v2") {
         sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
         cacheRelation(v2)
         sql(s"ALTER TABLE $t PARTITION (part=2) RENAME TO PARTITION (part=4)")
         checkCachedRelation(v2, Seq(Row(0, 4), Row(1, 3)))
       }
+    }
+  }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
+      checkPartitions(t, Map("part" -> "2020-01-01"))
+      sql(s"ALTER TABLE $t PARTITION (part = date'2020-01-01')" +
+        s" RENAME TO PARTITION (part = date'2020-01-02')")
+      checkPartitions(t, Map("part" -> "2020-01-02"))
     }
   }
 }

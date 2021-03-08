@@ -24,18 +24,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.StringType
 
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
  */
 case class AddJarCommand(path: String) extends RunnableCommand {
-  override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("result", IntegerType, nullable = false) :: Nil)
-    schema.toAttributes
-  }
-
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sessionState.resourceLoader.addJar(path)
     Seq.empty[Row]

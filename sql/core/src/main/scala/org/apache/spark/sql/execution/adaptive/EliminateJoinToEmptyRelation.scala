@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.planning.ExtractSingleColumnNullAwareAntiJoin
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation, HashedRelationWithAllNullKeys}
@@ -33,6 +33,8 @@ import org.apache.spark.sql.execution.joins.{EmptyHashedRelation, HashedRelation
  *    This applies to all Joins (sort merge join, shuffled hash join, and broadcast hash join),
  *    because sort merge join and shuffled hash join will be changed to broadcast hash join with AQE
  *    at the first place.
+ *
+ * 3. Join is left anti join without condition, and join right side is non-empty.
  */
 object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
@@ -53,5 +55,17 @@ object EliminateJoinToEmptyRelation extends Rule[LogicalPlan] {
 
     case j @ Join(_, _, LeftSemi, _, _) if canEliminate(j.right, EmptyHashedRelation) =>
       LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
+
+    case j @ Join(_, _, LeftAnti, None, _) =>
+      val isNonEmptyRightSide = j.right match {
+        case LogicalQueryStage(_, stage: QueryStageExec) if stage.resultOption.get().isDefined =>
+          stage.getRuntimeStatistics.rowCount.exists(_ > 0)
+        case _ => false
+      }
+      if (isNonEmptyRightSide) {
+        LocalRelation(j.output, data = Seq.empty, isStreaming = j.isStreaming)
+      } else {
+        j
+      }
   }
 }

@@ -198,6 +198,8 @@
               subitems: 
                 - text: ANALYZE TABLE
                   url: sql-ref-syntax-aux-analyze-table.html
+                - text: ANALYZE TABLES
+                  url: sql-ref-syntax-aux-analyze-tables.html
             - text: CACHE
               url: sql-ref-syntax-aux-cache.html
               subitems:

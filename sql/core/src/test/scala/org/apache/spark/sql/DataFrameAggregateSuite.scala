@@ -297,7 +297,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0, 2.0))
 
     checkAnswer(
-      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(avg($"a"), sumDistinct($"a")), // non-partial and test deprecated version
       Row(2.0, 6.0) :: Nil)
 
     checkAnswer(
@@ -305,7 +305,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(new java.math.BigDecimal(2)))
 
     checkAnswer(
-      decimalData.agg(avg($"a"), sumDistinct($"a")), // non-partial
+      decimalData.agg(avg($"a"), sum_distinct($"a")), // non-partial
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
@@ -314,7 +314,7 @@ class DataFrameAggregateSuite extends QueryTest
     // non-partial
     checkAnswer(
       decimalData.agg(
-        avg($"a" cast DecimalType(10, 2)), sumDistinct($"a" cast DecimalType(10, 2))),
+        avg($"a" cast DecimalType(10, 2)), sum_distinct($"a" cast DecimalType(10, 2))),
       Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
   }
 
@@ -324,11 +324,11 @@ class DataFrameAggregateSuite extends QueryTest
       Row(2.0))
 
     checkAnswer(
-      testData3.agg(avg($"b"), countDistinct($"b")),
+      testData3.agg(avg($"b"), count_distinct($"b")),
       Row(2.0, 1))
 
     checkAnswer(
-      testData3.agg(avg($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(avg($"b"), sum_distinct($"b")), // non-partial
       Row(2.0, 2.0))
   }
 
@@ -339,7 +339,7 @@ class DataFrameAggregateSuite extends QueryTest
       Row(null))
 
     checkAnswer(
-      emptyTableData.agg(avg($"a"), sumDistinct($"b")), // non-partial
+      emptyTableData.agg(avg($"a"), sum_distinct($"b")), // non-partial
       Row(null, null))
   }
 
@@ -347,7 +347,7 @@ class DataFrameAggregateSuite extends QueryTest
     assert(testData2.count() === testData2.rdd.map(_ => 1).count())
 
     checkAnswer(
-      testData2.agg(count($"a"), sumDistinct($"a")), // non-partial
+      testData2.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(6, 6.0))
   }
 
@@ -364,12 +364,12 @@ class DataFrameAggregateSuite extends QueryTest
 
     checkAnswer(
       testData3.agg(
-        count($"a"), count($"b"), count(lit(1)), countDistinct($"a"), countDistinct($"b")),
+        count($"a"), count($"b"), count(lit(1)), count_distinct($"a"), count_distinct($"b")),
       Row(2, 1, 2, 2, 1)
     )
 
     checkAnswer(
-      testData3.agg(count($"b"), countDistinct($"b"), sumDistinct($"b")), // non-partial
+      testData3.agg(count($"b"), count_distinct($"b"), sum_distinct($"b")), // non-partial
       Row(1, 1, 2)
     )
   }
@@ -384,17 +384,17 @@ class DataFrameAggregateSuite extends QueryTest
       .toDF("key1", "key2", "key3")
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2")),
+      df1.agg(count_distinct($"key1", $"key2")),
       Row(3)
     )
 
     checkAnswer(
-      df1.agg(countDistinct($"key1", $"key2", $"key3")),
+      df1.agg(count_distinct($"key1", $"key2", $"key3")),
       Row(3)
     )
 
     checkAnswer(
-      df1.groupBy($"key1").agg(countDistinct($"key2", $"key3")),
+      df1.groupBy($"key1").agg(count_distinct($"key2", $"key3")),
       Seq(Row("a", 2), Row("x", 1))
     )
   }
@@ -402,7 +402,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero count") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(count($"a"), sumDistinct($"a")), // non-partial
+      emptyTableData.agg(count($"a"), sum_distinct($"a")), // non-partial
       Row(0, null))
   }
 
@@ -433,7 +433,7 @@ class DataFrameAggregateSuite extends QueryTest
   test("zero sum distinct") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(
-      emptyTableData.agg(sumDistinct($"a")),
+      emptyTableData.agg(sum_distinct($"a")),
       Row(null))
   }
 
@@ -622,7 +622,7 @@ class DataFrameAggregateSuite extends QueryTest
     val df = Seq((1, 3, "a"), (1, 2, "b"), (3, 4, "c"), (3, 4, "c"), (3, 5, "d"))
       .toDF("x", "y", "z")
     checkAnswer(
-      df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
+      df.groupBy($"x").agg(count_distinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
   }
 
@@ -837,7 +837,7 @@ class DataFrameAggregateSuite extends QueryTest
     )
   }
 
-  test("SPARK-27581: DataFrame countDistinct(\"*\") shouldn't fail with AnalysisException") {
+  test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
     val distinctCount2 = df.select(countDistinct("*"))
