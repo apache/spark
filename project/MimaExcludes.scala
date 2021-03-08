@@ -36,16 +36,6 @@ object MimaExcludes {
 
   // Exclude rules for 3.2.x
   lazy val v32excludes = v31excludes ++ Seq(
-    // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
-    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.write.V1WriteBuilder"),
-
-    // [SPARK-33955] Add latest offsets to source progress
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.SourceProgress.this")
-  )
-
-  // Exclude rules for 3.1.x
-  lazy val v31excludes = v30excludes ++ Seq(
-    // mima plugin update caused new incompatibilities to be detected
     // core module
     // [SPARK-31801] Register map output metadata
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.shuffle.sort.io.LocalDiskShuffleDataIO.executor"),
@@ -67,6 +57,17 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.api.ShuffleDataIO.initializeShuffleDriverComponents"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter.transferMapSpillFile"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter.transferMapSpillFile"),
+    // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
+    ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.sql.connector.write.V1WriteBuilder"),
+
+    // [SPARK-33955] Add latest offsets to source progress
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.SourceProgress.this")
+  )
+
+  // Exclude rules for 3.1.x
+  lazy val v31excludes = v30excludes ++ Seq(
+    // mima plugin update caused new incompatibilities to be detected
+    // core module
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.shuffle.sort.io.LocalDiskShuffleMapOutputWriter.commitAllPartitions"),
     ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.shuffle.api.ShuffleMapOutputWriter.commitAllPartitions"),
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.shuffle.api.ShuffleMapOutputWriter.commitAllPartitions"),
