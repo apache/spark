@@ -916,7 +916,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       Files.write(file1.toPath, "file1".getBytes)
       Files.write(file2.toPath, "file2".getBytes)
 
-      // Emulate unsupported archive format with .bz2 and .xz suffix.
+      // Emulate unsupported archive formats with .bz2 and .xz suffix.
       val bz2File = new File(dir, "test.bz2")
       val xzFile = new File(dir, "test.xz")
       TestUtils.createJar(Seq(file1), bz2File)
