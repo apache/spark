@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.Period
+import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -103,9 +103,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(UnaryMinus(negativeIntLit), - negativeInt)
     checkEvaluation(UnaryMinus(positiveLongLit), - positiveLong)
     checkEvaluation(UnaryMinus(negativeLongLit), - negativeLong)
-    checkExceptionInExpression[ArithmeticException](
-      UnaryMinus(Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType)),
-      "overflow")
 
     Seq("true", "false").foreach { failOnError =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
@@ -578,6 +575,43 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkExceptionInExpression[ArithmeticException](operator(one, zero), "divide by zero")
         }
       }
+    }
+  }
+
+  test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
+    checkExceptionInExpression[ArithmeticException](
+      UnaryMinus(Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType)),
+      "overflow")
+    Seq(true, false).foreach { failOnError =>
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Period.ofMonths(Int.MaxValue), YearMonthIntervalType),
+          Literal.create(Period.ofMonths(10), YearMonthIntervalType),
+          failOnError
+        ),
+        "overflow")
+
+      checkExceptionInExpression[ArithmeticException](
+        Subtract(
+          Literal.create(Duration.ofDays(-106751991), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          failOnError
+        ),
+        "overflow")
+      checkExceptionInExpression[ArithmeticException](
+        Add(
+          Literal.create(Duration.ofDays(106751991), DayTimeIntervalType),
+          Literal.create(Duration.ofDays(10), DayTimeIntervalType),
+          failOnError
+        ),
+        "overflow")
     }
   }
 }

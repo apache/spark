@@ -180,6 +180,11 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   def calendarIntervalMethod: String =
     sys.error("BinaryArithmetics must override either calendarIntervalMethod or genCode")
 
+  /** Name of the function for this expression on [[DayTimeIntervalType]] and
+   *  [[YearMonthIntervalType]] types. */
+  def intervalMethod: String =
+    sys.error("BinaryArithmetics must override either intervalMethod or genCode")
+
   // Name of the function for the exact version of this expression in [[Math]].
   // If the option "spark.sql.ansi.enabled" is enabled and there is corresponding
   // function in [[Math]], the exact function will be called instead of evaluation with [[symbol]].
@@ -192,6 +197,9 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      val mathClass = classOf[Math].getName
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathClass.${intervalMethod}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -264,6 +272,7 @@ case class Add(
   override def decimalMethod: String = "$plus"
 
   override def calendarIntervalMethod: String = if (failOnError) "addExact" else "add"
+  override def intervalMethod: String = "addExact"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
@@ -274,6 +283,10 @@ case class Add(
     case CalendarIntervalType =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.plus(input1, input2)
   }
 
@@ -303,6 +316,7 @@ case class Subtract(
   override def decimalMethod: String = "$minus"
 
   override def calendarIntervalMethod: String = if (failOnError) "subtractExact" else "subtract"
+  override def intervalMethod: String = "subtractExact"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType, failOnError)
 
@@ -313,6 +327,10 @@ case class Subtract(
     case CalendarIntervalType =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.minus(input1, input2)
   }
 
