@@ -198,8 +198,8 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         arrs = []
         for s, dt in series:
-            t = to_arrow_type(dt)
-            print(f"S={s} dt={dt} t={t}")
+            print(f"S={s} dt={dt} dt type={type(dt)}")
+            t = to_arrow_type(dt) if isinstance(dt, DataType) else dt
             if t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError("A field of type StructType expects a pandas.DataFrame, "

@@ -140,7 +140,7 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
         return result
 
-    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), to_arrow_type(return_type))]
+    return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), return_type)]
 
 
 def wrap_grouped_map_pandas_udf(f, return_type, argspec):
@@ -164,18 +164,16 @@ def wrap_grouped_map_pandas_udf(f, return_type, argspec):
                 "Expected: {} Actual: {}".format(len(return_type), len(result.columns)))
         return result
 
-    return lambda k, v: [(wrapped(k, v), to_arrow_type(return_type))]
+    return lambda k, v: [(wrapped(k, v), return_type)]
 
 
 def wrap_grouped_agg_pandas_udf(f, return_type):
-    arrow_return_type = to_arrow_type(return_type)
-
     def wrapped(*series):
         import pandas as pd
         result = f(*series)
         return pd.Series([result])
 
-    return lambda *a: (wrapped(*a), arrow_return_type)
+    return lambda *a: (wrapped(*a), return_type)
 
 
 def wrap_window_agg_pandas_udf(f, return_type, runner_conf, udf_index):
@@ -194,19 +192,15 @@ def wrap_unbounded_window_agg_pandas_udf(f, return_type):
     # is that window_agg_pandas_udf needs to repeat the return value
     # to match window length, where grouped_agg_pandas_udf just returns
     # the scalar value.
-    arrow_return_type = to_arrow_type(return_type)
-
     def wrapped(*series):
         import pandas as pd
         result = f(*series)
         return pd.Series([result]).repeat(len(series[0]))
 
-    return lambda *a: (wrapped(*a), arrow_return_type)
+    return lambda *a: (wrapped(*a), return_type)
 
 
 def wrap_bounded_window_agg_pandas_udf(f, return_type):
-    arrow_return_type = to_arrow_type(return_type)
-
     def wrapped(begin_index, end_index, *series):
         import pandas as pd
         result = []
@@ -235,7 +229,7 @@ def wrap_bounded_window_agg_pandas_udf(f, return_type):
             result.append(f(*series_slices))
         return pd.Series(result)
 
-    return lambda *a: (wrapped(*a), arrow_return_type)
+    return lambda *a: (wrapped(*a), return_type)
 
 
 def read_single_udf(pickleSer, infile, eval_type, runner_conf, udf_index):
