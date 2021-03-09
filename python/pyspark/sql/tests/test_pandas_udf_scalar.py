@@ -1111,7 +1111,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     # SPARK-36400
     def test_user_defined_types_with_udf(self):
-        """PandasUDF returns single UDT out."""
+        """PandasUDF returns single UDT out.
+        """
+
+        # ExamplePointUDT uses ArrayType to present its sqlType.
         @pandas_udf(ExamplePointUDT())
         def create_vector(series: pd.Series) -> pd.Series:
             vectors = []
@@ -1119,6 +1122,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 vectors.append(ExamplePoint(item, item + 1))
             return pd.Series(vectors)
 
+        # ExampleBoxUDT uses StructType to present its sqlType.
         @pandas_udf(ExampleBoxUDT())
         def create_boxes(series: pd.Series) -> pd.Series:
             boxes = []
@@ -1140,36 +1144,65 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     # SPARK-36400
     def test_user_defined_types_in_struct(self):
-        @pandas_udf(StructType([StructField("vec", ArrayType(ExamplePointUDT()))]))
+        @pandas_udf(StructType([
+            StructField("vec", ArrayType(ExamplePointUDT())),
+            StructField("box", ArrayType(ExampleBoxUDT()))
+        ]))
         def array_of_udt_structs(series: pd.Series) -> pd.DataFrame:
             vectors = []
             for _, i in series.items():
-                vectors.append({"vec": [ExamplePoint(i, i), ExamplePoint(i + 1, i + 1)]})
+                vectors.append({
+                    "vec": [ExamplePoint(i, i), ExamplePoint(i + 1, i + 1)],
+                    "box": [ExampleBox(*([i] * 4)), ExampleBox(*([i+1] * 4))],
+                })
             return pd.DataFrame(vectors)
 
         df = self.spark.range(1, 3)
         df = df.withColumn("nested", array_of_udt_structs(df.id))
         df.show()
         self.assertEqual([
-            Row(id=1, nested=Row(vec=[ExamplePoint(1, 1), ExamplePoint(2, 2)])),
-            Row(id=2, nested=Row(vec=[ExamplePoint(2, 2), ExamplePoint(3, 3)])),
-        ], df.collect())
+            Row(id=1, nested=Row(
+                vec=[ExamplePoint(1, 1), ExamplePoint(2, 2)],
+                box=[ExampleBox(1, 1, 1, 1), ExampleBox(2, 2, 2, 2)])),
+            Row(id=2, nested=Row(
+                vec=[ExamplePoint(2, 2), ExamplePoint(3, 3)],
+                box=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)]),
+            )], df.collect())
 
     # SPARK-36400
     def test_user_defined_types_in_array(self):
         @pandas_udf(ArrayType(ExamplePointUDT()))
-        def array_of_vectors(series: pd.Series) -> pd.Series:
+        def array_of_points(series: pd.Series) -> pd.Series:
             vectors = []
             for _, i in series.items():
                 vectors.append([ExamplePoint(i, i), ExamplePoint(i + 1, i + 1)])
             return pd.Series(vectors)
 
+        @pandas_udf(ArrayType(ExampleBoxUDT()))
+        def array_of_boxes(series: pd.Series) -> pd.Series:
+            boxes = []
+            for _, i in series.items():
+                boxes.append([ExampleBox(*([i] * 4)), ExampleBox(*([i + 1] * 4))])
+            return pd.Series(boxes)
+
         df = self.spark.range(1, 3)
-        df = df.withColumn("arrayVectors", array_of_vectors(df.id))
+        df = (
+            df
+            .withColumn("points", array_of_points(df.id))
+            .withColumn("boxes", array_of_boxes(df.id))
+        )
         df.show()
         self.assertEqual([
-            Row(id=1, arrayVectors=[ExamplePoint(1, 1), ExamplePoint(2, 2)]),
-            Row(id=2, arrayVectors=[ExamplePoint(2, 2), ExamplePoint(3, 3)]),
+            Row(
+                id=1,
+                points=[ExamplePoint(1, 1), ExamplePoint(2, 2)],
+                boxes=[ExampleBox(1, 1, 1, 1), ExampleBox(2, 2, 2, 2)],
+            ),
+            Row(
+                id=2,
+                points=[ExamplePoint(2, 2), ExamplePoint(3, 3)],
+                boxes=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)],
+            ),
         ], df.collect())
 
     # SPARK-24721
