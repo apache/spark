@@ -154,7 +154,7 @@ case class CreateViewCommand(
             originalText))
       } else {
         TemporaryViewRelation(
-          prepareTemporaryViewFromDataFrame(name, aliasedPlan),
+          prepareTemporaryViewFromDataFrame(viewIdent, aliasedPlan),
           Some(aliasedPlan))
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
