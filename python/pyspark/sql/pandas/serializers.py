@@ -200,7 +200,6 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
 
         arrs = []
         for s, dt in series:
-            print(f"S={s} dt={dt} dt type={type(dt)}")
             t = to_arrow_type(dt) if isinstance(dt, DataType) else dt
             if t is not None and pa.types.is_struct(t) and not isinstance(dt, UserDefinedType):
                 if not isinstance(s, pd.DataFrame):
