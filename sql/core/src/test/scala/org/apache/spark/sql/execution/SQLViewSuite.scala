@@ -915,8 +915,8 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     Seq(true, false).foreach { storeAnalyzed =>
       withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
         withGlobalTempView("v") {
-          val globalTempDB = spark.sharedState.globalTempViewManager.database
           sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT 1")
+          val globalTempDB = spark.sharedState.globalTempViewManager.database
           val globalTempView = spark.sessionState.catalog.getGlobalTempView("v")
           globalTempView match {
             case Some(v: View) if v.isTempView =>
