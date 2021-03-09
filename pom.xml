@@ -705,7 +705,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.8-7</version>
+        <version>1.4.9-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
