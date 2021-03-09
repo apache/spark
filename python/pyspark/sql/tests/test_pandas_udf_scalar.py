@@ -1166,8 +1166,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 box=[ExampleBox(1, 1, 1, 1), ExampleBox(2, 2, 2, 2)])),
             Row(id=2, nested=Row(
                 vec=[ExamplePoint(2, 2), ExamplePoint(3, 3)],
-                box=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)]),
-            )], df.collect())
+                box=[ExampleBox(2, 2, 2, 2), ExampleBox(3, 3, 3, 3)]))
+        ], df.collect())
 
     # SPARK-36400
     def test_user_defined_types_in_array(self):
