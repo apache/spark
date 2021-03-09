@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeMap, AttributeSet, NamedExpression, PlanExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Except, Expand, FlatMapCoGroupsInPandas, FlatMapGroupsInPandas, Generate, Intersect, Join, LogicalPlan, MapInPandas, Project, SerializeFromObject, Union, Window}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 object DeduplicateRelations extends Rule[LogicalPlan] {
