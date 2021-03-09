@@ -56,6 +56,13 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
     }
   }
 
+  /**
+   * Deduplicate any duplicated relations of a LogicalPlan
+   * @param existingRelations the known unique relations for a LogicalPlan
+   * @param plan the LogicalPlan that requires the deduplication
+   * @return (the new LogicalPlan which already deduplicate all duplicated relations (if any),
+   *         all relations of the new LogicalPlan )
+   */
   private def renewDuplicatedRelations(
       existingRelations: Seq[MultiInstanceRelation],
       plan: LogicalPlan): (LogicalPlan, Seq[MultiInstanceRelation]) = plan match {
