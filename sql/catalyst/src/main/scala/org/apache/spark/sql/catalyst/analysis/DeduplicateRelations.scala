@@ -120,7 +120,7 @@ object DeduplicateRelations extends Rule[LogicalPlan] {
    * Generate a new logical plan for the right child with different expression IDs
    * for all conflicting attributes.
    */
-  private def dedupRight (left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
+  private def dedupRight(left: LogicalPlan, right: LogicalPlan): LogicalPlan = {
     val conflictingAttributes = left.outputSet.intersect(right.outputSet)
     logDebug(s"Conflicting attributes ${conflictingAttributes.mkString(",")} " +
       s"between $left and $right")
