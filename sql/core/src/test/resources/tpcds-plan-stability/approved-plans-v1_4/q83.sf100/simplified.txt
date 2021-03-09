@@ -66,32 +66,15 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                         InputAdapter
                                           Scan parquet default.catalog_returns [cr_item_sk,cr_return_quantity,cr_returned_date_sk]
                                     InputAdapter
-                                      BroadcastExchange #8
-                                        WholeStageCodegen (8)
-                                          Project [d_date_sk]
-                                            BroadcastHashJoin [d_date,d_date]
-                                              Filter [d_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date_sk,d_date]
-                                              InputAdapter
-                                                BroadcastExchange #9
-                                                  WholeStageCodegen (7)
-                                                    Project [d_date]
-                                                      BroadcastHashJoin [d_week_seq,d_week_seq]
-                                                        ColumnarToRow
-                                                          InputAdapter
-                                                            Scan parquet default.date_dim [d_date,d_week_seq]
-                                                        InputAdapter
-                                                          ReusedExchange [d_week_seq] #4
+                                      ReusedExchange [d_date_sk] #2
                                 InputAdapter
                                   ReusedExchange [i_item_sk,i_item_id] #5
         InputAdapter
-          BroadcastExchange #10
+          BroadcastExchange #8
             WholeStageCodegen (17)
               HashAggregate [i_item_id,sum] [sum(wr_return_quantity),item_id,wr_item_qty,sum]
                 InputAdapter
-                  Exchange [i_item_id] #11
+                  Exchange [i_item_id] #9
                     WholeStageCodegen (16)
                       HashAggregate [i_item_id,wr_return_quantity] [sum,sum]
                         Project [wr_return_quantity,i_item_id]
@@ -103,6 +86,6 @@ TakeOrderedAndProject [item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty
                                     InputAdapter
                                       Scan parquet default.web_returns [wr_item_sk,wr_return_quantity,wr_returned_date_sk]
                                 InputAdapter
-                                  ReusedExchange [d_date_sk] #8
+                                  ReusedExchange [d_date_sk] #2
                             InputAdapter
                               ReusedExchange [i_item_sk,i_item_id] #5
