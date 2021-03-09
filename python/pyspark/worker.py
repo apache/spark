@@ -87,8 +87,6 @@ def wrap_udf(f, return_type):
 
 
 def wrap_scalar_pandas_udf(f, return_type):
-    arrow_return_type = to_arrow_type(return_type)
-
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
@@ -103,12 +101,10 @@ def wrap_scalar_pandas_udf(f, return_type):
         return result
 
     return lambda *a: (verify_result_length(
-        verify_result_type(f(*a)), len(a[0])), arrow_return_type)
+        verify_result_type(f(*a)), len(a[0])), return_type)
 
 
 def wrap_pandas_iter_udf(f, return_type):
-    arrow_return_type = to_arrow_type(return_type)
-
     def verify_result_type(result):
         if not hasattr(result, "__len__"):
             pd_type = "Pandas.DataFrame" if type(return_type) == StructType else "Pandas.Series"
@@ -116,7 +112,7 @@ def wrap_pandas_iter_udf(f, return_type):
                             "{}, but is {}".format(pd_type, type(result)))
         return result
 
-    return lambda *iterator: map(lambda res: (res, arrow_return_type),
+    return lambda *iterator: map(lambda res: (res, return_type),
                                  map(verify_result_type, f(*iterator)))
 
 

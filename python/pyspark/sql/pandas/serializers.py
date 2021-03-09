@@ -20,6 +20,8 @@ Serializers for PyArrow and pandas conversions. See `pyspark.serializers` for mo
 """
 
 from pyspark.serializers import Serializer, read_int, write_int, UTF8Deserializer
+from pyspark.sql.types import ArrayType, DataType, UserDefinedType
+from pyspark.sql.pandas.types import to_arrow_type
 
 
 class SpecialLengths(object):
@@ -155,12 +157,20 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         from pandas.api.types import is_categorical_dtype
         # Make input conform to [(series1, type1), (series2, type2), ...]
         if not isinstance(series, (list, tuple)) or \
-                (len(series) == 2 and isinstance(series[1], pa.DataType)):
+                (len(series) == 2 and isinstance(series[1], (pa.DataType, DataType))):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
-        def create_array(s, t):
+        def to_plain_object(cell):
+            return cell.__UDT__.sqlType().fromInternal(cell.__UDT__.serialize(cell))
+
+        def create_array(s, dt: DataType, t: pa.DataType):
             mask = s.isnull()
+            if isinstance(dt, UserDefinedType):
+                s = s.apply(to_plain_object)
+            elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
+                s = s.apply(lambda x: [to_plain_object(f) for f in x])
+
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
                 s = _check_series_convert_timestamps_internal(s, self._timezone)
@@ -170,7 +180,10 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # Note: This can be removed once minimum pyarrow version is >= 0.16.1
                 s = s.astype(s.dtypes.categories.dtype)
             try:
-                array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+                if t is not None and pa.types.is_list(t):
+                    array = pa.StructArray.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
+                else:
+                    array = pa.Array.from_pandas(s, mask=mask, type=t, safe=self._safecheck)
             except ValueError as e:
                 if self._safecheck:
                     error_msg = "Exception thrown when converting pandas.Series (%s) to " + \
@@ -184,7 +197,9 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             return array
 
         arrs = []
-        for s, t in series:
+        for s, dt in series:
+            t = to_arrow_type(dt)
+            print(f"S={s} dt={dt} t={t}")
             if t is not None and pa.types.is_struct(t):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError("A field of type StructType expects a pandas.DataFrame, "
@@ -196,17 +211,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # Assign result columns by schema name if user labeled with strings
                 elif self._assign_cols_by_name and any(isinstance(name, str)
                                                        for name in s.columns):
-                    arrs_names = [(create_array(s[field.name], field.type), field.name)
-                                  for field in t]
+                    arrs_names = [(create_array(s[field.name], struct_field.dataType, field.type), field.name)
+                                  for field, struct_field in zip(t, dt.fields)]
                 # Assign result columns by  position
                 else:
-                    arrs_names = [(create_array(s[s.columns[i]], field.type), field.name)
-                                  for i, field in enumerate(t)]
+                    arrs_names = [(create_array(s[s.columns[i]], struct_field.dataType, field.type), field.name)
+                                  for i, (field, struct_field) in enumerate(zip(t, dt.fields))]
 
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
             else:
-                arrs.append(create_array(s, t))
+                arrs.append(create_array(s, dt, t))
 
         return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
 

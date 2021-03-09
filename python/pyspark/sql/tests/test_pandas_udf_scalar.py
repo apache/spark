@@ -35,7 +35,7 @@ from pyspark.sql.types import IntegerType, ByteType, StructType, ShortType, Bool
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     test_not_compiled_message, have_pandas, have_pyarrow, pandas_requirement_message, \
-    pyarrow_requirement_message
+    pyarrow_requirement_message, ExamplePointUDT, ExamplePoint
 from pyspark.testing.utils import QuietTest
 
 if have_pandas:
@@ -1108,6 +1108,58 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
 
             self.assertEqual(expected, df1.collect())
+
+    # SPARK-36400
+    def test_user_defined_types_with_udf(self):
+        """PandasUDF returns single UDT out."""
+        @pandas_udf(ExamplePointUDT())
+        def create_vector(series: pd.Series) -> pd.Series:
+            vectors = []
+            for idx, item in series.items():
+                vectors.append(ExamplePoint(1, 2))
+            return pd.Series(vectors)
+
+        df = self.spark.range(2)
+        df = df.withColumn("vector", create_vector(col("id")))
+        df.show()
+        self.assertEqual([
+            Row(id=0, vector=ExamplePoint(1, 2)),
+            Row(id=1, vector=ExamplePoint(1, 2))
+        ], df.collect())
+
+    # SPARK-36400
+    def test_user_defined_types_in_struct(self):
+        @pandas_udf(StructType([StructField("vec", ArrayType(ExamplePointUDT()))]))
+        def array_of_udt_structs(series: pd.Series) -> pd.DataFrame:
+            vectors = []
+            for _, i in series.items():
+                vectors.append({"vec": [ExamplePoint(i, i), ExamplePoint(i + 1, i + 1)]})
+            return pd.DataFrame(vectors)
+
+        df = self.spark.range(1, 3)
+        df = df.withColumn("nested", array_of_udt_structs(df.id))
+        df.show()
+        self.assertEqual([
+            Row(id=1, nested=Row(vec=[ExamplePoint(1, 1), ExamplePoint(2, 2)])),
+            Row(id=2, nested=Row(vec=[ExamplePoint(2, 2), ExamplePoint(3, 3)])),
+        ], df.collect())
+
+    # SPARK-36400
+    def test_user_defined_types_in_array(self):
+        @pandas_udf(ArrayType(ExamplePointUDT()))
+        def array_of_vectors(series: pd.Series) -> pd.Series:
+            vectors = []
+            for _, i in series.items():
+                vectors.append([ExamplePoint(i, i), ExamplePoint(i + 1, i + 1)])
+            return pd.Series(vectors)
+
+        df = self.spark.range(1, 3)
+        df = df.withColumn("arrayVectors", array_of_vectors(df.id))
+        df.show()
+        self.assertEqual([
+            Row(id=1, arrayVectors=[ExamplePoint(1, 1), ExamplePoint(2, 2)]),
+            Row(id=2, arrayVectors=[ExamplePoint(2, 2), ExamplePoint(3, 3)]),
+        ], df.collect())
 
     # SPARK-24721
     @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
