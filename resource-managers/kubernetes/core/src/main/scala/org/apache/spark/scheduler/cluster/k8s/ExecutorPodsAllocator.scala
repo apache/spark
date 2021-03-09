@@ -92,7 +92,7 @@ private[spark] class ExecutorPodsAllocator(
   private val dynamicAllocationEnabled = Utils.isDynamicAllocationEnabled(conf)
 
   // visible for tests
-  private[k8s] val numOutstandingPods = new AtomicInteger()
+  private[k8s] val numNewlyCreatedUnknownPods = new AtomicInteger()
 
   private var lastSnapshot = ExecutorPodsSnapshot()
 
@@ -121,7 +121,7 @@ private[spark] class ExecutorPodsAllocator(
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)
     }
     logDebug(s"Set total expected execs to $totalExpectedExecutorsPerResourceProfileId")
-    if (numOutstandingPods.get() == 0) {
+    if (numNewlyCreatedUnknownPods.get() < podAllocationSize) {
       snapshotsStore.notifySubscribers()
     }
   }
@@ -216,9 +216,12 @@ private[spark] class ExecutorPodsAllocator(
       }
     }
 
-    var totalPendingCount = 0
     // The order we request executors for each ResourceProfile is not guaranteed.
-    totalExpectedExecutorsPerResourceProfileId.asScala.foreach { case (rpId, targetNum) =>
+    val knownPodsPerTargetForRpId = totalExpectedExecutorsPerResourceProfileId
+      .asScala
+      .toSeq
+      .sortBy(_._1)
+      .map { case (rpId, targetNum) =>
       val podsForRpId = rpIdToExecsAndPodState.getOrElse(rpId, mutable.HashMap.empty)
 
       val currentRunningCount = podsForRpId.values.count {
@@ -247,7 +250,7 @@ private[spark] class ExecutorPodsAllocator(
         }
 
       if (podsForRpId.nonEmpty) {
-        logDebug(s"ResourceProfile Id: $rpId " +
+        logDebug(s"ResourceProfile Id: $rpId, " +
           s"pod allocation status: $currentRunningCount running, " +
           s"${currentPendingExecutorsForRpId.size} unknown pending, " +
           s"${schedulerKnownPendingExecsForRpId.size} scheduler backend known pending, " +
@@ -296,27 +299,24 @@ private[spark] class ExecutorPodsAllocator(
           }
         }
       }
+      (rpId -> (knownPodCount, targetNum))
+    }
 
-      if (newlyCreatedExecutorsForRpId.isEmpty
-        && knownPodCount < targetNum) {
-        requestNewExecutors(targetNum, knownPodCount, applicationId, rpId, k8sKnownPVCNames)
-      }
-      totalPendingCount += knownPendingCount
-
-      // The code below just prints debug messages, which are only useful when there's a change
-      // in the snapshot state. Since the messages are a little spammy, avoid them when we know
-      // there are no useful updates.
-      if (log.isDebugEnabled && snapshots.nonEmpty) {
-        val outstanding = knownPendingCount + newlyCreatedExecutorsForRpId.size
-        if (currentRunningCount >= targetNum && !dynamicAllocationEnabled) {
-          logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
-            "equal to the number of requested executors. Not scaling up further.")
-        } else {
-          if (outstanding > 0) {
-            logDebug(s"Still waiting for $outstanding executors for ResourceProfile " +
-              s"Id $rpId before requesting more.")
-          }
+    // after the downscale is triggered for all the resource profiles the size of
+    // newlyCreatedExecutors can be used for calculating the remaining batch size for upscaling
+    knownPodsPerTargetForRpId.foreach { case (rpId, (knownPodCount, targetNum)) =>
+      if (knownPodCount < targetNum) {
+        val remainingBatchAllocSize = podAllocationSize - newlyCreatedExecutors.size
+        if (remainingBatchAllocSize > 0) {
+          requestNewExecutors(targetNum, knownPodCount, applicationId, rpId,
+            remainingBatchAllocSize, k8sKnownPVCNames)
+        } else if (snapshots.nonEmpty) {
+          logDebug("Still waiting for executors for ResourceProfile " +
+            s"Id $rpId before requesting more.")
         }
+      } else if (knownPodCount == targetNum && !dynamicAllocationEnabled && snapshots.nonEmpty) {
+        logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
+          "equal to the number of requested executors. Not scaling up further.")
       }
     }
     deletedExecutorIds = _deletedExecutorIds
@@ -324,7 +324,7 @@ private[spark] class ExecutorPodsAllocator(
     // Update the flag that helps the setTotalExpectedExecutors() callback avoid triggering this
     // update method when not needed. PODs known by the scheduler backend are not counted here as
     // they considered running PODs and they should not block upscaling.
-    numOutstandingPods.set(totalPendingCount + newlyCreatedExecutors.size)
+    numNewlyCreatedUnknownPods.set(newlyCreatedExecutors.size)
   }
 
   private def getReusablePVCs(applicationId: String, pvcsInUse: Seq[String]) = {
@@ -350,12 +350,20 @@ private[spark] class ExecutorPodsAllocator(
       running: Int,
       applicationId: String,
       resourceProfileId: Int,
+<<<<<<< HEAD
       pvcsInUse: Seq[String]): Unit = {
     val numExecutorsToAllocate = math.min(expected - running, podAllocationSize)
     logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
       s"ResourceProfile Id: $resourceProfileId, target: $expected running: $running.")
     // Check reusable PVCs for this executor allocation batch
     val reusablePVCs = getReusablePVCs(applicationId, pvcsInUse)
+=======
+      remainingBatchAllocSize: Int): Unit = {
+    val numExecutorsToAllocate = math.min(expected - running, remainingBatchAllocSize)
+    logInfo(s"Going to request $numExecutorsToAllocate executors from Kubernetes for " +
+      s"ResourceProfile Id: $resourceProfileId, target: $expected, running: $running, " +
+      s"remainingBatchAllocSize: $remainingBatchAllocSize.")
+>>>>>>> Initial upload
     for ( _ <- 0 until numExecutorsToAllocate) {
       val newExecutorId = EXECUTOR_ID_COUNTER.incrementAndGet()
       val executorConf = KubernetesConf.createExecutorConf(
