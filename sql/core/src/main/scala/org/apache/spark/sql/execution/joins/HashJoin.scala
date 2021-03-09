@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -40,7 +39,7 @@ private[joins] case class HashedRelationInfo(
     keyIsUnique: Boolean,
     isEmpty: Boolean)
 
-trait HashJoin extends BaseJoinExec with CodegenSupport {
+trait HashJoin extends JoinCodegenSupport {
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
@@ -379,70 +378,12 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   }
 
   /**
-   * Generates the code for variable of build side.
-   */
-  private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
-    ctx.currentVars = null
-    ctx.INPUT_ROW = matched
-    buildPlan.output.zipWithIndex.map { case (a, i) =>
-      val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-      if (joinType.isInstanceOf[InnerLike]) {
-        ev
-      } else {
-        // the variables are needed even there is no matched rows
-        val isNull = ctx.freshName("isNull")
-        val value = ctx.freshName("value")
-        val javaType = CodeGenerator.javaType(a.dataType)
-        val code = code"""
-          |boolean $isNull = true;
-          |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
-          |if ($matched != null) {
-          |  ${ev.code}
-          |  $isNull = ${ev.isNull};
-          |  $value = ${ev.value};
-          |}
-         """.stripMargin
-        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
-      }
-    }
-  }
-
-  /**
-   * Generate the (non-equi) condition used to filter joined rows. This is used in Inner, Left Semi
-   * and Left Anti joins.
-   */
-  protected def getJoinCondition(
-      ctx: CodegenContext,
-      input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
-    val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-      // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = s"${ev.isNull} || !${ev.value}"
-      s"""
-         |$eval
-         |${ev.code}
-         |if (!($skipRow))
-       """.stripMargin
-    } else {
-      ""
-    }
-    (matched, checkCondition, buildVars)
-  }
-
-  /**
    * Generates the code for Inner join.
    */
   protected def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val resultVars = buildSide match {
@@ -497,7 +438,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
@@ -573,7 +514,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (isEmptyHashedRelation) {
@@ -635,7 +576,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
 
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
 
     if (keyIsUnique) {
       val found = ctx.freshName("found")
@@ -699,7 +640,7 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
