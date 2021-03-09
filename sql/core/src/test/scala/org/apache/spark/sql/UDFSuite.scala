@@ -781,13 +781,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage.contains("UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
 
-  test("SPARK-32307: Aggression that use map type input UDF as group expression") {
+  test("SPARK-32307: Aggregation that use map type input UDF as group expression") {
     spark.udf.register("key", udf((m: Map[String, String]) => m.keys.head.toInt))
     Seq(Map("1" -> "one", "2" -> "two")).toDF("a").createOrReplaceTempView("t")
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
   }
 
-  test("SPARK-32307: Aggression that use array type input UDF as group expression") {
+  test("SPARK-32307: Aggregation that use array type input UDF as group expression") {
     spark.udf.register("key", udf((m: Array[Int]) => m.head))
     Seq(Array(1)).toDF("a").createOrReplaceTempView("t")
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
@@ -843,5 +843,57 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       FunctionIdentifier("udaf34388"), Seq(Literal(1))) match {
       case udaf: ScalaUDAF => assert(udaf.name === "udaf34388")
     }
+  }
+
+  test("SPARK-34663: using java.time.Duration in UDF") {
+    // Regular case
+    val input = Seq(java.time.Duration.ofHours(23)).toDF("d")
+    val plusHour = udf((d: java.time.Duration) => d.plusHours(1))
+    val result = input.select(plusHour($"d").as("new_d"))
+    checkAnswer(result, Row(java.time.Duration.ofDays(1)) :: Nil)
+    assert(result.schema === new StructType().add("new_d", DayTimeIntervalType))
+    // UDF produces `null`
+    val nullFunc = udf((_: java.time.Duration) => null.asInstanceOf[java.time.Duration])
+    val nullResult = input.select(nullFunc($"d").as("null_d"))
+    checkAnswer(nullResult, Row(null) :: Nil)
+    assert(nullResult.schema === new StructType().add("null_d", DayTimeIntervalType))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[java.time.Duration]).toDF("null_d")
+    val constDuration = udf((_: java.time.Duration) => java.time.Duration.ofMinutes(10))
+    val constResult = nullInput.select(constDuration($"null_d").as("10_min"))
+    checkAnswer(constResult, Row(java.time.Duration.ofMinutes(10)) :: Nil)
+    assert(constResult.schema === new StructType().add("10_min", DayTimeIntervalType))
+    // Error in the conversion of UDF result to the internal representation of day-time interval
+    val overflowFunc = udf((d: java.time.Duration) => d.plusDays(Long.MaxValue))
+    val e = intercept[SparkException] {
+      input.select(overflowFunc($"d")).collect()
+    }.getCause.getCause
+    assert(e.isInstanceOf[java.lang.ArithmeticException])
+  }
+
+  test("SPARK-34663: using java.time.Period in UDF") {
+    // Regular case
+    val input = Seq(java.time.Period.ofMonths(11)).toDF("p")
+    val incMonth = udf((p: java.time.Period) => p.plusMonths(1))
+    val result = input.select(incMonth($"p").as("new_p"))
+    checkAnswer(result, Row(java.time.Period.ofYears(1)) :: Nil)
+    assert(result.schema === new StructType().add("new_p", YearMonthIntervalType))
+    // UDF produces `null`
+    val nullFunc = udf((_: java.time.Period) => null.asInstanceOf[java.time.Period])
+    val nullResult = input.select(nullFunc($"p").as("null_p"))
+    checkAnswer(nullResult, Row(null) :: Nil)
+    assert(nullResult.schema === new StructType().add("null_p", YearMonthIntervalType))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[java.time.Period]).toDF("null_p")
+    val constPeriod = udf((_: java.time.Period) => java.time.Period.ofYears(10))
+    val constResult = nullInput.select(constPeriod($"null_p").as("10_years"))
+    checkAnswer(constResult, Row(java.time.Period.ofYears(10)) :: Nil)
+    assert(constResult.schema === new StructType().add("10_years", YearMonthIntervalType))
+    // Error in the conversion of UDF result to the internal representation of year-month interval
+    val overflowFunc = udf((p: java.time.Period) => p.plusYears(Long.MaxValue))
+    val e = intercept[SparkException] {
+      input.select(overflowFunc($"p")).collect()
+    }.getCause.getCause
+    assert(e.isInstanceOf[java.lang.ArithmeticException])
   }
 }
