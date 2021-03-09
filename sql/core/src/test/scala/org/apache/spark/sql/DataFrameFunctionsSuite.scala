@@ -3038,11 +3038,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(map_zip_with(col("mis"), col("i"), (x, y, z) => concat(x, y, z)))
     }
     assert(ex4a.getMessage.contains("type mismatch: argument 2 requires map type"))
-
-    val ex5 = intercept[AnalysisException] {
-      df.selectExpr("map_zip_with(mmi, mmi, (x, y, z) -> x)")
-    }
-    assert(ex5.getMessage.contains("function map_zip_with does not support ordering on type map"))
   }
 
   test("transform keys function - primitive data types") {

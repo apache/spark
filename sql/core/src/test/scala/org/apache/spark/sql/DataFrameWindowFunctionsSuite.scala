@@ -1043,6 +1043,18 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       Seq(
         Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
         Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
+
+    // test with df with map type columns.
+    val df3 = Seq(
+      (Map("a" -> 0.0f, "b" -> -0.0f), Map(-0.0d -> Double.NaN)),
+      (Map("a" -> -0.0f, "b" -> 0.0f), Map(0.0d -> 0.0/0.0))
+    ).toDF("m1", "m2")
+    val windowSpec4 = Window.partitionBy("m1", "m2")
+    checkAnswer(
+      df3.select($"m1", $"m2", count(lit(1)).over(windowSpec4)),
+      Seq(
+        Row(Map("a" -> 0.0f, "b" -> -0.0f), Map(-0.0d -> Double.NaN), 2),
+        Row(Map("a" -> -0.0f, "b" -> 0.0f), Map(0.0d -> 0.0/0.0), 2)))
   }
 
   test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {

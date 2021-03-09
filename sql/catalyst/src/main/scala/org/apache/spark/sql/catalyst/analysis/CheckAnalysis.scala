@@ -639,14 +639,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
 
-          // TODO: although map type is not orderable, technically map type should be able to be
-          // used in equality comparison, remove this type check once we support it.
-          case o if mapColumnInSetOperation(o).isDefined =>
-            val mapCol = mapColumnInSetOperation(o).get
-            failAnalysis("Cannot have map type columns in DataFrame which calls " +
-              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
-              "is " + mapCol.dataType.catalogString)
-
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
             !o.isInstanceOf[Aggregate] && !o.isInstanceOf[Window] =>

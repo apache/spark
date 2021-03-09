@@ -298,11 +298,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
 
   errorTest(
-    "sorting by unsupported column types",
-    mapRelation.orderBy($"map".asc),
-    "sort" :: "type" :: "map<int,int>" :: Nil)
-
-  errorTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
     "cannot resolve" :: "'b'" :: "given input columns" :: "[a, a3, c]" :: Nil)
@@ -621,24 +616,6 @@ class AnalysisErrorSuite extends AnalysisTest {
       plan,
       "It is not allowed to use an aggregate function in the argument of " +
         "another aggregate function." :: Nil)
-  }
-
-  test("Join can work on binary types but can't work on map types") {
-    val left = LocalRelation(Symbol("a").binary, Symbol("b").map(StringType, StringType))
-    val right = LocalRelation(Symbol("c").binary, Symbol("d").map(StringType, StringType))
-
-    val plan1 = left.join(
-      right,
-      joinType = Cross,
-      condition = Some(Symbol("a") === Symbol("c")))
-
-    assertAnalysisSuccess(plan1)
-
-    val plan2 = left.join(
-      right,
-      joinType = Cross,
-      condition = Some(Symbol("b") === Symbol("d")))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {

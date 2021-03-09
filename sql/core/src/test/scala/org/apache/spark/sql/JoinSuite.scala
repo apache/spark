@@ -979,7 +979,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   }
 
   test("NaN and -0.0 in join keys") {
-    withTempView("v1", "v2", "v3", "v4") {
+    withTempView("v1", "v2", "v3", "v4", "v5", "v6") {
       Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v1")
       Seq(Float.NaN -> Double.NaN, 0.0f -> 0.0, -0.0f -> -0.0).toDF("f", "d").createTempView("v2")
 
@@ -1035,6 +1035,24 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
           Seq(0.0f, -0.0f),
           Row(0.0d, 0.0/0.0),
           Seq(Row(0.0d, 0.0/0.0)))))
+
+      // SPARK-34819 test with tables with map type columns
+      Seq((Map("a" -> 0.0f, "b" -> -0.0f), Map(0.0d -> Double.NaN)))
+        .toDF("m1", "m2").createTempView("v5")
+      Seq((Map("a" -> -0.0f, "b" -> 0.0f), Map(-0.0d -> 0.0/0.0)))
+        .toDF("m1", "m2").createTempView("v6")
+      checkAnswer(
+        sql(
+          """
+            |SELECT v5.m1, v5.m2, v6.m1, v6.m2
+            |FROM v5 JOIN v6
+            |ON v5.m1 = v6.m1 AND v5.m2 = v6.m2
+          """.stripMargin),
+        Seq(Row(
+          Map("a" -> 0.0f, "b" -> -0.0f),
+          Map(0.0d -> Double.NaN),
+          Map("a" -> -0.0f, "b" -> 0.0f),
+          Map(-0.0d -> 0.0/0.0))))
     }
   }
 

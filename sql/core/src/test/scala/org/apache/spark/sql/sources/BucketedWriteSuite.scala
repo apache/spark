@@ -91,11 +91,6 @@ abstract class BucketedWriteSuite extends QueryTest with SQLTestUtils {
     assert(e.getMessage == "sortBy must be used together with bucketBy")
   }
 
-  test("sorting by non-orderable column") {
-    val df = Seq("a" -> Map(1 -> 1), "b" -> Map(2 -> 2)).toDF("i", "j")
-    intercept[AnalysisException](df.write.bucketBy(2, "i").sortBy("j").saveAsTable("tt"))
-  }
-
   test("write bucketed data using save()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 

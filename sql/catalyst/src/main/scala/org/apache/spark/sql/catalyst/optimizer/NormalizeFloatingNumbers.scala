@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformKeys, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
@@ -95,9 +95,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)
-    // Currently MapType is not comparable and analyzer should fail earlier if this case happens.
-    case _: MapType =>
-      throw new IllegalStateException("grouping/join/window partition keys cannot be map type.")
+    case MapType(kt, vt, _) => needNormalize(kt) || needNormalize(vt)
     case _ => false
   }
 
@@ -140,6 +138,27 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
       val lv = NamedLambdaVariable("arg", et, containsNull)
       val function = normalize(lv)
       KnownFloatingPointNormalized(ArrayTransform(expr, LambdaFunction(function, Seq(lv))))
+
+    case _ if expr.dataType.isInstanceOf[MapType] =>
+      val MapType(kt, vt, containsNull) = expr.dataType
+      var normalized = if (needNormalize(kt)) {
+        val lv1 = NamedLambdaVariable("arg1", kt, false)
+        val lv2 = NamedLambdaVariable("arg2", vt, containsNull)
+        val function = normalize(lv1)
+        TransformKeys(expr, LambdaFunction(function, Seq(lv1, lv2)))
+      } else {
+        expr
+      }
+
+      normalized = if (needNormalize(vt)) {
+        val lv1 = NamedLambdaVariable("arg1", kt, false)
+        val lv2 = NamedLambdaVariable("arg2", vt, containsNull)
+        val function = normalize(lv2)
+        TransformValues(normalized, LambdaFunction(function, Seq(lv1, lv2)))
+      } else {
+        normalized
+      }
+      KnownFloatingPointNormalized(normalized)
 
     case _ => throw new IllegalStateException(s"fail to normalize $expr")
   }

@@ -612,6 +612,7 @@ class CodegenContext extends Logging {
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
+    case map: MapType => genComp(map, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case NullType => "false"
     case _ =>
@@ -687,6 +688,113 @@ class CodegenContext extends Logging {
           }
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+    case _ @ MapType(keyType, valueType, valueContainsNull) =>
+      val compareMapFunc = freshName("compareMap")
+      val initIndexArrayFunc = freshName("initIndexArray")
+      val keyIndexComparator = freshName("keyIndexComparator")
+      val compareKeyFunc = freshName("compareKey")
+      val compareValueFunc = freshName("compareValue")
+      val nullValueCheck = if (valueContainsNull) {
+        s"""
+           |boolean isNullA = leftArray.isNullAt(leftIndex);
+           |boolean isNullB = rightArray.isNullAt(rightIndex);
+           |if (isNullA && isNullB) {
+           |  // do nothing
+           |} else if (isNullA) {
+           |  return -1;
+           |} else if (isNullB) {
+           |  return 1;
+           |}
+           |""".stripMargin
+      } else {
+        ""
+      }
+
+      addNewFunction(initIndexArrayFunc,
+        s"""
+           |private Integer[] $initIndexArrayFunc(int n) {
+           |  Integer[] arr = new Integer[n];
+           |  for (int i = 0; i < n; i++) {
+           |    arr[i] = i;
+           |  }
+           |  return arr;
+           |}""".stripMargin)
+
+
+      addNewFunction(keyIndexComparator,
+        s"""
+           |private class $keyIndexComparator implements java.util.Comparator<Integer> {
+           |  private ArrayData array;
+           |  public $keyIndexComparator(ArrayData array) {
+           |    this.array = array;
+           |  }
+           |
+           |   @Override
+           |   public int compare(Object a, Object b) {
+           |     Integer indexA = (Integer)a;
+           |     Integer indexB = (Integer)b;
+           |     ${javaType(keyType)} keyA = ${getValue("array", keyType, "indexA")};
+           |     ${javaType(keyType)} keyB = ${getValue("array", keyType, "indexB")};
+           |     return ${genComp(keyType, "keyA", "keyB")};
+           |     }
+           |}""".stripMargin)
+
+      addNewFunction(compareKeyFunc,
+        s"""
+           |private int $compareKeyFunc(ArrayData leftArray, int leftIndex, ArrayData rightArray,
+           |    int rightIndex) {
+           |  ${javaType(keyType)} left = ${getValue("leftArray", keyType, "leftIndex")};
+           |  ${javaType(keyType)} right = ${getValue("rightArray", keyType, "rightIndex")};
+           |  return ${genComp(keyType, "left", "right")};
+           |}
+           |""".stripMargin)
+
+      addNewFunction(compareValueFunc,
+        s"""
+           |private int $compareValueFunc(ArrayData leftArray, int leftIndex, ArrayData rightArray,
+           |    int rightIndex) {
+           |  $nullValueCheck
+           |  ${javaType(valueType)} left = ${getValue("leftArray", valueType, "leftIndex")};
+           |  ${javaType(valueType)} right = ${getValue("rightArray", valueType, "rightIndex")};
+           |  return ${genComp(valueType, "left", "right")};
+           |}
+           |""".stripMargin)
+
+      addNewFunction(compareMapFunc,
+        s"""
+           |public int $compareMapFunc(MapData left, MapData right) {
+           |  if (left.numElements() != right.numElements()) {
+           |    return left.numElements() - right.numElements();
+           |  }
+           |
+           |  int numElements = left.numElements();
+           |  ArrayData leftKeys = left.keyArray();
+           |  ArrayData rightKeys = right.keyArray();
+           |  ArrayData leftValues = left.valueArray();
+           |  ArrayData rightValues = right.valueArray();
+           |
+           |  Integer[] leftSortedKeyIndex = $initIndexArrayFunc(numElements);
+           |  Integer[] rightSortedKeyIndex = $initIndexArrayFunc(numElements);
+           |  java.util.Arrays.sort(leftSortedKeyIndex, new $keyIndexComparator(leftKeys));
+           |  java.util.Arrays.sort(rightSortedKeyIndex, new $keyIndexComparator(rightKeys));
+           |
+           |  for (int i = 0; i < numElements; i++) {
+           |    int leftIndex = leftSortedKeyIndex[i];
+           |    int rightIndex = rightSortedKeyIndex[i];
+           |    int keyComp = $compareKeyFunc(leftKeys, leftIndex, rightKeys, rightIndex);
+           |    if (keyComp != 0) {
+           |      return keyComp;
+           |    } else {
+           |      int valueComp = $compareValueFunc(leftValues, leftIndex, rightValues, rightIndex);
+           |      if (valueComp != 0) {
+           |        return valueComp;
+           |      }
+           |    }
+           |  }
+           |  return 0;
+           |}
+           |""".stripMargin)
+      s"this.$compareMapFunc($c1, $c2)"
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")

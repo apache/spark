@@ -835,6 +835,16 @@ class DataFrameAggregateSuite extends QueryTest
       df.groupBy("arr", "stru", "arrOfStru").count(),
       Row(Seq(0.0f, 0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, Double.NaN)), 2)
     )
+
+    // test with map type grouping columns
+    val df2 = Seq(
+      (Map("a" -> 0.0f, "b" -> -0.0f), Map(-0.0d -> Double.NaN)),
+      (Map("a" -> -0.0f, "b" -> 0.0f), Map(0.0d -> 0.0 / 0.0))
+    ).toDF("m1", "m2")
+    checkAnswer(
+      df2.groupBy("m1", "m2").count(),
+      Row(Map("a" -> 0.0f, "b" -> 0.0f), Map(0.0d -> Double.NaN), 2)
+    )
   }
 
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
@@ -895,11 +905,10 @@ class DataFrameAggregateSuite extends QueryTest
         .toDF("x", "y")
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
-      val error = intercept[AnalysisException] {
-        sql("SELECT max_by(x, y) FROM tempView").show
-      }
-      assert(
-        error.message.contains("function max_by does not support ordering on type map<int,string>"))
+      checkAnswer(
+        sql("SELECT max_by(x, y) FROM tempView"),
+        Row(2) :: Nil
+      )
     }
   }
 
@@ -951,11 +960,10 @@ class DataFrameAggregateSuite extends QueryTest
         .toDF("x", "y")
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
-      val error = intercept[AnalysisException] {
-        sql("SELECT min_by(x, y) FROM tempView").show
-      }
-      assert(
-        error.message.contains("function min_by does not support ordering on type map<int,string>"))
+      checkAnswer(
+        sql("SELECT min_by(x, y) FROM tempView"),
+        Row(0) :: Nil
+      )
     }
   }
 

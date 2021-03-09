@@ -22,11 +22,13 @@ import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
+
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
-import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, GenericRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
@@ -511,7 +513,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       Row("1"))
   }
 
-  def sortTest(): Unit = {
+  def sorttest(): Unit = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq(Row(1, 1), Row(1, 2), Row(2, 1), Row(2, 2), Row(3, 1), Row(3, 2)))
@@ -554,7 +556,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("external sorting") {
-    sortTest()
+    sorttest()
   }
 
   test("CTE feature") {
@@ -4117,7 +4119,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
-
+  
   test("SPARK-33482: Fix FileScan canonicalization") {
     withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
       withTempPath { path =>
@@ -4138,6 +4140,136 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
           assert(reusedExchanges.size == 1)
         }
       }
+    }
+  }
+
+  test("SPARK-34819: MapType supports orderable semantics") {
+    Seq(CodegenObjectFactoryMode.CODEGEN_ONLY.toString,
+      CodegenObjectFactoryMode.NO_CODEGEN.toString).foreach {
+      case codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode,
+          SQLConf.USE_OBJECT_HASH_AGG.key -> "false") {
+          withTable("t", "t2") {
+            val df = Seq(
+              Map("a" -> 1, "b" -> 2, "c" -> 3),
+              Map("c" -> 3, "b" -> 2, "a" -> 1),
+              Map("d" -> 4),
+              Map("a" -> 1, "e" -> 2),
+              Map("d" -> 4),
+              Map("d" -> 5)).toDF("m")
+            val df2 = Seq(
+              Map("b" -> 2, "a" -> 1, "c" -> 3),
+            ).toDF("m2")
+            df.createOrReplaceTempView("t")
+            df2.createOrReplaceTempView("t2")
+
+            checkAnswer(
+              sql("select m, count(1) from t group by m"),
+              Row(Map("d" -> 4), 2) ::
+                Row(Map("d" -> 5), 1) ::
+                Row(Map("a" -> 1, "e" -> 2), 1) ::
+                Row(Map("a" -> 1, "b" -> 2, "c" -> 3), 2) :: Nil
+            )
+
+            checkAnswer(
+              sql("select distinct m from t"),
+              Row(Map("d" -> 4)) ::
+                Row(Map("d" -> 5)) ::
+                Row(Map("a" -> 1, "e" -> 2)) ::
+                Row(Map("a" -> 1, "b" -> 2, "c" -> 3)) :: Nil
+            )
+
+            checkAnswer(
+              sql("select m from t order by m"),
+              Row(Map("d" -> 4)) ::
+                Row(Map("d" -> 4)) ::
+                Row(Map("d" -> 5)) ::
+                Row(Map("a" -> 1, "e" -> 2)) ::
+                Row(Map("a" -> 1, "b" -> 2, "c" -> 3)) ::
+                Row(Map("c" -> 3, "b" -> 2, "a" -> 1)) :: Nil
+            )
+
+            checkAnswer(
+              sql("select m, count(1) over (partition by m) from t"),
+              Row(Map("d" -> 4), 2) ::
+                Row(Map("d" -> 4), 2) ::
+                Row(Map("d" -> 5), 1) ::
+                Row(Map("a" -> 1, "e" -> 2), 1) ::
+                Row(Map("a" -> 1, "b" -> 2, "c" -> 3), 2) ::
+                Row(Map("c" -> 3, "b" -> 2, "a" -> 1), 2) :: Nil
+            )
+
+            checkAnswer(
+              sql(
+                """select m2, count(1), percentile(id, 0.5) from (
+                  |   select
+                  |     case when size(m) == 3 then m else map('b', 2, 'a', 1, 'c', 3)
+                  |     end as m2,
+                  |     1 as id
+                  |   from t
+                  |)
+                  |group by m2
+                  |""".stripMargin),
+                Row(Map("a" -> 1, "b" -> 2, "c" -> 3), 6, 1.0)
+            )
+
+            checkAnswer(
+              sql("select m, m2 from t join t2 on t.m = t2.m2"),
+              Row(Map("a" -> 1, "b" -> 2, "c" -> 3), Map("b" -> 2, "a" -> 1, "c" -> 3)) ::
+                Row(Map("c" -> 3, "b" -> 2, "a" -> 1), Map("b" -> 2, "a" -> 1, "c" -> 3)) :: Nil
+            )
+
+            checkAnswer(
+              sql("select distinct m, m2 from t join t2 on t.m = t2.m2"),
+              Row(Map("a" -> 1, "b" -> 2, "c" -> 3), Map("a" -> 1, "b" -> 2, "c" -> 3)) :: Nil
+            )
+
+            checkAnswer(
+              sql("select m from t where m = map('b', 2, 'a', 1, 'c', 3)"),
+              Row(Map('a' -> 1, 'b' -> 2, 'c' -> 3)) ::
+                Row(Map('c' -> 3, 'b' -> 2, 'a' -> 3)) :: Nil
+            )
+          }
+        }
+    }
+  }
+
+  test("SPARK-34819: MapType has nesting complex type supports orderable semantics") {
+    Seq(CodegenObjectFactoryMode.CODEGEN_ONLY.toString,
+      CodegenObjectFactoryMode.NO_CODEGEN.toString).foreach {
+      case codegenMode =>
+        withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
+          withTable("t") {
+            val df = Seq(
+              Map("a" -> Map("hello" -> Array("i", "j"))),
+              Map("a" -> Map("world" -> Array("o", "p"))),
+              Map("a" -> Map("hello" -> Array("m", "n"))),
+              Map("a" -> Map("hello" -> Array("i", "j")))).toDF("m")
+            df.createOrReplaceTempView("t")
+            checkAnswer(
+              sql("select m, count(1) from t group by m"),
+              Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("i", "j")))), 2) ::
+                Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("m", "n")))), 1) ::
+                Row(Map("a" -> Map("world" -> mutable.WrappedArray.make(Array("o", "p")))), 1) ::
+                Nil
+            )
+
+            checkAnswer(
+              sql("select distinct m from t"),
+              Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("i", "j"))))) ::
+                Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("m", "n"))))) ::
+                Row(Map("a" -> Map("world" -> mutable.WrappedArray.make(Array("o", "p"))))) :: Nil
+            )
+
+            checkAnswer(
+              sql("select m from t order by m"),
+              Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("i", "j"))))) ::
+                Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("i", "j"))))) ::
+                Row(Map("a" -> Map("hello" -> mutable.WrappedArray.make(Array("m", "n"))))) ::
+                Row(Map("a" -> Map("world" -> mutable.WrappedArray.make(Array("o", "p"))))) :: Nil
+            )
+          }
+        }
     }
   }
 }
