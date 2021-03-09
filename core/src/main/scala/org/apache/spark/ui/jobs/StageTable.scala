@@ -155,6 +155,7 @@ private[ui] class StagePagedTable(
     // The tooltip information could be None, which indicates it does not have a tooltip.
     val stageHeadersAndCssClasses: Seq[(String, Boolean, Option[String])] =
       Seq(("Stage Id", true, None)) ++
+      Seq(("Job Id(s)", false, None)) ++
       {if (isFairScheduler) {Seq(("Pool Name", true, None))} else Seq.empty} ++
       Seq(
         ("Description", true, None),
@@ -186,11 +187,23 @@ private[ui] class StagePagedTable(
       case Some(stageData) =>
         val info = data.stage
 
+        val jobIds = store.jobsList(null)
+          .filter(_.stageIds.contains(info.stageId))
+          .map(_.jobId)
+          .sortWith(_ > _)
+
         {if (data.attemptId > 0) {
           <td>{data.stageId} (retry {data.attemptId})</td>
         } else {
           <td>{data.stageId}</td>
         }} ++
+        <td>{
+          for (jobId <- jobIds)
+            yield (<a href={"%s/jobs/job/?id=%d"
+              .format(UIUtils.prependBaseUri(request, basePath), jobId)}>
+              {jobId}
+            </a>)
+          }</td> ++
         {if (isFairScheduler) {
           <td>
             <a href={"%s/stages/pool?poolname=%s"
@@ -285,7 +298,8 @@ private[ui] class StagePagedTable(
   }
 
   protected def missingStageRow(stageId: Int): Seq[Node] = {
-    <td>{stageId}</td> ++
+    <td>{stageId}</td> ++ // StageID
+    <td></td> ++ // JobId
     {if (isFairScheduler) {<td>-</td>} else Seq.empty} ++
     <td>No data available for this stage</td> ++ // Description
     <td></td> ++ // Submitted
