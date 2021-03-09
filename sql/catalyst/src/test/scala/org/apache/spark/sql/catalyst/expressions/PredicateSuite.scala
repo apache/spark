@@ -233,14 +233,6 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
       testWithRandomDataGeneration(structType, nullable)
     }
-
-    // In doesn't support map type and will fail the analyzer.
-    val map = Literal.create(create_map(1 -> 1), MapType(IntegerType, IntegerType))
-    In(map, Seq(map)).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("function in does not support ordering on type map"))
-      case _ => fail("In should not work on map type")
-    }
   }
 
   test("switch statements in InSet for bytes, shorts, ints, dates") {

@@ -30,6 +30,8 @@ import com.esotericsoftware.kryo.io.Output;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
@@ -110,6 +112,22 @@ public final class UnsafeMapData extends MapData implements Externalizable, Kryo
   @Override
   public UnsafeArrayData valueArray() {
     return values;
+  }
+
+  @Override
+  public int hashCode() {
+    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (other instanceof UnsafeMapData) {
+      UnsafeMapData o = (UnsafeMapData) other;
+      return (sizeInBytes == o.sizeInBytes) &&
+        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
+          sizeInBytes);
+    }
+    return false;
   }
 
   public void writeToMemory(Object target, long targetOffset) {

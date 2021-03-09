@@ -65,6 +65,10 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends BaseOrdering {
             a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case a: ArrayType if order.direction == Descending =>
             - a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case a: MapType if order.direction == Ascending =>
+            a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case a: MapType if order.direction == Descending =>
+            - a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Ascending =>
             s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Descending =>
@@ -104,6 +108,7 @@ object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], 
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
+    case map: MapType => isOrderable(map.keyType) && isOrderable(map.valueType)
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
     case _ => false
   }

@@ -27,31 +27,37 @@ import org.apache.spark.unsafe.types.UTF8String
 class ComplexDataSuite extends SparkFunSuite {
   def utf8(str: String): UTF8String = UTF8String.fromString(str)
 
-  test("inequality tests for MapData") {
-    // test data
-    val testMap1 = Map(utf8("key1") -> 1)
-    val testMap2 = Map(utf8("key1") -> 1, utf8("key2") -> 2)
-    val testMap3 = Map(utf8("key1") -> 1)
-    val testMap4 = Map(utf8("key1") -> 1, utf8("key2") -> 2)
+  test("SPARK-34819: equality tests for MapData") {
+    val testArrayMap1 = ArrayBasedMapData(Array(), Array())
+    val testArrayMap2 = ArrayBasedMapData(Array(utf8("k1")), Array(1))
+    val testArrayMap3 = ArrayBasedMapData(Array(utf8("k1"), utf8("k2")), Array(1, 2))
+    val testArrayMap4 = ArrayBasedMapData(Array(utf8("k2"), utf8("k1")), Array(2, 1))
 
     // ArrayBasedMapData
-    val testArrayMap1 = ArrayBasedMapData(testMap1.toMap)
-    val testArrayMap2 = ArrayBasedMapData(testMap2.toMap)
-    val testArrayMap3 = ArrayBasedMapData(testMap3.toMap)
-    val testArrayMap4 = ArrayBasedMapData(testMap4.toMap)
-    assert(testArrayMap1 !== testArrayMap3)
-    assert(testArrayMap2 !== testArrayMap4)
+    assert(testArrayMap1 === testArrayMap1.copy())
+    assert(testArrayMap2 === testArrayMap2.copy())
+    assert(testArrayMap3 === testArrayMap3.copy())
+    assert(testArrayMap4 === testArrayMap4.copy())
+    assert(testArrayMap1 !== testArrayMap2)
+    assert(testArrayMap2 !== testArrayMap3)
+    assert(testArrayMap3 !== testArrayMap4)
 
-    // UnsafeMapData
     val unsafeConverter = UnsafeProjection.create(Array[DataType](MapType(StringType, IntegerType)))
     val row = new GenericInternalRow(1)
-    def toUnsafeMap(map: ArrayBasedMapData): UnsafeMapData = {
+    def toUnsafeMap(map: MapData): UnsafeMapData = {
       row.update(0, map)
       val unsafeRow = unsafeConverter.apply(row)
       unsafeRow.getMap(0).copy
     }
-    assert(toUnsafeMap(testArrayMap1) !== toUnsafeMap(testArrayMap3))
-    assert(toUnsafeMap(testArrayMap2) !== toUnsafeMap(testArrayMap4))
+
+    // UnsafeMapData
+    assert(toUnsafeMap(testArrayMap1) === toUnsafeMap(testArrayMap1.copy()))
+    assert(toUnsafeMap(testArrayMap2) === toUnsafeMap(testArrayMap2.copy()))
+    assert(toUnsafeMap(testArrayMap3) === toUnsafeMap(testArrayMap3.copy()))
+    assert(toUnsafeMap(testArrayMap4) === toUnsafeMap(testArrayMap4.copy()))
+    assert(toUnsafeMap(testArrayMap1) !== toUnsafeMap(testArrayMap2))
+    assert(toUnsafeMap(testArrayMap2) !== toUnsafeMap(testArrayMap3))
+    assert(toUnsafeMap(testArrayMap3) !== toUnsafeMap(testArrayMap4))
   }
 
   test("GenericInternalRow.copy return a new instance that is independent from the old one") {

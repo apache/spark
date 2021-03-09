@@ -113,19 +113,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertErrorForDifferingTypes(GreaterThan(Symbol("intField"), Symbol("booleanField")))
     assertErrorForDifferingTypes(GreaterThanOrEqual(Symbol("intField"), Symbol("booleanField")))
 
-    assertError(EqualTo(Symbol("mapField"), Symbol("mapField")),
-      "EqualTo does not support ordering on type map")
-    assertError(EqualNullSafe(Symbol("mapField"), Symbol("mapField")),
-      "EqualNullSafe does not support ordering on type map")
-    assertError(LessThan(Symbol("mapField"), Symbol("mapField")),
-      "LessThan does not support ordering on type map")
-    assertError(LessThanOrEqual(Symbol("mapField"), Symbol("mapField")),
-      "LessThanOrEqual does not support ordering on type map")
-    assertError(GreaterThan(Symbol("mapField"), Symbol("mapField")),
-      "GreaterThan does not support ordering on type map")
-    assertError(GreaterThanOrEqual(Symbol("mapField"), Symbol("mapField")),
-      "GreaterThanOrEqual does not support ordering on type map")
-
     assertError(If(Symbol("intField"), Symbol("stringField"), Symbol("stringField")),
       "type of predicate expression in If should be boolean")
     assertErrorForDifferingTypes(
@@ -156,8 +143,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(new BoolAnd(Symbol("booleanField")))
     assertSuccess(new BoolOr(Symbol("booleanField")))
 
-    assertError(Min(Symbol("mapField")), "min does not support ordering on type")
-    assertError(Max(Symbol("mapField")), "max does not support ordering on type")
+    assertSuccess(Min(Symbol("mapField")))
+    assertSuccess(Max(Symbol("mapField")))
     assertError(Sum(Symbol("booleanField")), "function sum requires numeric or interval types")
     assertError(Average(Symbol("booleanField")),
       "function average requires numeric or interval types")
@@ -228,8 +215,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       assertError(operator(Seq(Symbol("booleanField"))), "requires at least two arguments")
       assertError(operator(Seq(Symbol("intField"), Symbol("stringField"))),
         "should all have the same type")
-      assertError(operator(Seq(Symbol("mapField"), Symbol("mapField"))),
-        "does not support ordering")
     }
   }
 }

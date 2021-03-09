@@ -2937,6 +2937,11 @@ class DataFrameSuite extends QueryTest
       checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM tbl"), Row(2.00000000000) :: Nil)
     }
   }
+
+  test("SPARK-34819: dropDuplicates supports MapType") {
+    val df = Seq(Map("k1" -> 1, "k2" -> 2), Map("k2" -> 2, "k1" -> 1)).toDF("v")
+    assert(df.dropDuplicates().count() === 1)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

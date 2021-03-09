@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.types
 
+import scala.math.Ordering
+
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Stable
+import org.apache.spark.sql.catalyst.util.MapData
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
 
 /**
@@ -78,6 +81,31 @@ case class MapType(
 
   override private[spark] def existsRecursively(f: (DataType) => Boolean): Boolean = {
     f(this) || keyType.existsRecursively(f) || valueType.existsRecursively(f)
+  }
+
+  @transient
+  private[sql] lazy val interpretedOrdering: Ordering[MapData] = new Ordering[MapData] {
+
+    private val keyArrayOrdering = ArrayType(keyType).interpretedOrdering
+    private val valueArrayOrdering = ArrayType(valueType).interpretedOrdering
+
+    def compare(left: MapData, right: MapData): Int = {
+      val leftKeys = left.keyArray()
+      val rightKeys = right.keyArray()
+      val keyComp = keyArrayOrdering.compare(leftKeys, rightKeys)
+      if (keyComp != 0) {
+        return keyComp
+      }
+
+      val leftValues = left.valueArray()
+      val rightValues = right.valueArray()
+      val valueComp = valueArrayOrdering.compare(leftValues, rightValues)
+      if (valueComp != 0) {
+        valueComp
+      } else {
+        0
+      }
+    }
   }
 }
 

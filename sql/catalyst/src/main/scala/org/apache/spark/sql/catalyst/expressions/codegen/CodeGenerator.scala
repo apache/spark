@@ -625,6 +625,7 @@ class CodegenContext extends Logging {
     case dt: DataType if dt.isInstanceOf[AtomicType] => s"$c1.equals($c2)"
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
+    case map: MapType => genComp(map, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
     case NullType => "false"
     case _ =>
@@ -700,6 +701,32 @@ class CodegenContext extends Logging {
           }
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+
+    case _ @ MapType(keyType, valueType, _) =>
+      val keyArrayType = ArrayType(keyType)
+      val valueArrayType = ArrayType(valueType)
+      val compareFunc = freshName("compareMap")
+      val funcCode: String =
+        s"""
+          public int $compareFunc(MapData a, MapData b) {
+            ArrayData aKeys = a.keyArray();
+            ArrayData bKeys = b.keyArray();
+            int keyComp = ${genComp(keyArrayType, "aKeys", "bKeys")};
+            if (keyComp != 0) {
+              return keyComp;
+            }
+
+            ArrayData aValues = a.valueArray();
+            ArrayData bValues = b.valueArray();
+            int valueComp = ${genComp(valueArrayType, "aValues", "bValues")};
+            if (valueComp != 0) {
+              return valueComp;
+            }
+            return 0;
+          }
+        """
+      s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
+
     case schema: StructType =>
       val comparisons = GenerateOrdering.genComparisons(this, schema)
       val compareFunc = freshName("compareStruct")

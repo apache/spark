@@ -108,6 +108,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       case dt: AtomicType => dt.ordering.asInstanceOf[Ordering[Any]]
       case a : ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case m: MapType => m.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case other =>
         throw new IllegalArgumentException(
           s"Type ${other.catalogString} does not support ordered operations")

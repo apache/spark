@@ -918,11 +918,10 @@ class DataFrameAggregateSuite extends QueryTest
         .toDF("x", "y")
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
-      val error = intercept[AnalysisException] {
-        sql("SELECT max_by(x, y) FROM tempView").show
-      }
-      assert(
-        error.message.contains("function max_by does not support ordering on type map<int,string>"))
+      checkAnswer(
+        sql("SELECT max_by(x, y) FROM tempView"),
+        Row(2) :: Nil
+      )
     }
   }
 
@@ -974,11 +973,10 @@ class DataFrameAggregateSuite extends QueryTest
         .toDF("x", "y")
         .select($"x", map($"x", $"y").as("y"))
         .createOrReplaceTempView("tempView")
-      val error = intercept[AnalysisException] {
-        sql("SELECT min_by(x, y) FROM tempView").show
-      }
-      assert(
-        error.message.contains("function min_by does not support ordering on type map<int,string>"))
+      checkAnswer(
+        sql("SELECT min_by(x, y) FROM tempView"),
+        Row(0) :: Nil
+      )
     }
   }
 

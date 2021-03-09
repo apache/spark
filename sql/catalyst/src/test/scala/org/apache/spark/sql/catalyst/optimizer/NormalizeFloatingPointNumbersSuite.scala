@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Expression, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, NamedLambdaVariable, TransformKeys, TransformValues}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType}
 
 class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
@@ -122,6 +123,67 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
       namedStruct("a", KnownFloatingPointNormalized(NormalizeNaNAndZero(b)))
     val correctAnswer = testRelation1.join(testRelation2, condition = Some(joinCond))
 
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  def mapKeyNormalized(input: Expression, tpe1: DataType, tpe2: DataType): Expression = {
+    val lv1 = NamedLambdaVariable("arg1", tpe1, nullable = false)
+    val lv2 = NamedLambdaVariable("arg2", tpe2, nullable = true)
+    val f = KnownFloatingPointNormalized(NormalizeNaNAndZero(lv1))
+    TransformKeys(input, LambdaFunction(f, Seq(lv1, lv2)))
+  }
+
+  def mapValueNormalized(input: Expression, tpe1: DataType, tpe2: DataType): Expression = {
+    val lv1 = NamedLambdaVariable("arg1", tpe1, nullable = false)
+    val lv2 = NamedLambdaVariable("arg2", tpe2, nullable = true)
+    val f = KnownFloatingPointNormalized(NormalizeNaNAndZero(lv2))
+    TransformValues(input, LambdaFunction(f, Seq(lv1, lv2)))
+  }
+
+  test("SPARK-34819: normalize map keys and values - normalized keys only") {
+    val t1 = LocalRelation('a.map(DoubleType, IntegerType))
+    val a = t1.output(0)
+    val t2 = LocalRelation('a.map(DoubleType, IntegerType))
+    val b = t2.output(0)
+    val query = t1.join(t2, condition = Some(a === b))
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+
+    val correctAnswer = t1.join(t2, condition = Some(
+      KnownFloatingPointNormalized(mapKeyNormalized(a, DoubleType, IntegerType)) ===
+        KnownFloatingPointNormalized(mapKeyNormalized(b, DoubleType, IntegerType))))
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-34819: normalize map keys and values - normalized values only") {
+    val t1 = LocalRelation('a.map(IntegerType, DoubleType))
+    val a = t1.output(0)
+    val t2 = LocalRelation('a.map(IntegerType, DoubleType))
+    val b = t2.output(0)
+    val query = t1.join(t2, condition = Some(a === b))
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+
+    val correctAnswer = t1.join(t2, condition = Some(
+      KnownFloatingPointNormalized(mapValueNormalized(a, IntegerType, DoubleType)) ===
+        KnownFloatingPointNormalized(mapValueNormalized(b, IntegerType, DoubleType))))
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("SPARK-34819: normalize map keys and values - normalized both keys/values") {
+    val t1 = LocalRelation('a.map(DoubleType, DoubleType))
+    val a = t1.output(0)
+    val t2 = LocalRelation('a.map(DoubleType, DoubleType))
+    val b = t2.output(0)
+    val query = t1.join(t2, condition = Some(a === b))
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+
+    val correctAnswer = t1.join(t2, condition = Some(
+      KnownFloatingPointNormalized(mapValueNormalized(mapKeyNormalized(
+          a, DoubleType, DoubleType), DoubleType, DoubleType)) ===
+        KnownFloatingPointNormalized(mapValueNormalized(mapKeyNormalized(
+          b, DoubleType, DoubleType), DoubleType, DoubleType))))
     comparePlans(doubleOptimized, correctAnswer)
   }
 }

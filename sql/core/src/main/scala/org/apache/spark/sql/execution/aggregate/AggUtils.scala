@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.{NormalizeFloatingNumbers, NormalizeMaps}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -26,6 +27,38 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
 object AggUtils {
+
+  // Ideally, this should be done in `NormalizeFloatingNumbers` and `NormalizeMaps`,
+  // but we do it in the physical planning phase because `groupingExpressions`
+  // is not extracted during the logical phase.
+  def normalizeGroupingExpr(groupingExpr: Expression): Expression = {
+    NormalizeMaps.normalize(NormalizeFloatingNumbers.normalize(groupingExpr))
+  }
+
+  def normalizeGroupingExprs(groupingExprs: Seq[NamedExpression]): Seq[NamedExpression] = {
+    groupingExprs.map { e =>
+      normalizeGroupingExpr(e) match {
+        case n: NamedExpression => n
+        // Keep the name of the original expression
+        case other => Alias(other, e.name)(exprId = e.exprId)
+      }
+    }
+  }
+
+  def normalizeDistinctGroupingExprs(groupingExprs: Seq[Expression]): Seq[NamedExpression] = {
+    groupingExprs.map { e =>
+      normalizeGroupingExpr(e) match {
+        case ne: NamedExpression => ne
+        case other =>
+          // Keep the name of the original expression
+          val name = e match {
+            case ne: NamedExpression => ne.name
+            case _ => e.toString
+          }
+          Alias(other, name)()
+      }
+    }
+  }
 
   private def mayRemoveAggFilters(exprs: Seq[AggregateExpression]): Seq[AggregateExpression] = {
     exprs.map { ae =>

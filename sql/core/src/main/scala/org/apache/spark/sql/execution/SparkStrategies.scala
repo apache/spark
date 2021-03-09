@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -326,14 +326,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
 
-        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-        // `groupingExpressions` is not extracted during logical phase.
-        val normalizedGroupingExpressions = namedGroupingExpressions.map { e =>
-          NormalizeFloatingNumbers.normalize(e) match {
-            case n: NamedExpression => n
-            case other => Alias(other, e.name)(exprId = e.exprId)
-          }
-        }
+        val normalizedGroupingExpressions =
+          AggUtils.normalizeGroupingExprs(namedGroupingExpressions)
 
         AggUtils.planStreamingAggregation(
           normalizedGroupingExpressions,
@@ -434,15 +428,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               "Spark user mailing list.")
         }
 
-        // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
-        // `groupingExpressions` is not extracted during logical phase.
-        val normalizedGroupingExpressions = groupingExpressions.map { e =>
-          NormalizeFloatingNumbers.normalize(e) match {
-            case n: NamedExpression => n
-            // Keep the name of the original expression.
-            case other => Alias(other, e.name)(exprId = e.exprId)
-          }
-        }
+        val normalizedGroupingExpressions =
+          AggUtils.normalizeGroupingExprs(groupingExpressions)
 
         val aggregateOperator =
           if (functionsWithDistinct.isEmpty) {
@@ -460,20 +447,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // aggregates have different column expressions.
             val distinctExpressions =
               functionsWithDistinct.head.aggregateFunction.children.filterNot(_.foldable)
-            val normalizedNamedDistinctExpressions = distinctExpressions.map { e =>
-              // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here
-              // because `distinctExpressions` is not extracted during logical phase.
-              NormalizeFloatingNumbers.normalize(e) match {
-                case ne: NamedExpression => ne
-                case other =>
-                  // Keep the name of the original expression.
-                  val name = e match {
-                    case ne: NamedExpression => ne.name
-                    case _ => e.toString
-                  }
-                  Alias(other, name)()
-              }
-            }
+            val normalizedNamedDistinctExpressions =
+              AggUtils.normalizeDistinctGroupingExprs(distinctExpressions)
 
             AggUtils.planAggregateWithOneDistinct(
               normalizedGroupingExpressions,

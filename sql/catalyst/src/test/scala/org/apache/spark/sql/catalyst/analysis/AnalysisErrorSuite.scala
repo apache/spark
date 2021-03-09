@@ -52,34 +52,34 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
   private[spark] override def asNullable: GroupableUDT = this
 }
 
-private[sql] case class UngroupableData(data: Map[Int, Int]) {
+private[sql] case class GroupableData2(data: Map[Int, Int]) {
   def getData: Map[Int, Int] = data
 }
 
-private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
+private[sql] class GroupableUDT2 extends UserDefinedType[GroupableData2] {
 
   override def sqlType: DataType = MapType(IntegerType, IntegerType)
 
-  override def serialize(ungroupableData: UngroupableData): MapData = {
-    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
-    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
+  override def serialize(groupableData: GroupableData2): MapData = {
+    val keyArray = new GenericArrayData(groupableData.data.keys.toSeq)
+    val valueArray = new GenericArrayData(groupableData.data.values.toSeq)
     new ArrayBasedMapData(keyArray, valueArray)
   }
 
-  override def deserialize(datum: Any): UngroupableData = {
+  override def deserialize(datum: Any): GroupableData2 = {
     datum match {
       case data: MapData =>
         val keyArray = data.keyArray().array
         val valueArray = data.valueArray().array
         assert(keyArray.length == valueArray.length)
         val mapData = keyArray.zip(valueArray).toMap.asInstanceOf[Map[Int, Int]]
-        UngroupableData(mapData)
+        GroupableData2(mapData)
     }
   }
 
-  override def userClass: Class[UngroupableData] = classOf[UngroupableData]
+  override def userClass: Class[GroupableData2] = classOf[GroupableData2]
 
-  private[spark] override def asNullable: UngroupableUDT = this
+  private[spark] override def asNullable: GroupableUDT2 = this
 }
 
 case class TestFunction(
@@ -298,11 +298,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "unresolved star expansion in max",
     testRelation2.groupBy($"a")(sum(UnresolvedStar(None))),
     "Invalid usage of '*'" :: "in expression 'sum'" :: Nil)
-
-  errorTest(
-    "sorting by unsupported column types",
-    mapRelation.orderBy($"map".asc),
-    "sort" :: "type" :: "map<int,int>" :: Nil)
 
   errorTest(
     "sorting by attributes are not from grouping expressions",
@@ -594,19 +589,14 @@ class AnalysisErrorSuite extends AnalysisTest {
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true),
-      new GroupableUDT())
-    supportedDataTypes.foreach { dataType =>
-      checkDataType(dataType, shouldSuccess = true)
-    }
-
-    val unsupportedDataTypes = Seq(
       MapType(StringType, LongType),
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", MapType(StringType, LongType), nullable = true),
-      new UngroupableUDT())
-    unsupportedDataTypes.foreach { dataType =>
-      checkDataType(dataType, shouldSuccess = false)
+      new GroupableUDT(),
+      new GroupableUDT2())
+    supportedDataTypes.foreach { dataType =>
+      checkDataType(dataType, shouldSuccess = true)
     }
   }
 
@@ -625,7 +615,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         "another aggregate function." :: Nil)
   }
 
-  test("Join can work on binary types but can't work on map types") {
+  test("Join can work on binary/map types") {
     val left = LocalRelation(Symbol("a").binary, Symbol("b").map(StringType, StringType))
     val right = LocalRelation(Symbol("c").binary, Symbol("d").map(StringType, StringType))
 
@@ -640,7 +630,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some(Symbol("b") === Symbol("d")))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type map" :: Nil)
+    assertAnalysisSuccess(plan2)
   }
 
   test("PredicateSubQuery is used outside of a filter") {
