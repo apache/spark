@@ -22,7 +22,7 @@ import tempfile
 from contextlib import contextmanager
 
 from pyspark.sql import SparkSession
-from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
+from pyspark.sql.types import ArrayType, DoubleType, StructField, StructType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase
 
 
@@ -113,6 +113,61 @@ class ExamplePoint:
     def __eq__(self, other):
         return isinstance(other, self.__class__) and \
             other.x == self.x and other.y == self.y
+
+
+class ExampleBoxUDT(UserDefinedType):
+    """
+    User-defined type (UDT) for ExampleBox
+    """
+
+    @classmethod
+    def sqlType(cls):
+        return StructType([
+            StructField("xmin", DoubleType(), False),
+            StructField("ymin", DoubleType(), False),
+            StructField("xmax", DoubleType(), False),
+            StructField("ymax", DoubleType(), False),
+        ])
+
+    @classmethod
+    def module(cls):
+        return 'pyspark.sql.tests'
+
+    @classmethod
+    def scalaUDT(cls):
+        return 'org.apache.spark.sql.test.ExampleBoxUDT'
+
+    def serialize(self, obj):
+        return (obj.xmin, obj.ymin, obj.xmax, obj.ymax)
+
+    def deserialize(self, datum):
+        return ExampleBox(datum[0], datum[1], datum[2], datum[3])
+
+
+class ExampleBox:
+    """
+    An example class that uses StructType to implement UDT.
+    """
+    __UDT__ = ExampleBoxUDT()
+
+    def __init__(self, xmin, ymin, xmax, ymax):
+        self.xmin = xmin
+        self.ymin = ymin
+        self.xmax = xmax
+        self.ymax = ymax
+
+    def __repr__(self):
+        return f"ExampleBox{str(self)}"
+
+    def __str__(self):
+        return f"({self.xmin},{self.ymin},{self.xmax},{self.ymax})"
+
+    def __eq__(self, other):
+        return (
+            type(other) == ExampleBox and
+            (other.xmin, other.ymin, other.xmax, other.ymax) ==
+            (self.xmin, self.ymin, self.xmax, self.ymax)
+        )
 
 
 class PythonOnlyUDT(UserDefinedType):

@@ -35,7 +35,7 @@ from pyspark.sql.types import IntegerType, ByteType, StructType, ShortType, Bool
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     test_not_compiled_message, have_pandas, have_pyarrow, pandas_requirement_message, \
-    pyarrow_requirement_message, ExamplePointUDT, ExamplePoint
+    pyarrow_requirement_message, ExamplePointUDT, ExamplePoint, ExampleBox, ExampleBoxUDT
 from pyspark.testing.utils import QuietTest
 
 if have_pandas:
@@ -1115,16 +1115,27 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         @pandas_udf(ExamplePointUDT())
         def create_vector(series: pd.Series) -> pd.Series:
             vectors = []
-            for idx, item in series.items():
-                vectors.append(ExamplePoint(1, 2))
+            for _, item in series.items():
+                vectors.append(ExamplePoint(item, item + 1))
             return pd.Series(vectors)
 
+        @pandas_udf(ExampleBoxUDT())
+        def create_boxes(series: pd.Series) -> pd.Series:
+            boxes = []
+            for _, item in series.items():
+                boxes.append(ExampleBox(item, item + 1, item + 2, item + 3))
+            return pd.Series(boxes)
+
         df = self.spark.range(2)
-        df = df.withColumn("vector", create_vector(col("id")))
+        df = (
+            df
+            .withColumn("vector", create_vector(col("id")))
+            .withColumn("box", create_boxes(col("id")))
+        )
         df.show()
         self.assertEqual([
-            Row(id=0, vector=ExamplePoint(1, 2)),
-            Row(id=1, vector=ExamplePoint(1, 2))
+            Row(id=0, vector=ExamplePoint(0, 1), box=ExampleBox(0, 1, 2, 3)),
+            Row(id=1, vector=ExamplePoint(1, 2), box=ExampleBox(1, 2, 3, 4))
         ], df.collect())
 
     # SPARK-36400

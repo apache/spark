@@ -135,6 +135,11 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         else:
             return s
 
+    def _to_plain_object(self, obj):
+        """Convert an object with User-defined type to plain spark types."""
+        udt = obj.__UDT__
+        return udt.sqlType().fromInternal(udt.serialize(obj))
+
     def _create_batch(self, series):
         """
         Create an Arrow record batch from the given pandas.Series or list of Series,
@@ -161,15 +166,12 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
-        def to_plain_object(cell):
-            return cell.__UDT__.sqlType().fromInternal(cell.__UDT__.serialize(cell))
-
         def create_array(s, dt: DataType, t: pa.DataType):
             mask = s.isnull()
             if isinstance(dt, UserDefinedType):
-                s = s.apply(to_plain_object)
+                s = s.apply(lambda x: self._to_plain_object(x))
             elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
-                s = s.apply(lambda x: [to_plain_object(f) for f in x])
+                s = s.apply(lambda x: [self._to_plain_object(f) for f in x])
 
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
@@ -200,7 +202,7 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
         for s, dt in series:
             print(f"S={s} dt={dt} dt type={type(dt)}")
             t = to_arrow_type(dt) if isinstance(dt, DataType) else dt
-            if t is not None and pa.types.is_struct(t):
+            if t is not None and pa.types.is_struct(t) and not isinstance(dt, UserDefinedType):
                 if not isinstance(s, pd.DataFrame):
                     raise ValueError("A field of type StructType expects a pandas.DataFrame, "
                                      "but got: %s" % str(type(s)))
