@@ -137,16 +137,10 @@ case class GenerateExec(
   override def needCopyResult: Boolean = true
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    // Add input rows to the values when we are joining
-    val values = if (requiredChildOutput.nonEmpty) {
-      input
-    } else {
-      Seq.empty
-    }
-
-    val requiredInput = input.zip(child.output).filter {
-      case(_, output) => parent.inputSet.contains(output)
-    }.map(_._1)
+    val requiredAttrSet = AttributeSet(requiredChildOutput)
+    val requiredInput = child.output.zip(input).filter {
+      case (attr, _) => requiredAttrSet.contains(attr)
+    }.map(_._2)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput, row)
       case g => codeGenTraversableOnce(ctx, g, requiredInput, row)
@@ -229,7 +223,6 @@ case class GenerateExec(
       "0"
     }
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val requiredInput = input ++ position ++ values
     s"""
        |${data.code}
        |$initMapData
@@ -237,7 +230,7 @@ case class GenerateExec(
        |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
        |  $updateRowData
-       |  ${consume(ctx, requiredInput)}
+       |  ${consume(ctx, input ++ position ++ values)}
        |}
      """.stripMargin
   }
@@ -248,7 +241,7 @@ case class GenerateExec(
   private def codeGenTraversableOnce(
       ctx: CodegenContext,
       e: Expression,
-      input: Seq[ExprCode],
+      requiredInput: Seq[ExprCode],
       row: ExprCode): String = {
 
     // Generate the code for the generator
@@ -284,7 +277,7 @@ case class GenerateExec(
          |  boolean $hasNext = $iterator.hasNext();
          |  InternalRow $current = (InternalRow)($hasNext? $iterator.next() : null);
          |  $outerVal = false;
-         |  ${consume(ctx, input ++ values)}
+         |  ${consume(ctx, requiredInput ++ values)}
          |}
       """.stripMargin
     } else {
@@ -294,7 +287,7 @@ case class GenerateExec(
          |while ($iterator.hasNext()) {
          |  $numOutput.add(1);
          |  InternalRow $current = (InternalRow)($iterator.next());
-         |  ${consume(ctx, input ++ values)}
+         |  ${consume(ctx, requiredInput ++ values)}
          |}
       """.stripMargin
     }
