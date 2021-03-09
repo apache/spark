@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -2374,5 +2375,13 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
     assert(e2.getCause.isInstanceOf[RuntimeException])
     assert(e2.getCause.getMessage == "hello")
+  }
+
+  test("negate year-month and day-time intervals") {
+    import testImplicits._
+    val df = Seq((Period.ofMonths(10), Duration.ofDays(10)))
+      .toDF("year-month", "day-time")
+    val negated = df.select(-$"year-month", -$"day-time")
+    checkAnswer(negated, Row(Period.ofMonths(-10), Duration.ofDays(-10)))
   }
 }
