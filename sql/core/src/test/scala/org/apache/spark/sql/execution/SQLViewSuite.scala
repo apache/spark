@@ -22,6 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.View
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 
@@ -906,6 +907,23 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
+      }
+    }
+  }
+
+  test("SPARK-34152: global temp view's identifier should be correctly stored") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        withGlobalTempView("v") {
+          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          sql("CREATE GLOBAL TEMPORARY VIEW v AS SELECT 1")
+          val globalTempView = spark.sessionState.catalog.getGlobalTempView("v")
+          globalTempView match {
+            case Some(v: View) if v.isTempView =>
+              assert(v.desc.identifier == TableIdentifier("v", Some(globalTempDB)))
+            case _ => fail(s"Global temp view not found: $globalTempDB.v")
+          }
+        }
       }
     }
   }
