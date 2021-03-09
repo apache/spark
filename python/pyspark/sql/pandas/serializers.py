@@ -211,12 +211,17 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
                 # Assign result columns by schema name if user labeled with strings
                 elif self._assign_cols_by_name and any(isinstance(name, str)
                                                        for name in s.columns):
-                    arrs_names = [(create_array(s[field.name], struct_field.dataType, field.type), field.name)
-                                  for field, struct_field in zip(t, dt.fields)]
+                    arrs_names = [
+                        (create_array(s[field.name], struct_field.dataType, field.type), field.name)
+                        for field, struct_field in zip(t, dt.fields)
+                    ]
                 # Assign result columns by  position
                 else:
-                    arrs_names = [(create_array(s[s.columns[i]], struct_field.dataType, field.type), field.name)
-                                  for i, (field, struct_field) in enumerate(zip(t, dt.fields))]
+                    arrs_names = [
+                        (create_array(
+                            s[s.columns[i]], struct_field.dataType, field.type), field.name)
+                        for i, (field, struct_field) in enumerate(zip(t, dt.fields))
+                    ]
 
                 struct_arrs, struct_names = zip(*arrs_names)
                 arrs.append(pa.StructArray.from_arrays(struct_arrs, struct_names))
