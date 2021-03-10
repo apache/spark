@@ -430,7 +430,7 @@ object ParquetFileFormat extends Logging {
 
     finalSchemas.reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
-        throw QueryExecutionErrors.failedMergeIncompatibleSchemasError(left, right, e)
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(left, right, e)
       }
     }
   }

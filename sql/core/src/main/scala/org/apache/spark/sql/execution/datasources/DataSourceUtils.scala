@@ -141,7 +141,7 @@ object DataSourceUtils {
         (SQLConf.AVRO_REBASE_MODE_IN_READ.key, "datetimeRebaseMode")
       case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
     }
-    QueryExecutionErrors.sparkUpgradeInReadError(format, config, option)
+    QueryExecutionErrors.sparkUpgradeInReadingDatesError(format, config, option)
   }
 
   def newRebaseExceptionInWrite(format: String): SparkUpgradeException = {
@@ -151,7 +151,7 @@ object DataSourceUtils {
       case "Avro" => SQLConf.AVRO_REBASE_MODE_IN_WRITE.key
       case _ => throw QueryExecutionErrors.unrecognizedFileFormatError(format)
     }
-    QueryExecutionErrors.sparkUpgradeInWriteError(format, config)
+    QueryExecutionErrors.sparkUpgradeInWritingDatesError(format, config)
   }
 
   def creteDateRebaseFuncInRead(

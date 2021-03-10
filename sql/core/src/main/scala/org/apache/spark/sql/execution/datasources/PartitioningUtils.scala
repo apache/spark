@@ -199,7 +199,7 @@ object PartitioningUtils {
             } catch {
               case NonFatal(_) =>
                 if (validatePartitionColumns) {
-                  throw QueryExecutionErrors.failedCastValueToDataTypeForPartitionColumnError(
+                  throw QueryExecutionErrors.failedToCastValueToDataTypeForPartitionColumnError(
                     typedValue.value, typedValue.dataType, columnName)
                 } else null
             }

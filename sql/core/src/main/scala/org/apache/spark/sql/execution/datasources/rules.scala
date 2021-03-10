@@ -119,18 +119,18 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
       // [[FileFormat]], the two providers are considered compatible.
       if (fallBackV2ToV1(existingProvider) != fallBackV2ToV1(specifiedProvider)) {
-        throw QueryCompilationErrors.tableFormatMisMatchSpecifyOneError(
+        throw QueryCompilationErrors.mismatchedTableFormatError(
           tableName, existingProvider, specifiedProvider)
       }
       tableDesc.storage.locationUri match {
         case Some(location) if location.getPath != existingTable.location.getPath =>
-          throw QueryCompilationErrors.tableLocationMisMatchSpecifyOneError(
+          throw QueryCompilationErrors.mismatchedTableLocationError(
             tableIdentWithDB, existingTable, tableDesc)
         case _ =>
       }
 
       if (query.schema.length != existingTable.schema.length) {
-        throw QueryCompilationErrors.tableColumnNumberMisMatchSpecifyOneError(
+        throw QueryCompilationErrors.mismatchedTableColumnNumberError(
           tableName, existingTable, query)
       }
 
@@ -152,7 +152,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         tableName, tableCols, tableDesc.partitionColumnNames, resolver)
       if (specifiedPartCols != existingTable.partitionColumnNames) {
         val existingPartCols = existingTable.partitionColumnNames.mkString(", ")
-        throw QueryCompilationErrors.tablePartitionMisMatchSpecifyOneError(
+        throw QueryCompilationErrors.mismatchedTablePartitionColumnError(
           tableName, specifiedPartCols, existingPartCols)
       }
 
@@ -165,7 +165,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           specifiedBucketSpec.map(_.toString).getOrElse("not bucketed")
         val existingBucketString =
           existingTable.bucketSpec.map(_.toString).getOrElse("not bucketed")
-        throw QueryCompilationErrors.tableBucketMisMatchSpecifyOneError(
+        throw QueryCompilationErrors.mismatchedTableBucketingError(
           tableName, specifiedBucketString, existingBucketString)
       }
 
@@ -284,11 +284,11 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     normalizedBucketSpec.foreach { spec =>
       for (bucketCol <- spec.bucketColumnNames if normalizedPartCols.contains(bucketCol)) {
-        throw QueryCompilationErrors.bucketColumnIsPartOfPartitionColumnsNotAllowedError(
+        throw QueryCompilationErrors.bucketingColumnCannotBePartOfPartitionColumnsError(
           bucketCol, normalizedPartCols)
       }
       for (sortCol <- spec.sortColumnNames if normalizedPartCols.contains(sortCol)) {
-        throw QueryCompilationErrors.bucketSortingColumnIsPartOfPartitionColumnsNotAllowedError(
+        throw QueryCompilationErrors.bucketSortingColumnCannotBePartOfPartitionColumnsError(
           sortCol, normalizedPartCols)
       }
     }
@@ -380,7 +380,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
-      throw QueryCompilationErrors.columnNumberOfInsertedDataMisMatchTargetTableError(
+      throw QueryCompilationErrors.mismatchedInsertedDataColumnNumberError(
         tblName, insert, staticPartCols)
     }
 
@@ -400,7 +400,7 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
-        throw QueryCompilationErrors.requestedPartitionsMisMatchTablePartitionsError(
+        throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(
           tblName, normalizedPartSpec, partColNames)
       }
 

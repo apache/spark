@@ -74,19 +74,19 @@ class JDBCOptions(
   // table name or a table subquery.
   val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
     case (Some(name), Some(subquery)) =>
-      throw QueryExecutionErrors.cannotSpecifyBothTableNameAndQueryError(
+      throw QueryExecutionErrors.cannotSpecifyBothJdbcTableNameAndQueryError(
         JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (None, None) =>
-      throw QueryExecutionErrors.notSpecifyTableNameOrQueryError(JDBC_TABLE_NAME, JDBC_QUERY_STRING)
+      throw QueryExecutionErrors.missingJdbcTableNameAndQueryError(JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (Some(name), None) =>
       if (name.isEmpty) {
-        throw QueryExecutionErrors.optionIsEmptyError(JDBC_TABLE_NAME)
+        throw QueryExecutionErrors.emptyOptionError(JDBC_TABLE_NAME)
       } else {
         name.trim
       }
     case (None, Some(subquery)) =>
       if (subquery.isEmpty) {
-        throw QueryExecutionErrors.optionIsEmptyError(JDBC_QUERY_STRING)
+        throw QueryExecutionErrors.emptyOptionError(JDBC_QUERY_STRING)
       } else {
         s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }

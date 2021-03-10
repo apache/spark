@@ -295,7 +295,7 @@ object FileFormatWriter extends Logging {
         // We throw the exception and let Executor throw ExceptionFailure to abort the job.
         throw new TaskOutputFileAlreadyExistException(f)
       case t: Throwable =>
-        throw QueryExecutionErrors.taskFailedWhileWriteRowsError(t)
+        throw QueryExecutionErrors.taskFailedWhileWritingRowsError(t)
     }
   }
 

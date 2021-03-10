@@ -320,7 +320,7 @@ case class DataSource(
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
         })
         if (outputMode != OutputMode.Append) {
-          throw QueryCompilationErrors.outputModeUnsupportedByDataSourceError(className, outputMode)
+          throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
         }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
@@ -348,7 +348,7 @@ case class DataSource(
       case (dataSource: RelationProvider, None) =>
         dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
-        throw QueryCompilationErrors.notSpecifySchemaForSchemaRelationProviderError(className)
+        throw QueryCompilationErrors.schemaNotSpecifiedForSchemaRelationProviderError(className)
       case (dataSource: RelationProvider, Some(schema)) =>
         val baseRelation =
           dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
@@ -458,7 +458,7 @@ case class DataSource(
       val fs = path.getFileSystem(newHadoopConfiguration())
       path.makeQualified(fs.getUri, fs.getWorkingDirectory)
     } else {
-      throw QueryExecutionErrors.allPathsNotExpectedExactlyOneError(allPaths)
+      throw QueryExecutionErrors.multiplePathsSpecifiedError(allPaths)
     }
 
     val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
@@ -526,7 +526,7 @@ case class DataSource(
           assert(unresolved.nameParts.length == 1)
           val name = unresolved.nameParts.head
           outputColumns.find(a => equality(a.name, name)).getOrElse {
-            throw QueryCompilationErrors.unableResolveAttributeError(name, data)
+            throw QueryCompilationErrors.cannotResolveAttributeError(name, data)
           }
         }
         val resolved = cmd.copy(
@@ -657,11 +657,11 @@ object DataSource extends Logging {
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro" ||
                   provider1 == "org.apache.spark.sql.avro") {
-                  throw QueryCompilationErrors.failedFindAvroDataSourceError(provider1)
+                  throw QueryCompilationErrors.failedToFindAvroDataSourceError(provider1)
                 } else if (provider1.toLowerCase(Locale.ROOT) == "kafka") {
-                  throw QueryCompilationErrors.failedFindKafkaDataSourceError(provider1)
+                  throw QueryCompilationErrors.failedToFindKafkaDataSourceError(provider1)
                 } else {
-                  throw QueryExecutionErrors.failedFindDataSourceError(provider1, error)
+                  throw QueryExecutionErrors.failedToFindDataSourceError(provider1, error)
                 }
             }
           } catch {
@@ -669,7 +669,7 @@ object DataSource extends Logging {
               // NoClassDefFoundError's class name uses "/" rather than "." for packages
               val className = e.getMessage.replaceAll("/", ".")
               if (spark2RemovedClasses.contains(className)) {
-                throw QueryExecutionErrors.useSpark2RemovedClassesError(className, e)
+                throw QueryExecutionErrors.removedClassInSpark2Error(className, e)
               } else {
                 throw e
               }
@@ -696,7 +696,7 @@ object DataSource extends Logging {
         // NoClassDefFoundError's class name uses "/" rather than "." for packages
         val className = e.getCause.getMessage.replaceAll("/", ".")
         if (spark2RemovedClasses.contains(className)) {
-          throw QueryExecutionErrors.findIncompatibleDataSourceRegisterError(e)
+          throw QueryExecutionErrors.incompatibleDataSourceRegisterError(e)
         } else {
           throw e
         }

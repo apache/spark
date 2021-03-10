@@ -191,6 +191,10 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Unexpected data type ${dataType.catalogString}")
   }
 
+  def typeUnsupportedError(dataType: DataType): Throwable = {
+    new IllegalArgumentException(s"Unexpected type $dataType")
+  }
+
   def negativeValueUnexpectedError(frequencyExpression : Expression): Throwable = {
     new SparkException(s"Negative values found in ${frequencyExpression.sql}")
   }
@@ -344,12 +348,12 @@ object QueryExecutionErrors {
       s"Data source $className does not support streamed $operator")
   }
 
-  def allPathsNotExpectedExactlyOneError(allPaths: Seq[String]): Throwable = {
+  def multiplePathsSpecifiedError(allPaths: Seq[String]): Throwable = {
     new IllegalArgumentException("Expected exactly one path to be specified, but " +
       s"got: ${allPaths.mkString(", ")}")
   }
 
-  def failedFindDataSourceError(provider: String, error: Throwable): Throwable = {
+  def failedToFindDataSourceError(provider: String, error: Throwable): Throwable = {
     new ClassNotFoundException(
       s"""
          |Failed to find data source: $provider. Please find packages at
@@ -357,12 +361,12 @@ object QueryExecutionErrors {
        """.stripMargin, error)
   }
 
-  def useSpark2RemovedClassesError(className: String, e: Throwable): Throwable = {
+  def removedClassInSpark2Error(className: String, e: Throwable): Throwable = {
     new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
       "Please check if your library is compatible with Spark 2.0", e)
   }
 
-  def findIncompatibleDataSourceRegisterError(e: Throwable): Throwable = {
+  def incompatibleDataSourceRegisterError(e: Throwable): Throwable = {
     new ClassNotFoundException(
       s"""
          |Detected an incompatible DataSourceRegister. Please remove the incompatible
@@ -374,7 +378,7 @@ object QueryExecutionErrors {
     new IllegalStateException(s"unrecognized format $format")
   }
 
-  def sparkUpgradeInReadError(
+  def sparkUpgradeInReadingDatesError(
       format: String, config: String, option: String): SparkUpgradeException = {
     new SparkUpgradeException("3.0",
       s"""
@@ -388,7 +392,7 @@ object QueryExecutionErrors {
        """.stripMargin, null)
   }
 
-  def sparkUpgradeInWriteError(format: String, config: String): SparkUpgradeException = {
+  def sparkUpgradeInWritingDatesError(format: String, config: String): SparkUpgradeException = {
     new SparkUpgradeException("3.0",
       s"""
          |writing dates before 1582-10-15 or timestamps before 1900-01-01T00:00:00Z into $format
@@ -410,7 +414,7 @@ object QueryExecutionErrors {
     new SparkException("Job aborted.", cause)
   }
 
-  def taskFailedWhileWriteRowsError(cause: Throwable): Throwable = {
+  def taskFailedWhileWritingRowsError(cause: Throwable): Throwable = {
     new SparkException("Task failed while writing rows.", cause)
   }
 
@@ -428,26 +432,22 @@ object QueryExecutionErrors {
     new IllegalStateException(s"unsupported save mode $saveMode ($pathExists)")
   }
 
-  def unableClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
+  def cannotClearOutputDirectoryError(staticPrefixPath: Path): Throwable = {
     new IOException(s"Unable to clear output directory $staticPrefixPath prior to writing to it")
   }
 
-  def unableClearPartitionDirectoryError(path: Path): Throwable = {
+  def cannotClearPartitionDirectoryError(path: Path): Throwable = {
     new IOException(s"Unable to clear partition directory $path prior to writing to it")
   }
 
-  def failedCastValueToDataTypeForPartitionColumnError(
+  def failedToCastValueToDataTypeForPartitionColumnError(
       value: String, dataType: DataType, columnName: String): Throwable = {
     new RuntimeException(s"Failed to cast value `$value` to " +
       s"`$dataType` for partition column `$columnName`")
   }
 
-  def typeUnsupportedError(dataType: DataType): Throwable = {
-    new IllegalArgumentException(s"Unexpected type $dataType")
-  }
-
   def endOfStreamError(): Throwable = {
-    new java.util.NoSuchElementException("End of stream")
+    new NoSuchElementException("End of stream")
   }
 
   def writeUnsupportedForBinaryFileDataSourceError(): Throwable = {
@@ -464,20 +464,20 @@ object QueryExecutionErrors {
     new RuntimeException(s"Unsupported field name: ${fieldName}")
   }
 
-  def cannotSpecifyBothTableNameAndQueryError(
+  def cannotSpecifyBothJdbcTableNameAndQueryError(
       jdbcTableName: String, jdbcQueryString: String): Throwable = {
     new IllegalArgumentException(
       s"Both '$jdbcTableName' and '$jdbcQueryString' can not be specified at the same time.")
   }
 
-  def notSpecifyTableNameOrQueryError(
+  def missingJdbcTableNameAndQueryError(
       jdbcTableName: String, jdbcQueryString: String): Throwable = {
     new IllegalArgumentException(
       s"Option '$jdbcTableName' or '$jdbcQueryString' is required."
     )
   }
 
-  def optionIsEmptyError(optionName: String): Throwable = {
+  def emptyOptionError(optionName: String): Throwable = {
     new IllegalArgumentException(s"Option `$optionName` can not be empty.")
   }
 
@@ -495,7 +495,7 @@ object QueryExecutionErrors {
     new SQLException(s"Unrecognized SQL type $sqlType")
   }
 
-  def unrecognizedTypeError(content: String): Throwable = {
+  def unsupportedJdbcTypeError(content: String): Throwable = {
     new SQLException(s"Unsupported type $content")
   }
 
@@ -512,7 +512,7 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Can't translate non-null value for field $pos")
   }
 
-  def invalidValueForJdbcNumPartitionsError(n: Int, jdbcNumPartitions: String): Throwable = {
+  def invalidJdbcNumPartitionsError(n: Int, jdbcNumPartitions: String): Throwable = {
     new IllegalArgumentException(
       s"Invalid value `$n` for parameter `$jdbcNumPartitions` in table writing " +
         "via JDBC. The minimum value is 1.")
@@ -531,8 +531,8 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"DataType: ${dataType.catalogString}")
   }
 
-  def inputFilterNotFullyConvertibleError(own: String): Throwable = {
-    new SparkException(s"The input filter of $own should be fully convertible.")
+  def inputFilterNotFullyConvertibleError(owner: String): Throwable = {
+    new SparkException(s"The input filter of $owner should be fully convertible.")
   }
 
   def cannotReadFooterForFileError(file: Path, e: IOException): Throwable = {
@@ -540,7 +540,7 @@ object QueryExecutionErrors {
   }
 
   def cannotReadFooterForFileError(file: FileStatus, e: RuntimeException): Throwable = {
-    new Exception(s"Could not read footer for file: $file", e)
+    new IOException(s"Could not read footer for file: $file", e)
   }
 
   def foundDuplicateFieldInCaseInsensitiveModeError(
@@ -552,7 +552,7 @@ object QueryExecutionErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def failedMergeIncompatibleSchemasError(
+  def failedToMergeIncompatibleSchemasError(
       left: StructType, right: StructType, e: Throwable): Throwable = {
     new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
   }

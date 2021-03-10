@@ -770,12 +770,12 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Path does not exist: $path")
   }
 
-  def outputModeUnsupportedByDataSourceError(
+  def dataSourceOutputModeUnsupportedError(
       className: String, outputMode: OutputMode): Throwable = {
     new AnalysisException(s"Data source $className does not support $outputMode output mode")
   }
 
-  def notSpecifySchemaForSchemaRelationProviderError(className: String): Throwable = {
+  def schemaNotSpecifiedForSchemaRelationProviderError(className: String): Throwable = {
     new AnalysisException(s"A schema needs to be specified when using $className.")
   }
 
@@ -803,7 +803,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Cannot save interval data type into external storage.")
   }
 
-  def unableResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
+  def cannotResolveAttributeError(name: String, data: LogicalPlan): Throwable = {
     new AnalysisException(
       s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
   }
@@ -816,7 +816,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def failedFindAvroDataSourceError(provider: String): Throwable = {
+  def failedToFindAvroDataSourceError(provider: String): Throwable = {
     new AnalysisException(
       s"""
          |Failed to find data source: $provider. Avro is built-in but external data
@@ -825,7 +825,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def failedFindKafkaDataSourceError(provider: String): Throwable = {
+  def failedToFindKafkaDataSourceError(provider: String): Throwable = {
     new AnalysisException(
       s"""
          |Failed to find data source: $provider. Please deploy the application as
@@ -849,7 +849,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def insertMisMatchedColumnNumberError(
+  def insertMismatchedColumnNumberError(
       targetAttributes: Seq[Attribute],
       sourceAttributes: Seq[Attribute],
       staticPartitionsSize: Int): Throwable = {
@@ -863,7 +863,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def insertMisMatchedPartitionNumberError(
+  def insertMismatchedPartitionNumberError(
       targetPartitionSchema: StructType,
       providedPartitionsSize: Int): Throwable = {
     new AnalysisException(
@@ -884,7 +884,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def specifyMultipleValuesForPartitionColumnError(
+  def multiplePartitionColumnValuesSpecifiedError(
       field: StructField, potentialSpecs: Map[String, String]): Throwable = {
     new AnalysisException(
       s"""
@@ -893,7 +893,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def invalidPartitionColumnHavingConstantValueError(
+  def invalidOrderingForConstantValuePartitionColumnError(
       targetPartitionSchema: StructType): Throwable = {
     new AnalysisException(
       s"""
@@ -908,7 +908,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Can only write data to relations with a single path.")
   }
 
-  def failedRebuildExpressionCausedByMissingKeyError(filter: Filter): Throwable = {
+  def failedToRebuildExpressionError(filter: Filter): Throwable = {
     new AnalysisException(
       s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`")
   }
@@ -930,7 +930,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def insertIntoExistingOutputPathError(outputPath: Path): Throwable = {
+  def outputPathAlreadyExistsError(outputPath: Path): Throwable = {
     new AnalysisException(s"path $outputPath already exists.")
   }
 
@@ -959,7 +959,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("Saving data into a view is not allowed.")
   }
 
-  def tableFormatMisMatchSpecifyOneError(
+  def mismatchedTableFormatError(
       tableName: String, existingProvider: Class[_], specifiedProvider: Class[_]): Throwable = {
     new AnalysisException(
       s"""
@@ -968,7 +968,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def tableLocationMisMatchSpecifyOneError(
+  def mismatchedTableLocationError(
       identifier: TableIdentifier,
       existingTable: CatalogTable,
       tableDesc: CatalogTable): Throwable = {
@@ -980,7 +980,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def tableColumnNumberMisMatchSpecifyOneError(
+  def mismatchedTableColumnNumberError(
       tableName: String,
       existingTable: CatalogTable,
       query: LogicalPlan): Throwable = {
@@ -996,7 +996,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"cannot resolve '$col' given input columns: [$inputColumns]")
   }
 
-  def tablePartitionMisMatchSpecifyOneError(
+  def mismatchedTablePartitionColumnError(
       tableName: String,
       specifiedPartCols: Seq[String],
       existingPartCols: String): Throwable = {
@@ -1008,7 +1008,7 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin)
   }
 
-  def tableBucketMisMatchSpecifyOneError(
+  def mismatchedTableBucketingError(
       tableName: String,
       specifiedBucketString: String,
       existingBucketString: String): Throwable = {
@@ -1025,19 +1025,19 @@ private[spark] object QueryCompilationErrors {
       "table schema is not defined.")
   }
 
-  def bucketColumnIsPartOfPartitionColumnsNotAllowedError(
+  def bucketingColumnCannotBePartOfPartitionColumnsError(
       bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
     new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
       s"partition columns '${normalizedPartCols.mkString(", ")}'")
   }
 
-  def bucketSortingColumnIsPartOfPartitionColumnsNotAllowedError(
+  def bucketSortingColumnCannotBePartOfPartitionColumnsError(
     sortCol: String, normalizedPartCols: Seq[String]): Throwable = {
     new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
       s"partition columns '${normalizedPartCols.mkString(", ")}'")
   }
 
-  def columnNumberOfInsertedDataMisMatchTargetTableError(
+  def mismatchedInsertedDataColumnNumberError(
       tableName: String, insert: InsertIntoStatement, staticPartCols: Set[String]): Throwable = {
     new AnalysisException(
       s"$tableName requires that the data to be inserted have the same number of columns as " +
@@ -1046,7 +1046,7 @@ private[spark] object QueryCompilationErrors {
         s"including ${staticPartCols.size} partition column(s) having constant value(s).")
   }
 
-  def requestedPartitionsMisMatchTablePartitionsError(
+  def requestedPartitionsMismatchTablePartitionsError(
       tableName: String,
       normalizedPartSpec: Map[String, Option[String]],
       partColNames: StructType): Throwable = {
@@ -1084,7 +1084,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Unrecognized Parquet type: $field")
   }
 
-  def unsupportedDataTypeError(field: StructField): Throwable = {
+  def cannotConvertDataTypeToParquetTypeError(field: StructField): Throwable = {
     new AnalysisException(s"Unsupported data type ${field.dataType.catalogString}")
   }
 }

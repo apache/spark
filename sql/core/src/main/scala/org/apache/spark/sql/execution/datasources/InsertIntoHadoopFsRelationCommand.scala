@@ -118,7 +118,7 @@ case class InsertIntoHadoopFsRelationCommand(
       val pathExists = fs.exists(qualifiedOutputPath)
       (mode, pathExists) match {
         case (SaveMode.ErrorIfExists, true) =>
-          throw QueryCompilationErrors.insertIntoExistingOutputPathError(qualifiedOutputPath)
+          throw QueryCompilationErrors.outputPathAlreadyExistsError(qualifiedOutputPath)
         case (SaveMode.Overwrite, true) =>
           if (ifPartitionNotExists && matchingPartitions.nonEmpty) {
             false
@@ -233,7 +233,7 @@ case class InsertIntoHadoopFsRelationCommand(
     // first clear the path determined by the static partition keys (e.g. /table/foo=1)
     val staticPrefixPath = qualifiedOutputPath.suffix(staticPartitionPrefix)
     if (fs.exists(staticPrefixPath) && !committer.deleteWithJob(fs, staticPrefixPath, true)) {
-      throw QueryExecutionErrors.unableClearOutputDirectoryError(staticPrefixPath)
+      throw QueryExecutionErrors.cannotClearOutputDirectoryError(staticPrefixPath)
     }
     // now clear all custom partition locations (e.g. /custom/dir/where/foo=2/bar=4)
     for ((spec, customLoc) <- customPartitionLocations) {
@@ -242,7 +242,7 @@ case class InsertIntoHadoopFsRelationCommand(
         "Custom partition location did not match static partitioning keys")
       val path = new Path(customLoc)
       if (fs.exists(path) && !committer.deleteWithJob(fs, path, true)) {
-        throw QueryExecutionErrors.unableClearPartitionDirectoryError(path)
+        throw QueryExecutionErrors.cannotClearPartitionDirectoryError(path)
       }
     }
   }

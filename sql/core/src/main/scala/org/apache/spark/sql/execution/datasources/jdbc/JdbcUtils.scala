@@ -246,7 +246,7 @@ object JdbcUtils extends Logging {
     }
 
     if (answer == null) {
-      throw QueryExecutionErrors.unrecognizedTypeError(JDBCType.valueOf(sqlType).getName)
+      throw QueryExecutionErrors.unsupportedJdbcTypeError(JDBCType.valueOf(sqlType).getName)
     }
     answer
   }
@@ -536,7 +536,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw QueryExecutionErrors.unrecognizedTypeError(dt.catalogString)
+    case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
@@ -880,7 +880,7 @@ object JdbcUtils extends Logging {
 
     val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
-      case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidValueForJdbcNumPartitionsError(
+      case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
         n, JDBCOptions.JDBC_NUM_PARTITIONS)
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df

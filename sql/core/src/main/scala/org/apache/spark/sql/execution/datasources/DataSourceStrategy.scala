@@ -77,12 +77,12 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
     // The sum of the number of static partition columns and columns provided in the SELECT
     // clause needs to match the number of columns of the target table.
     if (staticPartitions.size + sourceAttributes.size != targetAttributes.size) {
-      throw QueryCompilationErrors.insertMisMatchedColumnNumberError(
+      throw QueryCompilationErrors.insertMismatchedColumnNumberError(
         targetAttributes, sourceAttributes, staticPartitions.size)
     }
 
     if (providedPartitions.size != targetPartitionSchema.fields.size) {
-      throw QueryCompilationErrors.insertMisMatchedPartitionNumberError(
+      throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
         targetPartitionSchema, providedPartitions.size)
     }
 
@@ -113,7 +113,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
             Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
         }
       } else {
-        throw QueryCompilationErrors.specifyMultipleValuesForPartitionColumnError(
+        throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(
           field, potentialSpecs)
       }
     }
@@ -122,7 +122,7 @@ object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
     // any static partition appear after dynamic partitions.
     partitionList.dropWhile(_.isDefined).collectFirst {
       case Some(_) =>
-        throw QueryCompilationErrors.invalidPartitionColumnHavingConstantValueError(
+        throw QueryCompilationErrors.invalidOrderingForConstantValuePartitionColumnError(
           targetPartitionSchema)
     }
 
@@ -641,7 +641,7 @@ object DataSourceStrategy
         expressions.Not(rebuildExpressionFromFilter(pred, translatedFilterToExpr))
       case other =>
         translatedFilterToExpr.getOrElse(other,
-          throw QueryCompilationErrors.failedRebuildExpressionCausedByMissingKeyError(filter))
+          throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
   }
 

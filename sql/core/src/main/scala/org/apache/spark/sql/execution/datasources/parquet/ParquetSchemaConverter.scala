@@ -551,7 +551,7 @@ class SparkToParquetSchemaConverter(
         convertField(field.copy(dataType = udt.sqlType))
 
       case _ =>
-        throw QueryCompilationErrors.unsupportedDataTypeError(field)
+        throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
   }
 }
