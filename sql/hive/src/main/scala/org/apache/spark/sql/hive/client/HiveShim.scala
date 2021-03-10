@@ -772,6 +772,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
+      case Not(InSet(_, values)) if values.size > inSetThreshold =>
+        None
+
       case Not(In(_, list)) if hasNullLiteral(list) => None
       case Not(InSet(_, list)) if list.contains(null) => None
 
@@ -790,9 +793,6 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           .sorted(TypeUtils.getInterpretedOrdering(dataType))
         convert(And(GreaterThanOrEqual(child, Literal(sortedValues.head, dataType)),
           LessThanOrEqual(child, Literal(sortedValues.last, dataType))))
-
-      case Not(InSet(_, values)) if values.size > inSetThreshold =>
-        None
 
       case InSet(child @ ExtractAttribute(SupportedAttribute(name)), ExtractableDateValues(values))
           if useAdvanced && child.dataType == DateType =>
