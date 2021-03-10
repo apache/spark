@@ -864,8 +864,8 @@ object SQLConf {
         "Metastore. When the set size exceeds the threshold, we rewrite the InSet predicate " +
         "to be greater than or equal to the minimum value in set and less than or equal to the " +
         "maximum value in set. Larger values may cause Hive Metastore stack overflow. But for " +
-        "the predicate of Not InSet which values exceeds the threshold, we won't to push it " +
-        "to Hive Metastore.")
+        "the predicate of Not InSet which values exceeds the threshold, we won't push it to " +
+        "Hive Metastore.")
       .version("3.1.0")
       .internal()
       .intConf
