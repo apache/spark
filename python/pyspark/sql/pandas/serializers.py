@@ -161,17 +161,13 @@ class ArrowStreamPandasSerializer(ArrowStreamSerializer):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
 
-        def to_plain_object(obj):
-            """Convert an object with User-defined type to plain spark types."""
-            udt = obj.__UDT__
-            return udt.sqlType().fromInternal(udt.serialize(obj))
-
         def create_array(s, dt: DataType, t: pa.DataType):
             mask = s.isnull()
             if isinstance(dt, UserDefinedType):
-                s = s.apply(to_plain_object)
+                s = s.apply(dt.serialize)
             elif isinstance(dt, ArrayType) and isinstance(dt.elementType, UserDefinedType):
-                s = s.apply(lambda x: [to_plain_object(f) for f in x])
+                udt = dt.elementType
+                s = s.apply(lambda x: [udt.serialize(f) for f in x])
 
             # Ensure timestamp series are in expected form for Spark internal representation
             if t is not None and pa.types.is_timestamp(t):
