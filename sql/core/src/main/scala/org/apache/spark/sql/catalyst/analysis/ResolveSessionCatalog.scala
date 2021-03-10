@@ -179,8 +179,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case UnsetViewProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
-      DescribeDatabaseCommand(db, d.extended)
+    case DescribeNamespace(DatabaseInSessionCatalog(db), extended, output) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 2)
+        Seq(output.head.withName("database_description_item"),
+          output.last.withName("database_description_value"))
+      } else {
+        output
+      }
+      DescribeDatabaseCommand(db, extended, newOutput)
 
     case SetNamespaceProperties(DatabaseInSessionCatalog(db), properties) =>
       AlterDatabasePropertiesCommand(db, properties)
@@ -200,20 +207,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, _) =>
-      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
+    case DescribeRelation(
+         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended, output)
 
-    case DescribeColumn(ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended) =>
+    case DescribeColumn(
+         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended)
+      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended, output)
 
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended) =>
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
         case u: UnresolvedAttribute =>
           throw QueryCompilationErrors.columnDoesNotExistError(u.name)
         case a: Attribute =>
-          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
+          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended, output)
         case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(child))
@@ -390,11 +399,11 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde) =>
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) =>
       if (asSerde) {
-        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier)
+        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
       } else {
-        ShowCreateTableCommand(ident.asTableIdentifier)
+        ShowCreateTableCommand(ident.asTableIdentifier, output)
       }
 
     case TruncateTable(ResolvedV1TableIdentifier(ident)) =>

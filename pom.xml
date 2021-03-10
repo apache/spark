@@ -210,6 +210,11 @@
     <test.exclude.tags></test.exclude.tags>
     <test.include.tags></test.include.tags>
 
+    <test.jdwp.address>localhost:0</test.jdwp.address>
+    <test.jdwp.suspend>y</test.jdwp.suspend>
+    <test.jdwp.server>y</test.jdwp.server>
+    <test.debug.suite>false</test.debug.suite>
+
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.sparkproject</spark.shade.packageName>
 
@@ -700,7 +705,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.4.8-6</version>
+        <version>1.4.9-1</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -2647,6 +2652,7 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
               <spark.memory.debugFill>true</spark.memory.debugFill>
+              <spark.hadoop.hadoop.security.key.provider.path>test:///</spark.hadoop.hadoop.security.key.provider.path>
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>src</test.src.tables>
             </systemProperties>
@@ -3441,6 +3447,15 @@
           <arch>aarch64</arch>
         </os>
       </activation>
+    </profile>
+    <profile>
+      <id>jdwp-test-debug</id>
+      <properties>
+        <jdwp.arg.line>-agentlib:jdwp=transport=dt_socket,suspend=${test.jdwp.suspend},server=${test.jdwp.server},address=${test.jdwp.address}</jdwp.arg.line>
+        <debugArgLine>${jdwp.arg.line}</debugArgLine>
+        <maven.surefire.debug>${jdwp.arg.line}</maven.surefire.debug>
+        <debugForkedProcess>${test.debug.suite}</debugForkedProcess>
+      </properties>
     </profile>
   </profiles>
 </project>

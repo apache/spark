@@ -222,6 +222,34 @@ def sum_distinct(col):
     return _invoke_function_over_column("sum_distinct", col)
 
 
+def product(col):
+    """
+    Aggregate function: returns the product of the values in a group.
+
+    .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    col : str, :class:`Column`
+        column containing values to be multiplied together
+
+    Examples
+    --------
+    >>> df = spark.range(1, 10).toDF('x').withColumn('mod3', col('x') % 3)
+    >>> prods = df.groupBy('mod3').agg(product('x').alias('product'))
+    >>> prods.orderBy('mod3').show()
+    +----+-------+
+    |mod3|product|
+    +----+-------+
+    |   0|  162.0|
+    |   1|   28.0|
+    |   2|   80.0|
+    +----+-------+
+
+    """
+    return _invoke_function_over_column("product", col)
+
+
 def acos(col):
     """
     .. versionadded:: 1.4.0

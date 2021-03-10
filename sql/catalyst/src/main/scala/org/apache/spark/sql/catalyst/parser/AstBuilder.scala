@@ -509,10 +509,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   protected def visitStringConstant(
       ctx: ConstantContext,
       legacyNullAsString: Boolean): String = withOrigin(ctx) {
-    ctx match {
-      case _: NullLiteralContext if !legacyNullAsString => null
-      case s: StringLiteralContext => createString(s)
-      case o => o.getText
+    expression(ctx) match {
+      case Literal(null, _) if !legacyNullAsString => null
+      case l @ Literal(null, _) => l.toString
+      case l: Literal =>
+        // TODO For v2 commands, we will cast the string back to its actual value,
+        //  which is a waste and can be improved in the future.
+        Cast(l, StringType, Some(SQLConf.get.sessionLocalTimeZone)).eval().toString
+      case other =>
+        throw new IllegalArgumentException(s"Only literals are allowed in the " +
+          s"partition spec, but got ${other.sql}")
     }
   }
 
@@ -1136,9 +1142,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else {
       Seq.empty
     }
+    val name = getFunctionIdentifier(func.functionName)
+    if (name.database.nonEmpty) {
+      operationNotAllowed(s"table valued function cannot specify database name: $name", ctx)
+    }
 
     val tvf = UnresolvedTableValuedFunction(
-      func.funcName.getText, func.expression.asScala.map(expression).toSeq, aliases)
+      name, func.expression.asScala.map(expression).toSeq, aliases)
     tvf.optionalMap(func.tableAlias.strictIdentifier)(aliasPlan)
   }
 

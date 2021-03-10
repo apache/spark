@@ -93,7 +93,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleEventHandler.start(this)
-    podAllocator.start(applicationId())
+    podAllocator.start(applicationId(), this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
     if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {

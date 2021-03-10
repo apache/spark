@@ -296,14 +296,18 @@ case class DropNamespace(
  */
 case class DescribeNamespace(
     namespace: LogicalPlan,
-    extended: Boolean) extends Command {
+    extended: Boolean,
+    override val output: Seq[Attribute] = DescribeNamespace.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(namespace)
 
-  override def output: Seq[Attribute] = Seq(
-    AttributeReference("name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("value", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "value of the column").build())())
+}
+
+object DescribeNamespace {
+  def getOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("info_name", StringType, nullable = false,
+      new MetadataBuilder().putString("comment", "name of the namespace info").build())(),
+    AttributeReference("info_value", StringType, nullable = true,
+      new MetadataBuilder().putString("comment", "value of the namespace info").build())())
 }
 
 /**
@@ -362,9 +366,13 @@ object DescribeRelation {
 case class DescribeColumn(
     relation: LogicalPlan,
     column: Expression,
-    isExtended: Boolean) extends Command {
+    isExtended: Boolean,
+    override val output: Seq[Attribute] = DescribeColumn.getOutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = Seq(relation)
-  override def output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
+}
+
+object DescribeColumn {
+  def getOutputAttrs: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 }
 
 /**
@@ -757,8 +765,17 @@ case class LoadData(
 /**
  * The logical plan of the SHOW CREATE TABLE command.
  */
-case class ShowCreateTable(child: LogicalPlan, asSerde: Boolean = false) extends Command {
+case class ShowCreateTable(
+    child: LogicalPlan,
+    asSerde: Boolean = false,
+    override val output: Seq[Attribute] = ShowCreateTable.getoutputAttrs) extends Command {
   override def children: Seq[LogicalPlan] = child :: Nil
+}
+
+object ShowCreateTable {
+  def getoutputAttrs: Seq[Attribute] = {
+    Seq(AttributeReference("createtab_stmt", StringType, nullable = false)())
+  }
 }
 
 /**

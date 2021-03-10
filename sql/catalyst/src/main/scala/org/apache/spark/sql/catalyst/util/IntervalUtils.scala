@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.{Duration, Period}
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 
 import scala.util.control.NonFatal
@@ -762,4 +764,62 @@ object IntervalUtils {
 
     new CalendarInterval(totalMonths, totalDays, micros)
   }
+
+  /**
+   * Converts this duration to the total length in microseconds.
+   * <p>
+   * If this duration is too large to fit in a [[Long]] microseconds, then an
+   * exception is thrown.
+   * <p>
+   * If this duration has greater than microsecond precision, then the conversion
+   * will drop any excess precision information as though the amount in nanoseconds
+   * was subject to integer division by one thousand.
+   *
+   * @return The total length of the duration in microseconds
+   * @throws ArithmeticException If numeric overflow occurs
+   */
+  def durationToMicros(duration: Duration): Long = {
+    val us = Math.multiplyExact(duration.getSeconds, MICROS_PER_SECOND)
+    val result = Math.addExact(us, duration.getNano / NANOS_PER_MICROS)
+    result
+  }
+
+  /**
+   * Obtains a [[Duration]] representing a number of microseconds.
+   *
+   * @param micros The number of microseconds, positive or negative
+   * @return A [[Duration]], not null
+   */
+  def microsToDuration(micros: Long): Duration = Duration.of(micros, ChronoUnit.MICROS)
+
+  /**
+   * Gets the total number of months in this period.
+   * <p>
+   * This returns the total number of months in the period by multiplying the
+   * number of years by 12 and adding the number of months.
+   * <p>
+   *
+   * @return The total number of months in the period, may be negative
+   * @throws ArithmeticException If numeric overflow occurs
+   */
+  def periodToMonths(period: Period): Int = {
+    val monthsInYears = Math.multiplyExact(period.getYears, MONTHS_PER_YEAR)
+    Math.addExact(monthsInYears, period.getMonths)
+  }
+
+  /**
+   * Obtains a [[Period]] representing a number of months. The days unit will be zero, and the years
+   * and months units will be normalized.
+   *
+   * <p>
+   * The months unit is adjusted to have an absolute value < 12, with the years unit being adjusted
+   * to compensate. For example, the method returns "2 years and 3 months" for the 27 input months.
+   * <p>
+   * The sign of the years and months units will be the same after normalization.
+   * For example, -13 months will be converted to "-1 year and -1 month".
+   *
+   * @param months The number of months, positive or negative
+   * @return The period of months, not null
+   */
+  def monthsToPeriod(months: Int): Period = Period.ofMonths(months).normalized()
 }

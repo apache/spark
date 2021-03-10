@@ -211,9 +211,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case AppendData(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), query, _,
-        _, Some(write)) =>
-      AppendDataExec(v2, planLater(query), refreshCache(r), write) :: Nil
+    case AppendData(r: DataSourceV2Relation, query, _, _, Some(write)) =>
+      AppendDataExec(planLater(query), refreshCache(r), write) :: Nil
 
     case OverwriteByExpression(r @ DataSourceV2Relation(v1: SupportsWrite, _, _, _, _), _, query,
         _, _, Some(write)) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -225,13 +224,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             v1, v2Write.getClass.getName, classOf[V1Write].getName)
       }
 
-    case OverwriteByExpression(r @ DataSourceV2Relation(v2: SupportsWrite, _, _, _, _), _, query,
-        _, _, Some(write)) =>
-      OverwriteByExpressionExec(v2, planLater(query), refreshCache(r), write) :: Nil
+    case OverwriteByExpression(r: DataSourceV2Relation, _, query, _, _, Some(write)) =>
+      OverwriteByExpressionExec(planLater(query), refreshCache(r), write) :: Nil
 
-    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, writeOptions, _, Some(write)) =>
-      val writable = r.table.asWritable
-      OverwritePartitionsDynamicExec(writable, planLater(query), refreshCache(r), write) :: Nil
+    case OverwritePartitionsDynamic(r: DataSourceV2Relation, query, _, _, Some(write)) =>
+      OverwritePartitionsDynamicExec(planLater(query), refreshCache(r), write) :: Nil
 
     case DeleteFromTable(relation, condition) =>
       relation match {
@@ -260,8 +257,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case WriteToContinuousDataSource(writer, query) =>
       WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
 
-    case desc @ DescribeNamespace(ResolvedNamespace(catalog, ns), extended) =>
-      DescribeNamespaceExec(desc.output, catalog.asNamespaceCatalog, ns, extended) :: Nil
+    case DescribeNamespace(ResolvedNamespace(catalog, ns), extended, output) =>
+      DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
 
     case DescribeRelation(r: ResolvedTable, partitionSpec, isExtended, output) =>
       if (partitionSpec.nonEmpty) {
@@ -269,10 +266,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       DescribeTableExec(output, r.table, isExtended) :: Nil
 
-    case desc @ DescribeColumn(_: ResolvedTable, column, isExtended) =>
+    case DescribeColumn(_: ResolvedTable, column, isExtended, output) =>
       column match {
         case c: Attribute =>
-          DescribeColumnExec(desc.output, c, isExtended) :: Nil
+          DescribeColumnExec(output, c, isExtended) :: Nil
         case nested =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(nested))
@@ -378,7 +375,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw QueryCompilationErrors.loadDataNotSupportedForV2TablesError()
 
-    case ShowCreateTable(_: ResolvedTable, _) =>
+    case ShowCreateTable(_: ResolvedTable, _, _) =>
       throw QueryCompilationErrors.showCreateTableNotSupportedForV2TablesError()
 
     case TruncateTable(r: ResolvedTable) =>

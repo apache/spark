@@ -215,10 +215,9 @@ case class AtomicReplaceTableAsSelectExec(
  * Rows in the output data set are appended.
  */
 case class AppendDataExec(
-    table: SupportsWrite,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 /**
  * Physical plan node for overwrite into a v2 table.
@@ -231,10 +230,9 @@ case class AppendDataExec(
  * AlwaysTrue to delete all rows.
  */
 case class OverwriteByExpressionExec(
-    table: SupportsWrite,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 /**
  * Physical plan node for dynamic partition overwrite into a v2 table.
@@ -246,10 +244,9 @@ case class OverwriteByExpressionExec(
  * are not modified.
  */
 case class OverwritePartitionsDynamicExec(
-    table: SupportsWrite,
     query: SparkPlan,
     refreshCache: () => Unit,
-    write: Write) extends V2ExistingTableWriteExec with BatchWriteHelper
+    write: Write) extends V2ExistingTableWriteExec
 
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
@@ -258,14 +255,6 @@ case class WriteToDataSourceV2Exec(
   override protected def run(): Seq[InternalRow] = {
     writeWithV2(batchWrite)
   }
-}
-
-/**
- * Helper for physical plans that build batch writes.
- */
-trait BatchWriteHelper {
-  def table: SupportsWrite
-  def query: SparkPlan
 }
 
 trait V2ExistingTableWriteExec extends V2TableWriteExec {

@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, Unresol
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
@@ -581,8 +581,6 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output = DescribeCommandSchema.describeTableAttributes()
-
   protected def describeSchema(
       schema: StructType,
       buffer: ArrayBuffer[Row],
@@ -609,7 +607,8 @@ abstract class DescribeCommandBase extends RunnableCommand {
 case class DescribeTableCommand(
     table: TableIdentifier,
     partitionSpec: TablePartitionSpec,
-    isExtended: Boolean)
+    isExtended: Boolean,
+    override val output: Seq[Attribute])
   extends DescribeCommandBase {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -721,6 +720,8 @@ case class DescribeTableCommand(
 case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
   extends DescribeCommandBase {
 
+  override val output = DescribeCommandSchema.describeTableAttributes()
+
   override def simpleString(maxFields: Int): String = s"$nodeName $queryText".trim
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -742,10 +743,10 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
 case class DescribeColumnCommand(
     table: TableIdentifier,
     colNameParts: Seq[String],
-    isExtended: Boolean)
+    isExtended: Boolean,
+    override val output: Seq[Attribute])
   extends RunnableCommand {
 
-  override val output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1076,11 +1077,10 @@ trait ShowCreateTableCommandBase {
  *   SHOW CREATE TABLE [db_name.]table_name
  * }}}
  */
-case class ShowCreateTableCommand(table: TableIdentifier)
+case class ShowCreateTableCommand(
+    table: TableIdentifier,
+    override val output: Seq[Attribute])
     extends RunnableCommand with ShowCreateTableCommandBase {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("createtab_stmt", StringType, nullable = false)()
-  )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -1231,11 +1231,10 @@ case class ShowCreateTableCommand(table: TableIdentifier)
  *   SHOW CREATE TABLE table_identifier AS SERDE;
  * }}}
  */
-case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
+case class ShowCreateTableAsSerdeCommand(
+    table: TableIdentifier,
+    override val output: Seq[Attribute])
     extends RunnableCommand with ShowCreateTableCommandBase {
-  override val output: Seq[Attribute] = Seq(
-    AttributeReference("createtab_stmt", StringType, nullable = false)()
-  )
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog

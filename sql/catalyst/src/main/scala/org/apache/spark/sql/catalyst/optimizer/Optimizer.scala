@@ -157,8 +157,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     //   since the other rules might make two separate Unions operators adjacent.
     Batch("Union", Once,
       RemoveNoopOperators,
-      RemoveNoopUnion,
-      CombineUnions) ::
+      CombineUnions,
+      RemoveNoopUnion) ::
     Batch("OptimizeLimitZero", Once,
       OptimizeLimitZero) ::
     // Run this once earlier. This might simplify the plan and reduce cost of optimizer.
@@ -509,7 +509,8 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
 }
 
 /**
- * Remove no-op `Union` from the query plan that do not make any modifications.
+ * Smplify the children of `Union` or remove no-op `Union` from the query plan that
+ * do not make any modifications to the query.
  */
 object RemoveNoopUnion extends Rule[LogicalPlan] {
   /**
@@ -532,21 +533,29 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
     case _ => plan
   }
 
-  private def removeUnion(u: Union): Option[LogicalPlan] = {
-    val unionChildren = u.children.map(removeAliasOnlyProject)
-    if (unionChildren.tail.forall(unionChildren.head.sameResult(_))) {
-      Some(u.children.head)
+  private def simplifyUnion(u: Union): LogicalPlan = {
+    val uniqueChildren = mutable.ArrayBuffer.empty[LogicalPlan]
+    val uniqueChildrenKey = mutable.HashSet.empty[LogicalPlan]
+
+    u.children.foreach { c =>
+      val key = removeAliasOnlyProject(c).canonicalized
+      if (!uniqueChildrenKey.contains(key)) {
+        uniqueChildren += c
+        uniqueChildrenKey += key
+      }
+    }
+    if (uniqueChildren.size == 1) {
+      u.children.head
     } else {
-      None
+      u.copy(children = uniqueChildren.toSeq)
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case d @ Distinct(u: Union) =>
-      removeUnion(u).map(c => d.withNewChildren(Seq(c))).getOrElse(d)
-
+      d.withNewChildren(Seq(simplifyUnion(u)))
     case d @ Deduplicate(_, u: Union) =>
-      removeUnion(u).map(c => d.withNewChildren(Seq(c))).getOrElse(d)
+      d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
 
@@ -1549,7 +1558,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * This rule optimizes Limit operators by:
- * 1. Eliminate [[Limit]] operators if it's child max row <= limit.
+ * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
  */
@@ -1560,6 +1569,8 @@ object EliminateLimits extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Limit(l, child) if canEliminate(l, child) =>
+      child
+    case GlobalLimit(l, child) if canEliminate(l, child) =>
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>

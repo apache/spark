@@ -180,6 +180,12 @@ function renderDagViz(forJob) {
     svg.selectAll("g[id=" + stageClusterId + "] g." + opClusterId).classed("barrier", true)
   });
 
+  metadataContainer().selectAll(".indeterminate-rdd").each(function(v) {
+    var rddId = d3.select(this).text().trim();
+    var nodeId = VizConstants.nodePrefix + rddId;
+    svg.selectAll("g." + nodeId).classed("indeterminate", true);
+  });
+
   resizeSvg(svg);
   interpretLineBreak(svg);
 }
