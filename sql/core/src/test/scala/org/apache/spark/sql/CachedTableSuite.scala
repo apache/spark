@@ -1495,7 +1495,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils
     assert(spark.sharedState.cacheManager.lookupCachedData(sql("SELECT 1")).isEmpty)
   }
 
-  test("SPARK-34546: ALTER VIEW AS should uncache if a permanent temp view is cached") {
+  test("SPARK-34546: ALTER VIEW AS should uncache if a permanent view is cached") {
     withView("view") {
       sql("CREATE VIEW view AS SELECT 1")
       sql("CACHE TABLE view")
