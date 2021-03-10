@@ -118,25 +118,6 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
     }
   }
 
-  test("Push down to first window if order is different") {
-    val originalQuery = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"),
-        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
-      .limit(2)
-    val correctAnswer = testRelation
-      .select(a, b, c,
-        windowExpr(RowNumber(), windowSpec(Nil, c.desc :: Nil, windowFrame)).as("rn"))
-      .orderBy(c.asc)
-      .limit(2)
-      .select(a, b, c, $"rn".attr,
-        windowExpr(new Rank(), windowSpec(Nil, c.asc :: Nil, windowFrame)).as("rk"))
-
-    comparePlans(
-      Optimize.execute(originalQuery.analyze),
-      WithoutOptimize.execute(correctAnswer.analyze))
-  }
-
   test("Push down to first window if order column is different") {
     val originalQuery = testRelation
       .select(a, b, c,

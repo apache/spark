@@ -588,7 +588,8 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
-  private def isSupportPushdownThroughWindow(
+  // The window frame of RankLike and RowNumberLike is UNBOUNDED PRECEDING to CURRENT ROW.
+  private def supportsPushdownThroughWindow(
       windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
     case Alias(WindowExpression(_: RankLike | _: RowNumberLike,
         WindowSpecDefinition(Nil, _, _)), _) => true
@@ -633,14 +634,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
     case LocalLimit(limitExpr @ IntegerLiteral(limit),
         window @ Window(windowExpressions, Nil, orderSpec, child))
-      if isSupportPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
+      if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child)))
     // There is a Project between LocalLimit and Window if they do not have the same output.
     case LocalLimit(limitExpr @ IntegerLiteral(limit), project @ Project(_,
         window @ Window(windowExpressions, Nil, orderSpec, child)))
-      if isSupportPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
+      if supportsPushdownThroughWindow(windowExpressions) && child.maxRows.forall(_ > limit) &&
         limit < conf.topKSortFallbackThreshold =>
       // Sort is needed here because we need global sort.
       project.copy(child = window.copy(child = Limit(limitExpr, Sort(orderSpec, true, child))))
