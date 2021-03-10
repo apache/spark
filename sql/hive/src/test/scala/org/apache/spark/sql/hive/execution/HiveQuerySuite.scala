@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
 import java.sql.Timestamp
 import java.util.Locale
 
@@ -855,6 +856,100 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     assert(sql("list file").
       filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
     assert(sql(s"list file $testFile").count() == 1)
+  }
+
+  test("ADD ARCHIVE/LIST ARCHIVES commands") {
+    withTempDir { dir =>
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+
+      Files.write(file1.toPath, "file1".getBytes)
+      Files.write(file2.toPath, "file2".getBytes)
+
+      val zipFile = new File(dir, "test.zip")
+      val jarFile = new File(dir, "test.jar")
+      TestUtils.createJar(Seq(file1), zipFile)
+      TestUtils.createJar(Seq(file2), jarFile)
+
+      sql(s"ADD ARCHIVE ${zipFile.getAbsolutePath}#foo")
+      sql(s"ADD ARCHIVE ${jarFile.getAbsolutePath}#bar")
+
+      val checkAddArchive =
+        sparkContext.parallelize(
+          Seq(
+            "foo",
+            s"foo/${file1.getName}",
+            "nonexistence",
+            "bar",
+            s"bar/${file2.getName}"), 1).map { name =>
+          val file = new File(SparkFiles.get(name))
+          val contents =
+            if (file.isFile) {
+              Some(String.join("", new String(Files.readAllBytes(file.toPath))))
+            } else {
+              None
+            }
+          (name, file.canRead, contents)
+        }.collect()
+
+      assert(checkAddArchive(0) === ("foo", true, None))
+      assert(checkAddArchive(1) === (s"foo/${file1.getName}", true, Some("file1")))
+      assert(checkAddArchive(2) === ("nonexistence", false, None))
+      assert(checkAddArchive(3) === ("bar", true, None))
+      assert(checkAddArchive(4) === (s"bar/${file2.getName}", true, Some("file2")))
+      assert(sql("list archives").
+        filter(_.getString(0).contains(s"${zipFile.getAbsolutePath}")).count() > 0)
+      assert(sql("list archive").
+        filter(_.getString(0).contains(s"${jarFile.getAbsolutePath}")).count() > 0)
+      assert(sql(s"list archive ${zipFile.getAbsolutePath}").count() === 1)
+      assert(sql(s"list archives ${zipFile.getAbsolutePath} nonexistence").count() === 1)
+      assert(sql(s"list archives ${zipFile.getAbsolutePath} " +
+        s"${jarFile.getAbsolutePath}").count === 2)
+    }
+  }
+
+  test("ADD ARCHIVE/List ARCHIVES commands - unsupported archive formats") {
+    withTempDir { dir =>
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+
+      Files.write(file1.toPath, "file1".getBytes)
+      Files.write(file2.toPath, "file2".getBytes)
+
+      // Emulate unsupported archive formats with .bz2 and .xz suffix.
+      val bz2File = new File(dir, "test.bz2")
+      val xzFile = new File(dir, "test.xz")
+      TestUtils.createJar(Seq(file1), bz2File)
+      TestUtils.createJar(Seq(file2), xzFile)
+
+      sql(s"ADD ARCHIVE ${bz2File.getAbsolutePath}#foo")
+      sql(s"ADD ARCHIVE ${xzFile.getAbsolutePath}#bar")
+
+      val checkAddArchive =
+        sparkContext.parallelize(
+          Seq(
+            "foo",
+            "bar"), 1).map { name =>
+          val file = new File(SparkFiles.get(name))
+          val contents =
+            if (file.isFile) {
+              Some(Files.readAllBytes(file.toPath).toSeq)
+            } else {
+              None
+            }
+          (name, file.canRead, contents)
+        }.collect()
+
+      assert(checkAddArchive(0) === ("foo", true, Some(Files.readAllBytes(bz2File.toPath).toSeq)))
+      assert(checkAddArchive(1) === ("bar", true, Some(Files.readAllBytes(xzFile.toPath).toSeq)))
+      assert(sql("list archives").
+        filter(_.getString(0).contains(s"${bz2File.getAbsolutePath}")).count() > 0)
+      assert(sql("list archive").
+        filter(_.getString(0).contains(s"${xzFile.getAbsolutePath}")).count() > 0)
+      assert(sql(s"list archive ${bz2File.getAbsolutePath}").count() === 1)
+      assert(sql(s"list archives ${bz2File.getAbsolutePath} " +
+        s"${xzFile.getAbsolutePath}").count === 2)
+    }
   }
 
   createQueryTest("dynamic_partition",

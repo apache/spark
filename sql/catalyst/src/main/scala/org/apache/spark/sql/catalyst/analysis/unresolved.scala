@@ -120,13 +120,13 @@ case class UnresolvedInlineTable(
  *   select t.a from range(10) t(a);
  * }}}
  *
- * @param functionName name of this table-value function
+ * @param name qualified name of this table-value function
  * @param functionArgs list of function arguments
  * @param outputNames alias names of function output columns. If these names given, an analyzer
  *                    adds [[Project]] to rename the output columns.
  */
 case class UnresolvedTableValuedFunction(
-    functionName: String,
+    name: FunctionIdentifier,
     functionArgs: Seq[Expression],
     outputNames: Seq[String])
   extends LeafNode {
@@ -134,6 +134,15 @@ case class UnresolvedTableValuedFunction(
   override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
+}
+
+object UnresolvedTableValuedFunction {
+  def apply(
+      name: String,
+      functionArgs: Seq[Expression],
+      outputNames: Seq[String]): UnresolvedTableValuedFunction = {
+    UnresolvedTableValuedFunction(FunctionIdentifier(name), functionArgs, outputNames)
+  }
 }
 
 /**

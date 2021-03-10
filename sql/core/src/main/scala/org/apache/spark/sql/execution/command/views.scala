@@ -154,7 +154,7 @@ case class CreateViewCommand(
             originalText))
       } else {
         TemporaryViewRelation(
-          prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan),
+          prepareTemporaryViewStoringAnalyzedPlan(viewIdent, aliasedPlan),
           Some(aliasedPlan))
       }
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
