@@ -195,7 +195,7 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case DayTimeIntervalType | YearMonthIntervalType =>
       assert(exactMathMethod.isDefined,
         s"The expression '$nodeName' must override the exactMathMethod() method " +
-        s"if it is supposed to operate over interval types.")
+        "if it is supposed to operate over interval types.")
       val mathClass = classOf[Math].getName
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathClass.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
