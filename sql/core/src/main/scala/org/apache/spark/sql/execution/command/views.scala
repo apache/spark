@@ -22,8 +22,9 @@ import scala.collection.mutable
 import org.json4s.JsonAST.{JArray, JString}
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{GlobalTempView, LocalTempView, PersistedView, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, SessionCatalog, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, UserDefinedExpression}
@@ -114,49 +115,26 @@ case class CreateViewCommand(
     verifyTemporaryObjectsNotExists(catalog, isTemporary, name, analyzedPlan)
 
     if (viewType == LocalTempView) {
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && needsToUncache(catalog.getRawTempView(name.table), aliasedPlan)) {
-        logDebug(s"Try to uncache ${name.quotedString} before replacing.")
-        checkCyclicViewReference(analyzedPlan, Seq(name), name)
-        CommandUtils.uncacheTableOrView(sparkSession, name.quotedString)
-      }
-      // If there is no sql text (e.g. from Dataset API), we will always store the analyzed plan
-      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(
-          prepareTemporaryView(
-            name,
-            sparkSession,
-            analyzedPlan,
-            aliasedPlan.schema,
-            originalText))
-      } else {
-        TemporaryViewRelation(
-          prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan),
-          Some(aliasedPlan))
-      }
+      val tableDefinition = createTemporaryViewRelation(
+        name,
+        sparkSession,
+        replace,
+        catalog.getRawTempView,
+        originalText,
+        userSpecifiedColumns,
+        analyzedPlan)
       catalog.createTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (viewType == GlobalTempView) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
       val viewIdent = TableIdentifier(name.table, Option(db))
-      val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
-      if (replace && needsToUncache(catalog.getRawGlobalTempView(name.table), aliasedPlan)) {
-        logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
-        checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
-        CommandUtils.uncacheTableOrView(sparkSession, viewIdent.quotedString)
-      }
-      val tableDefinition = if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
-        TemporaryViewRelation(
-          prepareTemporaryView(
-            viewIdent,
-            sparkSession,
-            analyzedPlan,
-            aliasedPlan.schema,
-            originalText))
-      } else {
-        TemporaryViewRelation(
-          prepareTemporaryViewStoringAnalyzedPlan(viewIdent, aliasedPlan),
-          Some(aliasedPlan))
-      }
+      val tableDefinition = createTemporaryViewRelation(
+        viewIdent,
+        sparkSession,
+        replace,
+        catalog.getRawGlobalTempView,
+        originalText,
+        userSpecifiedColumns,
+        analyzedPlan)
       catalog.createGlobalTempView(name.table, tableDefinition, overrideIfExists = replace)
     } else if (catalog.tableExists(name)) {
       val tableMetadata = catalog.getTableMetadata(name)
@@ -193,38 +171,6 @@ case class CreateViewCommand(
   }
 
   /**
-   * Checks if need to uncache the temp view being replaced.
-   */
-  private def needsToUncache(
-      rawTempView: Option[LogicalPlan],
-      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
-    // The temp view doesn't exist, no need to uncache.
-    case None => false
-    // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
-    // same-result plans.
-    case Some(TemporaryViewRelation(_, Some(p))) => !p.sameResult(aliasedPlan)
-    case Some(p) => !p.sameResult(aliasedPlan)
-  }
-
-  /**
-   * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
-   * else return the analyzed plan directly.
-   */
-  private def aliasPlan(session: SparkSession, analyzedPlan: LogicalPlan): LogicalPlan = {
-    if (userSpecifiedColumns.isEmpty) {
-      analyzedPlan
-    } else {
-      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
-        case (attr, (colName, None)) => Alias(attr, colName)()
-        case (attr, (colName, Some(colComment))) =>
-          val meta = new MetadataBuilder().putString("comment", colComment).build()
-          Alias(attr, colName)(explicitMetadata = Some(meta))
-      }
-      session.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
-    }
-  }
-
-  /**
    * Returns a [[CatalogTable]] that can be used to save in the catalog. Generate the view-specific
    * properties(e.g. view default database, view query output column names) and store them as
    * properties in the CatalogTable, and also creates the proper schema for the view.
@@ -235,7 +181,7 @@ case class CreateViewCommand(
         "It is not allowed to create a persisted view from the Dataset API")
     }
     val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, analyzedPlan).schema)
+      aliasPlan(session, analyzedPlan, userSpecifiedColumns).schema)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan, aliasedSchema.fieldNames)
 
@@ -268,7 +214,6 @@ case class AlterViewAsCommand(
     name: TableIdentifier,
     originalText: String,
     query: LogicalPlan) extends RunnableCommand {
-  require(query.resolved)
 
   import ViewHelper._
 
@@ -284,20 +229,20 @@ case class AlterViewAsCommand(
   }
 
   private def alterTemporaryView(session: SparkSession, analyzedPlan: LogicalPlan): Unit = {
-    checkCyclicViewReference(analyzedPlan, Seq(name), name)
-
-    logDebug(s"Try to uncache ${name.quotedString} before altering.")
-    CommandUtils.uncacheTableOrView(session, name.quotedString)
-
-    val tableDefinition = if (conf.storeAnalyzedPlanForView) {
-      TemporaryViewRelation(
-        prepareTemporaryViewStoringAnalyzedPlan(name, analyzedPlan),
-        Some(analyzedPlan))
+    val catalog = session.sessionState.catalog
+    val getRawTempView: String => Option[LogicalPlan] = if (name.database.isEmpty) {
+      catalog.getRawTempView
     } else {
-      TemporaryViewRelation(
-        prepareTemporaryView(
-          name, session, analyzedPlan, analyzedPlan.schema, Some(originalText)))
+      catalog.getRawGlobalTempView
     }
+    val tableDefinition = createTemporaryViewRelation(
+      name,
+      session,
+      replace = true,
+      getRawTempView,
+      Some(originalText),
+      userSpecifiedColumns = Nil,
+      analyzedPlan)
     session.sessionState.catalog.alterTempViewDefinition(name, tableDefinition)
   }
 
@@ -308,7 +253,7 @@ case class AlterViewAsCommand(
     val viewIdent = viewMeta.identifier
     checkCyclicViewReference(analyzedPlan, Seq(viewIdent), viewIdent)
 
-    logDebug(s"Try to uncache ${viewIdent.quotedString} before altering.")
+    logDebug(s"Try to uncache ${viewIdent.quotedString} before replacing.")
     CommandUtils.uncacheTableOrView(session, viewIdent.quotedString)
 
     val newProperties = generateViewProperties(
@@ -354,7 +299,7 @@ case class ShowViewsCommand(
   }
 }
 
-object ViewHelper {
+object ViewHelper extends SQLConfHelper with Logging {
 
   private val configPrefixDenyList = Seq(
     SQLConf.MAX_NESTED_VIEW_DEPTH.key,
@@ -601,6 +546,85 @@ object ViewHelper {
     (collectTempViews(child), collectTempFunctions(child))
   }
 
+  /**
+   * Returns a [[TemporaryViewRelation]] that contains information about a temporary view
+   * to create, given an analyzed plan of the view. If a temp view is to be replaced and it is
+   * cached, it will be uncached before being replaced.
+   *
+   * @param name the name of the temporary view to create/replace.
+   * @param session the spark session.
+   * @param replace if true and the existing view is cached, it will be uncached.
+   * @param getRawTempView the function that returns an optional raw plan of the local or
+   *                       global temporary view.
+   * @param originalText the original SQL text of this view, can be None if this view is created via
+   *                     Dataset API or spark.sql.legacy.storeAnalyzedPlanForView is set to true.
+   * @param userSpecifiedColumns the output column names and optional comments specified by users,
+   *                             can be Nil if not specified.
+   * @param analyzedPlan the logical plan that represents the view; this is used to generate the
+   *                     logical plan for temporary view and the view schema.
+   */
+  def createTemporaryViewRelation(
+      name: TableIdentifier,
+      session: SparkSession,
+      replace: Boolean,
+      getRawTempView: String => Option[LogicalPlan],
+      originalText: Option[String],
+      userSpecifiedColumns: Seq[(String, Option[String])],
+      analyzedPlan: LogicalPlan): TemporaryViewRelation = {
+    val aliasedPlan = aliasPlan(session, analyzedPlan, userSpecifiedColumns)
+    val needsToUncache = getRawTempView(name.table).map { r =>
+      produceSameResult(r, aliasedPlan)
+    }.getOrElse(false)
+    if (replace && needsToUncache) {
+      logInfo(s"Try to uncache ${name.quotedString} before replacing.")
+      checkCyclicViewReference(analyzedPlan, Seq(name), name)
+      CommandUtils.uncacheTableOrView(session, name.quotedString)
+    }
+    if (!conf.storeAnalyzedPlanForView && originalText.nonEmpty) {
+      TemporaryViewRelation(
+        prepareTemporaryView(
+          name,
+          session,
+          analyzedPlan,
+          aliasedPlan.schema,
+          originalText.get))
+    } else {
+      TemporaryViewRelation(
+        prepareTemporaryViewStoringAnalyzedPlan(name, aliasedPlan),
+        Some(aliasedPlan))
+    }
+  }
+
+  /**
+   * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
+   * else return the analyzed plan directly.
+   */
+  def aliasPlan(
+      session: SparkSession,
+      analyzedPlan: LogicalPlan,
+      userSpecifiedColumns: Seq[(String, Option[String])]): LogicalPlan = {
+    if (userSpecifiedColumns.isEmpty) {
+      analyzedPlan
+    } else {
+      val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
+        case (attr, (colName, None)) => Alias(attr, colName)()
+        case (attr, (colName, Some(colComment))) =>
+          val meta = new MetadataBuilder().putString("comment", colComment).build()
+          Alias(attr, colName)(explicitMetadata = Some(meta))
+      }
+      session.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
+    }
+  }
+
+  /**
+   * Checks if the raw temp view will return the same result as the given aliased plan.
+   */
+  private def produceSameResult(
+      rawTempView: LogicalPlan,
+      aliasedPlan: LogicalPlan): Boolean = rawTempView match {
+    case TemporaryViewRelation(_, Some(p)) => !p.sameResult(aliasedPlan)
+    case p => !p.sameResult(aliasedPlan)
+  }
 
   /**
    * Returns a [[CatalogTable]] that contains information for temporary view.
@@ -608,12 +632,12 @@ object ViewHelper {
    * column names) and store them as properties in the CatalogTable, and also creates
    * the proper schema for the view.
    */
-  def prepareTemporaryView(
+  private def prepareTemporaryView(
       viewName: TableIdentifier,
       session: SparkSession,
       analyzedPlan: LogicalPlan,
       viewSchema: StructType,
-      originalText: Option[String]): CatalogTable = {
+      originalText: String): CatalogTable = {
 
     val catalog = session.sessionState.catalog
     val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, analyzedPlan)
@@ -627,7 +651,7 @@ object ViewHelper {
       tableType = CatalogTableType.VIEW,
       storage = CatalogStorageFormat.empty,
       schema = viewSchema,
-      viewText = originalText,
+      viewText = Some(originalText),
       properties = newProperties)
   }
 
@@ -635,7 +659,7 @@ object ViewHelper {
    * Returns a [[CatalogTable]] that contains information for the temporary view storing
    * an analyzed plan.
    */
-  def prepareTemporaryViewStoringAnalyzedPlan(
+  private def prepareTemporaryViewStoringAnalyzedPlan(
       viewName: TableIdentifier,
       analyzedPlan: LogicalPlan): CatalogTable = {
     CatalogTable(
