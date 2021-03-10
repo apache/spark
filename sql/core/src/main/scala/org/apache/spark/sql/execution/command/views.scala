@@ -572,10 +572,10 @@ object ViewHelper extends SQLConfHelper with Logging {
       userSpecifiedColumns: Seq[(String, Option[String])],
       analyzedPlan: LogicalPlan): TemporaryViewRelation = {
     val aliasedPlan = aliasPlan(session, analyzedPlan, userSpecifiedColumns)
-    val needsToUncache = getRawTempView(name.table).map { r =>
-      produceSameResult(r, aliasedPlan)
+    val uncache = getRawTempView(name.table).map { r =>
+      needsToUncache(r, aliasedPlan)
     }.getOrElse(false)
-    if (replace && needsToUncache) {
+    if (replace && uncache) {
       logInfo(s"Try to uncache ${name.quotedString} before replacing.")
       checkCyclicViewReference(analyzedPlan, Seq(name), name)
       CommandUtils.uncacheTableOrView(session, name.quotedString)
@@ -617,11 +617,15 @@ object ViewHelper extends SQLConfHelper with Logging {
   }
 
   /**
-   * Checks if the raw temp view will return the same result as the given aliased plan.
+   * Checks if need to uncache the temp view being replaced.
    */
-  private def produceSameResult(
+  private def needsToUncache(
       rawTempView: LogicalPlan,
       aliasedPlan: LogicalPlan): Boolean = rawTempView match {
+    // If TemporaryViewRelation doesn't store the analyzed view, always uncache.
+    case TemporaryViewRelation(_, None) => true
+    // Do not need to uncache if the to-be-replaced temp view plan and the new plan are the
+    // same-result plans.
     case TemporaryViewRelation(_, Some(p)) => !p.sameResult(aliasedPlan)
     case p => !p.sameResult(aliasedPlan)
   }
