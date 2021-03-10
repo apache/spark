@@ -326,7 +326,7 @@ class DatasetSuite extends QueryTest
       e = intercept[AnalysisException] {
         ds.select(expr("`(_1|_2)`").as[Int])
       }.getMessage
-      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+      assert(e.contains("cannot resolve '(_1|_2)'"))
 
       e = intercept[AnalysisException] {
         ds.select(ds("`(_1)?+.+`"))
@@ -864,7 +864,7 @@ class DatasetSuite extends QueryTest
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve 'c' given input columns: [a, b]"), e.getMessage)
   }
 
   test("runtime nullability check") {

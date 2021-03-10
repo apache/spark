@@ -398,7 +398,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
-    "cannot resolve '`bad_column`'" :: Nil)
+    "cannot resolve 'bad_column'" :: Nil)
 
   errorTest(
     "slide duration greater than window in time window",

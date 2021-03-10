@@ -697,7 +697,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("CTE with non-existing column alias") {
     assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve '`y`' given input columns: [x]"))
+      Seq("cannot resolve 'y' given input columns: [x]"))
   }
 
   test("CTE with non-matching column alias") {
