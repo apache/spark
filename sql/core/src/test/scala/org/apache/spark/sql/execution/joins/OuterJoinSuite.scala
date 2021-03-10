@@ -104,18 +104,16 @@ class OuterJoinSuite extends SparkPlanTest with SharedSparkSession {
       ExtractEquiJoinKeys.unapply(join)
     }
 
-    if (joinType != FullOuter) {
-      test(s"$testName using ShuffledHashJoin") {
-        extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
-          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-            val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
-            checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-              EnsureRequirements.apply(
-                ShuffledHashJoinExec(
-                  leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right)),
-              expectedAnswer.map(Row.fromTuple),
-              sortAnswers = true)
-          }
+    test(s"$testName using ShuffledHashJoin") {
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
+        withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
+          checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
+            EnsureRequirements.apply(
+              ShuffledHashJoinExec(
+                leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right)),
+            expectedAnswer.map(Row.fromTuple),
+            sortAnswers = true)
         }
       }
     }
