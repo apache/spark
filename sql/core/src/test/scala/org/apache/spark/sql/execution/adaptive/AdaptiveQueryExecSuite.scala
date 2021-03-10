@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
-import java.lang.reflect.InvocationTargetException
 import java.net.URI
 
 import org.apache.log4j.Level
+import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
@@ -46,7 +46,8 @@ import org.apache.spark.util.Utils
 class AdaptiveQueryExecSuite
   extends QueryTest
   with SharedSparkSession
-  with AdaptiveSparkPlanHelper {
+  with AdaptiveSparkPlanHelper
+  with PrivateMethodTester {
 
   import testImplicits._
 
@@ -881,12 +882,11 @@ class AdaptiveQueryExecSuite
       val reader = readers.head
       val c = reader.canonicalized.asInstanceOf[CustomShuffleReaderExec]
       // we can't just call execute() because that has separate checks for canonicalized plans
-      val doExecute = c.getClass.getMethod("doExecute")
-      doExecute.setAccessible(true)
-      val ex = intercept[InvocationTargetException] {
-        doExecute.invoke(c)
+      val ex = intercept[IllegalStateException] {
+        val doExecute = PrivateMethod[Unit](Symbol("doExecute"))
+        c.invokePrivate(doExecute())
       }
-      assert(ex.getCause.getMessage === "operating on canonicalized plan")
+      assert(ex.getMessage === "operating on canonicalized plan")
     }
   }
 
