@@ -77,7 +77,8 @@ class JDBCOptions(
       throw QueryExecutionErrors.cannotSpecifyBothJdbcTableNameAndQueryError(
         JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (None, None) =>
-      throw QueryExecutionErrors.missingJdbcTableNameAndQueryError(JDBC_TABLE_NAME, JDBC_QUERY_STRING)
+      throw QueryExecutionErrors.missingJdbcTableNameAndQueryError(
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (Some(name), None) =>
       if (name.isEmpty) {
         throw QueryExecutionErrors.emptyOptionError(JDBC_TABLE_NAME)
