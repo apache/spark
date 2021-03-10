@@ -765,6 +765,9 @@ object IntervalUtils {
     new CalendarInterval(totalMonths, totalDays, micros)
   }
 
+  // The amount of seconds that can cause overflow in the conversion to microseconds
+  private final val minDurationSeconds = Math.floorDiv(Long.MinValue, MICROS_PER_SECOND)
+
   /**
    * Converts this duration to the total length in microseconds.
    * <p>
@@ -779,9 +782,14 @@ object IntervalUtils {
    * @throws ArithmeticException If numeric overflow occurs
    */
   def durationToMicros(duration: Duration): Long = {
-    val us = Math.multiplyExact(duration.getSeconds, MICROS_PER_SECOND)
-    val result = Math.addExact(us, duration.getNano / NANOS_PER_MICROS)
-    result
+    val seconds = duration.getSeconds
+    if (seconds == minDurationSeconds) {
+      val us = (minDurationSeconds + 1) * MICROS_PER_SECOND
+      Math.addExact(us, (duration.getNano - NANOS_PER_SECOND) / NANOS_PER_MICROS)
+    } else {
+      val us = Math.multiplyExact(seconds, MICROS_PER_SECOND)
+      Math.addExact(us, duration.getNano / NANOS_PER_MICROS)
+    }
   }
 
   /**
