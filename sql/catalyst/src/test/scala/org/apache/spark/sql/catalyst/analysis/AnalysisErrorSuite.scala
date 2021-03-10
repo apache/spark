@@ -305,7 +305,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "sorting by attributes are not from grouping expressions",
     testRelation2.groupBy($"a", $"c")($"a", $"c", count($"a").as("a3")).orderBy($"b".asc),
-    "cannot resolve" :: "'`b`'" :: "given input columns" :: "[a, a3, c]" :: Nil)
+    "cannot resolve" :: "'b'" :: "given input columns" :: "[a, a3, c]" :: Nil)
 
   errorTest(
     "non-boolean filters",
@@ -320,7 +320,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "missing group by",
     testRelation2.groupBy($"a")($"b"),
-    "'`b`'" :: "group by" :: Nil
+    "'b'" :: "group by" :: Nil
   )
 
   errorTest(
@@ -575,7 +575,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       if (shouldSuccess) {
         assertAnalysisSuccess(plan, true)
       } else {
-        assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
+        assertAnalysisError(plan, "expression a cannot be used as a grouping expression" :: Nil)
       }
     }
 

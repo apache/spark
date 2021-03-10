@@ -126,7 +126,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
       if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
-        checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
+        checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
   }
@@ -2769,8 +2769,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         }.message
         assert(
           m.contains(
-            "cannot resolve '(`spark_catalog`.`default`.`t`.`c` = " +
-            "`spark_catalog`.`default`.`S`.`C`)' due to data type mismatch"))
+            "cannot resolve '(spark_catalog.default.t.c = " +
+            "spark_catalog.default.S.C)' due to data type mismatch"))
       }
     }
   }
