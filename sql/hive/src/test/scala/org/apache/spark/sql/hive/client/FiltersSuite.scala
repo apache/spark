@@ -109,28 +109,50 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     "datecol != 2019-01-01")
 
   filterTest("not-in int filter",
-    (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2), Literal(null))))) :: Nil,
+    (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2))))) :: Nil,
     "(intcol != 1 and intcol != 2)")
+
+  filterTest("not-in int filter with null",
+    (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2), Literal(null))))) :: Nil,
+    "")
 
   filterTest("not-in string filter",
-    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
     """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-in string filter with null",
+    (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
+    "")
 
   filterTest("not-inset, int filter",
-    (Not(InSet(a("intcol", IntegerType), Set(1, 2, null)))) :: Nil,
+    (Not(InSet(a("intcol", IntegerType), Set(1, 2)))) :: Nil,
     "(intcol != 1 and intcol != 2)")
 
+  filterTest("not-inset, int filter with null",
+    (Not(InSet(a("intcol", IntegerType), Set(1, 2, null)))) :: Nil,
+    "")
+
   filterTest("not-inset, string filter",
+    (Not(InSet(a("strcol", StringType), Set(Literal("a").eval(), Literal("b").eval())))) :: Nil,
+    """(strcol != "a" and strcol != "b")""")
+
+  filterTest("not-inset, string filter with null",
     (Not(InSet(a("strcol", StringType),
       Set(Literal("a").eval(), Literal("b").eval(), Literal(null).eval())))) :: Nil,
-    """(strcol != "a" and strcol != "b")""")
+    "")
 
   filterTest("not-inset, date filter",
     (Not(InSet(a("datecol", DateType),
       Set(Literal(Date.valueOf("2020-01-01")).eval(),
+        Literal(Date.valueOf("2020-01-02")).eval())))) :: Nil,
+    """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
+
+  filterTest("not-inset, date filter with null",
+    (Not(InSet(a("datecol", DateType),
+      Set(Literal(Date.valueOf("2020-01-01")).eval(),
         Literal(Date.valueOf("2020-01-02")).eval(),
         Literal(null).eval())))) :: Nil,
-    """(datecol != 2020-01-01 and datecol != 2020-01-02)""")
+    "")
 
   // Applying the predicate `x IN (NULL)` should return an empty set, but since this optimization
   // will be applied by Catalyst, this filter converter does not need to account for this.
