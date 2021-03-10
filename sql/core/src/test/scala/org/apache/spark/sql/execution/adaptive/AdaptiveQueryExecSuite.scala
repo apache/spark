@@ -19,9 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
 import java.net.URI
-
 import org.apache.log4j.Level
-
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -41,6 +39,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
+
+import java.lang.reflect.InvocationTargetException
 
 class AdaptiveQueryExecSuite
   extends QueryTest
@@ -866,6 +866,26 @@ class AdaptiveQueryExecSuite
         // should run successfully without NPE
         runAdaptiveAndVerifyResult("SELECT * FROM testData2 t1 left semi join t2 ON t1.a=t2.b")
       }
+    }
+  }
+
+  test("SPARK-34682: CustomShuffleReaderExec operating on canonicalized plan") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(
+        "SELECT key FROM testData GROUP BY key")
+      val readers = collect(adaptivePlan) {
+        case r: CustomShuffleReaderExec => r
+      }
+      assert(readers.length == 1)
+      val reader = readers.head
+      val c = reader.canonicalized.asInstanceOf[CustomShuffleReaderExec]
+      // we can't just call execute() because that has separate checks for canonicalized plans
+      val doExecute = c.getClass.getMethod("doExecute")
+      doExecute.setAccessible(true)
+      val ex = intercept[InvocationTargetException] {
+        doExecute.invoke(c)
+      }
+      assert(ex.getCause.getMessage === "operating on canonicalized plan")
     }
   }
 
