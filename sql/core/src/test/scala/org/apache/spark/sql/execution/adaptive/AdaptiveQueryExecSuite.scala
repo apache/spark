@@ -18,8 +18,11 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
+
 import org.apache.log4j.Level
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
@@ -39,8 +42,6 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.util.Utils
-
-import java.lang.reflect.InvocationTargetException
 
 class AdaptiveQueryExecSuite
   extends QueryTest
