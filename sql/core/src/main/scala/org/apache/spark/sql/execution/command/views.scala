@@ -176,7 +176,7 @@ case class CreateViewCommand(
    * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
    * else return the analyzed plan directly.
    */
-  def aliasPlan(session: SparkSession, analyzedPlan: LogicalPlan): LogicalPlan = {
+  private def aliasPlan(session: SparkSession, analyzedPlan: LogicalPlan): LogicalPlan = {
     if (userSpecifiedColumns.isEmpty) {
       analyzedPlan
     } else {
