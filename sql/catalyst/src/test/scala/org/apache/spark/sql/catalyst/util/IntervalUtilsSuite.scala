@@ -426,7 +426,7 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(monthsToPeriod(Int.MinValue) === Period.ofYears(-178956970).withMonths(-8))
   }
 
-  test("SPARK-XXXXX: round trip conversion of micros -> duration -> micros") {
+  test("SPARK-34695: round trip conversion of micros -> duration -> micros") {
     Seq(
       0,
       MICROS_PER_SECOND - 1,
