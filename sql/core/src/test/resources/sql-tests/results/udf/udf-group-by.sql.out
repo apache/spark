@@ -274,7 +274,7 @@ SELECT udf(id) FROM range(10) HAVING id > 0
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-grouping expressions sequence is empty, and '`id`' is not an aggregate function. Wrap '()' in windowing function(s) or wrap '`id`' in first() (or first_value) if you don't care which value you get.
+grouping expressions sequence is empty, and 'id' is not an aggregate function. Wrap '()' in windowing function(s) or wrap 'id' in first() (or first_value) if you don't care which value you get.
 
 
 -- !query

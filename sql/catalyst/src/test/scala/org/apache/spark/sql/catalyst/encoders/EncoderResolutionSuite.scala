@@ -238,7 +238,7 @@ class EncoderResolutionSuite extends PlanTest {
     }.message
     assert(msg2 ==
       s"""
-         |Cannot up cast b.b from decimal(38,18) to bigint.
+         |Cannot up cast b.`b` from decimal(38,18) to bigint.
          |The type path of the target object is:
          |- field (class: "scala.Long", name: "b")
          |- field (class: "org.apache.spark.sql.catalyst.encoders.StringLongClass", name: "b")
