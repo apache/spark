@@ -330,4 +330,19 @@ class BooleanSimplificationSuite extends PlanTest with ExpressionEvalHelper with
       checkEvaluation(originalExpr, optimizedVal, inputRow)
     }
   }
+
+  test("SPARK-34692: Support Not(Int) and Not(InSet) propagate null") {
+    // The plan changed by the order NullPropagation -> SimplifyConditionals
+    comparePlans(
+      Optimize.execute(testRelationWithData
+        .where(Not(In("a".attr, Seq(Literal(1), Literal(2), Literal(null))))).analyze),
+      LocalRelation(testRelationWithData.output).analyze
+    )
+
+    comparePlans(
+      Optimize.execute(testRelationWithData
+        .where(Not(InSet("a".attr, Set(1, 2, null)))).analyze),
+      LocalRelation(testRelationWithData.output).analyze
+    )
+  }
 }

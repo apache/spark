@@ -769,6 +769,9 @@ object NullPropagation extends Rule[LogicalPlan] {
       case In(Literal(null, _), _) => Literal.create(null, BooleanType)
       case InSubquery(Seq(Literal(null, _)), _) => Literal.create(null, BooleanType)
 
+      case Not(In(_, values)) if values.exists(isNullLiteral) => Literal.create(null, BooleanType)
+      case Not(InSet(_, values)) if values.contains(null) => Literal.create(null, BooleanType)
+
       // Non-leaf NullIntolerant expressions will return null, if at least one of its children is
       // a null literal.
       case e: NullIntolerant if e.children.exists(isNullLiteral) =>
