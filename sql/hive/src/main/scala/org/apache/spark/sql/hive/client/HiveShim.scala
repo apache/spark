@@ -752,6 +752,16 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       values.map(value => s"$name != $value").mkString("(", " and ", ")")
     }
 
+    def hasNullLiteral(list: Seq[Expression]): Boolean = list.contains {
+      case Literal(null, _) => true
+      case _ => false
+    }
+
+    def hasNullValue(list: Set[Any]): Boolean = list.contains {
+      case null => true
+      case _ => false
+    }
+
     val useAdvanced = SQLConf.get.advancedPartitionPredicatePushdownEnabled
     val inSetThreshold = SQLConf.get.metastorePartitionPruningInSetThreshold
 
@@ -767,6 +777,9 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     }
 
     def convert(expr: Expression): Option[String] = expr match {
+      case Not(In(_, list)) if hasNullLiteral(list) => None
+      case Not(InSet(_, list)) if hasNullValue(list) => None
+
       case In(ExtractAttribute(SupportedAttribute(name)), ExtractableLiterals(values))
           if useAdvanced =>
         Some(convertInToOr(name, values))
