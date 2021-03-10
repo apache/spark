@@ -108,20 +108,31 @@ class FiltersSuite extends SparkFunSuite with Logging with PlanTest {
     (a("datecol", DateType) =!= Literal(Date.valueOf("2019-01-01"))) :: Nil,
     "datecol != 2019-01-01")
 
-  filterTest("not-in int filter",
+  filterTest("not-in, int filter",
     (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2))))) :: Nil,
     "(intcol != 1 and intcol != 2)")
 
-  filterTest("not-in int filter with null",
+  filterTest("not-in, int filter with null",
     (Not(In(a("intcol", IntegerType), Seq(Literal(1), Literal(2), Literal(null))))) :: Nil,
     "")
 
-  filterTest("not-in string filter",
+  filterTest("not-in, string filter",
     (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"))))) :: Nil,
     """(strcol != "a" and strcol != "b")""")
 
-  filterTest("not-in string filter with null",
+  filterTest("not-in, string filter with null",
     (Not(In(a("strcol", StringType), Seq(Literal("a"), Literal("b"), Literal(null))))) :: Nil,
+    "")
+
+  filterTest("not-in, date filter",
+    (Not(In(a("datecol", DateType),
+      Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")))))) :: Nil,
+    """(datecol != 2021-01-01 and datecol != 2021-01-02)""")
+
+  filterTest("not-in, date filter with null",
+    (Not(In(a("datecol", DateType),
+      Seq(Literal(Date.valueOf("2021-01-01")), Literal(Date.valueOf("2021-01-02")),
+        Literal(null))))) :: Nil,
     "")
 
   filterTest("not-inset, int filter",
