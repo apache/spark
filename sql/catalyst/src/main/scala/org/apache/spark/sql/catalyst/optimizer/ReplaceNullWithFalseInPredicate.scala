@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, LambdaFunction, Literal, MapFilter, Or}
+import org.apache.spark.sql.catalyst.expressions.{And, ArrayExists, ArrayFilter, CaseWhen, EqualNullSafe, Expression, If, In, InSet, LambdaFunction, Literal, MapFilter, Not, Or}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, DeleteFromTable, Filter, InsertAction, Join, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -95,6 +95,11 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
   private def replaceNullWithFalse(e: Expression): Expression = e match {
     case Literal(null, BooleanType) =>
       FalseLiteral
+    case Not(In(value, list)) if (value +: list).exists(isNullLiteral) =>
+      FalseLiteral
+    case Not(InSet(value, list)) if isNullLiteral(value) || list.contains(null) =>
+      FalseLiteral
+
     case And(left, right) =>
       And(replaceNullWithFalse(left), replaceNullWithFalse(right))
     case Or(left, right) =>
@@ -127,5 +132,10 @@ object ReplaceNullWithFalseInPredicate extends Rule[LogicalPlan] {
       case i @ InsertAction(Some(cond), _) => i.copy(condition = Some(replaceNullWithFalse(cond)))
       case other => other
     }
+  }
+
+  private def isNullLiteral(e: Expression): Boolean = e match {
+    case Literal(null, _) => true
+    case _ => false
   }
 }
