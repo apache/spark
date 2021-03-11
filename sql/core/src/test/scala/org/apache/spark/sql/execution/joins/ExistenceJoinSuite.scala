@@ -103,7 +103,7 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
       ProjectExec(output, FilterExec(condition, join))
     }
 
-    test(s"$testName using ShuffledHashJoin") {
+    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin") { _ =>
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
