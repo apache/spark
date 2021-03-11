@@ -418,49 +418,104 @@ class HivePartitionFilteringSuite(version: String)
       dateStrValue)
   }
 
-  test("getPartitionsByFilter: not in chunk") {
-    testMetastorePartitionFiltering(
+  test("getPartitionsByFilter: not in/inset string type") {
+    def check(condition: Expression, result: Seq[String]): Unit = {
+      testMetastorePartitionFiltering(
+        condition,
+        dsValue,
+        hValue,
+        result,
+        dateValue,
+        dateStrValue
+      )
+    }
+
+    check(
       Not(In(attr("chunk"), Seq(Literal("aa"), Literal("ab")))),
-      dsValue,
-      hValue,
-      Seq("ba", "bb"),
-      dateValue,
-      dateStrValue
+      Seq("ba", "bb")
+    )
+    check(
+      Not(In(attr("chunk"), Seq(Literal("aa"), Literal("ab"), Literal(null)))),
+      chunkValue
+    )
+
+    check(
+      Not(InSet(attr("chunk"), Set(Literal("aa").eval(), Literal("ab").eval()))),
+      Seq("ba", "bb")
+    )
+    check(
+      Not(InSet(attr("chunk"), Set("aa", "ab", null))),
+      chunkValue
     )
   }
 
-  test("getPartitionsByFilter: not in ds") {
-    testMetastorePartitionFiltering(
+  test("getPartitionsByFilter: not in/inset int type") {
+    def check(condition: Expression, result: Seq[Int]): Unit = {
+      testMetastorePartitionFiltering(
+        condition,
+        result,
+        hValue,
+        chunkValue,
+        dateValue,
+        dateStrValue
+      )
+    }
+
+    check(
       Not(In(attr("ds"), Seq(Literal(20170102)))),
-      Seq(20170101, 20170103),
-      hValue,
-      chunkValue,
-      dateValue,
-      dateStrValue
+      Seq(20170101, 20170103)
+    )
+    check(
+      Not(In(attr("ds"), Seq(Literal(20170102), Literal(null)))),
+      dsValue
+    )
+
+    check(
+      Not(InSet(attr("ds"), Set(Literal(20170102).eval()))),
+      Seq(20170101, 20170103)
+    )
+    check(
+      Not(InSet(attr("ds"), Set(Literal(20170102).eval(), null))),
+      dsValue
     )
   }
 
-  test("getPartitionsByFilter: not inset date") {
-    testMetastorePartitionFiltering(
+  test("getPartitionsByFilter: not in/inset date type") {
+    def check(condition: Expression, result: Seq[String]): Unit = {
+      testMetastorePartitionFiltering(
+        condition,
+        dsValue,
+        hValue,
+        chunkValue,
+        result,
+        dateStrValue
+      )
+    }
+
+    check(
+      Not(In(attr("d"),
+        Seq(Literal(Date.valueOf("2019-01-01")),
+          Literal(Date.valueOf("2019-01-02"))))),
+      Seq("2019-01-03")
+    )
+    check(
+      Not(In(attr("d"),
+        Seq(Literal(Date.valueOf("2019-01-01")),
+          Literal(Date.valueOf("2019-01-02")), Literal(null)))),
+      dateValue
+    )
+
+    check(
       Not(InSet(attr("d"),
         Set(Literal(Date.valueOf("2019-01-01")).eval(),
           Literal(Date.valueOf("2019-01-02")).eval()))),
-      dsValue,
-      hValue,
-      chunkValue,
-      Seq("2019-01-03"),
-      dateStrValue
+      Seq("2019-01-03")
     )
-  }
-
-  test("getPartitionsByFilter: not inset h") {
-    testMetastorePartitionFiltering(
-      Not(InSet(attr("h"), Set(1, 2))),
-      dsValue,
-      Seq(0, 3, 4),
-      chunkValue,
-      dateValue,
-      dateStrValue
+    check(
+      Not(InSet(attr("d"),
+        Set(Literal(Date.valueOf("2019-01-01")).eval(),
+          Literal(Date.valueOf("2019-01-02")).eval(), null))),
+      dateValue
     )
   }
 
