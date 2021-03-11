@@ -120,11 +120,11 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     val partitionInfo = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
       mergeManager, partitionId)
 
-    val (dataChannel, metaChannel, indexStream) =
+    val (mergedDataFile, mergeMetaFile, mergeIndexFile) =
       ShuffleTestAccessor.getPartitionFileHandlers(partitionInfo)
     for (chunkId <- 1 to 5) {
-      (0 until 4).foreach(_ => dataChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA)))
-      indexStream.writeLong(chunkId * 4 * DUMMY_BLOCK_DATA.length - 1)
+      (0 until 4).foreach(_ => mergedDataFile.getChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA)))
+      mergeIndexFile.getDos().writeLong(chunkId * 4 * DUMMY_BLOCK_DATA.length - 1)
       val bitmap = new RoaringBitmap
       for (j <- (chunkId - 1) * 10 until chunkId * 10) {
         bitmap.add(j)
@@ -133,7 +133,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       Encoders.Bitmaps.encode(buffer, bitmap)
       metaChannel.write(buffer.nioBuffer)
     }
-    dataChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA))
+    mergedDataFile.getChannel.write(ByteBuffer.wrap(DUMMY_BLOCK_DATA))
     ShuffleTestAccessor.closePartitionFiles(partitionInfo)
 
     partitionInfo
@@ -232,11 +232,11 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager2) should be (None)
     val partitionInfoReload1 = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
       mergeManager2, partitionId1)
-    partitionInfoReload1.getPosition should be (20 * DUMMY_BLOCK_DATA.length - 1)
+    partitionInfoReload1.getDataFile.getPos should be (20 * DUMMY_BLOCK_DATA.length - 1)
     partitionInfoReload1.getMapTracker.getCardinality should be (50)
     val dataFileReload1 = ShuffleTestAccessor.getFile(mergeManager2, app1Id.toString,
       ShuffleTestAccessor.generateDataFileName(partitionId1))
-    dataFileReload1.length() should be (partitionInfoReload1.getPosition)
+    dataFileReload1.length() should be (partitionInfoReload1.getDataFile.getPos)
 
     // Act like the NM restarts one more time
     s2.stop()
@@ -259,11 +259,11 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getAppPathsInfo(app2Id.toString, mergeManager3) should be (None)
     val partitionInfoReload2 = ShuffleTestAccessor.getOrCreateAppShufflePartitionInfo(
       mergeManager3, partitionId1)
-    partitionInfoReload2.getPosition should be (20 * DUMMY_BLOCK_DATA.length - 1)
+    partitionInfoReload2.getDataFile.getPos should be (20 * DUMMY_BLOCK_DATA.length - 1)
     partitionInfoReload2.getMapTracker.getCardinality should be (50)
     val dataFileReload2 = ShuffleTestAccessor.getFile(mergeManager3, app1Id.toString,
       ShuffleTestAccessor.generateDataFileName(partitionId1))
-    dataFileReload2.length() should be (partitionInfoReload2.getPosition)
+    dataFileReload2.length() should be (partitionInfoReload2.getDataFile.getPos)
     s3.stop()
   }
 

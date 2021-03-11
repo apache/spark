@@ -99,8 +99,9 @@ object ShuffleTestAccessor {
   }
 
   def getPartitionFileHandlers(
-      partitionInfo: AppShufflePartitionInfo): (FileChannel, FileChannel, DataOutputStream) = {
-    (partitionInfo.channel, partitionInfo.metaChannel, partitionInfo.indexWriteStream)
+      partitionInfo: AppShufflePartitionInfo):
+      (MergeShuffleDataFile, MergeShuffleMetaFile, MergeShuffleMetaFile) = {
+    (partitionInfo.getDataFile(), partitionInfo.getMetaFile(), partitionInfo.getIndexFile())
   }
 
   def closePartitionFiles(partitionInfo: AppShufflePartitionInfo): Unit = {
