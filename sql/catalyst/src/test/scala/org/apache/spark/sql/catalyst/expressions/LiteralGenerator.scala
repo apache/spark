@@ -175,10 +175,8 @@ object LiteralGenerator {
   }
 
   lazy val yearMonthIntervalLiteralGen: Gen[Literal] = {
-    for {
-      years <- Gen.choose(-178956969, 178956969)
-      months <- Gen.choose(-11, 11)
-    } yield Literal.create(Period.of(years, months, 0), YearMonthIntervalType)
+    for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
+      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType)
   }
 
   def randomGen(dt: DataType): Gen[Literal] = {
