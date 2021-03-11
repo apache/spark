@@ -425,4 +425,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     assert(monthsToPeriod(Int.MaxValue) === Period.ofYears(178956970).withMonths(7))
     assert(monthsToPeriod(Int.MinValue) === Period.ofYears(-178956970).withMonths(-8))
   }
+
+  test("SPARK-34695: round trip conversion of micros -> duration -> micros") {
+    Seq(
+      0,
+      MICROS_PER_SECOND - 1,
+      -MICROS_PER_SECOND + 1,
+      MICROS_PER_SECOND,
+      -MICROS_PER_SECOND,
+      Long.MaxValue - MICROS_PER_SECOND,
+      Long.MinValue + MICROS_PER_SECOND,
+      Long.MaxValue,
+      Long.MinValue).foreach { micros =>
+      val duration = microsToDuration(micros)
+      assert(durationToMicros(duration) === micros)
+    }
+  }
 }
