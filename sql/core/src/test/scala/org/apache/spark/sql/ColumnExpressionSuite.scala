@@ -2383,8 +2383,8 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       .toDF("year-month-A", "day-time-A", "year-month-B", "day-time-B")
     val negatedDF = df.select(-$"year-month-A", -$"day-time-A")
     checkAnswer(negatedDF, Row(Period.ofMonths(-10), Duration.ofDays(-10)))
-    val sumDF = df.select($"year-month-A" + $"year-month-B", $"day-time-A" + $"day-time-B")
-    checkAnswer(sumDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
+    val addDF = df.select($"year-month-A" + $"year-month-B", $"day-time-A" + $"day-time-B")
+    checkAnswer(addDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
     val subDF = df.select($"year-month-A" - $"year-month-B", $"day-time-A" - $"day-time-B")
     checkAnswer(subDF, Row(Period.ofMonths(9), Duration.ofDays(9)))
   }
