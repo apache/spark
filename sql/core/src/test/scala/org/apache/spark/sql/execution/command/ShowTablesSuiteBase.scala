@@ -44,7 +44,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   test("show an existing table") {
     withNamespaceAndTable("ns", "table") { t =>
       sql(s"CREATE TABLE $t (name STRING, id INT) $defaultUsing")
-      runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(Row("ns", "table", false)))
+      runShowTablesSql(s"SHOW TABLES IN $catalog.ns", Seq(Row("ns", "table", false, false)))
     }
   }
 
@@ -72,25 +72,25 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1",
           Seq(
-            Row("ns1", "table", false),
-            Row("ns1", "table_name_1a", false),
-            Row("ns1", "table_name_2b", false)))
+            Row("ns1", "table", false, false),
+            Row("ns1", "table_name_1a", false, false),
+            Row("ns1", "table_name_2b", false, false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE '*name*'",
           Seq(
-            Row("ns1", "table_name_1a", false),
-            Row("ns1", "table_name_2b", false)))
+            Row("ns1", "table_name_1a", false, false),
+            Row("ns1", "table_name_2b", false, false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE 'table_name_1*|table_name_2*'",
           Seq(
-            Row("ns1", "table_name_1a", false),
-            Row("ns1", "table_name_2b", false)))
+            Row("ns1", "table_name_1a", false, false),
+            Row("ns1", "table_name_2b", false, false)))
 
         runShowTablesSql(
           s"SHOW TABLES FROM $catalog.ns1 LIKE '*2b'",
-          Seq(Row("ns1", "table_name_2b", false)))
+          Seq(Row("ns1", "table_name_2b", false, false)))
       }
     }
   }
@@ -101,7 +101,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       withTable(tblName) {
         sql(s"CREATE TABLE $tblName (name STRING, id INT) $defaultUsing")
         val ns = defaultNamespace.mkString(".")
-        runShowTablesSql("SHOW TABLES", Seq(Row(ns, "table", false)))
+        runShowTablesSql("SHOW TABLES", Seq(Row(ns, "table", false, false)))
       }
     }
   }
@@ -129,7 +129,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
       // Update the current namespace to match "ns.tbl".
       sql(s"USE $catalog.ns")
-      runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false)))
+      runShowTablesSql("SHOW TABLES", Seq(Row("ns", "table", false, false)))
     }
   }
 }

@@ -514,7 +514,8 @@ object ShowTables {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
-    AttributeReference("isTemporary", BooleanType, nullable = false)())
+    AttributeReference("isTemporary", BooleanType, nullable = false)(),
+    AttributeReference("isView", BooleanType, nullable = false)())
 }
 
 /**
@@ -533,7 +534,8 @@ object ShowTableExtended {
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
-    AttributeReference("information", StringType, nullable = false)())
+    AttributeReference("information", StringType, nullable = false)(),
+    AttributeReference("isView", BooleanType, nullable = false)())
 }
 
 /**

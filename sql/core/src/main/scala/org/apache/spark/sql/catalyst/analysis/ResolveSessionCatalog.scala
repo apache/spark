@@ -353,8 +353,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case ShowTables(DatabaseInSessionCatalog(db), pattern, output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 3)
-        output.head.withName("database") +: output.tail
+        assert(output.length == 4)
+        output.head.withName("database") +: output.slice(1, 3)
       } else {
         output
       }
@@ -366,13 +366,13 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         partitionSpec @ (None | Some(UnresolvedPartitionSpec(_, _))),
         output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
-        assert(output.length == 4)
-        output.head.withName("database") +: output.tail
+        assert(output.length == 5)
+        output.head.withName("database") +: output.slice(1, 4)
       } else {
         output
       }
       val tablePartitionSpec = partitionSpec.map(_.asInstanceOf[UnresolvedPartitionSpec].spec)
-      ShowTablesCommand(Some(db), Some(pattern), newOutput, true, tablePartitionSpec)
+      ShowTablesCommand(Some(db), Some(pattern), newOutput, isExtended = true, tablePartitionSpec)
 
     // ANALYZE TABLE works on permanent views if the views are cached.
     case AnalyzeTable(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, noScan) =>

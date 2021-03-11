@@ -47,7 +47,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
-        Seq(Row("", "source", true), Row("", "source2", true)))
+        Seq(Row("", "source", true, true), Row("", "source2", true, true)))
     }
   }
 
@@ -60,14 +60,16 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
 
   test("SHOW TABLE EXTENDED from default") {
     withSourceViews {
-      val expected = Seq(Row("", "source", true), Row("", "source2", true))
+      val expected = Seq(Row("", "source", true, true), Row("", "source2", true, true))
 
       val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
       val result = df.collect()
-      val resultWithoutInfo = result.map { case Row(db, table, temp, _) => Row(db, table, temp) }
+      val resultWithoutInfo = result.map {
+        case Row(db, table, temp, _, isView) => Row(db, table, temp, isView)
+      }
 
       assert(resultWithoutInfo === expected)
-      result.foreach { case Row(_, _, _, info: String) => assert(info.nonEmpty) }
+      result.foreach { case Row(_, _, _, info: String, _) => assert(info.nonEmpty) }
     }
   }
 
@@ -108,12 +110,12 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       sql(s"USE $catalog.ns")
       withTable("tbl") {
         sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
-        checkAnswer(sql("show tables"), Row("ns", "tbl", false))
+        checkAnswer(sql("show tables"), Row("ns", "tbl", false, false))
         assert(sql("show tables").schema.fieldNames ===
-          Seq("namespace", "tableName", "isTemporary"))
-        assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
+          Seq("namespace", "tableName", "isTemporary", "isView"))
+        assert(sql("show table extended like 'tbl'").collect()(0).length == 5)
         assert(sql("show table extended like 'tbl'").schema.fieldNames ===
-          Seq("namespace", "tableName", "isTemporary", "information"))
+          Seq("namespace", "tableName", "isTemporary", "information", "isView"))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
