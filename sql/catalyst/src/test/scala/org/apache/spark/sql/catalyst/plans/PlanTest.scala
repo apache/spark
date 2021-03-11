@@ -44,12 +44,18 @@ trait CodegenInterpretedPlanTest extends PlanTest {
     val codegenMode = CodegenObjectFactoryMode.CODEGEN_ONLY.toString
     val interpretedMode = CodegenObjectFactoryMode.NO_CODEGEN.toString
 
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {
-      super.test(testName + " (codegen path)", testTags: _*)(testFun)(pos)
-    }
-    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) {
-      super.test(testName + " (interpreted path)", testTags: _*)(testFun)(pos)
-    }
+    super.test(testName + " (codegen path)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
+    super.test(testName + " (interpreted path)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> interpretedMode) { testFun })(pos)
+  }
+
+  protected def testFallback(
+      testName: String,
+      testTags: Tag*)(testFun: => Any)(implicit pos: source.Position): Unit = {
+    val codegenMode = CodegenObjectFactoryMode.FALLBACK.toString
+    super.test(testName + " (codegen fallback mode)", testTags: _*)(
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) { testFun })(pos)
   }
 }
 
