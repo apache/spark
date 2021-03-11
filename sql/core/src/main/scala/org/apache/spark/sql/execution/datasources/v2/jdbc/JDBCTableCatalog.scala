@@ -117,7 +117,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
       properties: java.util.Map[String, String]): Table = {
     checkNamespace(ident.namespace())
     if (partitions.nonEmpty) {
-      throw QueryExecutionErrors.cannotCreateJDBCTableWithPartitions()
+      throw QueryExecutionErrors.cannotCreateJDBCTableWithPartitionsError()
     }
 
     var tableOptions = options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))
@@ -281,7 +281,7 @@ class JDBCTableCatalog extends TableCatalog with SupportsNamespaces with Logging
   override def dropNamespace(namespace: Array[String]): Boolean = namespace match {
     case Array(db) if namespaceExists(namespace) =>
       if (listTables(Array(db)).nonEmpty) {
-        throw QueryExecutionErrors.namespaceIsNotEmptyError(namespace)
+        throw QueryExecutionErrors.namespaceNotEmptyError(namespace)
       }
       withConnection { conn =>
         classifyException(s"Failed drop name space: $db") {

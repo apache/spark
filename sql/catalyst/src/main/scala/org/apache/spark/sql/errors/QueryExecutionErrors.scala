@@ -382,10 +382,10 @@ object QueryExecutionErrors {
     val message = "Encounter error while reading parquet files. " +
       "One possible cause: Parquet column cannot be converted in the " +
       "corresponding files. Details: "
-    throw new QueryExecutionException(message, e)
+    new QueryExecutionException(message, e)
   }
 
-  def cannotBuildColumnarReaderError(): Throwable = {
+  def cannotCreateColumnarReaderError(): Throwable = {
     new UnsupportedOperationException("Cannot create columnar reader.")
   }
 
@@ -406,7 +406,7 @@ object QueryExecutionErrors {
     new UnsupportedOperationException(s"Cannot remove reserved property: $property")
   }
 
-  def namespaceIsNotEmptyError(namespace: Array[String]): Throwable = {
+  def namespaceNotEmptyError(namespace: Array[String]): Throwable = {
     new IllegalStateException(s"Namespace ${namespace.quoted} is not empty")
   }
 
@@ -425,12 +425,16 @@ object QueryExecutionErrors {
     new CommitDeniedException(message, stageId, partId, attemptId)
   }
 
-  def unsupportedWritesError(ident: Identifier): Throwable = {
+  def unsupportedTableWritesError(ident: Identifier): Throwable = {
     new SparkException(
       s"Table implementation does not support writes: ${ident.quoted}")
   }
 
-  def cannotCreateJDBCTableWithPartitions(): Throwable = {
+  def cannotCreateJDBCTableWithPartitionsError(): Throwable = {
     new UnsupportedOperationException("Cannot create JDBC table with partition")
+  }
+
+  def unsupportedUserSpecifiedSchemaError(): Throwable = {
+    new UnsupportedOperationException("user-specified schema")
   }
 }

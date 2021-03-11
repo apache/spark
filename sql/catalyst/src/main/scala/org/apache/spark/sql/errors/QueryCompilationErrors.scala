@@ -774,55 +774,42 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("DESCRIBE does not support partition for v2 tables.")
   }
 
-  def unsupportedUserSpecifiedSchemaError(): Throwable = {
-    new UnsupportedOperationException("user-specified schema")
-  }
-
-  def cannotReplaceMissingTableExceptionMessage(tableIdentifier: Identifier): String = {
-    s"Table $tableIdentifier cannot be replaced as it did not exist." +
-      s" Use CREATE OR REPLACE TABLE to create the table."
-  }
-
   def cannotReplaceMissingTableError(
       tableIdentifier: Identifier): Throwable = {
-    new CannotReplaceMissingTableException(
-      cannotReplaceMissingTableExceptionMessage(tableIdentifier)
-    )
+    new CannotReplaceMissingTableException(tableIdentifier)
   }
 
   def cannotReplaceMissingTableError(
       tableIdentifier: Identifier, cause: Option[Throwable]): Throwable = {
-    new CannotReplaceMissingTableException(
-      cannotReplaceMissingTableExceptionMessage(tableIdentifier), cause
-    )
+    new CannotReplaceMissingTableException(tableIdentifier, cause)
   }
 
-  def tableDoesNotSupportError(table: Table, cmd: String): Throwable = {
+  def unsupportedTableOperationError(table: Table, cmd: String): Throwable = {
     new AnalysisException(s"Table ${table.name} does not support $cmd.")
   }
 
   def unsupportedBatchReadError(table: Table): Throwable = {
-    tableDoesNotSupportError(table, "batch scan")
+    unsupportedTableOperationError(table, "batch scan")
   }
 
   def unsupportedMicroBatchOrContinuousScanError(table: Table): Throwable = {
-    tableDoesNotSupportError(table, "either micro-batch or continuous scan")
+    unsupportedTableOperationError(table, "either micro-batch or continuous scan")
   }
 
   def unsupportedAppendInBatchModeError(table: Table): Throwable = {
-    tableDoesNotSupportError(table, "append in batch mode")
+    unsupportedTableOperationError(table, "append in batch mode")
   }
 
   def unsupportedDynamicOverwriteInBatchModeError(table: Table): Throwable = {
-    tableDoesNotSupportError(table, "dynamic overwrite in batch mode")
+    unsupportedTableOperationError(table, "dynamic overwrite in batch mode")
   }
 
   def unsupportedTruncateInBatchModeError(table: Table): Throwable = {
-    tableDoesNotSupportError(table, "truncate in batch mode")
+    unsupportedTableOperationError(table, "truncate in batch mode")
   }
 
   def unsupportedOverwriteByFilterInBatchModeError(table: Table): Throwable = {
-    tableDoesNotSupportError(table, "overwrite by filter in batch mode")
+    unsupportedTableOperationError(table, "overwrite by filter in batch mode")
   }
 
   def streamingSourcesDoNotSupportCommonExecutionModeError(
@@ -834,28 +821,16 @@ private[spark] object QueryCompilationErrors {
         "Sources support continuous: " + continuousSources.mkString(", "))
   }
 
-  def noSuchTableExceptionMessage(ident: Identifier): String = {
-    s"Table ${ident.quoted} not found"
-  }
-
   def noSuchTableError(ident: Identifier): Throwable = {
-    new NoSuchTableException(noSuchTableExceptionMessage(ident))
-  }
-
-  def noSuchNamespaceExceptionMessage(namespace: Array[String]): String = {
-    s"Namespace '${namespace.quoted}' not found"
+    new NoSuchTableException(ident)
   }
 
   def noSuchNamespaceError(namespace: Array[String]): Throwable = {
-    new NoSuchNamespaceException(noSuchNamespaceExceptionMessage(namespace))
-  }
-
-  def tableAlreadyExistsExceptionMessage(ident: Identifier): String = {
-    s"Table ${ident.quoted} already exists"
+    new NoSuchNamespaceException(namespace)
   }
 
   def tableAlreadyExistsError(ident: Identifier): Throwable = {
-    new TableAlreadyExistsException(tableAlreadyExistsExceptionMessage(ident))
+    new TableAlreadyExistsException(ident)
   }
 
   def requiresSinglePartNamespaceError(ident: Identifier): Throwable = {
@@ -863,12 +838,8 @@ private[spark] object QueryCompilationErrors {
       s"V2 session catalog requires a single-part namespace: ${ident.quoted}")
   }
 
-  def namespaceAlreadyExistsExceptionMessage(namespace: Array[String]): String = {
-    s"Namespace '${namespace.quoted}' already exists"
-  }
-
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
-    new NamespaceAlreadyExistsException(namespaceAlreadyExistsExceptionMessage(namespace))
+    new NamespaceAlreadyExistsException(namespace)
   }
 
   private def notSupportedInJDBCCatalog(cmd: String): Throwable = {

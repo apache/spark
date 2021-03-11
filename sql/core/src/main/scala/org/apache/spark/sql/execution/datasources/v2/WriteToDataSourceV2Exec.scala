@@ -430,7 +430,7 @@ private[v2] trait TableWriteExecHelper extends V2TableWriteExec with SupportsV1W
         case _ =>
           // Table does not support writes - staged changes are also rolled back below if table
           // is staging.
-          throw QueryExecutionErrors.unsupportedWritesError(ident)
+          throw QueryExecutionErrors.unsupportedTableWritesError(ident)
       }
     })(catchBlock = {
       table match {

@@ -17,7 +17,5 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.SparkException
-
 class QueryExecutionException(message: String, cause: Throwable = null)
-  extends SparkException(message, cause)
+  extends Exception(message, cause)

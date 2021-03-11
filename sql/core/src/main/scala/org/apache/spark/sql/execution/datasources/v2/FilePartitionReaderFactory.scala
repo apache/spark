@@ -44,7 +44,7 @@ abstract class FilePartitionReaderFactory extends PartitionReaderFactory {
   def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow]
 
   def buildColumnarReader(partitionedFile: PartitionedFile): PartitionReader[ColumnarBatch] = {
-    throw QueryExecutionErrors.cannotBuildColumnarReaderError()
+    throw QueryExecutionErrors.cannotCreateColumnarReaderError()
   }
 }
 

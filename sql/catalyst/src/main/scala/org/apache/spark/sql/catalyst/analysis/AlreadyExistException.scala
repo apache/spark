@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -33,7 +33,7 @@ class DatabaseAlreadyExistsException(db: String)
 
 class NamespaceAlreadyExistsException(message: String) extends AnalysisException(message) {
   def this(namespace: Array[String]) = {
-    this(QueryCompilationErrors.namespaceAlreadyExistsExceptionMessage(namespace))
+    this(s"Namespace '${namespace.quoted}' already exists")
   }
 }
 
@@ -44,7 +44,7 @@ class TableAlreadyExistsException(message: String, cause: Option[Throwable] = No
   }
 
   def this(tableIdent: Identifier) = {
-    this(QueryCompilationErrors.tableAlreadyExistsExceptionMessage(tableIdent))
+    this(s"Table ${tableIdent.quoted} already exists")
   }
 }
 
