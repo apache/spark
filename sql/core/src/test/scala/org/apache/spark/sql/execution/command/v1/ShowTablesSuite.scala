@@ -47,7 +47,7 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     withSourceViews {
       runShowTablesSql(
         "SHOW TABLES FROM default",
-        Seq(Row("", "source", true, true), Row("", "source2", true, true)))
+        Seq(Row("", "source", true, "VIEW"), Row("", "source2", true, "VIEW")))
     }
   }
 
@@ -60,12 +60,12 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
 
   test("SHOW TABLE EXTENDED from default") {
     withSourceViews {
-      val expected = Seq(Row("", "source", true, true), Row("", "source2", true, true))
+      val expected = Seq(Row("", "source", true, "VIEW"), Row("", "source2", true, "VIEW"))
 
       val df = sql("SHOW TABLE EXTENDED FROM default LIKE '*source*'")
       val result = df.collect()
       val resultWithoutInfo = result.map {
-        case Row(db, table, temp, _, isView) => Row(db, table, temp, isView)
+        case Row(db, table, temp, _, tableType) => Row(db, table, temp, tableType)
       }
 
       assert(resultWithoutInfo === expected)
@@ -110,12 +110,12 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
       sql(s"USE $catalog.ns")
       withTable("tbl") {
         sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
-        checkAnswer(sql("show tables"), Row("ns", "tbl", false, false))
+        checkAnswer(sql("show tables"), Row("ns", "tbl", false, "TABLE"))
         assert(sql("show tables").schema.fieldNames ===
-          Seq("namespace", "tableName", "isTemporary", "isView"))
+          Seq("namespace", "tableName", "isTemporary", "tableType"))
         assert(sql("show table extended like 'tbl'").collect()(0).length == 5)
         assert(sql("show table extended like 'tbl'").schema.fieldNames ===
-          Seq("namespace", "tableName", "isTemporary", "information", "isView"))
+          Seq("namespace", "tableName", "isTemporary", "information", "tableType"))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {

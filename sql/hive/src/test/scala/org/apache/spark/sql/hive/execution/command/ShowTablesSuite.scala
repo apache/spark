@@ -26,7 +26,7 @@ class ShowTablesSuite extends v1.ShowTablesSuiteBase with CommandSuiteBase {
   test("hive client calls") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id int) $defaultUsing")
-      checkHiveClientCalls(expected = 3) {
+      checkHiveClientCalls(expected = 6) {
         sql(s"SHOW TABLES IN $catalog.ns")
       }
     }

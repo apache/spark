@@ -87,11 +87,8 @@ private[hive] trait SparkOperation extends Operation with Logging {
     }
   }
 
-  def tableTypeString(tableType: CatalogTableType): String = tableType match {
-    case EXTERNAL | MANAGED => "TABLE"
-    case VIEW => "VIEW"
-    case t =>
-      throw new IllegalArgumentException(s"Unknown table type is found: $t")
+  def tableTypeString(tableType: CatalogTableType): String = {
+    CatalogTableType.classicTableTypeString(tableType)
   }
 
   protected def onError(): PartialFunction[Throwable, Unit] = {

@@ -510,12 +510,21 @@ case class ShowTables(
   override def children: Seq[LogicalPlan] = Seq(namespace)
 }
 
-object ShowTables {
+trait ShowTablesLegacyHelper {
+  def getOutputAttrs: Seq[Attribute]
+
+  def getLegacyOutputAttrs: Seq[Attribute] = {
+    val output = getOutputAttrs
+    output.head.withName("database") +: output.slice(1, output.length - 1)
+  }
+}
+
+object ShowTables extends ShowTablesLegacyHelper {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
-    AttributeReference("isView", BooleanType, nullable = false)())
+    AttributeReference("tableType", StringType, nullable = false)())
 }
 
 /**
@@ -529,13 +538,13 @@ case class ShowTableExtended(
   override def children: Seq[LogicalPlan] = namespace :: Nil
 }
 
-object ShowTableExtended {
+object ShowTableExtended extends ShowTablesLegacyHelper {
   def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("namespace", StringType, nullable = false)(),
     AttributeReference("tableName", StringType, nullable = false)(),
     AttributeReference("isTemporary", BooleanType, nullable = false)(),
     AttributeReference("information", StringType, nullable = false)(),
-    AttributeReference("isView", BooleanType, nullable = false)())
+    AttributeReference("tableType", StringType, nullable = false)())
 }
 
 /**

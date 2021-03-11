@@ -844,17 +844,17 @@ case class ShowTablesCommand(
         val tableName = tableIdent.table
         val isTemp = catalog.isTempView(tableIdent)
         val catalogTable = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
-        val isView = catalogTable.tableType == CatalogTableType.VIEW
+        val tableType = classicTableTypeString(catalogTable.tableType)
         if (isExtended) {
           val information = catalogTable.simpleString
           if (output.size == 5) {
-            Row(database, tableName, isTemp, s"$information\n", isView)
+            Row(database, tableName, isTemp, s"$information\n", tableType)
           } else {
             Row(database, tableName, isTemp, s"$information\n")
           }
         } else {
           if (output.size == 4) {
-            Row(database, tableName, isTemp, isView)
+            Row(database, tableName, isTemp, tableType)
           } else {
             Row(database, tableName, isTemp)
           }
@@ -882,8 +882,8 @@ case class ShowTablesCommand(
       val isTemp = catalog.isTempView(tableIdent)
       val information = partition.simpleString
       if (output.size == 5) {
-        val isView = table.tableType == CatalogTableType.VIEW
-        Seq(Row(database, tableName, isTemp, s"$information\n", isView))
+        val tableType = classicTableTypeString(table.tableType)
+        Seq(Row(database, tableName, isTemp, s"$information\n", tableType))
       } else {
         Seq(Row(database, tableName, isTemp, s"$information\n"))
       }

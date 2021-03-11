@@ -742,6 +742,13 @@ object CatalogTableType {
   val VIEW = new CatalogTableType("VIEW")
 
   val tableTypes = Seq(EXTERNAL, MANAGED, VIEW)
+
+  def classicTableTypeString(tableType: CatalogTableType): String = tableType match {
+    case EXTERNAL | MANAGED => "TABLE"
+    case VIEW => "VIEW"
+    case t =>
+      throw new IllegalArgumentException(s"Unknown table type is found: $t")
+  }
 }
 
 

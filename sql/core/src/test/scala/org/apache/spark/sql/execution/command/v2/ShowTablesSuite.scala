@@ -34,7 +34,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       spark.sql(s"CREATE TABLE $catalog.n1.n2.db.table_name (id bigint, data string) $defaultUsing")
       runShowTablesSql(
         s"SHOW TABLES FROM $catalog.n1.n2.db",
-        Seq(Row("n1.n2.db", "table_name", false, false)))
+        Seq(Row("n1.n2.db", "table_name", false, "TABLE")))
     }
   }
 
@@ -44,7 +44,7 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
   test("using v2 catalog with empty namespace") {
     withTable(s"$catalog.table") {
       spark.sql(s"CREATE TABLE $catalog.table (id bigint, data string) $defaultUsing")
-      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(Row("", "table", false, false)))
+      runShowTablesSql(s"SHOW TABLES FROM $catalog", Seq(Row("", "table", false, "TABLE")))
     }
   }
 
