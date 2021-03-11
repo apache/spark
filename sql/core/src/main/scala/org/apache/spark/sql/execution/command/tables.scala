@@ -819,37 +819,6 @@ case class DescribeColumnCommand(
  * The syntax of using this command in SQL is:
  * {{{
  *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
- * }}}
- */
-case class ShowTblsCommand(
-    databaseName: Option[String], tableIdentifierPattern: Option[String],
-    override val output: Seq[Attribute]) extends RunnableCommand {
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Since we need to return a Seq of rows, we will call getTables directly
-    // instead of calling tables in sparkSession.
-    val catalog = sparkSession.sessionState.catalog
-    val db = databaseName.getOrElse(catalog.getCurrentDatabase)
-    // Show the information of tables.
-    val tables =
-      tableIdentifierPattern.map(catalog.listTables(db, _)).getOrElse(catalog.listTables(db))
-    tables.map { tableIdent =>
-      val database = tableIdent.database.getOrElse("")
-      val tableName = tableIdent.table
-      val isTemp = catalog.isTempView(tableIdent)
-      val catalogTable = catalog.getTempViewOrPermanentTableMetadata(tableIdent)
-      val isView = catalogTable.tableType == CatalogTableType.VIEW
-      Row(database, tableName, isTemp, isView)
-    }
-
-  }
-}
-
-/**
- * A command for users to get tables in the given database.
- * If a databaseName is not given, the current database will be used.
- * The syntax of using this command in SQL is:
- * {{{
- *   SHOW TABLES [(IN|FROM) database_name] [[LIKE] 'identifier_with_wildcards'];
  *   SHOW TABLE EXTENDED [(IN|FROM) database_name] LIKE 'identifier_with_wildcards'
  *   [PARTITION(partition_spec)];
  * }}}
