@@ -52,7 +52,10 @@ object DataTypeTestUtils {
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
-  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal + CalendarIntervalType
+  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++ Set(
+    CalendarIntervalType,
+    DayTimeIntervalType,
+    YearMonthIntervalType)
 
   /**
    * All the types that support ordering

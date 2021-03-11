@@ -83,12 +83,19 @@ case class UnaryMinus(
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       val method = if (failOnError) "negateExact" else "negate"
       defineCodeGen(ctx, ev, c => s"$iu.$method($c)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      nullSafeCodeGen(ctx, ev, eval => {
+        val mathClass = classOf[Math].getName
+        s"${ev.value} = $mathClass.negateExact($eval);"
+      })
   }
 
   protected override def nullSafeEval(input: Any): Any = dataType match {
     case CalendarIntervalType if failOnError =>
       IntervalUtils.negateExact(input.asInstanceOf[CalendarInterval])
     case CalendarIntervalType => IntervalUtils.negate(input.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType => Math.negateExact(input.asInstanceOf[Long])
+    case YearMonthIntervalType => Math.negateExact(input.asInstanceOf[Int])
     case _ => numeric.negate(input)
   }
 
@@ -185,6 +192,12 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
+    case DayTimeIntervalType | YearMonthIntervalType =>
+      assert(exactMathMethod.isDefined,
+        s"The expression '$nodeName' must override the exactMathMethod() method " +
+        "if it is supposed to operate over interval types.")
+      val mathClass = classOf[Math].getName
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathClass.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
@@ -267,6 +280,10 @@ case class Add(
     case CalendarIntervalType =>
       IntervalUtils.add(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.addExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.addExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.plus(input1, input2)
   }
 
@@ -306,6 +323,10 @@ case class Subtract(
     case CalendarIntervalType =>
       IntervalUtils.subtract(
         input1.asInstanceOf[CalendarInterval], input2.asInstanceOf[CalendarInterval])
+    case DayTimeIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Long], input2.asInstanceOf[Long])
+    case YearMonthIntervalType =>
+      Math.subtractExact(input1.asInstanceOf[Int], input2.asInstanceOf[Int])
     case _ => numeric.minus(input1, input2)
   }
 
