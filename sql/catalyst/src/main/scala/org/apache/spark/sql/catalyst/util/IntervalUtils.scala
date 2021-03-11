@@ -784,11 +784,15 @@ object IntervalUtils {
   def durationToMicros(duration: Duration): Long = {
     val seconds = duration.getSeconds
     if (seconds == minDurationSeconds) {
-      val us = (minDurationSeconds + 1) * MICROS_PER_SECOND
-      Math.addExact(us, (duration.getNano - NANOS_PER_SECOND) / NANOS_PER_MICROS)
+      val microsInSeconds = (minDurationSeconds + 1) * MICROS_PER_SECOND
+      val nanoAdjustment = duration.getNano
+      assert(0 <= nanoAdjustment && nanoAdjustment < NANOS_PER_SECOND,
+        "Duration.getNano() must return the adjustment to the seconds field " +
+        "in the range from 0 to 999999999 nanoseconds, inclusive.")
+      Math.addExact(microsInSeconds, (nanoAdjustment - NANOS_PER_SECOND) / NANOS_PER_MICROS)
     } else {
-      val us = Math.multiplyExact(seconds, MICROS_PER_SECOND)
-      Math.addExact(us, duration.getNano / NANOS_PER_MICROS)
+      val microsInSeconds = Math.multiplyExact(seconds, MICROS_PER_SECOND)
+      Math.addExact(microsInSeconds, duration.getNano / NANOS_PER_MICROS)
     }
   }
 
