@@ -449,37 +449,6 @@ class HivePartitionFilteringSuite(version: String)
     )
   }
 
-  test("getPartitionsByFilter: not in/inset int type") {
-    def check(condition: Expression, result: Seq[Int]): Unit = {
-      testMetastorePartitionFiltering(
-        condition,
-        result,
-        hValue,
-        chunkValue,
-        dateValue,
-        dateStrValue
-      )
-    }
-
-    check(
-      Not(In(attr("ds"), Seq(Literal(20170102)))),
-      Seq(20170101, 20170103)
-    )
-    check(
-      Not(In(attr("ds"), Seq(Literal(20170102), Literal(null)))),
-      dsValue
-    )
-
-    check(
-      Not(InSet(attr("ds"), Set(Literal(20170102).eval()))),
-      Seq(20170101, 20170103)
-    )
-    check(
-      Not(InSet(attr("ds"), Set(Literal(20170102).eval(), null))),
-      dsValue
-    )
-  }
-
   test("getPartitionsByFilter: not in/inset date type") {
     def check(condition: Expression, result: Seq[String]): Unit = {
       testMetastorePartitionFiltering(
