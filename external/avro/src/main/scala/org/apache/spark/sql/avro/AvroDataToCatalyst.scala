@@ -31,9 +31,9 @@ import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMo
 import org.apache.spark.sql.types._
 
 private[avro] case class AvroDataToCatalyst(
-    child: Expression,
-    jsonFormatSchema: String,
-    options: Map[String, String])
+                                             child: Expression,
+                                             jsonFormatSchema: String,
+                                             options: Map[String, String])
   extends UnaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
@@ -80,22 +80,36 @@ private[avro] case class AvroDataToCatalyst(
   }
 
   @transient private lazy val nullResultRow: Any = dataType match {
-      case st: StructType =>
-        val resultRow = new SpecificInternalRow(st.map(_.dataType))
-        for(i <- 0 until st.length) {
-          resultRow.setNullAt(i)
-        }
-        resultRow
+    case st: StructType =>
+      val resultRow = new SpecificInternalRow(st.map(_.dataType))
+      for (i <- 0 until st.length) {
+        resultRow.setNullAt(i)
+      }
+      resultRow
 
-      case _ =>
-        null
+    case _ =>
+      null
+  }
+
+  private def getBinaryOffset(binary: Array[Byte]): Int = {
+    val MAGIC_ONE = 0xC3.toByte
+    val MAGIC_TWO = 0x01.toByte
+
+    binary match {
+      case Array(MAGIC_ONE, MAGIC_TWO, _*) => 10
+      case _ => 0
     }
-
+  }
 
   override def nullSafeEval(input: Any): Any = {
     val binary = input.asInstanceOf[Array[Byte]]
+    val offset = getBinaryOffset(binary)
     try {
-      decoder = DecoderFactory.get().binaryDecoder(binary, 0, binary.length, decoder)
+      decoder = DecoderFactory.get().binaryDecoder(
+        binary,
+        offset,
+        binary.length-offset, decoder
+      )
       result = reader.read(result, decoder)
       val deserialized = deserializer.deserialize(result)
       assert(deserialized.isDefined,
