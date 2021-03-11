@@ -120,7 +120,8 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
     functionName.funcName.toLowerCase(Locale.ROOT) match {
       case "<>" =>
         Row(s"Function: $functionName") ::
