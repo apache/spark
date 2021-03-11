@@ -153,7 +153,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin (build=left)") { _ =>
+    test(s"$testName using ShuffledHashJoin (build=left)") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
@@ -165,7 +165,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSparkSession {
       }
     }
 
-    testWithWholeStageCodegenOnAndOff(s"$testName using ShuffledHashJoin (build=right)") { _ =>
+    test(s"$testName using ShuffledHashJoin (build=right)") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, boundCondition, _, _, _) =>
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>

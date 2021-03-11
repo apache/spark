@@ -46,7 +46,7 @@ case class BroadcastHashJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     isNullAwareAntiJoin: Boolean = false)
-  extends HashJoin {
+  extends HashJoin with CodegenSupport {
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")
