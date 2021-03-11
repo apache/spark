@@ -1,0 +1,2 @@
+--SET spark.sql.legacy.keepCommandOutputSchema=true
+--IMPORT show-tables.sql
