@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import java.io.ObjectInputStream
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
@@ -256,6 +254,7 @@ case class ExpressionEncoder[T](
       }
       nullSafeSerializer match {
         case If(_: IsNull, _, s: CreateNamedStruct) => s
+        case s: CreateNamedStruct => s
         case _ =>
           throw new RuntimeException(s"class $clsName has unexpected serializer: $objSerializer")
       }

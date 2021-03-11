@@ -26,7 +26,7 @@ import org.apache.spark.api.python.ChainedPythonFunctions
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.UnaryExecNode
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -57,8 +57,9 @@ import org.apache.spark.util.Utils
  * there should be always some rows buffered in the socket or Python process, so the pulling from
  * RowQueue ALWAYS happened after pushing into it.
  */
-abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute], child: SparkPlan)
-  extends UnaryExecNode {
+trait EvalPythonExec extends UnaryExecNode {
+  def udfs: Seq[PythonUDF]
+  def resultAttrs: Seq[Attribute]
 
   override def output: Seq[Attribute] = child.output ++ resultAttrs
 
@@ -114,10 +115,10 @@ abstract class EvalPythonExec(udfs: Seq[PythonUDF], resultAttrs: Seq[Attribute],
           }
         }.toArray
       }.toArray
-      val projection = MutableProjection.create(allInputs, child.output)
+      val projection = MutableProjection.create(allInputs.toSeq, child.output)
       val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
-      })
+      }.toSeq)
 
       // Add rows to queue to join later with the result.
       val projectedRowIter = contextAwareIterator.map { inputRow =>

@@ -97,3 +97,11 @@ private[scheduler] case object ResubmitFailedStages extends DAGSchedulerEvent
 private[scheduler]
 case class SpeculativeTaskSubmitted(task: Task[_]) extends DAGSchedulerEvent
 
+private[scheduler]
+case class UnschedulableTaskSetAdded(stageId: Int, stageAttemptId: Int)
+  extends DAGSchedulerEvent
+
+private[scheduler]
+case class UnschedulableTaskSetRemoved(stageId: Int, stageAttemptId: Int)
+  extends DAGSchedulerEvent
+

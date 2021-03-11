@@ -74,7 +74,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jarFile JAR file to send to the cluster. This can be a path on the local file system
    *                or an HDFS, HTTP, HTTPS, or FTP URL.
    */
@@ -84,7 +84,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
@@ -94,7 +94,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
-   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param sparkHome The SPARK_HOME directory on the worker nodes
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes
@@ -133,7 +133,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
     implicit val ctag: ClassTag[T] = fakeClassTag
-    sc.parallelize(list.asScala, numSlices)
+    sc.parallelize(list.asScala.toSeq, numSlices)
   }
 
   /** Get an RDD that has no partitions or elements. */
@@ -152,7 +152,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
   : JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag
     implicit val ctagV: ClassTag[V] = fakeClassTag
-    JavaPairRDD.fromRDD(sc.parallelize(list.asScala, numSlices))
+    JavaPairRDD.fromRDD(sc.parallelize(list.asScala.toSeq, numSlices))
   }
 
   /** Distribute a local Scala collection to form an RDD. */
@@ -161,7 +161,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double], numSlices: Int): JavaDoubleRDD =
-    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()), numSlices))
+    JavaDoubleRDD.fromRDD(sc.parallelize(list.asScala.map(_.doubleValue()).toSeq, numSlices))
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizeDoubles(list: java.util.List[java.lang.Double]): JavaDoubleRDD =
@@ -727,7 +727,7 @@ class JavaSparkContext(val sc: SparkContext) extends Closeable {
    * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
-    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))
+    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s)).toMap
       .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
   }
 

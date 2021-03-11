@@ -16,10 +16,8 @@
 #
 import os
 import shutil
-import sys
 import tempfile
 import unittest
-from array import array
 
 from pyspark.testing.utils import ReusedPySparkTestCase, SPARK_HOME
 
@@ -37,104 +35,6 @@ class InputFormatTests(ReusedPySparkTestCase):
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
         shutil.rmtree(cls.tempdir.name)
-
-    @unittest.skipIf(sys.version >= "3", "serialize array of byte")
-    def test_sequencefiles(self):
-        basepath = self.tempdir.name
-        ints = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfint/",
-                                           "org.apache.hadoop.io.IntWritable",
-                                           "org.apache.hadoop.io.Text").collect())
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.assertEqual(ints, ei)
-
-        doubles = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfdouble/",
-                                              "org.apache.hadoop.io.DoubleWritable",
-                                              "org.apache.hadoop.io.Text").collect())
-        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'), (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
-        self.assertEqual(doubles, ed)
-
-        bytes = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfbytes/",
-                                            "org.apache.hadoop.io.IntWritable",
-                                            "org.apache.hadoop.io.BytesWritable").collect())
-        ebs = [(1, bytearray('aa', 'utf-8')),
-               (1, bytearray('aa', 'utf-8')),
-               (2, bytearray('aa', 'utf-8')),
-               (2, bytearray('bb', 'utf-8')),
-               (2, bytearray('bb', 'utf-8')),
-               (3, bytearray('cc', 'utf-8'))]
-        self.assertEqual(bytes, ebs)
-
-        text = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sftext/",
-                                           "org.apache.hadoop.io.Text",
-                                           "org.apache.hadoop.io.Text").collect())
-        et = [(u'1', u'aa'),
-              (u'1', u'aa'),
-              (u'2', u'aa'),
-              (u'2', u'bb'),
-              (u'2', u'bb'),
-              (u'3', u'cc')]
-        self.assertEqual(text, et)
-
-        bools = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfbool/",
-                                            "org.apache.hadoop.io.IntWritable",
-                                            "org.apache.hadoop.io.BooleanWritable").collect())
-        eb = [(1, False), (1, True), (2, False), (2, False), (2, True), (3, True)]
-        self.assertEqual(bools, eb)
-
-        nulls = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfnull/",
-                                            "org.apache.hadoop.io.IntWritable",
-                                            "org.apache.hadoop.io.BooleanWritable").collect())
-        en = [(1, None), (1, None), (2, None), (2, None), (2, None), (3, None)]
-        self.assertEqual(nulls, en)
-
-        maps = self.sc.sequenceFile(basepath + "/sftestdata/sfmap/",
-                                    "org.apache.hadoop.io.IntWritable",
-                                    "org.apache.hadoop.io.MapWritable").collect()
-        em = [(1, {}),
-              (1, {3.0: u'bb'}),
-              (2, {1.0: u'aa'}),
-              (2, {1.0: u'cc'}),
-              (3, {2.0: u'dd'})]
-        for v in maps:
-            self.assertTrue(v in em)
-
-        # arrays get pickled to tuples by default
-        tuples = sorted(self.sc.sequenceFile(
-            basepath + "/sftestdata/sfarray/",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.spark.api.python.DoubleArrayWritable").collect())
-        et = [(1, ()),
-              (2, (3.0, 4.0, 5.0)),
-              (3, (4.0, 5.0, 6.0))]
-        self.assertEqual(tuples, et)
-
-        # with custom converters, primitive arrays can stay as arrays
-        arrays = sorted(self.sc.sequenceFile(
-            basepath + "/sftestdata/sfarray/",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.spark.api.python.DoubleArrayWritable",
-            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
-        ea = [(1, array('d')),
-              (2, array('d', [3.0, 4.0, 5.0])),
-              (3, array('d', [4.0, 5.0, 6.0]))]
-        self.assertEqual(arrays, ea)
-
-        clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
-                                            "org.apache.hadoop.io.Text",
-                                            "org.apache.spark.api.python.TestWritable").collect())
-        cname = u'org.apache.spark.api.python.TestWritable'
-        ec = [(u'1', {u'__class__': cname, u'double': 1.0, u'int': 1, u'str': u'test1'}),
-              (u'2', {u'__class__': cname, u'double': 2.3, u'int': 2, u'str': u'test2'}),
-              (u'3', {u'__class__': cname, u'double': 3.1, u'int': 3, u'str': u'test3'}),
-              (u'4', {u'__class__': cname, u'double': 4.2, u'int': 4, u'str': u'test4'}),
-              (u'5', {u'__class__': cname, u'double': 5.5, u'int': 5, u'str': u'test56'})]
-        self.assertEqual(clazz, ec)
-
-        unbatched_clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
-                                                      "org.apache.hadoop.io.Text",
-                                                      "org.apache.spark.api.python.TestWritable",
-                                                      ).collect())
-        self.assertEqual(unbatched_clazz, ec)
 
     def test_oldhadoop(self):
         basepath = self.tempdir.name
@@ -249,51 +149,6 @@ class OutputFormatTests(ReusedPySparkTestCase):
     def tearDown(self):
         shutil.rmtree(self.tempdir.name, ignore_errors=True)
 
-    @unittest.skipIf(sys.version >= "3", "serialize array of byte")
-    def test_sequencefiles(self):
-        basepath = self.tempdir.name
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei).saveAsSequenceFile(basepath + "/sfint/")
-        ints = sorted(self.sc.sequenceFile(basepath + "/sfint/").collect())
-        self.assertEqual(ints, ei)
-
-        ed = [(1.0, u'aa'), (1.0, u'aa'), (2.0, u'aa'), (2.0, u'bb'), (2.0, u'bb'), (3.0, u'cc')]
-        self.sc.parallelize(ed).saveAsSequenceFile(basepath + "/sfdouble/")
-        doubles = sorted(self.sc.sequenceFile(basepath + "/sfdouble/").collect())
-        self.assertEqual(doubles, ed)
-
-        ebs = [(1, bytearray(b'\x00\x07spam\x08')), (2, bytearray(b'\x00\x07spam\x08'))]
-        self.sc.parallelize(ebs).saveAsSequenceFile(basepath + "/sfbytes/")
-        bytes = sorted(self.sc.sequenceFile(basepath + "/sfbytes/").collect())
-        self.assertEqual(bytes, ebs)
-
-        et = [(u'1', u'aa'),
-              (u'2', u'bb'),
-              (u'3', u'cc')]
-        self.sc.parallelize(et).saveAsSequenceFile(basepath + "/sftext/")
-        text = sorted(self.sc.sequenceFile(basepath + "/sftext/").collect())
-        self.assertEqual(text, et)
-
-        eb = [(1, False), (1, True), (2, False), (2, False), (2, True), (3, True)]
-        self.sc.parallelize(eb).saveAsSequenceFile(basepath + "/sfbool/")
-        bools = sorted(self.sc.sequenceFile(basepath + "/sfbool/").collect())
-        self.assertEqual(bools, eb)
-
-        en = [(1, None), (1, None), (2, None), (2, None), (2, None), (3, None)]
-        self.sc.parallelize(en).saveAsSequenceFile(basepath + "/sfnull/")
-        nulls = sorted(self.sc.sequenceFile(basepath + "/sfnull/").collect())
-        self.assertEqual(nulls, en)
-
-        em = [(1, {}),
-              (1, {3.0: u'bb'}),
-              (2, {1.0: u'aa'}),
-              (2, {1.0: u'cc'}),
-              (3, {2.0: u'dd'})]
-        self.sc.parallelize(em).saveAsSequenceFile(basepath + "/sfmap/")
-        maps = self.sc.sequenceFile(basepath + "/sfmap/").collect()
-        for v in maps:
-            self.assertTrue(v, em)
-
     def test_oldhadoop(self):
         basepath = self.tempdir.name
         dict_data = [(1, {}),
@@ -360,46 +215,6 @@ class OutputFormatTests(ReusedPySparkTestCase):
             "org.apache.hadoop.io.Text",
             conf=input_conf).collect())
         self.assertEqual(new_dataset, data)
-
-    @unittest.skipIf(sys.version >= "3", "serialize of array")
-    def test_newhadoop_with_array(self):
-        basepath = self.tempdir.name
-        # use custom ArrayWritable types and converters to handle arrays
-        array_data = [(1, array('d')),
-                      (1, array('d', [1.0, 2.0, 3.0])),
-                      (2, array('d', [3.0, 4.0, 5.0]))]
-        self.sc.parallelize(array_data).saveAsNewAPIHadoopFile(
-            basepath + "/newhadoop/",
-            "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.spark.api.python.DoubleArrayWritable",
-            valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
-        result = sorted(self.sc.newAPIHadoopFile(
-            basepath + "/newhadoop/",
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.spark.api.python.DoubleArrayWritable",
-            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter").collect())
-        self.assertEqual(result, array_data)
-
-        conf = {
-            "mapreduce.job.outputformat.class":
-                "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat",
-            "mapreduce.job.output.key.class": "org.apache.hadoop.io.IntWritable",
-            "mapreduce.job.output.value.class": "org.apache.spark.api.python.DoubleArrayWritable",
-            "mapreduce.output.fileoutputformat.outputdir": basepath + "/newdataset/"
-        }
-        self.sc.parallelize(array_data).saveAsNewAPIHadoopDataset(
-            conf,
-            valueConverter="org.apache.spark.api.python.DoubleArrayToWritableConverter")
-        input_conf = {"mapreduce.input.fileinputformat.inputdir": basepath + "/newdataset/"}
-        new_dataset = sorted(self.sc.newAPIHadoopRDD(
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.spark.api.python.DoubleArrayWritable",
-            valueConverter="org.apache.spark.api.python.WritableToDoubleArrayConverter",
-            conf=input_conf).collect())
-        self.assertEqual(new_dataset, array_data)
 
     def test_newolderror(self):
         basepath = self.tempdir.name
@@ -489,10 +304,10 @@ class OutputFormatTests(ReusedPySparkTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_readwrite import *
+    from pyspark.tests.test_readwrite import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

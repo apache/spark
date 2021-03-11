@@ -521,7 +521,6 @@ Common Development and Distribution License (CDDL) 1.1
 ------------------------------------------------------
 
 javax.el:javax.el-api	https://javaee.github.io/uel-ri/
-javax.servlet:javax.servlet-api   https://javaee.github.io/servlet-spec/
 javax.servlet.jsp:jsp-api
 javax.transaction:jta http://www.oracle.com/technetwork/java/index.html
 javax.xml.bind:jaxb-api    https://github.com/javaee/jaxb-v2
@@ -553,14 +552,9 @@ Eclipse Public License (EPL) 2.0
 --------------------------------
 
 jakarta.annotation:jakarta-annotation-api https://projects.eclipse.org/projects/ee4j.ca
+jakarta.servlet:jakarta.servlet-api https://projects.eclipse.org/projects/ee4j.servlet
 jakarta.ws.rs:jakarta.ws.rs-api https://github.com/eclipse-ee4j/jaxrs-api
 org.glassfish.hk2.external:jakarta.inject
-
-
-Python Software Foundation License
-----------------------------------
-
-pyspark/heapq3.py
 
 
 Public Domain

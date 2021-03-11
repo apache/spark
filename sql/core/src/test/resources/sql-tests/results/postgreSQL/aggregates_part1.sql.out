@@ -143,7 +143,7 @@ SELECT var_pop(1.0), var_samp(2.0)
 -- !query schema
 struct<var_pop(CAST(1.0 AS DOUBLE)):double,var_samp(CAST(2.0 AS DOUBLE)):double>
 -- !query output
-0.0	NaN
+0.0	NULL
 
 
 -- !query
@@ -151,7 +151,7 @@ SELECT stddev_pop(CAST(3.0 AS Decimal(38,0))), stddev_samp(CAST(4.0 AS Decimal(3
 -- !query schema
 struct<stddev_pop(CAST(CAST(3.0 AS DECIMAL(38,0)) AS DOUBLE)):double,stddev_samp(CAST(CAST(4.0 AS DECIMAL(38,0)) AS DOUBLE)):double>
 -- !query output
-0.0	NaN
+0.0	NULL
 
 
 -- !query
@@ -382,7 +382,7 @@ org.apache.spark.sql.AnalysisException
 
 Aggregate/Window/Generate expressions are not valid in where clause of the query.
 Expression in where clause: [(sum(DISTINCT CAST((outer(a.`four`) + b.`four`) AS BIGINT)) = CAST(b.`four` AS BIGINT))]
-Invalid expressions: [sum(DISTINCT CAST((outer(a.`four`) + b.`four`) AS BIGINT))];
+Invalid expressions: [sum(DISTINCT CAST((outer(a.`four`) + b.`four`) AS BIGINT))]
 
 
 -- !query

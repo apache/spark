@@ -31,17 +31,23 @@ sealed trait ShufflePartitionSpec
 // A partition that reads data of one or more reducers, from `startReducerIndex` (inclusive) to
 // `endReducerIndex` (exclusive).
 case class CoalescedPartitionSpec(
-  startReducerIndex: Int, endReducerIndex: Int) extends ShufflePartitionSpec
+    startReducerIndex: Int,
+    endReducerIndex: Int) extends ShufflePartitionSpec
 
 // A partition that reads partial data of one reducer, from `startMapIndex` (inclusive) to
 // `endMapIndex` (exclusive).
 case class PartialReducerPartitionSpec(
-  reducerIndex: Int, startMapIndex: Int, endMapIndex: Int) extends ShufflePartitionSpec
+    reducerIndex: Int,
+    startMapIndex: Int,
+    endMapIndex: Int,
+    @transient dataSize: Long) extends ShufflePartitionSpec
 
 // A partition that reads partial data of one mapper, from `startReducerIndex` (inclusive) to
 // `endReducerIndex` (exclusive).
 case class PartialMapperPartitionSpec(
-  mapIndex: Int, startReducerIndex: Int, endReducerIndex: Int) extends ShufflePartitionSpec
+    mapIndex: Int,
+    startReducerIndex: Int,
+    endReducerIndex: Int) extends ShufflePartitionSpec
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]].
@@ -127,10 +133,9 @@ class ShuffledRowRDD(
       Array.tabulate(dependency.partitioner.numPartitions)(i => CoalescedPartitionSpec(i, i + 1)))
   }
 
-  if (SQLConf.get.fetchShuffleBlocksInBatch) {
-    dependency.rdd.context.setLocalProperty(
-      SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
-  }
+  dependency.rdd.context.setLocalProperty(
+    SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY,
+    SQLConf.get.fetchShuffleBlocksInBatch.toString)
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
@@ -162,7 +167,7 @@ class ShuffledRowRDD(
           tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
         }
 
-      case PartialReducerPartitionSpec(_, startMapIndex, endMapIndex) =>
+      case PartialReducerPartitionSpec(_, startMapIndex, endMapIndex, _) =>
         tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
 
       case PartialMapperPartitionSpec(mapIndex, _, _) =>
@@ -184,8 +189,8 @@ class ShuffledRowRDD(
           context,
           sqlMetricsReporter)
 
-      case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex) =>
-        SparkEnv.get.shuffleManager.getReaderForRange(
+      case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
+        SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           startMapIndex,
           endMapIndex,
@@ -195,7 +200,7 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
-        SparkEnv.get.shuffleManager.getReaderForRange(
+        SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           mapIndex,
           mapIndex + 1,

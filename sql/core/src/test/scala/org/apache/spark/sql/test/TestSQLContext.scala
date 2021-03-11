@@ -25,12 +25,12 @@ import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf
  * A special `SparkSession` prepared for testing.
  */
 private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
-  def this(sparkConf: SparkConf) {
+  def this(sparkConf: SparkConf) = {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
   }
 
-  def this() {
+  def this() = {
     this(new SparkConf)
   }
 
@@ -39,7 +39,7 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestSQLSessionStateBuilder(this, None).build()
+    new TestSQLSessionStateBuilder(this, None, Map.empty).build()
   }
 
   // Needed for Java tests
@@ -66,8 +66,9 @@ private[sql] object TestSQLContext {
 
 private[sql] class TestSQLSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState])
-  extends SessionStateBuilder(session, state) with WithTestConf {
+    state: Option[SessionState],
+    options: Map[String, String])
+  extends SessionStateBuilder(session, state, options) with WithTestConf {
   override def overrideConfs: Map[String, String] = TestSQLContext.overrideConfs
-  override def newBuilder: NewBuilder = new TestSQLSessionStateBuilder(_, _)
+  override def newBuilder: NewBuilder = new TestSQLSessionStateBuilder(_, _, Map.empty)
 }

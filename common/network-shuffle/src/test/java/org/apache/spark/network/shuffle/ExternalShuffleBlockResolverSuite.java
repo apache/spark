@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -25,7 +24,6 @@ import java.nio.charset.StandardCharsets;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.CharStreams;
-import org.apache.commons.lang3.SystemUtils;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -71,15 +69,6 @@ public class ExternalShuffleBlockResolverSuite {
       fail("Should have failed");
     } catch (RuntimeException e) {
       assertTrue("Bad error message: " + e, e.getMessage().contains("not registered"));
-    }
-
-    // Invalid shuffle manager
-    try {
-      resolver.registerExecutor("app0", "exec2", dataContext.createExecutorInfo("foobar"));
-      resolver.getBlockData("app0", "exec2", 1, 1, 0);
-      fail("Should have failed");
-    } catch (UnsupportedOperationException e) {
-      // pass
     }
 
     // Nonexistent shuffle block
@@ -145,29 +134,4 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(shuffleInfo, mapper.readValue(legacyShuffleJson, ExecutorShuffleInfo.class));
   }
 
-  @Test
-  public void testNormalizeAndInternPathname() {
-    String sep = File.separator;
-    String expectedPathname = sep + "foo" + sep + "bar" + sep + "baz";
-    assertPathsMatch("/foo", "bar", "baz", expectedPathname);
-    assertPathsMatch("//foo/", "bar/", "//baz", expectedPathname);
-    assertPathsMatch("/foo/", "/bar//", "/baz", expectedPathname);
-    assertPathsMatch("foo", "bar", "baz///", "foo" + sep + "bar" + sep + "baz");
-    assertPathsMatch("/", "", "", sep);
-    assertPathsMatch("/", "/", "/", sep);
-    if (SystemUtils.IS_OS_WINDOWS) {
-      assertPathsMatch("/foo\\/", "bar", "baz", expectedPathname);
-    } else {
-      assertPathsMatch("/foo\\/", "bar", "baz", sep + "foo\\" + sep + "bar" + sep + "baz");
-    }
-  }
-
-  private void assertPathsMatch(String p1, String p2, String p3, String expectedPathname) {
-    String normPathname =
-      ExecutorDiskUtils.createNormalizedInternedPathname(p1, p2, p3);
-    assertEquals(expectedPathname, normPathname);
-    File file = new File(normPathname);
-    String returnedPath = file.getPath();
-    assertEquals(normPathname, returnedPath);
-  }
 }

@@ -245,6 +245,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals("42", cmd.get(cmd.size() - 1));
   }
 
+  @Test
+  public void testExamplesRunnerPrimaryResource() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+            SparkSubmitCommandBuilder.RUN_EXAMPLE,
+            parser.MASTER + "=foo",
+            parser.DEPLOY_MODE + "=cluster",
+            "SparkPi",
+            "100");
+
+    List<String> cmd = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
+    assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
+            findArgValue(cmd, parser.CLASS));
+    assertEquals("cluster", findArgValue(cmd, parser.DEPLOY_MODE));
+    String primaryResource = cmd.get(cmd.size() - 2);
+    assertTrue(primaryResource.equals(SparkLauncher.NO_RESOURCE)
+            || new File(primaryResource).getName().startsWith("spark-examples"));
+  }
+
   @Test(expected = IllegalArgumentException.class)
   public void testMissingAppResource() {
     new SparkSubmitCommandBuilder().buildSparkSubmitArgs();

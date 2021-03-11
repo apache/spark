@@ -271,7 +271,7 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
@@ -302,6 +302,8 @@ private[spark] object BLAS extends Serializable {
           j += 1
           prevCol = col
         }
+      case _ =>
+        throw new IllegalArgumentException(s"spr doesn't support vector type ${v.getClass}.")
     }
   }
 
@@ -691,7 +693,6 @@ private[spark] object BLAS extends Serializable {
 
           val xTemp = xValues(k) * alpha
           while (i < indEnd) {
-            val rowIndex = Arows(i)
             yValues(Arows(i)) += Avals(i) * xTemp
             i += 1
           }
@@ -743,8 +744,7 @@ private[spark] object BLAS extends Serializable {
         val indEnd = Acols(colCounterForA + 1)
         val xVal = xValues(colCounterForA) * alpha
         while (i < indEnd) {
-          val rowIndex = Arows(i)
-          yValues(rowIndex) += Avals(i) * xVal
+          yValues(Arows(i)) += Avals(i) * xVal
           i += 1
         }
         colCounterForA += 1

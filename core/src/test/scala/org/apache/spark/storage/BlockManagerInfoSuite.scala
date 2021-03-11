@@ -33,7 +33,7 @@ class BlockManagerInfoSuite extends SparkFunSuite {
         timeMs = 300,
         maxOnHeapMem = 10000,
         maxOffHeapMem = 20000,
-        slaveEndpoint = null,
+        storageEndpoint = null,
         if (svcEnabled) Some(new JHashMap[BlockId, BlockStatus]) else None)
       test(s"$testName externalShuffleServiceEnabled=$svcEnabled") {
         f(svcEnabled, bmInfo)

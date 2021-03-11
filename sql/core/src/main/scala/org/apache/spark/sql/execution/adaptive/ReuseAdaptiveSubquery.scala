@@ -21,10 +21,8 @@ import scala.collection.concurrent.TrieMap
 
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{BaseSubqueryExec, ExecSubqueryExpression, ReusedSubqueryExec, SparkPlan}
-import org.apache.spark.sql.internal.SQLConf
 
 case class ReuseAdaptiveSubquery(
-    conf: SQLConf,
     reuseMap: TrieMap[SparkPlan, BaseSubqueryExec]) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {

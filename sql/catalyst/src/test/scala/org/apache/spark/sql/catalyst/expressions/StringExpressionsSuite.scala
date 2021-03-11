@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -943,6 +943,20 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateUnsafeProjection.generate(ParseUrl(Seq(Literal("\"quote"), Literal("\"quote"))) :: Nil)
   }
 
+  test("SPARK-33468: ParseUrl in ANSI mode should fail if input string is not a valid url") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val msg = intercept[IllegalArgumentException] {
+        evaluateWithoutCodegen(
+          ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")))
+      }.getMessage
+      assert(msg.contains("Find an invaild url string"))
+    }
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkEvaluation(
+        ParseUrl(Seq("https://a.b.c/index.php?params1=a|b&params2=x", "HOST")), null)
+    }
+  }
+
   test("Sentences") {
     val nullString = Literal.create(null, StringType)
     checkEvaluation(Sentences(nullString, nullString, nullString), null)
@@ -967,5 +981,35 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       Sentences(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
+  }
+
+  test("SPARK-33386: elt ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        var expr: Expression = Elt(Seq(Literal(4), Literal("123"), Literal("456")))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: 4, numElements: 2"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = Elt(Seq(Literal(0), Literal("123"), Literal("456")))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: 0, numElements: 2"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = Elt(Seq(Literal(-1), Literal("123"), Literal("456")))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: -1, numElements: 2"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
   }
 }

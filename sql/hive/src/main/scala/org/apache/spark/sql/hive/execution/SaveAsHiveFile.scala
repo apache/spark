@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}

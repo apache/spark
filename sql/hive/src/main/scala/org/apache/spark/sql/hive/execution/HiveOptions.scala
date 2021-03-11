@@ -87,7 +87,7 @@ class HiveOptions(@transient private val parameters: CaseInsensitiveMap[String])
 
   def serdeProperties: Map[String, String] = parameters.filterKeys {
     k => !lowerCasedOptionNames.contains(k.toLowerCase(Locale.ROOT))
-  }.map { case (k, v) => delimiterOptions.getOrElse(k, k) -> v }
+  }.map { case (k, v) => delimiterOptions.getOrElse(k, k) -> v }.toMap
 }
 
 object HiveOptions {

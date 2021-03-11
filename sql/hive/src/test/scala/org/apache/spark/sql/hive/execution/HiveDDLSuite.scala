@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, NoSuchPartitionsException, PartitionsAlreadyExistException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
@@ -127,7 +128,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       createTime = 0L,
       lastAccessTime = 0L,
       owner = "",
-      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
+      properties = table.properties.filterKeys(!nondeterministicProps.contains(_)).toMap,
       // View texts are checked separately
       viewText = None
     )
@@ -597,8 +598,7 @@ class HiveDDLSuite
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (b) STORED AS parquet")
     }
-    assert(e.message.contains("Must specify a data type for each partition column while creating " +
-      "Hive partitioned table."))
+    assert(e.message.contains("partition column b is not defined in table"))
   }
 
   test("add/drop partition with location - managed table") {
@@ -814,6 +814,11 @@ class HiveDDLSuite
     }
   }
 
+  private def assertAnalysisError(sqlText: String, message: String): Unit = {
+    val e = intercept[AnalysisException](sql(sqlText))
+    assert(e.message.contains(message))
+  }
+
   private def assertErrorForAlterTableOnView(sqlText: String): Unit = {
     val message = intercept[AnalysisException](sql(sqlText)).getMessage
     assert(message.contains("Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead"))
@@ -891,15 +896,17 @@ class HiveDDLSuite
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a=1, b=2) SET SERDEPROPERTIES ('x' = 'y')")
 
-        assertErrorForAlterTableOnView(
-          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')")
-
-        assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')")
-
         assertErrorForAlterTableOnView(s"ALTER TABLE $oldViewName RECOVER PARTITIONS")
 
         assertErrorForAlterTableOnView(
           s"ALTER TABLE $oldViewName PARTITION (a='1') RENAME TO PARTITION (a='100')")
+
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName ADD IF NOT EXISTS PARTITION (a='4', b='8')",
+          s"$oldViewName is a view. 'ALTER TABLE ... ADD PARTITION ...' expects a table.")
+        assertAnalysisError(
+          s"ALTER TABLE $oldViewName DROP IF EXISTS PARTITION (a='2')",
+          s"$oldViewName is a view. 'ALTER TABLE ... DROP PARTITION ...' expects a table.")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -976,7 +983,7 @@ class HiveDDLSuite
   }
 
   test("alter table partition - storage information") {
-    sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
+    sql("CREATE TABLE boxes (height INT, length INT) STORED AS textfile PARTITIONED BY (width INT)")
     sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
     val catalog = spark.sessionState.catalog
     val expectedSerde = "com.sparkbricks.serde.ColumnarSerDe"
@@ -993,7 +1000,7 @@ class HiveDDLSuite
       |""".stripMargin)
     val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
     assert(newPart.storage.serde == Some(expectedSerde))
-    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains) ==
+    assert(newPart.storage.properties.filterKeys(expectedSerdeProps.contains).toMap ==
       expectedSerdeProps)
   }
 
@@ -2244,8 +2251,8 @@ class HiveDDLSuite
         )
 
         sql("ALTER TABLE tab ADD COLUMNS (c5 char(10))")
-        assert(spark.table("tab").schema.find(_.name == "c5")
-          .get.metadata.getString("HIVE_TYPE_STRING") == "char(10)")
+        assert(spark.sharedState.externalCatalog.getTable("default", "tab")
+          .schema.find(_.name == "c5").get.dataType == CharType(10))
       }
     }
   }
@@ -2309,6 +2316,126 @@ class HiveDDLSuite
           }
         }
       }
+    }
+  }
+
+  test("SPARK-20680: do not support for null column datatype") {
+    withTable("t") {
+      withView("tabNullType") {
+        hiveClient.runSqlHive("CREATE TABLE t (t1 int)")
+        hiveClient.runSqlHive("INSERT INTO t VALUES (3)")
+        hiveClient.runSqlHive("CREATE VIEW tabNullType AS SELECT NULL AS col FROM t")
+        checkAnswer(spark.table("tabNullType"), Row(null))
+        // No exception shows
+        val desc = spark.sql("DESC tabNullType").collect().toSeq
+        assert(desc.contains(Row("col", NullType.simpleString, null)))
+      }
+    }
+
+    // Forbid CTAS with null type
+    withTable("t1", "t2", "t3") {
+      val e1 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t1 USING PARQUET AS SELECT null as null_col")
+      }.getMessage
+      assert(e1.contains("Cannot create tables with null type"))
+
+      val e2 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t2 AS SELECT null as null_col")
+      }.getMessage
+      assert(e2.contains("Cannot create tables with null type"))
+
+      val e3 = intercept[AnalysisException] {
+        spark.sql("CREATE TABLE t3 STORED AS PARQUET AS SELECT null as null_col")
+      }.getMessage
+      assert(e3.contains("Cannot create tables with null type"))
+    }
+
+    // Forbid Replace table AS SELECT with null type
+    withTable("t") {
+      val v2Source = classOf[FakeV2Provider].getName
+      val e = intercept[AnalysisException] {
+        spark.sql(s"CREATE OR REPLACE TABLE t USING $v2Source AS SELECT null as null_col")
+      }.getMessage
+      assert(e.contains("Cannot create tables with null type"))
+    }
+
+    // Forbid creating table with VOID type in Spark
+    withTable("t1", "t2", "t3", "t4") {
+      val e1 = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE t1 (v VOID) USING PARQUET")
+      }.getMessage
+      assert(e1.contains("Cannot create tables with null type"))
+      val e2 = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE t2 (v VOID) USING hive")
+      }.getMessage
+      assert(e2.contains("Cannot create tables with null type"))
+      val e3 = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE t3 (v VOID)")
+      }.getMessage
+      assert(e3.contains("Cannot create tables with null type"))
+      val e4 = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE t4 (v VOID) STORED AS PARQUET")
+      }.getMessage
+      assert(e4.contains("Cannot create tables with null type"))
+    }
+
+    // Forbid Replace table with VOID type
+    withTable("t") {
+      val v2Source = classOf[FakeV2Provider].getName
+      val e = intercept[AnalysisException] {
+        spark.sql(s"CREATE OR REPLACE TABLE t (v VOID) USING $v2Source")
+      }.getMessage
+      assert(e.contains("Cannot create tables with null type"))
+    }
+
+    // Make sure spark.catalog.createTable with null type will fail
+    val schema1 = new StructType().add("c", NullType)
+    assertHiveTableNullType(schema1)
+    assertDSTableNullType(schema1)
+
+    val schema2 = new StructType()
+      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
+    assertHiveTableNullType(schema2)
+    assertDSTableNullType(schema2)
+
+    val schema3 = new StructType().add("c", ArrayType(NullType))
+    assertHiveTableNullType(schema3)
+    assertDSTableNullType(schema3)
+
+    val schema4 = new StructType()
+      .add("c", MapType(StringType, NullType))
+    assertHiveTableNullType(schema4)
+    assertDSTableNullType(schema4)
+
+    val schema5 = new StructType()
+      .add("c", MapType(NullType, StringType))
+    assertHiveTableNullType(schema5)
+    assertDSTableNullType(schema5)
+  }
+
+  private def assertHiveTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "hive",
+          schema = schema,
+          options = Map("fileFormat" -> "parquet"))
+      }.getMessage
+      assert(e.contains("Cannot create tables with null type"))
+    }
+  }
+
+  private def assertDSTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      val e = intercept[AnalysisException] {
+        spark.catalog.createTable(
+          tableName = "t",
+          source = "json",
+          schema = schema,
+          options = Map.empty[String, String])
+      }.getMessage
+      assert(e.contains("Cannot create tables with null type"))
     }
   }
 
@@ -2573,8 +2700,7 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err1.contains("Schema may not be specified in a Create Table As Select " +
-      "(CTAS) statement"))
+    assert(err1.contains("Schema may not be specified in a Create Table As Select"))
 
     val err2 = intercept[ParseException] {
       spark.sql(
@@ -2585,8 +2711,7 @@ class HiveDDLSuite
            |AS SELECT 1 as a, "a" as b
                  """.stripMargin)
     }.getMessage
-    assert(err2.contains("Create Partitioned Table As Select cannot specify data type for " +
-      "the partition columns of the target table"))
+    assert(err2.contains("Partition column types may not be specified in Create Table As Select"))
   }
 
   test("Hive CTAS with dynamic partition") {
@@ -2655,7 +2780,7 @@ class HiveDDLSuite
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE"))
 
       // row format doesn't work with provider hive
       e = intercept[AnalysisException] {
@@ -2666,7 +2791,7 @@ class HiveDDLSuite
             |WITH SERDEPROPERTIES ('test' = 'test')
           """.stripMargin)
       }.getMessage
-      assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... ROW FORMAT SERDE"))
 
       // row format doesn't work without 'STORED AS'
       e = intercept[AnalysisException] {
@@ -2678,6 +2803,17 @@ class HiveDDLSuite
           """.stripMargin)
       }.getMessage
       assert(e.contains("'ROW FORMAT' must be used with 'STORED AS'"))
+
+      // 'INPUTFORMAT' and 'OUTPUTFORMAT' conflict with 'USING'
+      e = intercept[AnalysisException] {
+        spark.sql(
+          """
+            |CREATE TABLE targetDsTable LIKE sourceDsTable USING format
+            |STORED AS INPUTFORMAT 'inFormat' OUTPUTFORMAT 'outFormat'
+            |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+            """.stripMargin)
+      }.getMessage
+      assert(e.contains("Operation not allowed: CREATE TABLE LIKE ... USING ... STORED AS"))
 
       // row format works with STORED AS hive format (from hive table)
       spark.sql(
@@ -2736,7 +2872,7 @@ class HiveDDLSuite
 
   test("SPARK-33742: partition already exists") {
     withTable("t") {
-      sql(s"CREATE TABLE t (data string) PARTITIONED BY (id bigint)")
+      sql(s"CREATE TABLE t (id bigint, data string) PARTITIONED BY (id)")
       sql(s"ALTER TABLE t ADD PARTITION (id=2) LOCATION 'loc1'")
 
       val errMsg = intercept[PartitionsAlreadyExistException] {

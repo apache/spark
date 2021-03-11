@@ -1,0 +1,94 @@
+TakeOrderedAndProject [substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee)]
+  WholeStageCodegen (15)
+    HashAggregate [r_reason_desc,sum,count,sum,count,sum,count] [avg(cast(ws_quantity as bigint)),avg(UnscaledValue(wr_refunded_cash)),avg(UnscaledValue(wr_fee)),substr(r_reason_desc, 1, 20),avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee),sum,count,sum,count,sum,count]
+      InputAdapter
+        Exchange [r_reason_desc] #1
+          WholeStageCodegen (14)
+            HashAggregate [r_reason_desc,ws_quantity,wr_refunded_cash,wr_fee] [sum,count,sum,count,sum,count,sum,count,sum,count,sum,count]
+              Project [ws_quantity,wr_fee,wr_refunded_cash,r_reason_desc]
+                SortMergeJoin [wr_refunded_cdemo_sk,wr_returning_cdemo_sk,cd_demo_sk,cd_demo_sk,cd_marital_status,cd_education_status,ws_sales_price]
+                  InputAdapter
+                    WholeStageCodegen (10)
+                      Sort [wr_refunded_cdemo_sk,wr_returning_cdemo_sk]
+                        InputAdapter
+                          Exchange [wr_refunded_cdemo_sk,wr_returning_cdemo_sk] #2
+                            WholeStageCodegen (9)
+                              Project [ws_quantity,ws_sales_price,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,wr_fee,wr_refunded_cash,r_reason_desc]
+                                BroadcastHashJoin [wr_refunded_addr_sk,ca_address_sk,ca_state,ws_net_profit]
+                                  Project [ws_quantity,ws_sales_price,ws_net_profit,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_fee,wr_refunded_cash,r_reason_desc]
+                                    BroadcastHashJoin [wr_reason_sk,r_reason_sk]
+                                      Project [ws_quantity,ws_sales_price,ws_net_profit,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_fee,wr_refunded_cash]
+                                        BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
+                                          Project [ws_sold_date_sk,ws_quantity,ws_sales_price,ws_net_profit,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_fee,wr_refunded_cash]
+                                            SortMergeJoin [ws_item_sk,ws_order_number,wr_item_sk,wr_order_number]
+                                              InputAdapter
+                                                WholeStageCodegen (3)
+                                                  Sort [ws_item_sk,ws_order_number]
+                                                    InputAdapter
+                                                      Exchange [ws_item_sk,ws_order_number] #3
+                                                        WholeStageCodegen (2)
+                                                          Project [ws_sold_date_sk,ws_item_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit]
+                                                            BroadcastHashJoin [ws_web_page_sk,wp_web_page_sk]
+                                                              Filter [ws_item_sk,ws_order_number,ws_web_page_sk,ws_sold_date_sk,ws_sales_price,ws_net_profit]
+                                                                ColumnarToRow
+                                                                  InputAdapter
+                                                                    Scan parquet default.web_sales [ws_sold_date_sk,ws_item_sk,ws_web_page_sk,ws_order_number,ws_quantity,ws_sales_price,ws_net_profit]
+                                                              InputAdapter
+                                                                BroadcastExchange #4
+                                                                  WholeStageCodegen (1)
+                                                                    Filter [wp_web_page_sk]
+                                                                      ColumnarToRow
+                                                                        InputAdapter
+                                                                          Scan parquet default.web_page [wp_web_page_sk]
+                                              InputAdapter
+                                                WholeStageCodegen (5)
+                                                  Sort [wr_item_sk,wr_order_number]
+                                                    InputAdapter
+                                                      Exchange [wr_item_sk,wr_order_number] #5
+                                                        WholeStageCodegen (4)
+                                                          Filter [wr_item_sk,wr_order_number,wr_refunded_cdemo_sk,wr_returning_cdemo_sk,wr_refunded_addr_sk,wr_reason_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.web_returns [wr_item_sk,wr_refunded_cdemo_sk,wr_refunded_addr_sk,wr_returning_cdemo_sk,wr_reason_sk,wr_order_number,wr_fee,wr_refunded_cash]
+                                          InputAdapter
+                                            BroadcastExchange #6
+                                              WholeStageCodegen (6)
+                                                Project [d_date_sk]
+                                                  Filter [d_year,d_date_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                                      InputAdapter
+                                        BroadcastExchange #7
+                                          WholeStageCodegen (7)
+                                            Filter [r_reason_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.reason [r_reason_sk,r_reason_desc]
+                                  InputAdapter
+                                    BroadcastExchange #8
+                                      WholeStageCodegen (8)
+                                        Project [ca_address_sk,ca_state]
+                                          Filter [ca_country,ca_address_sk,ca_state]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.customer_address [ca_address_sk,ca_state,ca_country]
+                  InputAdapter
+                    WholeStageCodegen (13)
+                      Sort [cd_demo_sk,cd_demo_sk]
+                        InputAdapter
+                          Exchange [cd_demo_sk,cd_demo_sk] #9
+                            WholeStageCodegen (12)
+                              Project [cd_demo_sk,cd_marital_status,cd_education_status,cd_demo_sk]
+                                BroadcastHashJoin [cd_marital_status,cd_education_status,cd_marital_status,cd_education_status]
+                                  InputAdapter
+                                    BroadcastExchange #10
+                                      WholeStageCodegen (11)
+                                        Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
+                                  Filter [cd_demo_sk,cd_marital_status,cd_education_status]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]

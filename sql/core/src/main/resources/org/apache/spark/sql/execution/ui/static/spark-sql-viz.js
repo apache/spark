@@ -63,16 +63,11 @@ function planVizContainer() { return d3.select("#plan-viz-graph"); }
 function setupTooltipForSparkPlanNode(nodeId) {
   var nodeTooltip = d3.select("#plan-meta-data-" + nodeId).text();
   d3.select("svg g .node_" + nodeId)
-    .on('mouseover', function(d) {
+    .each(function(d) {
       var domNode = d3.select(this).node();
       $(domNode).tooltip({
-        title: nodeTooltip, trigger: "manual", container: "body", placement: "top"
+        title: nodeTooltip, trigger: "hover focus", container: "body", placement: "top"
       });
-      $(domNode).tooltip("show");
-    })
-    .on('mouseout', function(d) {
-      var domNode = d3.select(this).node();
-      $(domNode).tooltip("destroy");
     })
 }
 
@@ -92,14 +87,14 @@ function preprocessGraphLayout(g) {
     var node = g.node(nodes[i]);
     node.padding = "5";
 
-    var firstSearator;
+    var firstSeparator;
     var secondSeparator;
     var splitter;
     if (node.isCluster) {
-      firstSearator = secondSeparator = labelSeparator;
+      firstSeparator = secondSeparator = labelSeparator;
       splitter = "\\n";
     } else {
-      firstSearator = "<span class='stageId-and-taskId-metrics'>";
+      firstSeparator = "<span class='stageId-and-taskId-metrics'>";
       secondSeparator = "</span>";
       splitter = "<br>";
     }
@@ -109,7 +104,7 @@ function preprocessGraphLayout(g) {
       if (newTexts) {
         node.label = node.label.replace(
             newTexts[0],
-            newTexts[1] + firstSearator + newTexts[2] + secondSeparator + newTexts[3]);
+            newTexts[1] + firstSeparator + newTexts[2] + secondSeparator + newTexts[3]);
       }
     });
   }

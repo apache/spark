@@ -1,0 +1,302 @@
+== Physical Plan ==
+TakeOrderedAndProject (53)
++- * HashAggregate (52)
+   +- Exchange (51)
+      +- * HashAggregate (50)
+         +- * Project (49)
+            +- * SortMergeJoin Inner (48)
+               :- * Sort (18)
+               :  +- Exchange (17)
+               :     +- * Project (16)
+               :        +- * BroadcastHashJoin Inner BuildRight (15)
+               :           :- * Project (10)
+               :           :  +- * BroadcastHashJoin Inner BuildRight (9)
+               :           :     :- * Filter (3)
+               :           :     :  +- * ColumnarToRow (2)
+               :           :     :     +- Scan parquet default.store_sales (1)
+               :           :     +- BroadcastExchange (8)
+               :           :        +- * Project (7)
+               :           :           +- * Filter (6)
+               :           :              +- * ColumnarToRow (5)
+               :           :                 +- Scan parquet default.date_dim (4)
+               :           +- BroadcastExchange (14)
+               :              +- * Filter (13)
+               :                 +- * ColumnarToRow (12)
+               :                    +- Scan parquet default.store (11)
+               +- * Sort (47)
+                  +- Exchange (46)
+                     +- * HashAggregate (45)
+                        +- Exchange (44)
+                           +- * HashAggregate (43)
+                              +- * Project (42)
+                                 +- * BroadcastHashJoin LeftSemi BuildRight (41)
+                                    :- * Filter (21)
+                                    :  +- * ColumnarToRow (20)
+                                    :     +- Scan parquet default.customer_address (19)
+                                    +- BroadcastExchange (40)
+                                       +- * Project (39)
+                                          +- * Filter (38)
+                                             +- * HashAggregate (37)
+                                                +- Exchange (36)
+                                                   +- * HashAggregate (35)
+                                                      +- * Project (34)
+                                                         +- * SortMergeJoin Inner (33)
+                                                            :- * Sort (26)
+                                                            :  +- Exchange (25)
+                                                            :     +- * Filter (24)
+                                                            :        +- * ColumnarToRow (23)
+                                                            :           +- Scan parquet default.customer_address (22)
+                                                            +- * Sort (32)
+                                                               +- Exchange (31)
+                                                                  +- * Project (30)
+                                                                     +- * Filter (29)
+                                                                        +- * ColumnarToRow (28)
+                                                                           +- Scan parquet default.customer (27)
+
+
+(1) Scan parquet default.store_sales
+Output [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_sold_date_sk), IsNotNull(ss_store_sk)]
+ReadSchema: struct<ss_sold_date_sk:int,ss_store_sk:int,ss_net_profit:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3]
+
+(3) Filter [codegen id : 3]
+Input [3]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3]
+Condition : (isnotnull(ss_sold_date_sk#1) AND isnotnull(ss_store_sk#2))
+
+(4) Scan parquet default.date_dim
+Output [3]: [d_date_sk#4, d_year#5, d_qoy#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_qoy), IsNotNull(d_year), EqualTo(d_qoy,2), EqualTo(d_year,1998), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#4, d_year#5, d_qoy#6]
+
+(6) Filter [codegen id : 1]
+Input [3]: [d_date_sk#4, d_year#5, d_qoy#6]
+Condition : ((((isnotnull(d_qoy#6) AND isnotnull(d_year#5)) AND (d_qoy#6 = 2)) AND (d_year#5 = 1998)) AND isnotnull(d_date_sk#4))
+
+(7) Project [codegen id : 1]
+Output [1]: [d_date_sk#4]
+Input [3]: [d_date_sk#4, d_year#5, d_qoy#6]
+
+(8) BroadcastExchange
+Input [1]: [d_date_sk#4]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
+
+(9) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#4]
+Join condition: None
+
+(10) Project [codegen id : 3]
+Output [2]: [ss_store_sk#2, ss_net_profit#3]
+Input [4]: [ss_sold_date_sk#1, ss_store_sk#2, ss_net_profit#3, d_date_sk#4]
+
+(11) Scan parquet default.store
+Output [3]: [s_store_sk#8, s_store_name#9, s_zip#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk), IsNotNull(s_zip)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string,s_zip:string>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [3]: [s_store_sk#8, s_store_name#9, s_zip#10]
+
+(13) Filter [codegen id : 2]
+Input [3]: [s_store_sk#8, s_store_name#9, s_zip#10]
+Condition : (isnotnull(s_store_sk#8) AND isnotnull(s_zip#10))
+
+(14) BroadcastExchange
+Input [3]: [s_store_sk#8, s_store_name#9, s_zip#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_store_sk#2]
+Right keys [1]: [s_store_sk#8]
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [3]: [ss_net_profit#3, s_store_name#9, s_zip#10]
+Input [5]: [ss_store_sk#2, ss_net_profit#3, s_store_sk#8, s_store_name#9, s_zip#10]
+
+(17) Exchange
+Input [3]: [ss_net_profit#3, s_store_name#9, s_zip#10]
+Arguments: hashpartitioning(substr(s_zip#10, 1, 2), 5), true, [id=#12]
+
+(18) Sort [codegen id : 4]
+Input [3]: [ss_net_profit#3, s_store_name#9, s_zip#10]
+Arguments: [substr(s_zip#10, 1, 2) ASC NULLS FIRST], false, 0
+
+(19) Scan parquet default.customer_address
+Output [1]: [ca_zip#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+ReadSchema: struct<ca_zip:string>
+
+(20) ColumnarToRow [codegen id : 11]
+Input [1]: [ca_zip#13]
+
+(21) Filter [codegen id : 11]
+Input [1]: [ca_zip#13]
+Condition : (substr(ca_zip#13, 1, 5) INSET (56910,69952,63792,39371,74351,11101,25003,97189,57834,73134,62377,51200,32754,22752,86379,14171,91110,40162,98569,28709,13394,66162,25733,25782,26065,18383,51949,87343,50298,83849,33786,64528,23470,67030,46136,25280,46820,77721,99076,18426,31880,17871,98235,45748,49156,18652,72013,51622,43848,78567,41248,13695,44165,67853,54917,53179,64034,10567,71791,68908,55565,59402,64147,85816,57855,61547,27700,68100,28810,58263,15723,83933,51103,58058,90578,82276,81096,81426,96451,77556,38607,76638,18906,62971,57047,48425,35576,11928,30625,83444,73520,51650,57647,60099,30122,94983,24128,10445,41368,26233,26859,21756,24676,19849,36420,38193,58470,39127,13595,87501,24317,15455,69399,98025,81019,48033,11376,39516,67875,92712,14867,38122,29741,42961,30469,51211,56458,15559,16021,33123,33282,33515,72823,54601,76698,56240,72175,60279,20004,68806,72325,28488,43933,50412,45200,22246,78668,79777,96765,67301,73273,49448,82636,23932,47305,29839,39192,18799,61265,37125,58943,64457,88424,24610,84935,89360,68893,30431,28898,10336,90257,59166,46081,26105,96888,36634,86284,35258,39972,22927,73241,53268,24206,27385,99543,31671,14663,30903,39861,24996,63089,88086,83921,21076,67897,66708,45721,60576,25103,52867,30450,36233,30010,96576,73171,56571,56575,64544,13955,78451,43285,18119,16725,83041,76107,79994,54364,35942,56691,19769,63435,34102,18845,22744,13354,75691,45549,23968,31387,83144,13375,15765,28577,88190,19736,73650,37930,25989,83926,94898,51798,39736,22437,55253,38415,71256,18376,42029,25858,44438,19515,38935,51649,71954,15882,18767,63193,25486,49130,37126,40604,34425,17043,12305,11634,26653,94167,36446,10516,67473,66864,72425,63981,18842,22461,42666,47770,69035,70372,28587,45266,15371,15798,45375,90225,16807,31016,68014,21337,19505,50016,10144,84093,21286,19430,34322,91068,94945,72305,24671,58048,65084,28545,21195,20548,22245,77191,96976,48583,76231,15734,61810,11356,68621,68786,98359,41367,26689,69913,76614,68101,88885,50308,79077,18270,28915,29178,53672,62878,10390,14922,68341,56529,41766,68309,56616,15126,61860,97789,11489,45692,41918,72151,72550,27156,36495,70738,17879,53535,17920,68880,78890,35850,14089,58078,65164,27068,26231,13376,57665,32213,77610,87816,21309,15146,86198,91137,55307,67467,40558,94627,82136,22351,89091,20260,23006,91393,47537,62496,98294,18840,71286,81312,31029,70466,35458,14060,22685,28286,25631,19512,40081,63837,14328,35474,22152,76232,51061,86057,17183) AND isnotnull(substr(ca_zip#13, 1, 5)))
+
+(22) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#14, ca_zip#13]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_zip:string>
+
+(23) ColumnarToRow [codegen id : 5]
+Input [2]: [ca_address_sk#14, ca_zip#13]
+
+(24) Filter [codegen id : 5]
+Input [2]: [ca_address_sk#14, ca_zip#13]
+Condition : isnotnull(ca_address_sk#14)
+
+(25) Exchange
+Input [2]: [ca_address_sk#14, ca_zip#13]
+Arguments: hashpartitioning(ca_address_sk#14, 5), true, [id=#15]
+
+(26) Sort [codegen id : 6]
+Input [2]: [ca_address_sk#14, ca_zip#13]
+Arguments: [ca_address_sk#14 ASC NULLS FIRST], false, 0
+
+(27) Scan parquet default.customer
+Output [2]: [c_current_addr_sk#16, c_preferred_cust_flag#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_preferred_cust_flag), EqualTo(c_preferred_cust_flag,Y), IsNotNull(c_current_addr_sk)]
+ReadSchema: struct<c_current_addr_sk:int,c_preferred_cust_flag:string>
+
+(28) ColumnarToRow [codegen id : 7]
+Input [2]: [c_current_addr_sk#16, c_preferred_cust_flag#17]
+
+(29) Filter [codegen id : 7]
+Input [2]: [c_current_addr_sk#16, c_preferred_cust_flag#17]
+Condition : ((isnotnull(c_preferred_cust_flag#17) AND (c_preferred_cust_flag#17 = Y)) AND isnotnull(c_current_addr_sk#16))
+
+(30) Project [codegen id : 7]
+Output [1]: [c_current_addr_sk#16]
+Input [2]: [c_current_addr_sk#16, c_preferred_cust_flag#17]
+
+(31) Exchange
+Input [1]: [c_current_addr_sk#16]
+Arguments: hashpartitioning(c_current_addr_sk#16, 5), true, [id=#18]
+
+(32) Sort [codegen id : 8]
+Input [1]: [c_current_addr_sk#16]
+Arguments: [c_current_addr_sk#16 ASC NULLS FIRST], false, 0
+
+(33) SortMergeJoin [codegen id : 9]
+Left keys [1]: [ca_address_sk#14]
+Right keys [1]: [c_current_addr_sk#16]
+Join condition: None
+
+(34) Project [codegen id : 9]
+Output [1]: [ca_zip#13]
+Input [3]: [ca_address_sk#14, ca_zip#13, c_current_addr_sk#16]
+
+(35) HashAggregate [codegen id : 9]
+Input [1]: [ca_zip#13]
+Keys [1]: [ca_zip#13]
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#19]
+Results [2]: [ca_zip#13, count#20]
+
+(36) Exchange
+Input [2]: [ca_zip#13, count#20]
+Arguments: hashpartitioning(ca_zip#13, 5), true, [id=#21]
+
+(37) HashAggregate [codegen id : 10]
+Input [2]: [ca_zip#13, count#20]
+Keys [1]: [ca_zip#13]
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#22]
+Results [2]: [substr(ca_zip#13, 1, 5) AS ca_zip#23, count(1)#22 AS count(1)#24]
+
+(38) Filter [codegen id : 10]
+Input [2]: [ca_zip#23, count(1)#24]
+Condition : (count(1)#24 > 10)
+
+(39) Project [codegen id : 10]
+Output [1]: [ca_zip#23]
+Input [2]: [ca_zip#23, count(1)#24]
+
+(40) BroadcastExchange
+Input [1]: [ca_zip#23]
+Arguments: HashedRelationBroadcastMode(List(coalesce(input[0, string, true], ), isnull(input[0, string, true])),false), [id=#25]
+
+(41) BroadcastHashJoin [codegen id : 11]
+Left keys [2]: [coalesce(substr(ca_zip#13, 1, 5), ), isnull(substr(ca_zip#13, 1, 5))]
+Right keys [2]: [coalesce(ca_zip#23, ), isnull(ca_zip#23)]
+Join condition: None
+
+(42) Project [codegen id : 11]
+Output [1]: [substr(ca_zip#13, 1, 5) AS ca_zip#26]
+Input [1]: [ca_zip#13]
+
+(43) HashAggregate [codegen id : 11]
+Input [1]: [ca_zip#26]
+Keys [1]: [ca_zip#26]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [ca_zip#26]
+
+(44) Exchange
+Input [1]: [ca_zip#26]
+Arguments: hashpartitioning(ca_zip#26, 5), true, [id=#27]
+
+(45) HashAggregate [codegen id : 12]
+Input [1]: [ca_zip#26]
+Keys [1]: [ca_zip#26]
+Functions: []
+Aggregate Attributes: []
+Results [1]: [ca_zip#26]
+
+(46) Exchange
+Input [1]: [ca_zip#26]
+Arguments: hashpartitioning(substr(ca_zip#26, 1, 2), 5), true, [id=#28]
+
+(47) Sort [codegen id : 13]
+Input [1]: [ca_zip#26]
+Arguments: [substr(ca_zip#26, 1, 2) ASC NULLS FIRST], false, 0
+
+(48) SortMergeJoin [codegen id : 14]
+Left keys [1]: [substr(s_zip#10, 1, 2)]
+Right keys [1]: [substr(ca_zip#26, 1, 2)]
+Join condition: None
+
+(49) Project [codegen id : 14]
+Output [2]: [ss_net_profit#3, s_store_name#9]
+Input [4]: [ss_net_profit#3, s_store_name#9, s_zip#10, ca_zip#26]
+
+(50) HashAggregate [codegen id : 14]
+Input [2]: [ss_net_profit#3, s_store_name#9]
+Keys [1]: [s_store_name#9]
+Functions [1]: [partial_sum(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [1]: [sum#29]
+Results [2]: [s_store_name#9, sum#30]
+
+(51) Exchange
+Input [2]: [s_store_name#9, sum#30]
+Arguments: hashpartitioning(s_store_name#9, 5), true, [id=#31]
+
+(52) HashAggregate [codegen id : 15]
+Input [2]: [s_store_name#9, sum#30]
+Keys [1]: [s_store_name#9]
+Functions [1]: [sum(UnscaledValue(ss_net_profit#3))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_profit#3))#32]
+Results [2]: [s_store_name#9, MakeDecimal(sum(UnscaledValue(ss_net_profit#3))#32,17,2) AS sum(ss_net_profit)#33]
+
+(53) TakeOrderedAndProject
+Input [2]: [s_store_name#9, sum(ss_net_profit)#33]
+Arguments: 100, [s_store_name#9 ASC NULLS FIRST], [s_store_name#9, sum(ss_net_profit)#33]
+

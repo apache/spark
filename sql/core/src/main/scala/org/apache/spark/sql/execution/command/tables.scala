@@ -33,10 +33,10 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.DescribeTableSchema
+import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap}
-import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, quoteIdentifier, CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.PartitioningUtils
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -114,12 +115,13 @@ case class CreateTableLikeCommand(
       CatalogTableType.EXTERNAL
     }
 
+    val newTableSchema = CharVarcharUtils.getRawSchema(sourceTableDesc.schema)
     val newTableDesc =
       CatalogTable(
         identifier = targetTable,
         tableType = tblType,
         storage = newStorage,
-        schema = sourceTableDesc.schema,
+        schema = newTableSchema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
         bucketSpec = sourceTableDesc.bucketSpec,
@@ -235,7 +237,8 @@ case class AlterTableAddColumnsCommand(
       conf.caseSensitiveAnalysis)
     DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
 
-    catalog.alterTableDataSchema(table, StructType(catalogTable.dataSchema ++ colsToAdd))
+    val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
+    catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsToAdd))
     Seq.empty[Row]
   }
 
@@ -305,7 +308,7 @@ case class LoadDataCommand(
     val normalizedSpec = partition.map { spec =>
       PartitioningUtils.normalizePartitionSpec(
         spec,
-        targetTable.partitionColumnNames,
+        targetTable.partitionSchema,
         tableIdentwithDB,
         sparkSession.sessionState.conf.resolver)
     }
@@ -354,7 +357,7 @@ case class LoadDataCommand(
         // entire  string will be considered while making a Path instance,this is mainly done
         // by considering the wild card scenario in mind.as per old logic query param  is
         // been considered while creating URI instance and if path contains wild card char '?'
-        // the remaining charecters after '?' will be removed while forming URI instance
+        // the remaining characters after '?' will be removed while forming URI instance
         LoadDataCommand.makeQualified(defaultFS, uriPath, loadPath)
       }
     }
@@ -472,7 +475,7 @@ case class TruncateTableCommand(
         val normalizedSpec = partitionSpec.map { spec =>
           PartitioningUtils.normalizePartitionSpec(
             spec,
-            partCols,
+            table.partitionSchema,
             table.identifier.quotedString,
             spark.sessionState.conf.resolver)
         }
@@ -595,7 +598,7 @@ case class TruncateTableCommand(
 }
 
 abstract class DescribeCommandBase extends RunnableCommand {
-  override val output = DescribeTableSchema.describeTableAttributes()
+  override val output = DescribeCommandSchema.describeTableAttributes()
 
   protected def describeSchema(
       schema: StructType,
@@ -637,7 +640,7 @@ case class DescribeTableCommand(
       }
       describeSchema(catalog.lookupRelation(table).schema, result, header = false)
     } else {
-      val metadata = catalog.getTableMetadata(table)
+      val metadata = catalog.getTableRawMetadata(table)
       if (metadata.schema.isEmpty) {
         // In older version(prior to 2.1) of Spark, the table schema can be empty and should be
         // inferred at runtime. We should still support it.
@@ -657,7 +660,7 @@ case class DescribeTableCommand(
       }
     }
 
-    result
+    result.toSeq
   }
 
   private def describePartitionInfo(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
@@ -740,7 +743,7 @@ case class DescribeQueryCommand(queryText: String, plan: LogicalPlan)
     val result = new ArrayBuffer[Row]
     val queryExecution = sparkSession.sessionState.executePlan(plan)
     describeSchema(queryExecution.analyzed.schema, result, header = false)
-    result
+    result.toSeq
   }
 }
 
@@ -758,14 +761,7 @@ case class DescribeColumnCommand(
     isExtended: Boolean)
   extends RunnableCommand {
 
-  override val output: Seq[Attribute] = {
-    Seq(
-      AttributeReference("info_name", StringType, nullable = false,
-        new MetadataBuilder().putString("comment", "name of the column info").build())(),
-      AttributeReference("info_value", StringType, nullable = false,
-        new MetadataBuilder().putString("comment", "value of the column info").build())()
-    )
-  }
+  override val output: Seq[Attribute] = DescribeCommandSchema.describeColumnAttributes()
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -795,9 +791,11 @@ case class DescribeColumnCommand(
       None
     }
 
+    val dataType = CharVarcharUtils.getRawType(field.metadata)
+      .getOrElse(field.dataType).catalogString
     val buffer = ArrayBuffer[Row](
       Row("col_name", field.name),
-      Row("data_type", field.dataType.catalogString),
+      Row("data_type", dataType),
       Row("comment", comment.getOrElse("NULL"))
     )
     if (isExtended) {
@@ -815,7 +813,7 @@ case class DescribeColumnCommand(
       } yield histogramDescription(hist)
       buffer ++= histDesc.getOrElse(Seq(Row("histogram", "NULL")))
     }
-    buffer
+    buffer.toSeq
   }
 
   private def histogramDescription(histogram: Histogram): Seq[Row] = {
@@ -891,7 +889,7 @@ case class ShowTablesCommand(
       val tableIdent = table.identifier
       val normalizedSpec = PartitioningUtils.normalizePartitionSpec(
         partitionSpec.get,
-        table.partitionColumnNames,
+        table.partitionSchema,
         tableIdent.quotedString,
         sparkSession.sessionState.conf.resolver)
       val partition = catalog.getPartition(tableIdent, normalizedSpec)
@@ -1022,7 +1020,7 @@ case class ShowPartitionsCommand(
      */
     val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
-      table.partitionColumnNames,
+      table.partitionSchema,
       table.identifier.quotedString,
       sparkSession.sessionState.conf.resolver))
 
@@ -1128,7 +1126,7 @@ case class ShowCreateTableCommand(table: TableIdentifier)
       throw new AnalysisException(
         s"SHOW CREATE TABLE is not supported on a temporary view: ${table.identifier}")
     } else {
-      val tableMetadata = catalog.getTableMetadata(table)
+      val tableMetadata = catalog.getTableRawMetadata(table)
 
       // TODO: [SPARK-28692] unify this after we unify the
       //  CREATE TABLE syntax for hive serde and data source table.
@@ -1279,7 +1277,7 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val tableMetadata = catalog.getTableMetadata(table)
+    val tableMetadata = catalog.getTableRawMetadata(table)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       throw new AnalysisException(
@@ -1383,5 +1381,24 @@ case class ShowCreateTableAsSerdeCommand(table: TableIdentifier)
         builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
       }
     }
+  }
+}
+
+/**
+ * A command to refresh all cached entries associated with the table.
+ *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   REFRESH TABLE [db_name.]table_name
+ * }}}
+ */
+case class RefreshTableCommand(tableIdent: TableIdentifier)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
+    // drop the original cached version and make the new version cached lazily.
+    sparkSession.catalog.refreshTable(tableIdent.quotedString)
+    Seq.empty[Row]
   }
 }

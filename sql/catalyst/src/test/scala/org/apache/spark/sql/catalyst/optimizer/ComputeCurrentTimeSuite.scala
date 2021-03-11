@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.time.ZoneId
+
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Literal}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.unsafe.types.UTF8String
 
 class ComputeCurrentTimeSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -51,9 +55,9 @@ class ComputeCurrentTimeSuite extends PlanTest {
   test("analyzer should replace current_date with literals") {
     val in = Project(Seq(Alias(CurrentDate(), "a")(), Alias(CurrentDate(), "b")()), LocalRelation())
 
-    val min = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val min = DateTimeUtils.currentDate(ZoneId.systemDefault())
     val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
-    val max = DateTimeUtils.millisToDays(System.currentTimeMillis())
+    val max = DateTimeUtils.currentDate(ZoneId.systemDefault())
 
     val lits = new scala.collection.mutable.ArrayBuffer[Int]
     plan.transformAllExpressions { case e: Literal =>
@@ -64,5 +68,17 @@ class ComputeCurrentTimeSuite extends PlanTest {
     assert(lits(0) >= min && lits(0) <= max)
     assert(lits(1) >= min && lits(1) <= max)
     assert(lits(0) == lits(1))
+  }
+
+  test("SPARK-33469: Add current_timezone function") {
+    val in = Project(Seq(Alias(CurrentTimeZone(), "c")()), LocalRelation())
+    val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+    val lits = new scala.collection.mutable.ArrayBuffer[String]
+    plan.transformAllExpressions { case e: Literal =>
+      lits += e.value.asInstanceOf[UTF8String].toString
+      e
+    }
+    assert(lits.size == 1)
+    assert(lits.head == SQLConf.get.sessionLocalTimeZone)
   }
 }

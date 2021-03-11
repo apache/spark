@@ -24,7 +24,7 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.scalatest.{BeforeAndAfterAll, GivenWhenThen}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Dataset
@@ -46,8 +46,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest
-  extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
   override protected val enableAutoThreadAudit = false
 
@@ -372,11 +371,11 @@ abstract class HiveComparisonTest
 
             // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[ShowFunctionsStatement]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeFunctionStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctions]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeColumnStatement]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeColumn]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

@@ -26,8 +26,8 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, P
 import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
+import org.apache.spark.resource.ExecutorResourceRequest
 import org.apache.spark.util.Utils
 
 object YarnSparkHadoopUtil {
@@ -37,7 +37,6 @@ object YarnSparkHadoopUtil {
   // the common cases. Memory overhead tends to grow with container size.
 
   val MEMORY_OVERHEAD_FACTOR = 0.10
-  val MEMORY_OVERHEAD_MIN = 384L
 
   val ANY_HOST = "*"
 
@@ -107,7 +106,7 @@ object YarnSparkHadoopUtil {
    * Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
    * an inconsistent state.
    * TODO: If the OOM is not recoverable by rescheduling it on different node, then do
-   * 'something' to fail job ... akin to blacklisting trackers in mapred ?
+   * 'something' to fail job ... akin to unhealthy trackers in mapred ?
    *
    * The handler if an OOM Exception is thrown by the JVM must be configured on Windows
    * differently: the 'taskkill' command should be used, whereas Unix-based systems use 'kill'.
@@ -184,16 +183,11 @@ object YarnSparkHadoopUtil {
   }
 
   /**
-   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   * Get offHeap memory size from [[ExecutorResourceRequest]]
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
    */
-  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
-    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
-      val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
-      require(sizeInMB > 0,
-        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
-      sizeInMB
-    } else {
-      0
-    }
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf,
+    execRequest: ExecutorResourceRequest): Long = {
+    Utils.checkOffHeapEnabled(sparkConf, execRequest.amount)
   }
 }

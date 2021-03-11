@@ -28,6 +28,16 @@ import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.internal.Logging
 
 private[spark] object YarnContainerInfoHelper extends Logging {
+
+  private[this] val DRIVER_LOG_FILE_NAMES = Seq("stdout", "stderr")
+  private[this] val DRIVER_LOG_START_OFFSET = -4096
+
+  def getLogUrlsFromBaseUrl(baseUrl: String): Map[String, String] = {
+    DRIVER_LOG_FILE_NAMES.map { fname =>
+      fname -> s"$baseUrl/$fname?start=$DRIVER_LOG_START_OFFSET"
+    }.toMap
+  }
+
   def getLogUrls(
       conf: Configuration,
       container: Option[Container]): Option[Map[String, String]] = {
@@ -42,9 +52,7 @@ private[spark] object YarnContainerInfoHelper extends Logging {
       val baseUrl = s"$httpScheme$httpAddress/node/containerlogs/$containerId/$user"
       logDebug(s"Base URL for logs: $baseUrl")
 
-      Some(Map(
-        "stdout" -> s"$baseUrl/stdout?start=-4096",
-        "stderr" -> s"$baseUrl/stderr?start=-4096"))
+      Some(getLogUrlsFromBaseUrl(baseUrl))
     } catch {
       case e: Exception =>
         logInfo("Error while building executor logs - executor logs will not be available", e)

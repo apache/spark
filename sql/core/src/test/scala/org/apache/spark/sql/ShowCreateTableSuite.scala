@@ -155,16 +155,19 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val ex = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }
-      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(ex.getMessage.contains(
+        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
     }
 
     withGlobalTempView(viewName) {
       sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
       val ex = intercept[AnalysisException] {
-        val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
         sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
       }
-      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(ex.getMessage.contains(
+        s"$globalTempViewDb.$viewName is a temp view. " +
+          "'SHOW CREATE TABLE' expects a table or permanent view."))
     }
   }
 

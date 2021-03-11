@@ -102,13 +102,11 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
     if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
-      typeSoFar match {
+      val typeElemInfer = typeSoFar match {
         case NullType => tryParseInteger(field)
         case IntegerType => tryParseInteger(field)
         case LongType => tryParseLong(field)
-        case _: DecimalType =>
-          // DecimalTypes have different precisions and scales, so we try to find the common type.
-          compatibleType(typeSoFar, tryParseDecimal(field)).getOrElse(StringType)
+        case _: DecimalType => tryParseDecimal(field)
         case DoubleType => tryParseDouble(field)
         case TimestampType => tryParseTimestamp(field)
         case BooleanType => tryParseBoolean(field)
@@ -116,6 +114,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
+      compatibleType(typeSoFar, typeElemInfer).getOrElse(StringType)
     }
   }
 

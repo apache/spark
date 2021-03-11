@@ -25,8 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
 import scala.util.control.NonFatal
 
-import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
@@ -157,7 +157,7 @@ private class SaveInfoListener extends SparkListener {
   def getCompletedStageInfos: Seq[StageInfo] = completedStageInfos.toArray.toSeq
   def getCompletedTaskInfos: Seq[TaskInfo] = completedTaskInfos.values.flatten.toSeq
   def getCompletedTaskInfos(stageId: StageId, stageAttemptId: StageAttemptId): Seq[TaskInfo] =
-    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo])
+    completedTaskInfos.getOrElse((stageId, stageAttemptId), Seq.empty[TaskInfo]).toSeq
 
   /**
    * If `jobCompletionCallback` is set, block until the next call has finished.

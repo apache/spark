@@ -70,8 +70,11 @@ object Canonicalize {
 
   /** Rearrange expressions that are commutative or associative. */
   private def expressionReorder(e: Expression): Expression = e match {
-    case a: Add => orderCommutative(a, { case Add(l, r) => Seq(l, r) }).reduce(Add)
-    case m: Multiply => orderCommutative(m, { case Multiply(l, r) => Seq(l, r) }).reduce(Multiply)
+    // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
+    case a @ Add(_, _, f) =>
+      orderCommutative(a, { case Add(l, r, _) => Seq(l, r) }).reduce(Add(_, _, f))
+    case m @ Multiply(_, _, f) =>
+      orderCommutative(m, { case Multiply(l, r, _) => Seq(l, r) }).reduce(Multiply(_, _, f))
 
     case o: Or =>
       orderCommutative(o, { case Or(l, r) if l.deterministic && r.deterministic => Seq(l, r) })
@@ -79,6 +82,13 @@ object Canonicalize {
     case a: And =>
       orderCommutative(a, { case And(l, r) if l.deterministic && r.deterministic => Seq(l, r)})
         .reduce(And)
+
+    case o: BitwiseOr =>
+      orderCommutative(o, { case BitwiseOr(l, r) => Seq(l, r) }).reduce(BitwiseOr)
+    case a: BitwiseAnd =>
+      orderCommutative(a, { case BitwiseAnd(l, r) => Seq(l, r) }).reduce(BitwiseAnd)
+    case x: BitwiseXor =>
+      orderCommutative(x, { case BitwiseXor(l, r) => Seq(l, r) }).reduce(BitwiseXor)
 
     case EqualTo(l, r) if l.hashCode() > r.hashCode() => EqualTo(r, l)
     case EqualNullSafe(l, r) if l.hashCode() > r.hashCode() => EqualNullSafe(r, l)
@@ -98,6 +108,13 @@ object Canonicalize {
 
     // order the list in the In operator
     case In(value, list) if list.length > 1 => In(value, list.sortBy(_.hashCode()))
+
+    case g: Greatest =>
+      val newChildren = orderCommutative(g, { case Greatest(children) => children })
+      Greatest(newChildren)
+    case l: Least =>
+      val newChildren = orderCommutative(l, { case Least(children) => children })
+      Least(newChildren)
 
     case _ => e
   }

@@ -16,7 +16,10 @@
  */
 package org.apache.spark.sql.execution
 
+import java.io.File
+
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.hadoop.fs.Path
 
@@ -114,6 +117,45 @@ class DataSourceScanExecRedactionSuite extends DataSourceScanRedactionTest {
       assert(isIncluded(df.queryExecution, "PushedFilters"))
       assert(isIncluded(df.queryExecution, "DataFilters"))
       assert(isIncluded(df.queryExecution, "Location"))
+    }
+  }
+
+  test("SPARK-31793: FileSourceScanExec metadata should contain limited file paths") {
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
+
+      // create a sub-directory with long name so that each root path will always exceed the limit
+      // this is to ensure we always test the case for the path truncation
+      val dataDirName = Random.alphanumeric.take(100).toList.mkString
+      val dataDir = new File(path, dataDirName)
+      dataDir.mkdir()
+
+      val partitionCol = "partitionCol"
+      spark.range(10)
+        .select("id", "id")
+        .toDF("value", partitionCol)
+        .write
+        .partitionBy(partitionCol)
+        .orc(dataDir.getCanonicalPath)
+      val paths = (0 to 9).map(i => new File(dataDir, s"$partitionCol=$i").getCanonicalPath)
+      val plan = spark.read.orc(paths: _*).queryExecution.executedPlan
+      val location = plan collectFirst {
+        case f: FileSourceScanExec => f.metadata("Location")
+      }
+      assert(location.isDefined)
+      // The location metadata should at least contain one path
+      assert(location.get.contains(paths.head))
+
+      // The location metadata should have bracket wrapping paths
+      assert(location.get.indexOf('[') > -1)
+      assert(location.get.indexOf(']') > -1)
+
+      // extract paths in location metadata (removing classname, brackets, separators)
+      val pathsInLocation = location.get.substring(
+        location.get.indexOf('[') + 1, location.get.indexOf(']')).split(", ").toSeq
+
+      // the only one path should be available
+      assert(pathsInLocation.size == 1)
     }
   }
 }

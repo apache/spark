@@ -64,8 +64,9 @@ class ElementwiseProduct @Since("1.4.0") (
     newValues
   }
 
-  private[spark] def transformSparse(indices: Array[Int],
-                                     values: Array[Double]): (Array[Int], Array[Double]) = {
+  private[spark] def transformSparse(
+      indices: Array[Int],
+      values: Array[Double]): (Array[Int], Array[Double]) = {
     val newValues = values.clone()
     val dim = newValues.length
     var i = 0

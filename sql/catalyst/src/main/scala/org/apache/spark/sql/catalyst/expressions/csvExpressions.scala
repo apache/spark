@@ -144,7 +144,7 @@ case class CsvToStructs(
   examples = """
     Examples:
       > SELECT _FUNC_('1,abc');
-       struct<_c0:int,_c1:string>
+       STRUCT<`_c0`: INT, `_c1`: STRING>
   """,
   since = "3.0.0")
 case class SchemaOfCsv(
@@ -165,10 +165,14 @@ case class SchemaOfCsv(
   @transient
   private lazy val csv = child.eval().asInstanceOf[UTF8String]
 
-  override def checkInputDataTypes(): TypeCheckResult = child match {
-    case Literal(s, StringType) if s != null => super.checkInputDataTypes()
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"The input csv should be a string literal and not null; however, got ${child.sql}.")
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (child.foldable && csv != null) {
+      super.checkInputDataTypes()
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        "The input csv should be a foldable string expression and not null; " +
+        s"however, got ${child.sql}.")
+    }
   }
 
   override def eval(v: InternalRow): Any = {
@@ -182,7 +186,7 @@ case class SchemaOfCsv(
     val inferSchema = new CSVInferSchema(parsedOptions)
     val fieldTypes = inferSchema.inferRowType(startType, row)
     val st = StructType(inferSchema.toStructFields(fieldTypes, header))
-    UTF8String.fromString(st.catalogString)
+    UTF8String.fromString(st.sql)
   }
 
   override def prettyName: String = "schema_of_csv"
@@ -207,7 +211,8 @@ case class StructsToCsv(
      options: Map[String, String],
      child: Expression,
      timeZoneId: Option[String] = None)
-  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes {
+  extends UnaryExpression with TimeZoneAwareExpression with CodegenFallback with ExpectsInputTypes
+    with NullIntolerant {
   override def nullable: Boolean = true
 
   def this(options: Map[String, String], child: Expression) = this(options, child, None)

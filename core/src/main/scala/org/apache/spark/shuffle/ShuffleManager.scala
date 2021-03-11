@@ -24,8 +24,12 @@ import org.apache.spark.{ShuffleDependency, TaskContext}
  * and on each executor, based on the spark.shuffle.manager setting. The driver registers shuffles
  * with it, and executors (or tasks running locally in the driver) can ask to read and write data.
  *
- * NOTE: this will be instantiated by SparkEnv so its constructor can take a SparkConf and
+ * NOTE:
+ * 1. This will be instantiated by SparkEnv so its constructor can take a SparkConf and
  * boolean isDriver as parameters.
+ * 2. This contains a method ShuffleBlockResolver which interacts with External Shuffle Service
+ * when it is enabled. Need to pay attention to that, if implementing a custom ShuffleManager, to
+ * make sure the custom ShuffleManager could co-exist with External Shuffle Service.
  */
 private[spark] trait ShuffleManager {
 
@@ -43,23 +47,31 @@ private[spark] trait ShuffleManager {
       context: TaskContext,
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V]
 
+
   /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
+   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
+   * read from all map outputs of the shuffle.
+   *
    * Called on executors by reduce tasks.
    */
-  def getReader[K, C](
+  final def getReader[K, C](
       handle: ShuffleHandle,
       startPartition: Int,
       endPartition: Int,
       context: TaskContext,
-      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C]
+      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    getReader(handle, 0, Int.MaxValue, startPartition, endPartition, context, metrics)
+  }
 
   /**
    * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
-   * read from map output (startMapIndex to endMapIndex - 1, inclusive).
+   * read from a range of map outputs(startMapIndex to endMapIndex-1, inclusive).
+   * If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length of total map
+   * outputs of the shuffle in `getMapSizesByExecutorId`.
+   *
    * Called on executors by reduce tasks.
    */
-  def getReaderForRange[K, C](
+  def getReader[K, C](
       handle: ShuffleHandle,
       startMapIndex: Int,
       endMapIndex: Int,

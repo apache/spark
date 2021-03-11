@@ -118,6 +118,6 @@ private[python] object PandasGroupUtils {
 
     // Attributes after deduplication
     val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
-    (dedupAttributes, argOffsets)
+    (dedupAttributes.toSeq, argOffsets)
   }
 }

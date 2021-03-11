@@ -24,6 +24,9 @@ By default, PySpark uses :class:`PickleSerializer` to serialize objects using Py
 Other serializers, like :class:`MarshalSerializer`, support fewer datatypes but can be
 faster.
 
+
+Examples
+--------
 The serializer is chosen when creating :class:`SparkContext`:
 
 >>> from pyspark.context import SparkContext
@@ -58,18 +61,11 @@ import types
 import collections
 import zlib
 import itertools
-
-if sys.version < '3':
-    import cPickle as pickle
-    from itertools import izip as zip, imap as map
-else:
-    import pickle
-    basestring = unicode = str
-    xrange = range
+import pickle
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import _exception_message, print_exec
+from pyspark.util import print_exec
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -132,11 +128,6 @@ class FramedSerializer(Serializer):
     where `length` is a 32-bit integer and data is `length` bytes.
     """
 
-    def __init__(self):
-        # On Python 2.6, we can't write bytearrays to streams, so we need to convert them
-        # to strings first. Check if the version number is that old.
-        self._only_write_strings = sys.version_info[0:2] <= (2, 6)
-
     def dump_stream(self, iterator, stream):
         for obj in iterator:
             self._write_with_length(obj, stream)
@@ -155,10 +146,7 @@ class FramedSerializer(Serializer):
         if len(serialized) > (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
-        if self._only_write_strings:
-            stream.write(str(serialized))
-        else:
-            stream.write(serialized)
+        stream.write(serialized)
 
     def _read_with_length(self, stream):
         length = read_int(stream)
@@ -204,7 +192,7 @@ class BatchedSerializer(Serializer):
             yield list(iterator)
         elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
             n = len(iterator)
-            for i in xrange(0, n, self.batchSize):
+            for i in range(0, n, self.batchSize):
                 yield iterator[i: i + self.batchSize]
         else:
             items = []
@@ -357,7 +345,7 @@ class NoOpSerializer(FramedSerializer):
 
 # Hack namedtuple, make it picklable
 
-__cls = {}
+__cls = {}  # type: ignore
 
 
 def _restore(name, fields, value):
@@ -395,23 +383,8 @@ def _hijack_namedtuple():
         return types.FunctionType(f.__code__, f.__globals__, f.__name__,
                                   f.__defaults__, f.__closure__)
 
-    def _kwdefaults(f):
-        # __kwdefaults__ contains the default values of keyword-only arguments which are
-        # introduced from Python 3. The possible cases for __kwdefaults__ in namedtuple
-        # are as below:
-        #
-        # - Does not exist in Python 2.
-        # - Returns None in <= Python 3.5.x.
-        # - Returns a dictionary containing the default values to the keys from Python 3.6.x
-        #    (See https://bugs.python.org/issue25628).
-        kargs = getattr(f, "__kwdefaults__", None)
-        if kargs is None:
-            return {}
-        else:
-            return kargs
-
     _old_namedtuple = _copy_func(collections.namedtuple)
-    _old_namedtuple_kwdefaults = _kwdefaults(collections.namedtuple)
+    _old_namedtuple_kwdefaults = collections.namedtuple.__kwdefaults__
 
     def namedtuple(*args, **kwargs):
         for k, v in _old_namedtuple_kwdefaults.items():
@@ -453,12 +426,8 @@ class PickleSerializer(FramedSerializer):
     def dumps(self, obj):
         return pickle.dumps(obj, pickle_protocol)
 
-    if sys.version >= '3':
-        def loads(self, obj, encoding="bytes"):
-            return pickle.loads(obj, encoding=encoding)
-    else:
-        def loads(self, obj, encoding=None):
-            return pickle.loads(obj)
+    def loads(self, obj, encoding="bytes"):
+        return pickle.loads(obj, encoding=encoding)
 
 
 class CloudPickleSerializer(PickleSerializer):
@@ -469,7 +438,7 @@ class CloudPickleSerializer(PickleSerializer):
         except pickle.PickleError:
             raise
         except Exception as e:
-            emsg = _exception_message(e)
+            emsg = str(e)
             if "'i' format requires" in emsg:
                 msg = "Object too large to serialize: %s" % emsg
             else:

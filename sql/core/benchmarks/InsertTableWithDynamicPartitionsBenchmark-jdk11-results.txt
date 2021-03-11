@@ -1,0 +1,8 @@
+OpenJDK 64-Bit Server VM 11.0.8+10-LTS on Mac OS X 10.15.7
+Intel(R) Core(TM) i5-7360U CPU @ 2.30GHz
+dynamic insert table benchmark, totalRows = 200000:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+one partition column, 100 partitions                        16396          16688         413          0.0       81978.3       1.0X
+two partition columns, 500 partitions                       50356          50924         804          0.0      251777.9       0.3X
+three partition columns, 2000 partitions                   144342         144850         718          0.0      721710.9       0.1X
+

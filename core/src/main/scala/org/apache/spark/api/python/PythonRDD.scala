@@ -48,14 +48,14 @@ import org.apache.spark.util._
 private[spark] class PythonRDD(
     parent: RDD[_],
     func: PythonFunction,
-    preservePartitoning: Boolean,
+    preservePartitioning: Boolean,
     isFromBarrier: Boolean = false)
   extends RDD[Array[Byte]](parent) {
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
   override val partitioner: Option[Partitioner] = {
-    if (preservePartitoning) firstParent.partitioner else None
+    if (preservePartitioning) firstParent.partitioner else None
   }
 
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
@@ -74,13 +74,25 @@ private[spark] class PythonRDD(
  * runner.
  */
 private[spark] case class PythonFunction(
-    command: Array[Byte],
+    command: Seq[Byte],
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
     pythonVer: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: PythonAccumulatorV2)
+    accumulator: PythonAccumulatorV2) {
+
+  def this(
+      command: Array[Byte],
+      envVars: JMap[String, String],
+      pythonIncludes: JList[String],
+      pythonExec: String,
+      pythonVer: String,
+      broadcastVars: JList[Broadcast[PythonBroadcast]],
+      accumulator: PythonAccumulatorV2) = {
+    this(command.toSeq, envVars, pythonIncludes, pythonExec, pythonVer, broadcastVars, accumulator)
+  }
+}
 
 /**
  * A wrapper for chained Python functions (from bottom to top).
@@ -151,7 +163,7 @@ private[spark] object PythonRDD extends Logging {
     type ByteArray = Array[Byte]
     type UnrolledPartition = Array[ByteArray]
     val allPartitions: Array[UnrolledPartition] =
-      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala)
+      sc.runJob(rdd, (x: Iterator[ByteArray]) => x.toArray, partitions.asScala.toSeq)
     val flattenedPartition: UnrolledPartition = Array.concat(allPartitions: _*)
     serveIterator(flattenedPartition.iterator,
       s"serve RDD ${rdd.id} with partitions ${partitions.asScala.mkString(",")}")
@@ -825,7 +837,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
  * We might be serializing a really large object from python -- we don't want
  * python to buffer the whole thing in memory, nor can it write to a file,
  * so we don't know the length in advance.  So python writes it in chunks, each chunk
- * preceeded by a length, till we get a "length" of -1 which serves as EOF.
+ * preceded by a length, till we get a "length" of -1 which serves as EOF.
  *
  * Tested from python tests.
  */

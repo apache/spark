@@ -25,7 +25,9 @@ import org.apache.spark.annotation.Since
 @Since("1.0.0")
 object Entropy extends Impurity {
 
-  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+  private val _log2 = scala.math.log(2)
+
+  private[tree] def log2(x: Double) = scala.math.log(x) / _log2
 
   /**
    * information calculation for multiclass classification
@@ -110,7 +112,7 @@ private[spark] class EntropyAggregator(numClasses: Int)
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
-    new EntropyCalculator(allStats.view(offset, offset + statsSize - 1).toArray,
+    new EntropyCalculator(allStats.view.slice(offset, offset + statsSize - 1).toArray,
       allStats(offset + statsSize - 1).toLong)
   }
 }

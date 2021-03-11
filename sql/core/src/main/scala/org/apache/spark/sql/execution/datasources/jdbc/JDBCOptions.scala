@@ -20,15 +20,18 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
+import org.apache.commons.io.FilenameUtils
+
+import org.apache.spark.SparkFiles
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.types.StructType
 
 /**
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient val parameters: CaseInsensitiveMap[String])
-  extends Serializable {
+    val parameters: CaseInsensitiveMap[String])
+  extends Serializable with Logging {
 
   import JDBCOptions._
 
@@ -187,10 +190,28 @@ class JDBCOptions(
 
   // An option to allow/disallow pushing down predicate into JDBC data source
   val pushDownPredicate = parameters.getOrElse(JDBC_PUSHDOWN_PREDICATE, "true").toBoolean
+
+  // The local path of user's keytab file, which is assumed to be pre-uploaded to all nodes either
+  // by --files option of spark-submit or manually
+  val keytab = {
+    val keytabParam = parameters.getOrElse(JDBC_KEYTAB, null)
+    if (keytabParam != null && FilenameUtils.getPath(keytabParam).isEmpty) {
+      val result = SparkFiles.get(keytabParam)
+      logDebug(s"Keytab path not found, assuming --files, file name used on executor: $result")
+      result
+    } else {
+      logDebug("Keytab path found, assuming manual upload")
+      keytabParam
+    }
+  }
+  // The principal name of user's keytab file
+  val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+
+  val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "").toString
 }
 
 class JdbcOptionsInWrite(
-    @transient override val parameters: CaseInsensitiveMap[String])
+    override val parameters: CaseInsensitiveMap[String])
   extends JDBCOptions(parameters) {
 
   import JDBCOptions._
@@ -239,4 +260,7 @@ object JDBCOptions {
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
+  val JDBC_KEYTAB = newOption("keytab")
+  val JDBC_PRINCIPAL = newOption("principal")
+  val JDBC_TABLE_COMMENT = newOption("tableComment")
 }

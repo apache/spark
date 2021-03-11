@@ -1,0 +1,198 @@
+== Physical Plan ==
+TakeOrderedAndProject (35)
++- * HashAggregate (34)
+   +- Exchange (33)
+      +- * HashAggregate (32)
+         +- * Project (31)
+            +- * SortMergeJoin Inner (30)
+               :- * Sort (17)
+               :  +- Exchange (16)
+               :     +- * Project (15)
+               :        +- * BroadcastHashJoin Inner BuildRight (14)
+               :           :- * Project (9)
+               :           :  +- * BroadcastHashJoin Inner BuildRight (8)
+               :           :     :- * Filter (3)
+               :           :     :  +- * ColumnarToRow (2)
+               :           :     :     +- Scan parquet default.store_sales (1)
+               :           :     +- BroadcastExchange (7)
+               :           :        +- * Filter (6)
+               :           :           +- * ColumnarToRow (5)
+               :           :              +- Scan parquet default.date_dim (4)
+               :           +- BroadcastExchange (13)
+               :              +- * Filter (12)
+               :                 +- * ColumnarToRow (11)
+               :                    +- Scan parquet default.store (10)
+               +- * Sort (29)
+                  +- Exchange (28)
+                     +- * Project (27)
+                        +- * BroadcastHashJoin Inner BuildRight (26)
+                           :- * Filter (20)
+                           :  +- * ColumnarToRow (19)
+                           :     +- Scan parquet default.store_returns (18)
+                           +- BroadcastExchange (25)
+                              +- * Project (24)
+                                 +- * Filter (23)
+                                    +- * ColumnarToRow (22)
+                                       +- Scan parquet default.date_dim (21)
+
+
+(1) Scan parquet default.store_sales
+Output [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_ticket_number), IsNotNull(ss_item_sk), IsNotNull(ss_customer_sk), IsNotNull(ss_store_sk), IsNotNull(ss_sold_date_sk)]
+ReadSchema: struct<ss_sold_date_sk:int,ss_item_sk:int,ss_customer_sk:int,ss_store_sk:int,ss_ticket_number:int>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+
+(3) Filter [codegen id : 3]
+Input [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Condition : ((((isnotnull(ss_ticket_number#5) AND isnotnull(ss_item_sk#2)) AND isnotnull(ss_customer_sk#3)) AND isnotnull(ss_store_sk#4)) AND isnotnull(ss_sold_date_sk#1))
+
+(4) Scan parquet default.date_dim
+Output [1]: [d_date_sk#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [1]: [d_date_sk#6]
+
+(6) Filter [codegen id : 1]
+Input [1]: [d_date_sk#6]
+Condition : isnotnull(d_date_sk#6)
+
+(7) BroadcastExchange
+Input [1]: [d_date_sk#6]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#7]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_sold_date_sk#1]
+Right keys [1]: [d_date_sk#6]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [5]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5]
+Input [6]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5, d_date_sk#6]
+
+(10) Scan parquet default.store
+Output [11]: [s_store_sk#8, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store]
+PushedFilters: [IsNotNull(s_store_sk)]
+ReadSchema: struct<s_store_sk:int,s_store_name:string,s_company_id:int,s_street_number:string,s_street_name:string,s_street_type:string,s_suite_number:string,s_city:string,s_county:string,s_state:string,s_zip:string>
+
+(11) ColumnarToRow [codegen id : 2]
+Input [11]: [s_store_sk#8, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+
+(12) Filter [codegen id : 2]
+Input [11]: [s_store_sk#8, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Condition : isnotnull(s_store_sk#8)
+
+(13) BroadcastExchange
+Input [11]: [s_store_sk#8, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#19]
+
+(14) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ss_store_sk#4]
+Right keys [1]: [s_store_sk#8]
+Join condition: None
+
+(15) Project [codegen id : 3]
+Output [14]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Input [16]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_store_sk#4, ss_ticket_number#5, s_store_sk#8, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+
+(16) Exchange
+Input [14]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Arguments: hashpartitioning(cast(ss_ticket_number#5 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_customer_sk#3 as bigint), 5), true, [id=#20]
+
+(17) Sort [codegen id : 4]
+Input [14]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Arguments: [cast(ss_ticket_number#5 as bigint) ASC NULLS FIRST, cast(ss_item_sk#2 as bigint) ASC NULLS FIRST, cast(ss_customer_sk#3 as bigint) ASC NULLS FIRST], false, 0
+
+(18) Scan parquet default.store_returns
+Output [4]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_returns]
+PushedFilters: [IsNotNull(sr_ticket_number), IsNotNull(sr_item_sk), IsNotNull(sr_customer_sk), IsNotNull(sr_returned_date_sk)]
+ReadSchema: struct<sr_returned_date_sk:bigint,sr_item_sk:bigint,sr_customer_sk:bigint,sr_ticket_number:bigint>
+
+(19) ColumnarToRow [codegen id : 6]
+Input [4]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+
+(20) Filter [codegen id : 6]
+Input [4]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+Condition : (((isnotnull(sr_ticket_number#24) AND isnotnull(sr_item_sk#22)) AND isnotnull(sr_customer_sk#23)) AND isnotnull(sr_returned_date_sk#21))
+
+(21) Scan parquet default.date_dim
+Output [3]: [d_date_sk#25, d_year#26, d_moy#27]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,8), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
+
+(22) ColumnarToRow [codegen id : 5]
+Input [3]: [d_date_sk#25, d_year#26, d_moy#27]
+
+(23) Filter [codegen id : 5]
+Input [3]: [d_date_sk#25, d_year#26, d_moy#27]
+Condition : ((((isnotnull(d_year#26) AND isnotnull(d_moy#27)) AND (d_year#26 = 2001)) AND (d_moy#27 = 8)) AND isnotnull(d_date_sk#25))
+
+(24) Project [codegen id : 5]
+Output [1]: [d_date_sk#25]
+Input [3]: [d_date_sk#25, d_year#26, d_moy#27]
+
+(25) BroadcastExchange
+Input [1]: [d_date_sk#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#28]
+
+(26) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [sr_returned_date_sk#21]
+Right keys [1]: [cast(d_date_sk#25 as bigint)]
+Join condition: None
+
+(27) Project [codegen id : 6]
+Output [4]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+Input [5]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24, d_date_sk#25]
+
+(28) Exchange
+Input [4]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+Arguments: hashpartitioning(sr_ticket_number#24, sr_item_sk#22, sr_customer_sk#23, 5), true, [id=#29]
+
+(29) Sort [codegen id : 7]
+Input [4]: [sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+Arguments: [sr_ticket_number#24 ASC NULLS FIRST, sr_item_sk#22 ASC NULLS FIRST, sr_customer_sk#23 ASC NULLS FIRST], false, 0
+
+(30) SortMergeJoin [codegen id : 8]
+Left keys [3]: [cast(ss_ticket_number#5 as bigint), cast(ss_item_sk#2 as bigint), cast(ss_customer_sk#3 as bigint)]
+Right keys [3]: [sr_ticket_number#24, sr_item_sk#22, sr_customer_sk#23]
+Join condition: None
+
+(31) Project [codegen id : 8]
+Output [12]: [ss_sold_date_sk#1, sr_returned_date_sk#21, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Input [18]: [ss_sold_date_sk#1, ss_item_sk#2, ss_customer_sk#3, ss_ticket_number#5, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, sr_returned_date_sk#21, sr_item_sk#22, sr_customer_sk#23, sr_ticket_number#24]
+
+(32) HashAggregate [codegen id : 8]
+Input [12]: [ss_sold_date_sk#1, sr_returned_date_sk#21, s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Keys [10]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Functions [5]: [partial_sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 30) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 30) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 60)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 60) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 90)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 90) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 120)) THEN 1 ELSE 0 END as bigint)), partial_sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 120) THEN 1 ELSE 0 END as bigint))]
+Aggregate Attributes [5]: [sum#30, sum#31, sum#32, sum#33, sum#34]
+Results [15]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, sum#35, sum#36, sum#37, sum#38, sum#39]
+
+(33) Exchange
+Input [15]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, sum#35, sum#36, sum#37, sum#38, sum#39]
+Arguments: hashpartitioning(s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, 5), true, [id=#40]
+
+(34) HashAggregate [codegen id : 9]
+Input [15]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, sum#35, sum#36, sum#37, sum#38, sum#39]
+Keys [10]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18]
+Functions [5]: [sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 30) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 30) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 60)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 60) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 90)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 90) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 120)) THEN 1 ELSE 0 END as bigint)), sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 120) THEN 1 ELSE 0 END as bigint))]
+Aggregate Attributes [5]: [sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 30) THEN 1 ELSE 0 END as bigint))#41, sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 30) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 60)) THEN 1 ELSE 0 END as bigint))#42, sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 60) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 90)) THEN 1 ELSE 0 END as bigint))#43, sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 90) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 120)) THEN 1 ELSE 0 END as bigint))#44, sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 120) THEN 1 ELSE 0 END as bigint))#45]
+Results [15]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 30) THEN 1 ELSE 0 END as bigint))#41 AS 30 days #46, sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 30) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 60)) THEN 1 ELSE 0 END as bigint))#42 AS 31 - 60 days #47, sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 60) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 90)) THEN 1 ELSE 0 END as bigint))#43 AS 61 - 90 days #48, sum(cast(CASE WHEN (((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 90) AND ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) <= 120)) THEN 1 ELSE 0 END as bigint))#44 AS 91 - 120 days #49, sum(cast(CASE WHEN ((sr_returned_date_sk#21 - cast(ss_sold_date_sk#1 as bigint)) > 120) THEN 1 ELSE 0 END as bigint))#45 AS >120 days #50]
+
+(35) TakeOrderedAndProject
+Input [15]: [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, 30 days #46, 31 - 60 days #47, 61 - 90 days #48, 91 - 120 days #49, >120 days #50]
+Arguments: 100, [s_store_name#9 ASC NULLS FIRST, s_company_id#10 ASC NULLS FIRST, s_street_number#11 ASC NULLS FIRST, s_street_name#12 ASC NULLS FIRST, s_street_type#13 ASC NULLS FIRST, s_suite_number#14 ASC NULLS FIRST, s_city#15 ASC NULLS FIRST, s_county#16 ASC NULLS FIRST, s_state#17 ASC NULLS FIRST, s_zip#18 ASC NULLS FIRST], [s_store_name#9, s_company_id#10, s_street_number#11, s_street_name#12, s_street_type#13, s_suite_number#14, s_city#15, s_county#16, s_state#17, s_zip#18, 30 days #46, 31 - 60 days #47, 61 - 90 days #48, 91 - 120 days #49, >120 days #50]
+

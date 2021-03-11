@@ -114,28 +114,50 @@ case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
 }
 
 abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
-  override def getSQLConf(caseSensitive: Boolean): SQLConf =
-    super.getSQLConf(caseSensitive)
-      .copy(SQLConf.STORE_ASSIGNMENT_POLICY -> StoreAssignmentPolicy.ANSI)
-
 
   // For Ansi store assignment policy, expression `AnsiCast` is used instead of `Cast`.
   override def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
-      caseSensitive: Boolean): Unit = {
+      caseSensitive: Boolean = true): Unit = {
     val expectedPlanWithAnsiCast = expectedPlan transformAllExpressions {
       case c: Cast => AnsiCast(c.child, c.dataType, c.timeZoneId)
       case other => other
     }
-    super.checkAnalysis(inputPlan, expectedPlanWithAnsiCast, caseSensitive)
+
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
+      super.checkAnalysis(inputPlan, expectedPlanWithAnsiCast, caseSensitive)
+    }
+  }
+
+  override def assertAnalysisError(
+      inputPlan: LogicalPlan,
+      expectedErrors: Seq[String],
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.ANSI.toString) {
+      super.assertAnalysisError(inputPlan, expectedErrors, caseSensitive)
+    }
   }
 }
 
 abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
-  override def getSQLConf(caseSensitive: Boolean): SQLConf =
-    super.getSQLConf(caseSensitive)
-      .copy(SQLConf.STORE_ASSIGNMENT_POLICY -> StoreAssignmentPolicy.STRICT)
+  override def checkAnalysis(
+      inputPlan: LogicalPlan,
+      expectedPlan: LogicalPlan,
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
+      super.checkAnalysis(inputPlan, expectedPlan, caseSensitive)
+    }
+  }
+
+  override def assertAnalysisError(
+      inputPlan: LogicalPlan,
+      expectedErrors: Seq[String],
+      caseSensitive: Boolean = true): Unit = {
+    withSQLConf(SQLConf.STORE_ASSIGNMENT_POLICY.key -> StoreAssignmentPolicy.STRICT.toString) {
+      super.assertAnalysisError(inputPlan, expectedErrors, caseSensitive)
+    }
+  }
 
   test("byName: fail canWrite check") {
     val parsedPlan = byName(table, widerTable)
@@ -200,16 +222,12 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
 
 abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
 
-  protected def getSQLConf(caseSensitive: Boolean): SQLConf =
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
-
-  override def getAnalyzer(caseSensitive: Boolean): Analyzer = {
-    val conf = getSQLConf(caseSensitive)
-    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+  override def getAnalyzer: Analyzer = {
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", new URI("loc"), Map.empty),
       ignoreIfExists = false)
-    new Analyzer(catalog, conf) {
+    new Analyzer(catalog) {
       override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
   }
@@ -229,6 +247,68 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
   def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
   def byPosition(table: NamedRelation, query: LogicalPlan): LogicalPlan
+
+  test("SPARK-33136: output resolved on complex types for V2 write commands") {
+    def assertTypeCompatibility(name: String, fromType: DataType, toType: DataType): Unit = {
+      val table = TestRelation(StructType(Seq(StructField("a", toType))).toAttributes)
+      val query = TestRelation(StructType(Seq(StructField("a", fromType))).toAttributes)
+      val parsedPlan = byName(table, query)
+      assertResolved(parsedPlan)
+      checkAnalysis(parsedPlan, parsedPlan)
+    }
+
+    // The major difference between `from` and `to` is that `from` is a complex type
+    // with non-nullable, whereas `to` is same data type with flipping nullable.
+
+    // nested struct type
+    val fromStructType = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType, nullable = false),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType, nullable = false))))))
+
+    val toStructType = StructType(Array(
+      StructField("s", StringType),
+      StructField("i_nonnull", IntegerType),
+      StructField("st", StructType(Array(
+        StructField("l", LongType),
+        StructField("s_nonnull", StringType))))))
+
+    assertTypeCompatibility("struct", fromStructType, toStructType)
+
+    // array type
+    assertTypeCompatibility("array", ArrayType(LongType, containsNull = false),
+      ArrayType(LongType, containsNull = true))
+
+    // array type with struct type
+    val fromArrayWithStructType = ArrayType(
+      StructType(Array(StructField("s", StringType, nullable = false))),
+      containsNull = false)
+
+    val toArrayWithStructType = ArrayType(
+      StructType(Array(StructField("s", StringType))),
+      containsNull = true)
+
+    assertTypeCompatibility("array_struct", fromArrayWithStructType, toArrayWithStructType)
+
+    // map type
+    assertTypeCompatibility("map", MapType(IntegerType, StringType, valueContainsNull = false),
+      MapType(IntegerType, StringType, valueContainsNull = true))
+
+    // map type with struct type
+    val fromMapWithStructType = MapType(
+      IntegerType,
+      StructType(Array(StructField("s", StringType, nullable = false))),
+      valueContainsNull = false)
+
+    val toMapWithStructType = MapType(
+      IntegerType,
+      StructType(Array(StructField("s", StringType))),
+      valueContainsNull = true)
+
+    assertTypeCompatibility("map_struct", fromMapWithStructType, toMapWithStructType)
+  }
 
   test("skipSchemaResolution should still require query to be resolved") {
     val table = TestRelationAcceptAnySchema(StructType(Seq(

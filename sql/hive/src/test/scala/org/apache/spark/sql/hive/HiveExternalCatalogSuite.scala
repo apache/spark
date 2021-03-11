@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
@@ -181,41 +179,25 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       "INSERT overwrite directory \"fs://localhost/tmp\" select 1 as a"))
   }
 
-  test("SPARK-31061: alterTable should be able to change table provider") {
+  test("SPARK-31061: alterTable should be able to change table provider/hive") {
     val catalog = newBasicCatalog()
-    val parquetTable = CatalogTable(
-      identifier = TableIdentifier("parq_tbl", Some("db1")),
-      tableType = CatalogTableType.MANAGED,
-      storage = storageFormat.copy(locationUri = Some(new URI("file:/some/path"))),
-      schema = new StructType().add("col1", "int").add("col2", "string"),
-      provider = Some("parquet"))
-    catalog.createTable(parquetTable, ignoreIfExists = false)
+    Seq("parquet", "hive").foreach( provider => {
+      val tableDDL = CatalogTable(
+        identifier = TableIdentifier("parq_tbl", Some("db1")),
+        tableType = CatalogTableType.MANAGED,
+        storage = storageFormat,
+        schema = new StructType().add("col1", "int"),
+        provider = Some(provider))
+      catalog.dropTable("db1", "parq_tbl", true, true)
+      catalog.createTable(tableDDL, ignoreIfExists = false)
 
-    val rawTable = externalCatalog.getTable("db1", "parq_tbl")
-    assert(rawTable.provider === Some("parquet"))
+      val rawTable = externalCatalog.getTable("db1", "parq_tbl")
+      assert(rawTable.provider === Some(provider))
 
-    val fooTable = parquetTable.copy(provider = Some("foo"))
-    catalog.alterTable(fooTable)
-    val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
-    assert(alteredTable.provider === Some("foo"))
-  }
-
-  test("SPARK-31061: alterTable should be able to change table provider from hive") {
-    val catalog = newBasicCatalog()
-    val hiveTable = CatalogTable(
-      identifier = TableIdentifier("parq_tbl", Some("db1")),
-      tableType = CatalogTableType.MANAGED,
-      storage = storageFormat,
-      schema = new StructType().add("col1", "int").add("col2", "string"),
-      provider = Some("hive"))
-    catalog.createTable(hiveTable, ignoreIfExists = false)
-
-    val rawTable = externalCatalog.getTable("db1", "parq_tbl")
-    assert(rawTable.provider === Some("hive"))
-
-    val fooTable = rawTable.copy(provider = Some("foo"))
-    catalog.alterTable(fooTable)
-    val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
-    assert(alteredTable.provider === Some("foo"))
+      val fooTable = rawTable.copy(provider = Some("foo"))
+      catalog.alterTable(fooTable)
+      val alteredTable = externalCatalog.getTable("db1", "parq_tbl")
+      assert(alteredTable.provider === Some("foo"))
+    })
   }
 }

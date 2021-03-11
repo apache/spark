@@ -21,28 +21,39 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
-import org.scalatest.Ignore
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
 
-
+/**
+ * To run this test suite for a specific version (e.g., ibmcom/db2:11.5.4.0):
+ * {{{
+ *   DB2_DOCKER_IMAGE_NAME=ibmcom/db2:11.5.4.0
+ *     ./build/sbt -Pdocker-integration-tests
+ *     "testOnly org.apache.spark.sql.jdbc.DB2IntegrationSuite"
+ * }}}
+ */
 @DockerTest
-@Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
-    override val imageName = "lresende/db2express-c:10.5.0.5-3.10.0"
+    override val imageName = sys.env.getOrElse("DB2_DOCKER_IMAGE_NAME", "ibmcom/db2:11.5.4.0")
     override val env = Map(
       "DB2INST1_PASSWORD" -> "rootpass",
-      "LICENSE" -> "accept"
+      "LICENSE" -> "accept",
+      "DBNAME" -> "foo",
+      "ARCHIVE_LOGS" -> "false",
+      "AUTOCONFIG" -> "false"
     )
     override val usesIpc = false
     override val jdbcPort: Int = 50000
+    override val privileged = true
     override def getJdbcUrl(ip: String, port: Int): String =
       s"jdbc:db2://$ip:$port/foo:user=db2inst1;password=rootpass;retrieveMessagesFromServerOnGetMessage=true;" //scalastyle:ignore
-    override def getStartupProcessName: Option[String] = Some("db2start")
   }
+
+  override val connectionTimeout = timeout(3.minutes)
 
   override def dataPreparation(conn: Connection): Unit = {
     conn.prepareStatement("CREATE TABLE tbl (x INTEGER, y VARCHAR(8))").executeUpdate()

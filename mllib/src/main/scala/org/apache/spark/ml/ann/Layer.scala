@@ -838,7 +838,7 @@ private[ml] class FeedForwardTrainer(
    * @param data RDD of input and output vector pairs
    * @return model
    */
-  def train(data: RDD[(Vector, Vector)]): TopologyModel = {
+  def train(data: RDD[(Vector, Vector)]): (TopologyModel, Array[Double]) = {
     val w = if (getWeights == null) {
       // TODO: will make a copy if vector is a subvector of BDV (see Vectors code)
       topology.model(_seed).weights
@@ -851,9 +851,14 @@ private[ml] class FeedForwardTrainer(
     }
     val handlePersistence = trainData.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) trainData.persist(StorageLevel.MEMORY_AND_DISK)
-    val newWeights = optimizer.optimize(trainData, w)
+    val (newWeights, lossHistory) = optimizer match {
+      case lbfgs: LBFGS => lbfgs.optimizeWithLossReturned(trainData, w)
+      case sgd: GradientDescent => sgd.optimizeWithLossReturned(trainData, w)
+      case other => throw new UnsupportedOperationException(
+        s"Only LBFGS and GradientDescent are supported but got ${other.getClass}.")
+    }
     if (handlePersistence) trainData.unpersist()
-    topology.model(newWeights)
+    (topology.model(newWeights), lossHistory)
   }
 
 }

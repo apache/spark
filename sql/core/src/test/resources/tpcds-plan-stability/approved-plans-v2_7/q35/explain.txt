@@ -1,0 +1,274 @@
+== Physical Plan ==
+TakeOrderedAndProject (49)
++- * HashAggregate (48)
+   +- Exchange (47)
+      +- * HashAggregate (46)
+         +- * Project (45)
+            +- * BroadcastHashJoin Inner BuildRight (44)
+               :- * Project (39)
+               :  +- * BroadcastHashJoin Inner BuildRight (38)
+               :     :- * Project (33)
+               :     :  +- * Filter (32)
+               :     :     +- * BroadcastHashJoin ExistenceJoin(exists#1) BuildRight (31)
+               :     :        :- * BroadcastHashJoin ExistenceJoin(exists#2) BuildRight (23)
+               :     :        :  :- * BroadcastHashJoin LeftSemi BuildRight (15)
+               :     :        :  :  :- * Filter (3)
+               :     :        :  :  :  +- * ColumnarToRow (2)
+               :     :        :  :  :     +- Scan parquet default.customer (1)
+               :     :        :  :  +- BroadcastExchange (14)
+               :     :        :  :     +- * Project (13)
+               :     :        :  :        +- * BroadcastHashJoin Inner BuildRight (12)
+               :     :        :  :           :- * Filter (6)
+               :     :        :  :           :  +- * ColumnarToRow (5)
+               :     :        :  :           :     +- Scan parquet default.store_sales (4)
+               :     :        :  :           +- BroadcastExchange (11)
+               :     :        :  :              +- * Project (10)
+               :     :        :  :                 +- * Filter (9)
+               :     :        :  :                    +- * ColumnarToRow (8)
+               :     :        :  :                       +- Scan parquet default.date_dim (7)
+               :     :        :  +- BroadcastExchange (22)
+               :     :        :     +- * Project (21)
+               :     :        :        +- * BroadcastHashJoin Inner BuildRight (20)
+               :     :        :           :- * Filter (18)
+               :     :        :           :  +- * ColumnarToRow (17)
+               :     :        :           :     +- Scan parquet default.web_sales (16)
+               :     :        :           +- ReusedExchange (19)
+               :     :        +- BroadcastExchange (30)
+               :     :           +- * Project (29)
+               :     :              +- * BroadcastHashJoin Inner BuildRight (28)
+               :     :                 :- * Filter (26)
+               :     :                 :  +- * ColumnarToRow (25)
+               :     :                 :     +- Scan parquet default.catalog_sales (24)
+               :     :                 +- ReusedExchange (27)
+               :     +- BroadcastExchange (37)
+               :        +- * Filter (36)
+               :           +- * ColumnarToRow (35)
+               :              +- Scan parquet default.customer_address (34)
+               +- BroadcastExchange (43)
+                  +- * Filter (42)
+                     +- * ColumnarToRow (41)
+                        +- Scan parquet default.customer_demographics (40)
+
+
+(1) Scan parquet default.customer
+Output [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_current_addr_sk), IsNotNull(c_current_cdemo_sk)]
+ReadSchema: struct<c_customer_sk:int,c_current_cdemo_sk:int,c_current_addr_sk:int>
+
+(2) ColumnarToRow [codegen id : 9]
+Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+
+(3) Filter [codegen id : 9]
+Input [3]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5]
+Condition : (isnotnull(c_current_addr_sk#5) AND isnotnull(c_current_cdemo_sk#4))
+
+(4) Scan parquet default.store_sales
+Output [2]: [ss_sold_date_sk#6, ss_customer_sk#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/store_sales]
+PushedFilters: [IsNotNull(ss_sold_date_sk)]
+ReadSchema: struct<ss_sold_date_sk:int,ss_customer_sk:int>
+
+(5) ColumnarToRow [codegen id : 2]
+Input [2]: [ss_sold_date_sk#6, ss_customer_sk#7]
+
+(6) Filter [codegen id : 2]
+Input [2]: [ss_sold_date_sk#6, ss_customer_sk#7]
+Condition : isnotnull(ss_sold_date_sk#6)
+
+(7) Scan parquet default.date_dim
+Output [3]: [d_date_sk#8, d_year#9, d_qoy#10]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_year), IsNotNull(d_qoy), EqualTo(d_year,2002), LessThan(d_qoy,4), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
+
+(8) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#8, d_year#9, d_qoy#10]
+
+(9) Filter [codegen id : 1]
+Input [3]: [d_date_sk#8, d_year#9, d_qoy#10]
+Condition : ((((isnotnull(d_year#9) AND isnotnull(d_qoy#10)) AND (d_year#9 = 2002)) AND (d_qoy#10 < 4)) AND isnotnull(d_date_sk#8))
+
+(10) Project [codegen id : 1]
+Output [1]: [d_date_sk#8]
+Input [3]: [d_date_sk#8, d_year#9, d_qoy#10]
+
+(11) BroadcastExchange
+Input [1]: [d_date_sk#8]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#11]
+
+(12) BroadcastHashJoin [codegen id : 2]
+Left keys [1]: [ss_sold_date_sk#6]
+Right keys [1]: [d_date_sk#8]
+Join condition: None
+
+(13) Project [codegen id : 2]
+Output [1]: [ss_customer_sk#7]
+Input [3]: [ss_sold_date_sk#6, ss_customer_sk#7, d_date_sk#8]
+
+(14) BroadcastExchange
+Input [1]: [ss_customer_sk#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#12]
+
+(15) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_customer_sk#3]
+Right keys [1]: [ss_customer_sk#7]
+Join condition: None
+
+(16) Scan parquet default.web_sales
+Output [2]: [ws_sold_date_sk#13, ws_bill_customer_sk#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+PushedFilters: [IsNotNull(ws_sold_date_sk)]
+ReadSchema: struct<ws_sold_date_sk:int,ws_bill_customer_sk:int>
+
+(17) ColumnarToRow [codegen id : 4]
+Input [2]: [ws_sold_date_sk#13, ws_bill_customer_sk#14]
+
+(18) Filter [codegen id : 4]
+Input [2]: [ws_sold_date_sk#13, ws_bill_customer_sk#14]
+Condition : isnotnull(ws_sold_date_sk#13)
+
+(19) ReusedExchange [Reuses operator id: 11]
+Output [1]: [d_date_sk#8]
+
+(20) BroadcastHashJoin [codegen id : 4]
+Left keys [1]: [ws_sold_date_sk#13]
+Right keys [1]: [d_date_sk#8]
+Join condition: None
+
+(21) Project [codegen id : 4]
+Output [1]: [ws_bill_customer_sk#14]
+Input [3]: [ws_sold_date_sk#13, ws_bill_customer_sk#14, d_date_sk#8]
+
+(22) BroadcastExchange
+Input [1]: [ws_bill_customer_sk#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+
+(23) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_customer_sk#3]
+Right keys [1]: [ws_bill_customer_sk#14]
+Join condition: None
+
+(24) Scan parquet default.catalog_sales
+Output [2]: [cs_sold_date_sk#16, cs_ship_customer_sk#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/catalog_sales]
+PushedFilters: [IsNotNull(cs_sold_date_sk)]
+ReadSchema: struct<cs_sold_date_sk:int,cs_ship_customer_sk:int>
+
+(25) ColumnarToRow [codegen id : 6]
+Input [2]: [cs_sold_date_sk#16, cs_ship_customer_sk#17]
+
+(26) Filter [codegen id : 6]
+Input [2]: [cs_sold_date_sk#16, cs_ship_customer_sk#17]
+Condition : isnotnull(cs_sold_date_sk#16)
+
+(27) ReusedExchange [Reuses operator id: 11]
+Output [1]: [d_date_sk#8]
+
+(28) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cs_sold_date_sk#16]
+Right keys [1]: [d_date_sk#8]
+Join condition: None
+
+(29) Project [codegen id : 6]
+Output [1]: [cs_ship_customer_sk#17]
+Input [3]: [cs_sold_date_sk#16, cs_ship_customer_sk#17, d_date_sk#8]
+
+(30) BroadcastExchange
+Input [1]: [cs_ship_customer_sk#17]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+
+(31) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_customer_sk#3]
+Right keys [1]: [cs_ship_customer_sk#17]
+Join condition: None
+
+(32) Filter [codegen id : 9]
+Input [5]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5, exists#2, exists#1]
+Condition : (exists#2 OR exists#1)
+
+(33) Project [codegen id : 9]
+Output [2]: [c_current_cdemo_sk#4, c_current_addr_sk#5]
+Input [5]: [c_customer_sk#3, c_current_cdemo_sk#4, c_current_addr_sk#5, exists#2, exists#1]
+
+(34) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#19, ca_state#20]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
+
+(35) ColumnarToRow [codegen id : 7]
+Input [2]: [ca_address_sk#19, ca_state#20]
+
+(36) Filter [codegen id : 7]
+Input [2]: [ca_address_sk#19, ca_state#20]
+Condition : isnotnull(ca_address_sk#19)
+
+(37) BroadcastExchange
+Input [2]: [ca_address_sk#19, ca_state#20]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#21]
+
+(38) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_current_addr_sk#5]
+Right keys [1]: [ca_address_sk#19]
+Join condition: None
+
+(39) Project [codegen id : 9]
+Output [2]: [c_current_cdemo_sk#4, ca_state#20]
+Input [4]: [c_current_cdemo_sk#4, c_current_addr_sk#5, ca_address_sk#19, ca_state#20]
+
+(40) Scan parquet default.customer_demographics
+Output [6]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_demographics]
+PushedFilters: [IsNotNull(cd_demo_sk)]
+ReadSchema: struct<cd_demo_sk:int,cd_gender:string,cd_marital_status:string,cd_dep_count:int,cd_dep_employed_count:int,cd_dep_college_count:int>
+
+(41) ColumnarToRow [codegen id : 8]
+Input [6]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+
+(42) Filter [codegen id : 8]
+Input [6]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Condition : isnotnull(cd_demo_sk#22)
+
+(43) BroadcastExchange
+Input [6]: [cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#28]
+
+(44) BroadcastHashJoin [codegen id : 9]
+Left keys [1]: [c_current_cdemo_sk#4]
+Right keys [1]: [cd_demo_sk#22]
+Join condition: None
+
+(45) Project [codegen id : 9]
+Output [6]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Input [8]: [c_current_cdemo_sk#4, ca_state#20, cd_demo_sk#22, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+
+(46) HashAggregate [codegen id : 9]
+Input [6]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Keys [6]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Functions [10]: [partial_count(1), partial_avg(cast(cd_dep_count#25 as bigint)), partial_max(cd_dep_count#25), partial_sum(cast(cd_dep_count#25 as bigint)), partial_avg(cast(cd_dep_employed_count#26 as bigint)), partial_max(cd_dep_employed_count#26), partial_sum(cast(cd_dep_employed_count#26 as bigint)), partial_avg(cast(cd_dep_college_count#27 as bigint)), partial_max(cd_dep_college_count#27), partial_sum(cast(cd_dep_college_count#27 as bigint))]
+Aggregate Attributes [13]: [count#29, sum#30, count#31, max#32, sum#33, sum#34, count#35, max#36, sum#37, sum#38, count#39, max#40, sum#41]
+Results [19]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, count#42, sum#43, count#44, max#45, sum#46, sum#47, count#48, max#49, sum#50, sum#51, count#52, max#53, sum#54]
+
+(47) Exchange
+Input [19]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, count#42, sum#43, count#44, max#45, sum#46, sum#47, count#48, max#49, sum#50, sum#51, count#52, max#53, sum#54]
+Arguments: hashpartitioning(ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, 5), true, [id=#55]
+
+(48) HashAggregate [codegen id : 10]
+Input [19]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27, count#42, sum#43, count#44, max#45, sum#46, sum#47, count#48, max#49, sum#50, sum#51, count#52, max#53, sum#54]
+Keys [6]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cd_dep_employed_count#26, cd_dep_college_count#27]
+Functions [10]: [count(1), avg(cast(cd_dep_count#25 as bigint)), max(cd_dep_count#25), sum(cast(cd_dep_count#25 as bigint)), avg(cast(cd_dep_employed_count#26 as bigint)), max(cd_dep_employed_count#26), sum(cast(cd_dep_employed_count#26 as bigint)), avg(cast(cd_dep_college_count#27 as bigint)), max(cd_dep_college_count#27), sum(cast(cd_dep_college_count#27 as bigint))]
+Aggregate Attributes [10]: [count(1)#56, avg(cast(cd_dep_count#25 as bigint))#57, max(cd_dep_count#25)#58, sum(cast(cd_dep_count#25 as bigint))#59, avg(cast(cd_dep_employed_count#26 as bigint))#60, max(cd_dep_employed_count#26)#61, sum(cast(cd_dep_employed_count#26 as bigint))#62, avg(cast(cd_dep_college_count#27 as bigint))#63, max(cd_dep_college_count#27)#64, sum(cast(cd_dep_college_count#27 as bigint))#65]
+Results [18]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, count(1)#56 AS cnt1#66, avg(cast(cd_dep_count#25 as bigint))#57 AS avg(cd_dep_count)#67, max(cd_dep_count#25)#58 AS max(cd_dep_count)#68, sum(cast(cd_dep_count#25 as bigint))#59 AS sum(cd_dep_count)#69, cd_dep_employed_count#26, count(1)#56 AS cnt2#70, avg(cast(cd_dep_employed_count#26 as bigint))#60 AS avg(cd_dep_employed_count)#71, max(cd_dep_employed_count#26)#61 AS max(cd_dep_employed_count)#72, sum(cast(cd_dep_employed_count#26 as bigint))#62 AS sum(cd_dep_employed_count)#73, cd_dep_college_count#27, count(1)#56 AS cnt3#74, avg(cast(cd_dep_college_count#27 as bigint))#63 AS avg(cd_dep_college_count)#75, max(cd_dep_college_count#27)#64 AS max(cd_dep_college_count)#76, sum(cast(cd_dep_college_count#27 as bigint))#65 AS sum(cd_dep_college_count)#77]
+
+(49) TakeOrderedAndProject
+Input [18]: [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cnt1#66, avg(cd_dep_count)#67, max(cd_dep_count)#68, sum(cd_dep_count)#69, cd_dep_employed_count#26, cnt2#70, avg(cd_dep_employed_count)#71, max(cd_dep_employed_count)#72, sum(cd_dep_employed_count)#73, cd_dep_college_count#27, cnt3#74, avg(cd_dep_college_count)#75, max(cd_dep_college_count)#76, sum(cd_dep_college_count)#77]
+Arguments: 100, [ca_state#20 ASC NULLS FIRST, cd_gender#23 ASC NULLS FIRST, cd_marital_status#24 ASC NULLS FIRST, cd_dep_count#25 ASC NULLS FIRST, cd_dep_employed_count#26 ASC NULLS FIRST, cd_dep_college_count#27 ASC NULLS FIRST], [ca_state#20, cd_gender#23, cd_marital_status#24, cd_dep_count#25, cnt1#66, avg(cd_dep_count)#67, max(cd_dep_count)#68, sum(cd_dep_count)#69, cd_dep_employed_count#26, cnt2#70, avg(cd_dep_employed_count)#71, max(cd_dep_employed_count)#72, sum(cd_dep_employed_count)#73, cd_dep_college_count#27, cnt3#74, avg(cd_dep_college_count)#75, max(cd_dep_college_count)#76, sum(cd_dep_college_count)#77]
+

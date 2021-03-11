@@ -55,7 +55,7 @@ case class DescribeNamespaceExec(
         rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
     }
-    rows
+    rows.toSeq
   }
 
   private def toCatalystRow(strs: String*): InternalRow = {

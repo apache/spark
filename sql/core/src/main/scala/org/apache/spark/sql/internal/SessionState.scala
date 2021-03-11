@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.streaming.StreamingQueryManager
-import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListener}
+import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]].
@@ -52,7 +52,8 @@ import org.apache.spark.sql.util.{ExecutionListenerManager, QueryExecutionListen
  * @param planner Planner that converts optimized logical plans to physical plans.
  * @param streamingQueryManagerBuilder A function to create a streaming query manager to
  *                                     start and stop streaming queries.
- * @param listenerManager Interface to register custom [[QueryExecutionListener]]s.
+ * @param listenerManager Interface to register custominternal/SessionState.scala
+ *                        [[org.apache.spark.sql.util.QueryExecutionListener]]s.
  * @param resourceLoaderBuilder a function to create a session shared resource loader to load JARs,
  *                              files, etc.
  * @param createQueryExecution Function used to create QueryExecution objects.
@@ -136,9 +137,10 @@ private[sql] object SessionState {
 @Unstable
 class SessionStateBuilder(
     session: SparkSession,
-    parentState: Option[SessionState] = None)
-  extends BaseSessionStateBuilder(session, parentState) {
-  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _)
+    parentState: Option[SessionState],
+    options: Map[String, String])
+  extends BaseSessionStateBuilder(session, parentState, options) {
+  override protected def newBuilder: NewBuilder = new SessionStateBuilder(_, _, Map.empty)
 }
 
 /**

@@ -569,25 +569,28 @@ struct<max(q1):bigint,max(q2):bigint>
 -- !query
 select bigint('9223372036854775800') / bigint('0')
 -- !query schema
-struct<(CAST(CAST(9223372036854775800 AS BIGINT) AS DOUBLE) / CAST(CAST(0 AS BIGINT) AS DOUBLE)):double>
+struct<>
 -- !query output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 select bigint('-9223372036854775808') / smallint('0')
 -- !query schema
-struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(0 AS SMALLINT) AS DOUBLE)):double>
+struct<>
 -- !query output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 select smallint('100') / bigint('0')
 -- !query schema
-struct<(CAST(CAST(100 AS SMALLINT) AS DOUBLE) / CAST(CAST(0 AS BIGINT) AS DOUBLE)):double>
+struct<>
 -- !query output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query

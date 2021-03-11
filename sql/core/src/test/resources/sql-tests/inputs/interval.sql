@@ -98,7 +98,7 @@ select interval 30 days days days;
 -- Interval year-month arithmetic
 
 create temporary view interval_arithmetic as
-  select CAST(dateval AS date), CAST(tsval AS timestamp) from values
+  select CAST(dateval AS date), CAST(tsval AS timestamp), dateval as strval from values
     ('2012-01-01', '2012-01-01')
     as interval_arithmetic(dateval, tsval);
 
@@ -149,6 +149,17 @@ select
   interval '99 11:22:33.123456789' day to second + tsval
 from interval_arithmetic;
 
+-- datetimes(in string representation) + intervals
+select
+  strval,
+  strval - interval '99 11:22:33.123456789' day to second,
+  strval - interval '-99 11:22:33.123456789' day to second,
+  strval + interval '99 11:22:33.123456789' day to second,
+  strval + interval '-99 11:22:33.123456789' day to second,
+  -interval '99 11:22:33.123456789' day to second + strval,
+  interval '99 11:22:33.123456789' day to second + strval
+from interval_arithmetic;
+
 select
   interval '99 11:22:33.123456789' day to second + interval '10 9:8:7.123456789' day to second,
   interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
@@ -165,6 +176,9 @@ select interval '-\t2-2\t' year to month;
 select interval '\n0 12:34:46.789\t' day to second;
 select interval '\n-\t10\t 12:34:46.789\t' day to second;
 select interval '中文 interval 1 day';
+select interval 'interval中文 1 day';
+select interval 'interval 1中文day';
+
 
 -- interval overflow if (ansi) exception else NULL
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);

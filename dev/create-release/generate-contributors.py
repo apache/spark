@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -22,7 +22,9 @@ import os
 import re
 import sys
 
-from releaseutils import *
+from releaseutils import tag_exists, raw_input, get_commits, yesOrNoPrompt, get_date, \
+    is_valid_author, capitalize_author, JIRA, find_components, translate_issue_type, \
+    translate_component, CORE_COMPONENT, contributors_file_name, nice_join
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")

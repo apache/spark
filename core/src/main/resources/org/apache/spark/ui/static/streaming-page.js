@@ -43,7 +43,7 @@ function showBootstrapTooltip(node, text) {
 
 // Hide the tooltip for "node"
 function hideBootstrapTooltip(node) {
-    $(node).tooltip("destroy");
+    $(node).tooltip("dispose");
 }
 
 // Return the function to scroll to the corresponding

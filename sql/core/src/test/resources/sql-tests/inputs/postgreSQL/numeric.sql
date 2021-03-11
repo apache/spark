@@ -754,22 +754,22 @@ DROP TABLE ceil_floor_round;
 -- 	round((2.5 * 10 ^ i)::numeric, -i)
 -- FROM generate_series(-5,5) AS t(i);
 
--- [SPARK-21117] Built-in SQL Function Support - WIDTH_BUCKET
 -- Testing for width_bucket(). For convenience, we test both the
 -- numeric and float8 versions of the function in this file.
 
 -- errors
--- SELECT width_bucket(5.0, 3.0, 4.0, 0);
--- SELECT width_bucket(5.0, 3.0, 4.0, -5);
--- SELECT width_bucket(3.5, 3.0, 3.0, 888);
--- SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
--- SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
--- SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
--- SELECT width_bucket('NaN', 3.0, 4.0, 888);
--- SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+SELECT width_bucket(double(5.0), double(3.0), double(4.0), 0);
+SELECT width_bucket(double(5.0), double(3.0), double(4.0), -5);
+SELECT width_bucket(double(3.5), double(3.0), double(3.0), 888);
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+SELECT width_bucket(double(0), 'NaN', double(4.0), 888);
 
 -- normal operation
 -- CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+CREATE TABLE width_bucket_test (operand_num decimal(30,15), operand_f8 double) USING parquet;
 
 -- COPY width_bucket_test (operand_num) FROM stdin;
 -- -5.2
@@ -795,28 +795,50 @@ DROP TABLE ceil_floor_round;
 
 -- UPDATE width_bucket_test SET operand_f8 = operand_num::float8;
 
--- SELECT
---     operand_num,
---     width_bucket(operand_num, 0, 10, 5) AS wb_1,
---     width_bucket(operand_f8, 0, 10, 5) AS wb_1f,
---     width_bucket(operand_num, 10, 0, 5) AS wb_2,
---     width_bucket(operand_f8, 10, 0, 5) AS wb_2f,
---     width_bucket(operand_num, 2, 8, 4) AS wb_3,
---     width_bucket(operand_f8, 2, 8, 4) AS wb_3f,
---     width_bucket(operand_num, 5.0, 5.5, 20) AS wb_4,
---     width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
---     width_bucket(operand_num, -25, 25, 10) AS wb_5,
---     width_bucket(operand_f8, -25, 25, 10) AS wb_5f
---     FROM width_bucket_test;
+INSERT INTO width_bucket_test VALUES
+    (-5.2, -5.2),
+    (-0.0000000001, -0.0000000001),
+    (0.000000000001, 0.000000000001),
+    (1, 1),
+    (1.99999999999999, 1.99999999999999),
+    (2, 2),
+    (2.00000000000001, 2.00000000000001),
+    (3, 3),
+    (4, 4),
+    (4.5, 4.5),
+    (5, 5),
+    (5.5, 5.5),
+    (6, 6),
+    (7, 7),
+    (8, 8),
+    (9, 9),
+    (9.99999999999999, 9.99999999999999),
+    (10, 10),
+    (10.0000000000001, 10.0000000000001);
+
+SELECT
+    operand_num,
+    width_bucket(operand_num, 0, 10, 5) AS wb_1,
+    width_bucket(operand_f8, 0, 10, 5) AS wb_1f,
+    width_bucket(operand_num, 10, 0, 5) AS wb_2,
+    width_bucket(operand_f8, 10, 0, 5) AS wb_2f,
+    width_bucket(operand_num, 2, 8, 4) AS wb_3,
+    width_bucket(operand_f8, 2, 8, 4) AS wb_3f,
+    width_bucket(operand_num, 5.0, 5.5, 20) AS wb_4,
+    width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
+    width_bucket(operand_num, -25, 25, 10) AS wb_5,
+    width_bucket(operand_f8, -25, 25, 10) AS wb_5f
+    FROM width_bucket_test
+    ORDER BY operand_num ASC;
 
 -- for float8 only, check positive and negative infinity: we require
 -- finite bucket bounds, but allow an infinite operand
--- SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
--- SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
--- SELECT width_bucket('Infinity'::float8, 1, 10, 10),
---        width_bucket('-Infinity'::float8, 1, 10, 10);
+SELECT width_bucket(double(0.0), double('Infinity'), 5, 10); -- error
+SELECT width_bucket(double(0.0), 5, double('-Infinity'), 20); -- error
+SELECT width_bucket(double('Infinity'), 1, 10, 10),
+       width_bucket(double('-Infinity'), 1, 10, 10);
 
--- DROP TABLE width_bucket_test;
+DROP TABLE width_bucket_test;
 
 -- [SPARK-28137] Missing Data Type Formatting Functions: TO_CHAR
 -- TO_CHAR()

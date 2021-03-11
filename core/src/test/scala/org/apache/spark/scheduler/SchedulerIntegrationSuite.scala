@@ -36,6 +36,7 @@ import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_REVIVE_INTERVAL
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
@@ -43,7 +44,7 @@ import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
  * TaskSetManagers.
  *
  * Test cases are configured by providing a set of jobs to submit, and then simulating interaction
- * with spark's executors via a mocked backend (eg., task completion, task failure, executors
+ * with spark's executors via a mocked backend (e.g., task completion, task failure, executors
  * disconnecting, etc.).
  */
 abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends SparkFunSuite
@@ -371,7 +372,7 @@ private[spark] abstract class MockBackend(
 
   /**
    * Accessed by both scheduling and backend thread, so should be protected by this.
-   * Most likely the only thing that needs to be protected are the inidividual ExecutorTaskStatus,
+   * Most likely the only thing that needs to be protected are the individual ExecutorTaskStatus,
    * but for simplicity in this mock just lock the whole backend.
    */
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
@@ -385,7 +386,7 @@ private[spark] abstract class MockBackend(
     }.toIndexedSeq
   }
 
-  override def maxNumConcurrentTasks(): Int = 0
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = 0
 
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks
@@ -406,9 +407,9 @@ private[spark] abstract class MockBackend(
         (taskDescription, task)
       }
       newTasks.foreach { case (taskDescription, _) =>
+        freeCores -= taskScheduler.CPUS_PER_TASK
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
-      freeCores -= newTasks.size * taskScheduler.CPUS_PER_TASK
       assignedTasksWaitingToRun ++= newTasks
     }
   }
@@ -534,8 +535,8 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    */
   testScheduler("super simple job") {
     def runBackend(): Unit = {
-      val (taskDescripition, _) = backend.beginTask()
-      backend.taskSuccess(taskDescripition, 42)
+      val (taskDescription, _) = backend.beginTask()
+      backend.taskSuccess(taskDescription, 42)
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)

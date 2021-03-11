@@ -41,13 +41,28 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * @param jobId the job's or stage's id
  * @param path the job's output path, or null if committer acts as a noop
  * @param dynamicPartitionOverwrite If true, Spark will overwrite partition directories at runtime
- *                                  dynamically, i.e., we first write files under a staging
- *                                  directory with partition path, e.g.
- *                                  /path/to/staging/a=1/b=1/xxx.parquet. When committing the job,
- *                                  we first clean up the corresponding partition directories at
- *                                  destination path, e.g. /path/to/destination/a=1/b=1, and move
- *                                  files from staging directory to the corresponding partition
- *                                  directories under destination path.
+ *                                  dynamically. Suppose final path is /path/to/outputPath, output
+ *                                  path of [[FileOutputCommitter]] is an intermediate path, e.g.
+ *                                  /path/to/outputPath/.spark-staging-{jobId}, which is a staging
+ *                                  directory. Task attempts firstly write files under the
+ *                                  intermediate path, e.g.
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/_temporary/
+ *                                  {appAttemptId}/_temporary/{taskAttemptId}/a=1/b=1/xxx.parquet.
+ *
+ *                                  1. When [[FileOutputCommitter]] algorithm version set to 1,
+ *                                  we firstly move task attempt output files to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/_temporary/
+ *                                  {appAttemptId}/{taskId}/a=1/b=1,
+ *                                  then move them to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
+ *                                  2. When [[FileOutputCommitter]] algorithm version set to 2,
+ *                                  committing tasks directly move task attempt output files to
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1.
+ *
+ *                                  At the end of committing job, we move output files from
+ *                                  intermediate path to final path, e.g., move files from
+ *                                  /path/to/outputPath/.spark-staging-{jobId}/a=1/b=1
+ *                                  to /path/to/outputPath/a=1/b=1
  */
 class HadoopMapReduceCommitProtocol(
     jobId: String,
@@ -89,7 +104,7 @@ class HadoopMapReduceCommitProtocol(
    * The staging directory of this write job. Spark uses it to deal with files with absolute output
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
-  private def stagingDir = new Path(path, ".spark-staging-" + jobId)
+  protected def stagingDir = getStagingDir(path, jobId)
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
@@ -106,13 +121,13 @@ class HadoopMapReduceCommitProtocol(
     val filename = getFilename(taskContext, ext)
 
     val stagingDir: Path = committer match {
-      case _ if dynamicPartitionOverwrite =>
-        assert(dir.isDefined,
-          "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
-        partitionPaths += dir.get
-        this.stagingDir
       // For FileOutputCommitter it has its own staging path called "work path".
       case f: FileOutputCommitter =>
+        if (dynamicPartitionOverwrite) {
+          assert(dir.isDefined,
+            "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+          partitionPaths += dir.get
+        }
         new Path(Option(f.getWorkPath).map(_.toString).getOrElse(path))
       case _ => new Path(path)
     }
