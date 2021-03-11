@@ -522,29 +522,29 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   private def testAddMonths(dataType: DataType): Unit = {
-    def addMonth(date: Literal, months: Any): AddMonthsBase = dataType match {
+    def addMonths(date: Literal, months: Any): AddMonthsBase = dataType match {
       case IntegerType => AddMonths(date, Literal.create(months, dataType))
       case YearMonthIntervalType =>
         val period = if (months == null) null else Period.ofMonths(months.asInstanceOf[Int])
         DateAddYMInterval(date, Literal.create(period, dataType))
     }
-    checkEvaluation(addMonth(Literal(Date.valueOf("2015-01-30")), 1),
+    checkEvaluation(addMonths(Literal(Date.valueOf("2015-01-30")), 1),
       DateTimeUtils.fromJavaDate(Date.valueOf("2015-02-28")))
-    checkEvaluation(addMonth(Literal(Date.valueOf("2016-03-30")), -1),
+    checkEvaluation(addMonths(Literal(Date.valueOf("2016-03-30")), -1),
       DateTimeUtils.fromJavaDate(Date.valueOf("2016-02-29")))
     checkEvaluation(
-      addMonth(Literal(Date.valueOf("2015-01-30")), null),
+      addMonths(Literal(Date.valueOf("2015-01-30")), null),
       null)
-    checkEvaluation(addMonth(Literal.create(null, DateType), 1), null)
-    checkEvaluation(addMonth(Literal.create(null, DateType), null),
+    checkEvaluation(addMonths(Literal.create(null, DateType), 1), null)
+    checkEvaluation(addMonths(Literal.create(null, DateType), null),
       null)
     // Valid range of DateType is [0001-01-01, 9999-12-31]
     val maxMonthInterval = 10000 * 12
     checkEvaluation(
-      addMonth(Literal(LocalDate.parse("0001-01-01")), maxMonthInterval),
+      addMonths(Literal(LocalDate.parse("0001-01-01")), maxMonthInterval),
       LocalDate.of(10001, 1, 1).toEpochDay.toInt)
     checkEvaluation(
-      addMonth(Literal(Date.valueOf("9999-12-31")), -1 * maxMonthInterval), -719529)
+      addMonths(Literal(Date.valueOf("9999-12-31")), -1 * maxMonthInterval), -719529)
   }
 
   test("add_months") {
