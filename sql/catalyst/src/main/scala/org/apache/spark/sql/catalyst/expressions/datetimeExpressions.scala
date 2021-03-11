@@ -1471,6 +1471,22 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   override val prettyName: String = "to_utc_timestamp"
 }
 
+abstract class AddMonthsBase extends BinaryExpression with ImplicitCastInputTypes
+  with NullIntolerant {
+  override def dataType: DataType = DateType
+
+  override def nullSafeEval(start: Any, months: Any): Any = {
+    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, (sd, m) => {
+      s"""$dtu.dateAddMonths($sd, $m)"""
+    })
+  }
+}
+
 /**
  * Returns the date that is num_months after start_date.
  */
@@ -1485,28 +1501,24 @@ case class ToUTCTimestamp(left: Expression, right: Expression) extends UTCTimest
   group = "datetime_funcs",
   since = "1.5.0")
 // scalastyle:on line.size.limit
-case class AddMonths(startDate: Expression, numMonths: Expression)
-  extends BinaryExpression with ImplicitCastInputTypes with NullIntolerant {
-
+case class AddMonths(startDate: Expression, numMonths: Expression) extends AddMonthsBase {
   override def left: Expression = startDate
   override def right: Expression = numMonths
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, IntegerType)
 
-  override def dataType: DataType = DateType
-
-  override def nullSafeEval(start: Any, months: Any): Any = {
-    DateTimeUtils.dateAddMonths(start.asInstanceOf[Int], months.asInstanceOf[Int])
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-    defineCodeGen(ctx, ev, (sd, m) => {
-      s"""$dtu.dateAddMonths($sd, $m)"""
-    })
-  }
-
   override def prettyName: String = "add_months"
+}
+
+// Adds the year-month interval to the date
+case class DateAddYMInterval(date: Expression, interval: Expression) extends AddMonthsBase {
+  override def left: Expression = date
+  override def right: Expression = interval
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType, YearMonthIntervalType)
+
+  override def toString: String = s"$left + $right"
+  override def sql: String = s"${left.sql} + ${right.sql}"
 }
 
 /**
