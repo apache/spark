@@ -558,7 +558,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-34721: add year-month interval to date") {
+  test("SPARK-34721: add a year-month interval to a date") {
     testAddMonths(YearMonthIntervalType)
     // Test evaluation results between Interpreted mode and Codegen mode
     forAll (
