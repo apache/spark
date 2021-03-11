@@ -474,7 +474,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case SetTableLocation(ResolvedV1TableIdentifier(ident), partitionSpec, location) =>
       AlterTableSetLocationCommand(ident.asTableIdentifier, partitionSpec, location)
 
-    case AlterViewAs(ResolvedView(ident, _), originalText, query) =>
+    case AlterViewAs(ResolvedView(ident, _), originalText, query) if query.resolved =>
       AlterViewAsCommand(
         ident.asTableIdentifier,
         originalText,
