@@ -579,10 +579,12 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   }
 
   test("SPARK-34677: exact add and subtract of day-time and year-month intervals") {
-    checkExceptionInExpression[ArithmeticException](
-      UnaryMinus(Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType)),
-      "overflow")
     Seq(true, false).foreach { failOnError =>
+      checkExceptionInExpression[ArithmeticException](
+        UnaryMinus(
+          Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
+          failOnError),
+        "overflow")
       checkExceptionInExpression[ArithmeticException](
         Subtract(
           Literal.create(Period.ofMonths(Int.MinValue), YearMonthIntervalType),
