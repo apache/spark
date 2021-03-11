@@ -3977,6 +3977,8 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>
           Seq(Literal(e.name), e)
+        case Seq(NamePlaceholder, e: ExtractValue) if e.resolved && e.name.isDefined =>
+          Seq(Literal(e.name.get), e)
         case kv =>
           kv
       }
