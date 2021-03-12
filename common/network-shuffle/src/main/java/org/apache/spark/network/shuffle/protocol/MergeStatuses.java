@@ -19,6 +19,7 @@ package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Arrays;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
 import org.roaringbitmap.RoaringBitmap;
@@ -76,7 +77,7 @@ public class MergeStatuses extends BlockTransferMessage {
 
   @Override
   public String toString() {
-    return Objects.toStringHelper(this)
+    return MoreObjects.toStringHelper(this)
       .add("shuffleId", shuffleId)
       .add("reduceId size", reduceIds.length)
       .toString();
