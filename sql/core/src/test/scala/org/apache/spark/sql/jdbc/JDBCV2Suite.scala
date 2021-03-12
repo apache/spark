@@ -145,7 +145,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
 
   test("show tables") {
     checkAnswer(sql("SHOW TABLES IN h2.test"),
-      Seq(Row("test", "people", false), Row("test", "empty_table", false)))
+      Seq(Row("test", "people", false, "TABLE"), Row("test", "empty_table", false, "TABLE")))
   }
 
   test("SQL API: create table as select") {

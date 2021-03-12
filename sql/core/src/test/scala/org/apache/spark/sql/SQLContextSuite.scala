@@ -88,11 +88,11 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
       sqlContext.tables().filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("", "listtablessuitetable", true) :: Nil)
+      Row("", "listtablessuitetable", true, "VIEW") :: Nil)
 
     assert(
       sqlContext.sql("SHOW tables").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("", "listtablessuitetable", true) :: Nil)
+      Row("", "listtablessuitetable", true, "VIEW") :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
       TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
@@ -105,11 +105,11 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     df.createOrReplaceTempView("listtablessuitetable")
     assert(
       sqlContext.tables("default").filter("tableName = 'listtablessuitetable'").collect().toSeq ==
-      Row("", "listtablessuitetable", true) :: Nil)
+      Row("", "listtablessuitetable", true, "VIEW") :: Nil)
 
     assert(
       sqlContext.sql("show TABLES in default").filter("tableName = 'listtablessuitetable'")
-        .collect().toSeq == Row("", "listtablessuitetable", true) :: Nil)
+        .collect().toSeq == Row("", "listtablessuitetable", true, "VIEW") :: Nil)
 
     sqlContext.sessionState.catalog.dropTable(
       TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true, purge = false)
@@ -124,7 +124,8 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     val expectedSchema = StructType(
       StructField("namespace", StringType, false) ::
         StructField("tableName", StringType, false) ::
-        StructField("isTemporary", BooleanType, false) :: Nil)
+        StructField("isTemporary", BooleanType, false) ::
+        StructField("tableType", StringType, false) :: Nil)
 
     Seq(sqlContext.tables(), sqlContext.sql("SHOW TABLes")).foreach {
       case tableDF =>

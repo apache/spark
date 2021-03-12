@@ -1879,7 +1879,8 @@ class DataSourceV2SQLSuite
   test("rename table by ALTER VIEW") {
     withTable("testcat.ns1.new") {
       sql("CREATE TABLE testcat.ns1.ns2.old USING foo AS SELECT id, data FROM source")
-      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"), Seq(Row("ns1.ns2", "old", false)))
+      checkAnswer(sql("SHOW TABLES FROM testcat.ns1.ns2"),
+        Seq(Row("ns1.ns2", "old", false, "TABLE")))
 
       val e = intercept[AnalysisException] {
         sql("ALTER VIEW testcat.ns1.ns2.old RENAME TO ns1.new")
@@ -2602,7 +2603,7 @@ class DataSourceV2SQLSuite
       sql(s"ALTER TABLE $tbl RENAME TO new_tbl")
       checkAnswer(
         sql(s"SHOW TABLES FROM testcat.ns1.ns2 LIKE 'new_tbl'"),
-        Row("ns1.ns2", "new_tbl", false))
+        Row("ns1.ns2", "new_tbl", false, "TABLE"))
       checkAnswer(sql(s"SELECT c0 FROM ${catalogAndNamespace}new_tbl"), Row(0))
     }
   }
