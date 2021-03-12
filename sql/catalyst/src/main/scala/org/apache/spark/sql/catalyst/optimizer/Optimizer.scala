@@ -78,6 +78,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownLeftSemiAntiJoin,
         PushLeftSemiLeftAntiThroughJoin,
         LimitPushDown,
+        LimitPushDownThroughWindow,
         ColumnPruning,
         // Operator combine
         CollapseRepartition,
@@ -560,7 +561,7 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL, joins and Window.
+ * Pushes down [[LocalLimit]] beneath UNION ALL and joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -586,14 +587,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
         // Otherwise, don't put a new LocalLimit.
         plan
     }
-  }
-
-  // The window frame of RankLike and RowNumberLike is UNBOUNDED PRECEDING to CURRENT ROW.
-  private def supportsPushdownThroughWindow(
-      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
-    case Alias(WindowExpression(_: RankLike | _: RowNumberLike,
-        WindowSpecDefinition(Nil, _, _)), _) => true
-    case _ => false
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -630,7 +623,22 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case _ => join
       }
       LocalLimit(exp, newJoin)
+  }
+}
 
+/**
+ * Pushes down [[LocalLimit]] beneath WINDOW.
+ */
+object LimitPushDownThroughWindow extends Rule[LogicalPlan] {
+  // The window frame of RankLike and RowNumberLike is UNBOUNDED PRECEDING to CURRENT ROW.
+  private def supportsPushdownThroughWindow(
+      windowExpressions: Seq[NamedExpression]): Boolean = windowExpressions.forall {
+    case Alias(WindowExpression(_: RankLike | _: RowNumberLike,
+        WindowSpecDefinition(Nil, _, _)), _) => true
+    case _ => false
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Adding an extra Limit below WINDOW when the partitionSpec of all window functions is empty.
     case LocalLimit(limitExpr @ IntegerLiteral(limit),
         window @ Window(windowExpressions, Nil, orderSpec, child))

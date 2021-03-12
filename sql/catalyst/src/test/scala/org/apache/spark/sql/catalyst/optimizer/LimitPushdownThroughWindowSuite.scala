@@ -31,21 +31,22 @@ class LimitPushdownThroughWindowSuite extends PlanTest {
   private val limitPushdownRules = Seq(
     CollapseProject,
     RemoveNoopOperators,
-    LimitPushDown,
+    LimitPushDownThroughWindow,
     EliminateLimits,
     ConstantFolding,
     BooleanSimplification)
 
   private object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Limit pushdown", FixedPoint(100),
+      Batch("Limit pushdown through window", FixedPoint(100),
         limitPushdownRules: _*) :: Nil
   }
 
   private object WithoutOptimize extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("Without Limit pushdown", FixedPoint(100),
-        limitPushdownRules.filterNot(_.ruleName.equals(LimitPushDown.ruleName)): _*) :: Nil
+      Batch("Without limit pushdown through window", FixedPoint(100),
+        limitPushdownRules
+          .filterNot(_.ruleName.equals(LimitPushDownThroughWindow.ruleName)): _*) :: Nil
   }
 
   private val testRelation = LocalRelation.fromExternalRows(
