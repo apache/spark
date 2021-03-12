@@ -878,6 +878,7 @@ private[spark] abstract class PythonServer[T](
 
 private[spark] object PythonServer {
 
+  // visible for testing
   private[spark] var timeout = 15000
 
   /**

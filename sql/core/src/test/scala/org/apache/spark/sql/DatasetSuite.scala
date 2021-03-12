@@ -1606,20 +1606,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         Thread.sleep(PythonServer.timeout + 1000)
       }
     }
-    spark.listenerManager.register(listener)
+    try {
+      spark.listenerManager.register(listener)
 
-    val Array(port: Int, secretToPython: String) = spark.range(5).toDF().collectToPython()
+      val Array(port: Int, secretToPython: String) = spark.range(5).toDF().collectToPython()
 
-    // Mimic Python side
-    val socket = new Socket(InetAddress.getByAddress(Array(127, 0, 0, 1)), port)
-    val authHelper = new SocketAuthHelper(new SparkConf()) {
-      override val secret: String = secretToPython
+      // Mimic Python side
+      val socket = new Socket(InetAddress.getByAddress(Array(127, 0, 0, 1)), port)
+      val authHelper = new SocketAuthHelper(new SparkConf()) {
+        override val secret: String = secretToPython
+      }
+      authHelper.authToServer(socket)
+      Source.fromInputStream(socket.getInputStream)
+    } finally {
+      spark.listenerManager.unregister(listener)
+      PythonServer.timeout = oldTimeout
     }
-    authHelper.authToServer(socket)
-    Source.fromInputStream(socket.getInputStream)
-
-    spark.listenerManager.unregister(listener)
-    PythonServer.timeout = oldTimeout
   }
 }
 
