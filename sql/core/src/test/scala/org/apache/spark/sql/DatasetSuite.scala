@@ -24,6 +24,7 @@ import java.sql.{Date, Timestamp}
 import scala.io.Source
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.api.python.PythonServer
 import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
@@ -1593,12 +1594,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-34726: Fix collectToPython timeouts") {
+    // Lower `PythonServer.setupOneConnectionServer` timeout for this test
+    val oldTimeout = PythonServer.timeout
+    PythonServer.timeout = 1000
+
     val listener = new QueryExecutionListener {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        // Longer than 15s in `PythonServer.setupOneConnectionServer`
-        Thread.sleep(20 * 1000)
+        // Wait longer than `PythonServer.setupOneConnectionServer` timeout
+        Thread.sleep(PythonServer.timeout + 1000)
       }
     }
     spark.listenerManager.register(listener)
@@ -1614,6 +1619,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     Source.fromInputStream(socket.getInputStream)
 
     spark.listenerManager.unregister(listener)
+    PythonServer.timeout = oldTimeout
   }
 }
 
