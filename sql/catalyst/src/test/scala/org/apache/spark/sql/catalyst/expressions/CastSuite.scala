@@ -961,7 +961,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   }
 
   test("ANSI mode: cast string to timestamp with parse error") {
-    val activeConf = conf
     ALL_TIMEZONES.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
         checkExceptionInExpression[DateTimeException](
@@ -969,18 +968,16 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to TimestampType.")
       }
 
-      SQLConf.withExistingConf(activeConf) {
-        checkCastWithParseError("123")
-        checkCastWithParseError("2015-03-18 123142")
-        checkCastWithParseError("2015-03-18T123123")
-        checkCastWithParseError("2015-03-18X")
-        checkCastWithParseError("2015/03/18")
-        checkCastWithParseError("2015.03.18")
-        checkCastWithParseError("20150318")
-        checkCastWithParseError("2015-031-8")
-        checkCastWithParseError("2015-03-18T12:03:17-0:70")
-        checkCastWithParseError("abdef")
-      }
+      checkCastWithParseError("123")
+      checkCastWithParseError("2015-03-18 123142")
+      checkCastWithParseError("2015-03-18T123123")
+      checkCastWithParseError("2015-03-18X")
+      checkCastWithParseError("2015/03/18")
+      checkCastWithParseError("2015.03.18")
+      checkCastWithParseError("20150318")
+      checkCastWithParseError("2015-031-8")
+      checkCastWithParseError("2015-03-18T12:03:17-0:70")
+      checkCastWithParseError("abdef")
     }
   }
 
