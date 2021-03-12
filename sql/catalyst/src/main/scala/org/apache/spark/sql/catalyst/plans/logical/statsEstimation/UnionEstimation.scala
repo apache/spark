@@ -64,7 +64,7 @@ object UnionEstimation {
 
   def estimate(union: Union): Option[Statistics] = {
     val sizeInBytes = union.children.map(_.stats.sizeInBytes).sum
-    val outputRows: Option[BigInt] = if (rowCountsExist(union.children: _*)) {
+    val outputRows = if (rowCountsExist(union.children: _*)) {
       Some(union.children.map(_.stats.rowCount.get).sum)
     } else {
       None

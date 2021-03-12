@@ -245,7 +245,7 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("row size and column stats estimation for sort") {
-    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
+    val columnInfo = AttributeMap(
       Seq(
         AttributeReference("cbool", BooleanType)() -> ColumnStat(
           distinctCount = Some(2),

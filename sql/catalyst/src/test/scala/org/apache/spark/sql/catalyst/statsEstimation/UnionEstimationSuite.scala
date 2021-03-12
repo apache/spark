@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.statsEstimation
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Union}
-import org.apache.spark.sql.types.{ByteType, DateType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType, TimestampType}
+import org.apache.spark.sql.types._
 
 class UnionEstimationSuite extends StatsEstimationTestBase {
 
@@ -62,7 +62,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
     val s2 = 4.toShort
     val b1 = 1.toByte
     val b2 = 4.toByte
-    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
+    val columnInfo = AttributeMap(
       Seq(
         attrInt -> ColumnStat(
           distinctCount = Some(2),
@@ -156,7 +156,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
 
     val attrInt = AttributeReference("cint", IntegerType)()
 
-    val columnInfo: AttributeMap[ColumnStat] = AttributeMap(
+    val columnInfo = AttributeMap(
       Seq(
         attrInt -> ColumnStat(
           distinctCount = Some(2),
@@ -166,7 +166,7 @@ class UnionEstimationSuite extends StatsEstimationTestBase {
           avgLen = Some(4),
           maxLen = Some(4))))
 
-    val columnInfo1: AttributeMap[ColumnStat] = AttributeMap(
+    val columnInfo1 = AttributeMap(
       Seq(
         AttributeReference("cint1", IntegerType)() -> ColumnStat(
           distinctCount = Some(2),
