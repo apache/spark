@@ -453,6 +453,15 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       checkKeywordsExistsInExplain(df2, keywords = "[key1=value1, KEY2=VALUE2]")
     }
   }
+
+  test("Do not show Statistics(sizeInBytes=8.0 EiB) if we don't have valid stats") {
+    withTable("t1") {
+      sql(s"CREATE TABLE t1 (c1 int) USING PARQUET PARTITIONED BY (p1 int)")
+      val explainString = sql("SELECT * FROM t1")
+        .queryExecution.explainString(ExplainMode.fromString("cost"))
+      assert(!explainString.contains("Statistics(sizeInBytes=8.0 EiB)"))
+    }
+  }
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {

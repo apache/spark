@@ -40,7 +40,10 @@ abstract class LogicalPlan
   def isStreaming: Boolean = children.exists(_.isStreaming)
 
   override def verboseStringWithSuffix(maxFields: Int): String = {
-    super.verboseString(maxFields) + statsCache.map(", " + _.toString).getOrElse("")
+    // Do not show Statistics(sizeInBytes=8.0 EiB) if we don't have valid stats
+    val stats = statsCache.find(_.sizeInBytes != Long.MaxValue)
+      .map(", " + _.toString).getOrElse("")
+    super.verboseString(maxFields) + stats
   }
 
   /**
