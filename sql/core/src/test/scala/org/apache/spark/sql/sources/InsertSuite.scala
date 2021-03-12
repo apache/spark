@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.test.SharedSparkSession
@@ -755,6 +756,47 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-33354: Throw exceptions on inserting invalid cast with ANSI casting policy") {
+    withSQLConf(
+      SQLConf.STORE_ASSIGNMENT_POLICY.key -> SQLConf.StoreAssignmentPolicy.ANSI.toString) {
+      withTable("t") {
+        sql("CREATE TABLE t(i int, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': timestamp to int"))
+        assert(msg.contains("Cannot safely cast 't': int to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(i int, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), 1)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'i': date to int"))
+        assert(msg.contains("Cannot safely cast 'd': int to date"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, t timestamp) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (TIMESTAMP('2010-09-02 14:10:10'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': timestamp to boolean"))
+        assert(msg.contains("Cannot safely cast 't': boolean to timestamp"))
+      }
+
+      withTable("t") {
+        sql("CREATE TABLE t(b boolean, d date) USING parquet")
+        val msg = intercept[AnalysisException] {
+          sql("INSERT INTO t VALUES (date('2010-09-02'), true)")
+        }.getMessage
+        assert(msg.contains("Cannot safely cast 'b': date to boolean"))
+        assert(msg.contains("Cannot safely cast 'd': boolean to date"))
+      }
+    }
+  }
+
   test("SPARK-30844: static partition should also follow StoreAssignmentPolicy") {
     SQLConf.StoreAssignmentPolicy.values.foreach { policy =>
       withSQLConf(
@@ -852,11 +894,64 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-34223: static partition with null raise NPE") {
-    withTable("t") {
-      sql(s"CREATE TABLE t(i STRING, c string) USING PARQUET PARTITIONED BY (c)")
-      sql("INSERT OVERWRITE t PARTITION (c=null) VALUES ('1')")
-      checkAnswer(spark.table("t"), Row("1", null))
+  test("SPARK-29174 Support LOCAL in INSERT OVERWRITE DIRECTORY to data source") {
+    withTempPath { dir =>
+      val path = dir.toURI.getPath
+      sql(s"""create table tab1 ( a int) using parquet location '$path'""")
+      sql("insert into tab1 values(1)")
+      checkAnswer(sql("select * from tab1"), Seq(1).map(i => Row(i)))
+      sql("create table tab2 ( a int) using parquet")
+      sql("insert into tab2 values(2)")
+      checkAnswer(sql("select * from tab2"), Seq(2).map(i => Row(i)))
+      sql(s"""insert overwrite local directory '$path' using parquet select * from tab2""")
+      sql("refresh table tab1")
+      checkAnswer(sql("select * from tab1"), Seq(2).map(i => Row(i)))
+    }
+  }
+
+  test("SPARK-29174 fail LOCAL in INSERT OVERWRITE DIRECT remote path") {
+    val message = intercept[ParseException] {
+      sql("insert overwrite local directory 'hdfs:/abcd' using parquet select 1")
+    }.getMessage
+    assert(message.contains("LOCAL is supported only with file: scheme"))
+  }
+
+  test("SPARK-32508 " +
+    "Disallow empty part col values in partition spec before static partition writing") {
+    withTable("insertTable") {
+      sql(
+        """
+          |CREATE TABLE insertTable(i int, part1 string, part2 string) USING PARQUET
+          |PARTITIONED BY (part1, part2)
+            """.stripMargin)
+      val msg = "Partition spec is invalid"
+      assert(intercept[AnalysisException] {
+        sql("INSERT INTO TABLE insertTable PARTITION(part1=1, part2='') SELECT 1")
+      }.getMessage.contains(msg))
+      assert(intercept[AnalysisException] {
+        sql("INSERT INTO TABLE insertTable PARTITION(part1='', part2) SELECT 1 ,'' AS part2")
+      }.getMessage.contains(msg))
+
+      sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2='2') SELECT 1")
+      sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'2' AS part2")
+      sql("INSERT INTO TABLE insertTable PARTITION(part1='1', part2) SELECT 1 ,'' AS part2")
+    }
+  }
+
+  test("SPARK-33294: Add query resolved check before analyze InsertIntoDir") {
+    withTempPath { path =>
+      val msg = intercept[AnalysisException] {
+        sql(
+          s"""
+            |INSERT OVERWRITE DIRECTORY '${path.getAbsolutePath}' USING PARQUET
+            |SELECT * FROM (
+            | SELECT c3 FROM (
+            |  SELECT c1, c2 from values(1,2) t(c1, c2)
+            |  )
+            |)
+          """.stripMargin)
+      }.getMessage
+      assert(msg.contains("cannot resolve '`c3`' given input columns"))
     }
   }
 }

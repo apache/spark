@@ -71,7 +71,7 @@ private[spark] class DirectTaskResult[T](
       for (i <- 0 until numUpdates) {
         _accumUpdates += in.readObject.asInstanceOf[AccumulatorV2[_, _]]
       }
-      accumUpdates = _accumUpdates
+      accumUpdates = _accumUpdates.toSeq
     }
 
     val numMetrics = in.readInt

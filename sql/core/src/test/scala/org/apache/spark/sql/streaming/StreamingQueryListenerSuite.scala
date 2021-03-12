@@ -323,7 +323,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
         actions += AssertOnQuery { q =>
           q.recentProgress.size > 1 && q.recentProgress.size <= 11
         }
-        testStream(input.toDS)(actions: _*)
+        testStream(input.toDS)(actions.toSeq: _*)
         spark.sparkContext.listenerBus.waitUntilEmpty()
         // 11 is the max value of the possible numbers of events.
         assert(numProgressEvent > 1 && numProgressEvent <= 11)
@@ -559,11 +559,11 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     private val _progressEvents = new mutable.Queue[StreamingQueryProgress]
 
     def progressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
-      _progressEvents.filter(_.numInputRows > 0)
+      _progressEvents.filter(_.numInputRows > 0).toSeq
     }
 
     def allProgressEvents: Seq[StreamingQueryProgress] = _progressEvents.synchronized {
-      _progressEvents.clone()
+      _progressEvents.clone().toSeq
     }
 
     def reset(): Unit = {

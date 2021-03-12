@@ -74,7 +74,8 @@ class JDBCSuite extends QueryTest
     }
   }
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     Utils.classForName("org.h2.Driver")
     // Extra properties that will be specified for our database. We need these to test
     // usage of parameters from OPTIONS clause in queries.
@@ -276,8 +277,9 @@ class JDBCSuite extends QueryTest
     // Untested: IDENTITY, OTHER, UUID, ARRAY, and GEOMETRY types.
   }
 
-  after {
+  override def afterAll(): Unit = {
     conn.close()
+    super.afterAll()
   }
 
   // Check whether the tables are fetched in the expected degree of parallelism
@@ -769,9 +771,14 @@ class JDBCSuite extends QueryTest
   }
 
   test("Dialect unregister") {
-    JdbcDialects.registerDialect(testH2Dialect)
-    JdbcDialects.unregisterDialect(testH2Dialect)
-    assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    JdbcDialects.unregisterDialect(H2Dialect)
+    try {
+      JdbcDialects.registerDialect(testH2Dialect)
+      JdbcDialects.unregisterDialect(testH2Dialect)
+      assert(JdbcDialects.get(urlWithUserAndPass) == NoopDialect)
+    } finally {
+      JdbcDialects.registerDialect(H2Dialect)
+    }
   }
 
   test("Aggregated dialects") {
@@ -1198,7 +1205,10 @@ class JDBCSuite extends QueryTest
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(
+      df.schema,
+      df.sqlContext.conf.caseSensitiveAnalysis,
+      "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 
@@ -1422,7 +1432,7 @@ class JDBCSuite extends QueryTest
   }
 
   test("SPARK-24327 verify and normalize a partition column based on a JDBC resolved schema") {
-    def testJdbcParitionColumn(partColName: String, expectedColumnName: String): Unit = {
+    def testJdbcPartitionColumn(partColName: String, expectedColumnName: String): Unit = {
       val df = spark.read.format("jdbc")
         .option("url", urlWithUserAndPass)
         .option("dbtable", "TEST.PARTITION")
@@ -1443,16 +1453,16 @@ class JDBCSuite extends QueryTest
       }
     }
 
-    testJdbcParitionColumn("THEID", "THEID")
-    testJdbcParitionColumn("\"THEID\"", "THEID")
+    testJdbcPartitionColumn("THEID", "THEID")
+    testJdbcPartitionColumn("\"THEID\"", "THEID")
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      testJdbcParitionColumn("ThEiD", "THEID")
+      testJdbcPartitionColumn("ThEiD", "THEID")
     }
-    testJdbcParitionColumn("THE ID", "THE ID")
+    testJdbcPartitionColumn("THE ID", "THE ID")
 
     def testIncorrectJdbcPartitionColumn(partColName: String): Unit = {
       val errMsg = intercept[AnalysisException] {
-        testJdbcParitionColumn(partColName, "THEID")
+        testJdbcPartitionColumn(partColName, "THEID")
       }.getMessage
       assert(errMsg.contains(s"User-defined partition column $partColName not found " +
         "in the JDBC relation:"))

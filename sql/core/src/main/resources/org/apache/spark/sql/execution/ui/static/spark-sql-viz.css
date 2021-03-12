@@ -16,6 +16,7 @@
  */
 
 #plan-viz-graph .label {
+  font-size: 0.85rem;
   font-weight: normal;
   text-shadow: none;
   color: #333;
@@ -50,4 +51,9 @@
 /* Breaks the long string like file path when showing tooltips */
 .tooltip-inner {
   word-wrap:break-word;
+}
+
+/* Breaks the long job url list when showing Details for Query in SQL */
+.job-url {
+  word-wrap: break-word;
 }

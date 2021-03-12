@@ -24,7 +24,6 @@ from contextlib import contextmanager
 from pyspark.sql import SparkSession
 from pyspark.sql.types import ArrayType, DoubleType, UserDefinedType, Row
 from pyspark.testing.utils import ReusedPySparkTestCase
-from pyspark.util import _exception_message
 
 
 pandas_requirement_message = None
@@ -33,7 +32,7 @@ try:
     require_minimum_pandas_version()
 except ImportError as e:
     # If Pandas version requirement is not satisfied, skip related tests.
-    pandas_requirement_message = _exception_message(e)
+    pandas_requirement_message = str(e)
 
 pyarrow_requirement_message = None
 try:
@@ -41,14 +40,14 @@ try:
     require_minimum_pyarrow_version()
 except ImportError as e:
     # If Arrow version requirement is not satisfied, skip related tests.
-    pyarrow_requirement_message = _exception_message(e)
+    pyarrow_requirement_message = str(e)
 
 test_not_compiled_message = None
 try:
     from pyspark.sql.utils import require_test_compiled
     require_test_compiled()
 except Exception as e:
-    test_not_compiled_message = _exception_message(e)
+    test_not_compiled_message = str(e)
 
 have_pandas = pandas_requirement_message is None
 have_pyarrow = pyarrow_requirement_message is None
@@ -148,7 +147,7 @@ class PythonOnlyPoint(ExamplePoint):
     """
     An example class to demonstrate UDT in only Python
     """
-    __UDT__ = PythonOnlyUDT()
+    __UDT__ = PythonOnlyUDT()  # type: ignore
 
 
 class MyObject(object):

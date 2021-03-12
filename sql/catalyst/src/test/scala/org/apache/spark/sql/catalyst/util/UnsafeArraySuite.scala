@@ -72,9 +72,8 @@ class UnsafeArraySuite extends SparkFunSuite {
     arrayData
   }
 
-  private def toUnsafeArray[T : TypeTag](array: Array[T]): ArrayData = {
+  private def toUnsafeArray[T: TypeTag](array: Array[T]): ArrayData = {
     val converted = ExpressionEncoder[Array[T]].createSerializer().apply(array).getArray(0)
-    assert(converted.isInstanceOf[T])
     assert(converted.numElements == array.length)
     converted
   }

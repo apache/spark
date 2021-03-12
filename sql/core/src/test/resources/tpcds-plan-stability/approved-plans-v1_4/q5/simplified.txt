@@ -1,0 +1,123 @@
+TakeOrderedAndProject [channel,id,sales,returns,profit]
+  WholeStageCodegen (21)
+    HashAggregate [channel,id,spark_grouping_id,sum,isEmpty,sum,isEmpty,sum,isEmpty] [sum(sales),sum(returns),sum(profit),sales,returns,profit,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+      InputAdapter
+        Exchange [channel,id,spark_grouping_id] #1
+          WholeStageCodegen (20)
+            HashAggregate [channel,id,spark_grouping_id,sales,returns,profit] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+              Expand [sales,returns,profit,channel,id]
+                InputAdapter
+                  Union
+                    WholeStageCodegen (6)
+                      HashAggregate [s_store_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
+                        InputAdapter
+                          Exchange [s_store_id] #2
+                            WholeStageCodegen (5)
+                              HashAggregate [s_store_id,sales_price,return_amt,profit,net_loss] [sum,sum,sum,sum,sum,sum,sum,sum]
+                                Project [sales_price,profit,return_amt,net_loss,s_store_id]
+                                  BroadcastHashJoin [store_sk,s_store_sk]
+                                    Project [store_sk,sales_price,profit,return_amt,net_loss]
+                                      BroadcastHashJoin [date_sk,d_date_sk]
+                                        InputAdapter
+                                          Union
+                                            WholeStageCodegen (1)
+                                              Project [ss_store_sk,ss_sold_date_sk,ss_ext_sales_price,ss_net_profit]
+                                                Filter [ss_sold_date_sk,ss_store_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.store_sales [ss_sold_date_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit]
+                                            WholeStageCodegen (2)
+                                              Project [sr_store_sk,sr_returned_date_sk,sr_return_amt,sr_net_loss]
+                                                Filter [sr_returned_date_sk,sr_store_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.store_returns [sr_returned_date_sk,sr_store_sk,sr_return_amt,sr_net_loss]
+                                        InputAdapter
+                                          BroadcastExchange #3
+                                            WholeStageCodegen (3)
+                                              Project [d_date_sk]
+                                                Filter [d_date,d_date_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.date_dim [d_date_sk,d_date]
+                                    InputAdapter
+                                      BroadcastExchange #4
+                                        WholeStageCodegen (4)
+                                          Filter [s_store_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.store [s_store_sk,s_store_id]
+                    WholeStageCodegen (12)
+                      HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
+                        InputAdapter
+                          Exchange [cp_catalog_page_id] #5
+                            WholeStageCodegen (11)
+                              HashAggregate [cp_catalog_page_id,sales_price,return_amt,profit,net_loss] [sum,sum,sum,sum,sum,sum,sum,sum]
+                                Project [sales_price,profit,return_amt,net_loss,cp_catalog_page_id]
+                                  BroadcastHashJoin [page_sk,cp_catalog_page_sk]
+                                    Project [page_sk,sales_price,profit,return_amt,net_loss]
+                                      BroadcastHashJoin [date_sk,d_date_sk]
+                                        InputAdapter
+                                          Union
+                                            WholeStageCodegen (7)
+                                              Project [cs_catalog_page_sk,cs_sold_date_sk,cs_ext_sales_price,cs_net_profit]
+                                                Filter [cs_sold_date_sk,cs_catalog_page_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.catalog_sales [cs_sold_date_sk,cs_catalog_page_sk,cs_ext_sales_price,cs_net_profit]
+                                            WholeStageCodegen (8)
+                                              Project [cr_catalog_page_sk,cr_returned_date_sk,cr_return_amount,cr_net_loss]
+                                                Filter [cr_returned_date_sk,cr_catalog_page_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.catalog_returns [cr_returned_date_sk,cr_catalog_page_sk,cr_return_amount,cr_net_loss]
+                                        InputAdapter
+                                          ReusedExchange [d_date_sk] #3
+                                    InputAdapter
+                                      BroadcastExchange #6
+                                        WholeStageCodegen (10)
+                                          Filter [cp_catalog_page_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
+                    WholeStageCodegen (19)
+                      HashAggregate [web_site_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
+                        InputAdapter
+                          Exchange [web_site_id] #7
+                            WholeStageCodegen (18)
+                              HashAggregate [web_site_id,sales_price,return_amt,profit,net_loss] [sum,sum,sum,sum,sum,sum,sum,sum]
+                                Project [sales_price,profit,return_amt,net_loss,web_site_id]
+                                  BroadcastHashJoin [wsr_web_site_sk,web_site_sk]
+                                    Project [wsr_web_site_sk,sales_price,profit,return_amt,net_loss]
+                                      BroadcastHashJoin [date_sk,d_date_sk]
+                                        InputAdapter
+                                          Union
+                                            WholeStageCodegen (13)
+                                              Project [ws_web_site_sk,ws_sold_date_sk,ws_ext_sales_price,ws_net_profit]
+                                                Filter [ws_sold_date_sk,ws_web_site_sk]
+                                                  ColumnarToRow
+                                                    InputAdapter
+                                                      Scan parquet default.web_sales [ws_sold_date_sk,ws_web_site_sk,ws_ext_sales_price,ws_net_profit]
+                                            WholeStageCodegen (15)
+                                              Project [ws_web_site_sk,wr_returned_date_sk,wr_return_amt,wr_net_loss]
+                                                BroadcastHashJoin [wr_item_sk,wr_order_number,ws_item_sk,ws_order_number]
+                                                  Filter [wr_returned_date_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.web_returns [wr_returned_date_sk,wr_item_sk,wr_order_number,wr_return_amt,wr_net_loss]
+                                                  InputAdapter
+                                                    BroadcastExchange #8
+                                                      WholeStageCodegen (14)
+                                                        Filter [ws_item_sk,ws_order_number,ws_web_site_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.web_sales [ws_item_sk,ws_web_site_sk,ws_order_number]
+                                        InputAdapter
+                                          ReusedExchange [d_date_sk] #3
+                                    InputAdapter
+                                      BroadcastExchange #9
+                                        WholeStageCodegen (17)
+                                          Filter [web_site_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.web_site [web_site_sk,web_site_id]

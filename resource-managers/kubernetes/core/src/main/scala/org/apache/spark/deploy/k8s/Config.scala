@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{PYSPARK_DRIVER_PYTHON, PYSPARK_PYTHON}
 import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] object Config extends Logging {
@@ -90,6 +91,14 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val CONFIG_MAP_MAXSIZE =
+    ConfigBuilder("spark.kubernetes.configMap.maxSize")
+      .doc("Max size limit for a config map. This is configurable as per" +
+        " https://etcd.io/docs/v3.4.0/dev-guide/limit/ on k8s server end.")
+      .version("3.1.0")
+      .longConf
+      .createWithDefault(1572864) // 1.5 MiB
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX = "spark.kubernetes.authenticate.driver.mounted"
@@ -128,13 +137,21 @@ private[spark] object Config extends Logging {
       .intConf
       .createWithDefault(10000)
 
-  val KUBERNETES_SERVICE_ACCOUNT_NAME =
+  val KUBERNETES_DRIVER_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.serviceAccountName")
       .doc("Service account that is used when running the driver pod. The driver pod uses " +
         "this service account when requesting executor pods from the API server. If specific " +
         "credentials are given for the driver pod to use, the driver will favor " +
         "using those credentials instead.")
       .version("2.3.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME =
+    ConfigBuilder(s"$KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX.serviceAccountName")
+      .doc("Service account that is used when running the executor pod." +
+        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+      .version("3.1.0")
       .stringConf
       .createOptional
 
@@ -199,7 +216,6 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names.")
       .version("2.3.0")
-      .internal()
       .stringConf
       .createOptional
 
@@ -218,6 +234,14 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value > 0, "Allocation batch delay must be a positive time value.")
       .createWithDefaultString("1s")
+
+  val KUBERNETES_ALLOCATION_EXECUTOR_TIMEOUT =
+    ConfigBuilder("spark.kubernetes.allocation.executor.timeout")
+      .doc("Time to wait before considering a pending executor timedout.")
+      .version("3.1.0")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(value => value > 0, "Allocation executor timeout must be a positive time value.")
+      .createWithDefaultString("600s")
 
   val KUBERNETES_EXECUTOR_LOST_REASON_CHECK_MAX_ATTEMPTS =
     ConfigBuilder("spark.kubernetes.executor.lostCheck.maxAttempts")
@@ -277,12 +301,19 @@ private[spark] object Config extends Logging {
 
   val PYSPARK_MAJOR_PYTHON_VERSION =
     ConfigBuilder("spark.kubernetes.pyspark.pythonVersion")
-      .doc("This sets the major Python version. Either 2 or 3. (Python2 or Python3)")
+      .doc(
+        s"(Deprecated since Spark 3.1, please set '${PYSPARK_PYTHON.key}' and " +
+        s"'${PYSPARK_DRIVER_PYTHON.key}' configurations or $ENV_PYSPARK_PYTHON and " +
+        s"$ENV_PYSPARK_DRIVER_PYTHON environment variables instead.)")
       .version("2.4.0")
       .stringConf
-      .checkValue(pv => List("2", "3").contains(pv),
-        "Ensure that major Python version is either Python2 or Python3")
-      .createWithDefault("3")
+      .checkValue("3" == _,
+        "Python 2 was dropped from Spark 3.1, and only 3 is allowed in " +
+          "this configuration. Note that this configuration was deprecated in Spark 3.1. " +
+          s"Please set '${PYSPARK_PYTHON.key}' and '${PYSPARK_DRIVER_PYTHON.key}' " +
+          s"configurations or $ENV_PYSPARK_PYTHON and $ENV_PYSPARK_DRIVER_PYTHON environment " +
+          "variables instead.")
+      .createOptional
 
   val KUBERNETES_KERBEROS_KRB5_FILE =
     ConfigBuilder("spark.kubernetes.kerberos.krb5.path")
@@ -404,7 +435,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_FILE_UPLOAD_PATH =
     ConfigBuilder("spark.kubernetes.file.upload.path")
       .doc("Hadoop compatible file system path where files from the local file system " +
-        "will be uploded to in cluster mode.")
+        "will be uploaded to in cluster mode.")
       .version("3.0.0")
       .stringConf
       .createOptional
@@ -444,13 +475,16 @@ private[spark] object Config extends Logging {
   val KUBERNETES_VOLUMES_HOSTPATH_TYPE = "hostPath"
   val KUBERNETES_VOLUMES_PVC_TYPE = "persistentVolumeClaim"
   val KUBERNETES_VOLUMES_EMPTYDIR_TYPE = "emptyDir"
+  val KUBERNETES_VOLUMES_NFS_TYPE = "nfs"
   val KUBERNETES_VOLUMES_MOUNT_PATH_KEY = "mount.path"
   val KUBERNETES_VOLUMES_MOUNT_SUBPATH_KEY = "mount.subPath"
   val KUBERNETES_VOLUMES_MOUNT_READONLY_KEY = "mount.readOnly"
   val KUBERNETES_VOLUMES_OPTIONS_PATH_KEY = "options.path"
   val KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY = "options.claimName"
+  val KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY = "options.storageClass"
   val KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY = "options.medium"
   val KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY = "options.sizeLimit"
+  val KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY = "options.server"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }

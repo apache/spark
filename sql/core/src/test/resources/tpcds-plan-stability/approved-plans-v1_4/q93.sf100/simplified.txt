@@ -1,0 +1,38 @@
+TakeOrderedAndProject [sumsales,ss_customer_sk]
+  WholeStageCodegen (7)
+    HashAggregate [ss_customer_sk,sum,isEmpty] [sum(act_sales),sumsales,sum,isEmpty]
+      InputAdapter
+        Exchange [ss_customer_sk] #1
+          WholeStageCodegen (6)
+            HashAggregate [ss_customer_sk,act_sales] [sum,isEmpty,sum,isEmpty]
+              Project [ss_customer_sk,sr_return_quantity,ss_quantity,ss_sales_price]
+                SortMergeJoin [sr_item_sk,sr_ticket_number,ss_item_sk,ss_ticket_number]
+                  InputAdapter
+                    WholeStageCodegen (3)
+                      Sort [sr_item_sk,sr_ticket_number]
+                        InputAdapter
+                          Exchange [sr_item_sk,sr_ticket_number] #2
+                            WholeStageCodegen (2)
+                              Project [sr_item_sk,sr_ticket_number,sr_return_quantity]
+                                BroadcastHashJoin [sr_reason_sk,r_reason_sk]
+                                  Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity]
+                                  InputAdapter
+                                    BroadcastExchange #3
+                                      WholeStageCodegen (1)
+                                        Project [r_reason_sk]
+                                          Filter [r_reason_desc,r_reason_sk]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.reason [r_reason_sk,r_reason_desc]
+                  InputAdapter
+                    WholeStageCodegen (5)
+                      Sort [ss_item_sk,ss_ticket_number]
+                        InputAdapter
+                          Exchange [ss_item_sk,ss_ticket_number] #4
+                            WholeStageCodegen (4)
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_ticket_number,ss_quantity,ss_sales_price]

@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{DateTimeException, Instant, LocalDateTime, LocalTime}
 import java.util.concurrent.TimeUnit
 
+import org.scalatest.matchers.should.Matchers._
+
 import org.apache.spark.SparkUpgradeException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -137,6 +139,9 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
   test("format fraction of second") {
     val formatter = TimestampFormatter.getFractionFormatter(UTC)
     Seq(
+      -999999 -> "1969-12-31 23:59:59.000001",
+      -999900 -> "1969-12-31 23:59:59.0001",
+      -1 -> "1969-12-31 23:59:59.999999",
       0 -> "1970-01-01 00:00:00",
       1 -> "1970-01-01 00:00:00.000001",
       1000 -> "1970-01-01 00:00:00.001",
@@ -285,14 +290,14 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId.getId) {
           withDefaultTimeZone(zoneId) {
             withClue(s"zoneId = ${zoneId.getId}") {
-              val formatters = LegacyDateFormats.values.map { legacyFormat =>
+              val formatters = LegacyDateFormats.values.toSeq.map { legacyFormat =>
                 TimestampFormatter(
                   TimestampFormatter.defaultPattern,
                   zoneId,
                   TimestampFormatter.defaultLocale,
                   legacyFormat,
                   isParsing = false)
-              }.toSeq :+ TimestampFormatter.getFractionFormatter(zoneId)
+              } :+ TimestampFormatter.getFractionFormatter(zoneId)
               formatters.foreach { formatter =>
                 assert(microsToInstant(formatter.parse("1000-01-01 01:02:03"))
                   .atZone(zoneId)

@@ -553,7 +553,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private UnsafeSorterIterator upstream;
     private MemoryBlock lastPage = null;
     private boolean loaded = false;
-    private int numRecords = 0;
+    private int numRecords;
 
     private Object currentBaseObject;
     private long currentBaseOffset;
@@ -577,19 +577,25 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     public long spill() throws IOException {
       synchronized (this) {
-        if (inMemSorter == null || numRecords <= 0) {
+        if (inMemSorter == null) {
           return 0L;
         }
 
         long currentPageNumber = upstream.getCurrentPageNumber();
 
         ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-        // Iterate over the records that have not been returned and spill them.
-        final UnsafeSorterSpillWriter spillWriter =
-          new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
-        spillIterator(upstream, spillWriter);
-        spillWriters.add(spillWriter);
-        upstream = spillWriter.getReader(serializerManager);
+        if (numRecords > 0) {
+          // Iterate over the records that have not been returned and spill them.
+          final UnsafeSorterSpillWriter spillWriter = new UnsafeSorterSpillWriter(
+                  blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
+          spillIterator(upstream, spillWriter);
+          spillWriters.add(spillWriter);
+          upstream = spillWriter.getReader(serializerManager);
+        } else {
+          // Nothing to spill as all records have been read already, but do not return yet, as the
+          // memory still has to be freed.
+          upstream = null;
+        }
 
         long released = 0L;
         synchronized (UnsafeExternalSorter.this) {
@@ -605,6 +611,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
             }
           }
           allocatedPages.clear();
+          if (lastPage != null) {
+            // Add the last page back to the list of allocated pages to make sure it gets freed in
+            // case loadNext() never gets called again.
+            allocatedPages.add(lastPage);
+          }
         }
 
         // in-memory sorter will not be used after spilling
@@ -627,11 +638,12 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public void loadNext() throws IOException {
+      assert upstream != null;
       MemoryBlock pageToFree = null;
       try {
         synchronized (this) {
           loaded = true;
-          // Just consumed the last record from in memory iterator
+          // Just consumed the last record from the in-memory iterator.
           if (lastPage != null) {
             // Do not free the page here, while we are locking `SpillableIterator`. The `freePage`
             // method locks the `TaskMemoryManager`, and it's a bad idea to lock 2 objects in
@@ -639,6 +651,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
             // `SpillableIterator` in sequence, which may happen in
             // `TaskMemoryManager.acquireExecutionMemory`.
             pageToFree = lastPage;
+            allocatedPages.clear();
             lastPage = null;
           }
           numRecords--;

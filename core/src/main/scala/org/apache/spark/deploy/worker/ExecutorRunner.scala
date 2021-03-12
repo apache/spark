@@ -158,7 +158,7 @@ private[deploy] class ExecutorRunner(
       val builder = CommandUtils.buildProcessBuilder(subsCommand, new SecurityManager(conf),
         memory, sparkHome.getAbsolutePath, substituteVariables)
       val command = builder.command()
-      val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala)
+      val redactedCommand = Utils.redactCommandLineArgs(conf, command.asScala.toSeq)
         .mkString("\"", "\" \"", "\"")
       logInfo(s"Launch command: $redactedCommand")
 
@@ -171,7 +171,8 @@ private[deploy] class ExecutorRunner(
       // Add webUI log urls
       val baseUrl =
         if (conf.get(UI_REVERSE_PROXY)) {
-          s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
+          conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/") +
+            s"/proxy/$workerId/logPage/?appId=$appId&executorId=$execId&logType="
         } else {
           s"$webUiScheme$publicAddress:$webUiPort/logPage/?appId=$appId&executorId=$execId&logType="
         }

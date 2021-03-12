@@ -307,7 +307,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
     logInfo(s"Generated an explicit feedback dataset with ${training.size} ratings for training " +
       s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 
   /**
@@ -810,7 +810,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topItems = model.recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
-      checkRecommendations(topItems, expectedUpToN, "item")
+      checkRecommendations(topItems, expectedUpToN.toMap, "item")
     }
   }
 
@@ -831,7 +831,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topUsers = getALSModel.recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
-      checkRecommendations(topUsers, expectedUpToN, "user")
+      checkRecommendations(topUsers, expectedUpToN.toMap, "user")
     }
   }
 
@@ -853,7 +853,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topItems = model.recommendForUserSubset(userSubset, k)
       assert(topItems.count() == numUsersSubset)
       assert(topItems.columns.contains("user"))
-      checkRecommendations(topItems, expectedUpToN, "item")
+      checkRecommendations(topItems, expectedUpToN.toMap, "item")
     }
   }
 
@@ -875,7 +875,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       val topUsers = model.recommendForItemSubset(itemSubset, k)
       assert(topUsers.count() == numItemsSubset)
       assert(topUsers.columns.contains("item"))
-      checkRecommendations(topUsers, expectedUpToN, "user")
+      checkRecommendations(topUsers, expectedUpToN.toMap, "user")
     }
   }
 
@@ -984,49 +984,27 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
     super.afterEach()
   }
 
-  test("ALS shuffle cleanup standalone") {
-    val conf = new SparkConf()
-    val localDir = Utils.createTempDir()
-    val checkpointDir = Utils.createTempDir()
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
-    try {
-      conf.set("spark.local.dir", localDir.getAbsolutePath)
-      val sc = new SparkContext("local[2]", "test", conf)
-      try {
-        sc.setCheckpointDir(checkpointDir.getAbsolutePath)
-        // Test checkpoint and clean parents
-        val input = sc.parallelize(1 to 1000)
-        val keyed = input.map(x => (x % 20, 1))
-        val shuffled = keyed.reduceByKey(_ + _)
-        val keysOnly = shuffled.keys
-        val deps = keysOnly.dependencies
-        keysOnly.count()
-        ALS.cleanShuffleDependencies(sc, deps, true)
-        val resultingFiles = getAllFiles
-        assert(resultingFiles === Set())
-        // Ensure running count again works fine even if we kill the shuffle files.
-        keysOnly.count()
-      } finally {
-        sc.stop()
-      }
-    } finally {
-      Utils.deleteRecursively(localDir)
-      Utils.deleteRecursively(checkpointDir)
-    }
-  }
-
   test("ALS shuffle cleanup in algorithm") {
     val conf = new SparkConf()
     val localDir = Utils.createTempDir()
     val checkpointDir = Utils.createTempDir()
-    def getAllFiles: Set[File] =
-      FileUtils.listFiles(localDir, TrueFileFilter.INSTANCE, TrueFileFilter.INSTANCE).asScala.toSet
+    def getAllFiles: Set[File] = {
+      val files = FileUtils.listFiles(
+        localDir,
+        TrueFileFilter.INSTANCE,
+        TrueFileFilter.INSTANCE).asScala.toSet
+      files
+    }
     try {
       conf.set("spark.local.dir", localDir.getAbsolutePath)
       val sc = new SparkContext("local[2]", "ALSCleanerSuite", conf)
+      val pattern = "shuffle_(\\d+)_.+\\.data".r
       try {
         sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+        // There should be 0 shuffle files at the start
+        val initialIds = getAllFiles.flatMap { f =>
+          pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
+        assert(initialIds.size === 0)
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
@@ -1044,7 +1022,6 @@ class ALSCleanerSuite extends SparkFunSuite with BeforeAndAfterEach {
         val resultingFiles = getAllFiles
         // We expect the last shuffles files, block ratings, user factors, and item factors to be
         // around but no more.
-        val pattern = "shuffle_(\\d+)_.+\\.data".r
         val rddIds = resultingFiles.flatMap { f =>
           pattern.findAllIn(f.getName()).matchData.map { _.group(1) } }
         assert(rddIds.size === 4)
@@ -1234,6 +1211,6 @@ object ALSSuite extends Logging {
     }
     logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
       s"and ${test.size} for test.")
-    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+    (sc.parallelize(training.toSeq, 2), sc.parallelize(test.toSeq, 2))
   }
 }

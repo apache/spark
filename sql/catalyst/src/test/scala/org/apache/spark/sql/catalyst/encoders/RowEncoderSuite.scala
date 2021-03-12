@@ -336,7 +336,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val encoder = RowEncoder(schema).resolveAndBind()
       val localDate = java.time.LocalDate.parse("2019-02-27")
       val row = toRow(encoder, Row(localDate))
-      assert(row.getLong(0) === DateTimeUtils.localDateToDays(localDate))
+      assert(row.getInt(0) === DateTimeUtils.localDateToDays(localDate))
       val readback = fromRow(encoder, row)
       assert(readback.get(0).equals(localDate))
     }

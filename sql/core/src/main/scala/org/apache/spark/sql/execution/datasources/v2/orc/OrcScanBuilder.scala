@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 
 import scala.collection.JavaConverters._
 
-import org.apache.orc.mapreduce.OrcInputFormat
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
@@ -55,10 +53,8 @@ case class OrcScanBuilder(
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      val dataTypeMap = OrcFilters.getDataTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
-      // TODO (SPARK-25557): ORC doesn't support nested predicate pushdown, so they are removed.
-      val newFilters = filters.filter(!_.containsNestedColumn)
-      _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, newFilters).toArray
+      val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
+      _pushedFilters = OrcFilters.convertibleFilters(schema, dataTypeMap, filters).toArray
     }
     filters
   }

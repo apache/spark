@@ -41,7 +41,7 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveVersion
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.tags.{ExtendedHiveTest, GitHubActionsUnstableTest}
+import org.apache.spark.tags.{ExtendedHiveTest, SlowHiveTest}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
@@ -51,8 +51,8 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * is not fully tested.
  */
 // TODO: Refactor this to `HiveClientSuite` and make it a subclass of `HiveVersionSuite`
+@SlowHiveTest
 @ExtendedHiveTest
-@GitHubActionsUnstableTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
   override protected val enableAutoThreadAudit = false
@@ -488,7 +488,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: getPartitionsByFilter") {
       // Only one partition [1, 1] for key2 == 1
       val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
-        Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
+        Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))),
+        versionSpark.conf.sessionLocalTimeZone)
 
       // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
       if (version != "0.12") {
@@ -818,6 +819,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         versionSpark.sql(
           """
             |CREATE TABLE tbl(c1 string)
+            |USING hive
             |PARTITIONED BY (ds STRING)
           """.stripMargin)
         versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")

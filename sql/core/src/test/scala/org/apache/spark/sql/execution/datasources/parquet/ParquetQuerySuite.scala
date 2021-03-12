@@ -857,7 +857,7 @@ class ParquetV1QuerySuite extends ParquetQuerySuite {
         val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
-        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(!fileScan2.asInstanceOf[FileSourceScanExec].supportsColumnar)
@@ -890,7 +890,7 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
         val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
-        // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
+        // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
         val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]

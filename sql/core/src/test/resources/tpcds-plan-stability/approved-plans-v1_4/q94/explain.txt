@@ -1,0 +1,235 @@
+== Physical Plan ==
+* Sort (41)
++- * HashAggregate (40)
+   +- Exchange (39)
+      +- * HashAggregate (38)
+         +- * HashAggregate (37)
+            +- Exchange (36)
+               +- * HashAggregate (35)
+                  +- * Project (34)
+                     +- * BroadcastHashJoin Inner BuildRight (33)
+                        :- * Project (27)
+                        :  +- * BroadcastHashJoin Inner BuildRight (26)
+                        :     :- * Project (20)
+                        :     :  +- * BroadcastHashJoin Inner BuildRight (19)
+                        :     :     :- * BroadcastHashJoin LeftAnti BuildRight (13)
+                        :     :     :  :- * Project (9)
+                        :     :     :  :  +- * BroadcastHashJoin LeftSemi BuildRight (8)
+                        :     :     :  :     :- * Filter (3)
+                        :     :     :  :     :  +- * ColumnarToRow (2)
+                        :     :     :  :     :     +- Scan parquet default.web_sales (1)
+                        :     :     :  :     +- BroadcastExchange (7)
+                        :     :     :  :        +- * Project (6)
+                        :     :     :  :           +- * ColumnarToRow (5)
+                        :     :     :  :              +- Scan parquet default.web_sales (4)
+                        :     :     :  +- BroadcastExchange (12)
+                        :     :     :     +- * ColumnarToRow (11)
+                        :     :     :        +- Scan parquet default.web_returns (10)
+                        :     :     +- BroadcastExchange (18)
+                        :     :        +- * Project (17)
+                        :     :           +- * Filter (16)
+                        :     :              +- * ColumnarToRow (15)
+                        :     :                 +- Scan parquet default.date_dim (14)
+                        :     +- BroadcastExchange (25)
+                        :        +- * Project (24)
+                        :           +- * Filter (23)
+                        :              +- * ColumnarToRow (22)
+                        :                 +- Scan parquet default.customer_address (21)
+                        +- BroadcastExchange (32)
+                           +- * Project (31)
+                              +- * Filter (30)
+                                 +- * ColumnarToRow (29)
+                                    +- Scan parquet default.web_site (28)
+
+
+(1) Scan parquet default.web_sales
+Output [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+PushedFilters: [IsNotNull(ws_ship_date_sk), IsNotNull(ws_ship_addr_sk), IsNotNull(ws_web_site_sk)]
+ReadSchema: struct<ws_ship_date_sk:int,ws_ship_addr_sk:int,ws_web_site_sk:int,ws_warehouse_sk:int,ws_order_number:int,ws_ext_ship_cost:decimal(7,2),ws_net_profit:decimal(7,2)>
+
+(2) ColumnarToRow [codegen id : 6]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+
+(3) Filter [codegen id : 6]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Condition : ((isnotnull(ws_ship_date_sk#1) AND isnotnull(ws_ship_addr_sk#2)) AND isnotnull(ws_web_site_sk#3))
+
+(4) Scan parquet default.web_sales
+Output [2]: [ws_warehouse_sk#4, ws_order_number#5]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_sales]
+ReadSchema: struct<ws_warehouse_sk:int,ws_order_number:int>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [ws_warehouse_sk#4, ws_order_number#5]
+
+(6) Project [codegen id : 1]
+Output [2]: [ws_warehouse_sk#4 AS ws_warehouse_sk#4#8, ws_order_number#5 AS ws_order_number#5#9]
+Input [2]: [ws_warehouse_sk#4, ws_order_number#5]
+
+(7) BroadcastExchange
+Input [2]: [ws_warehouse_sk#4#8, ws_order_number#5#9]
+Arguments: HashedRelationBroadcastMode(List(cast(input[1, int, true] as bigint)),false), [id=#10]
+
+(8) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ws_order_number#5]
+Right keys [1]: [ws_order_number#5#9]
+Join condition: NOT (ws_warehouse_sk#4 = ws_warehouse_sk#4#8)
+
+(9) Project [codegen id : 6]
+Output [6]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_warehouse_sk#4, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+
+(10) Scan parquet default.web_returns
+Output [1]: [wr_order_number#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_returns]
+ReadSchema: struct<wr_order_number:bigint>
+
+(11) ColumnarToRow [codegen id : 2]
+Input [1]: [wr_order_number#11]
+
+(12) BroadcastExchange
+Input [1]: [wr_order_number#11]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#12]
+
+(13) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [cast(ws_order_number#5 as bigint)]
+Right keys [1]: [wr_order_number#11]
+Join condition: None
+
+(14) Scan parquet default.date_dim
+Output [2]: [d_date_sk#13, d_date#14]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/date_dim]
+PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+ReadSchema: struct<d_date_sk:int,d_date:date>
+
+(15) ColumnarToRow [codegen id : 3]
+Input [2]: [d_date_sk#13, d_date#14]
+
+(16) Filter [codegen id : 3]
+Input [2]: [d_date_sk#13, d_date#14]
+Condition : (((isnotnull(d_date#14) AND (d_date#14 >= 10623)) AND (d_date#14 <= 10683)) AND isnotnull(d_date_sk#13))
+
+(17) Project [codegen id : 3]
+Output [1]: [d_date_sk#13]
+Input [2]: [d_date_sk#13, d_date#14]
+
+(18) BroadcastExchange
+Input [1]: [d_date_sk#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+
+(19) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ws_ship_date_sk#1]
+Right keys [1]: [d_date_sk#13]
+Join condition: None
+
+(20) Project [codegen id : 6]
+Output [5]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, d_date_sk#13]
+
+(21) Scan parquet default.customer_address
+Output [2]: [ca_address_sk#16, ca_state#17]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer_address]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
+ReadSchema: struct<ca_address_sk:int,ca_state:string>
+
+(22) ColumnarToRow [codegen id : 4]
+Input [2]: [ca_address_sk#16, ca_state#17]
+
+(23) Filter [codegen id : 4]
+Input [2]: [ca_address_sk#16, ca_state#17]
+Condition : ((isnotnull(ca_state#17) AND (ca_state#17 = IL)) AND isnotnull(ca_address_sk#16))
+
+(24) Project [codegen id : 4]
+Output [1]: [ca_address_sk#16]
+Input [2]: [ca_address_sk#16, ca_state#17]
+
+(25) BroadcastExchange
+Input [1]: [ca_address_sk#16]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+
+(26) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ws_ship_addr_sk#2]
+Right keys [1]: [ca_address_sk#16]
+Join condition: None
+
+(27) Project [codegen id : 6]
+Output [4]: [ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [6]: [ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, ca_address_sk#16]
+
+(28) Scan parquet default.web_site
+Output [2]: [web_site_sk#19, web_company_name#20]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/web_site]
+PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri), IsNotNull(web_site_sk)]
+ReadSchema: struct<web_site_sk:int,web_company_name:string>
+
+(29) ColumnarToRow [codegen id : 5]
+Input [2]: [web_site_sk#19, web_company_name#20]
+
+(30) Filter [codegen id : 5]
+Input [2]: [web_site_sk#19, web_company_name#20]
+Condition : ((isnotnull(web_company_name#20) AND (web_company_name#20 = pri)) AND isnotnull(web_site_sk#19))
+
+(31) Project [codegen id : 5]
+Output [1]: [web_site_sk#19]
+Input [2]: [web_site_sk#19, web_company_name#20]
+
+(32) BroadcastExchange
+Input [1]: [web_site_sk#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#21]
+
+(33) BroadcastHashJoin [codegen id : 6]
+Left keys [1]: [ws_web_site_sk#3]
+Right keys [1]: [web_site_sk#19]
+Join condition: None
+
+(34) Project [codegen id : 6]
+Output [3]: [ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Input [5]: [ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7, web_site_sk#19]
+
+(35) HashAggregate [codegen id : 6]
+Input [3]: [ws_order_number#5, ws_ext_ship_cost#6, ws_net_profit#7]
+Keys [1]: [ws_order_number#5]
+Functions [2]: [partial_sum(UnscaledValue(ws_ext_ship_cost#6)), partial_sum(UnscaledValue(ws_net_profit#7))]
+Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#22, sum(UnscaledValue(ws_net_profit#7))#23]
+Results [3]: [ws_order_number#5, sum#24, sum#25]
+
+(36) Exchange
+Input [3]: [ws_order_number#5, sum#24, sum#25]
+Arguments: hashpartitioning(ws_order_number#5, 5), true, [id=#26]
+
+(37) HashAggregate [codegen id : 7]
+Input [3]: [ws_order_number#5, sum#24, sum#25]
+Keys [1]: [ws_order_number#5]
+Functions [2]: [merge_sum(UnscaledValue(ws_ext_ship_cost#6)), merge_sum(UnscaledValue(ws_net_profit#7))]
+Aggregate Attributes [2]: [sum(UnscaledValue(ws_ext_ship_cost#6))#22, sum(UnscaledValue(ws_net_profit#7))#23]
+Results [3]: [ws_order_number#5, sum#24, sum#25]
+
+(38) HashAggregate [codegen id : 7]
+Input [3]: [ws_order_number#5, sum#24, sum#25]
+Keys: []
+Functions [3]: [merge_sum(UnscaledValue(ws_ext_ship_cost#6)), merge_sum(UnscaledValue(ws_net_profit#7)), partial_count(distinct ws_order_number#5)]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#22, sum(UnscaledValue(ws_net_profit#7))#23, count(ws_order_number#5)#27]
+Results [3]: [sum#24, sum#25, count#28]
+
+(39) Exchange
+Input [3]: [sum#24, sum#25, count#28]
+Arguments: SinglePartition, true, [id=#29]
+
+(40) HashAggregate [codegen id : 8]
+Input [3]: [sum#24, sum#25, count#28]
+Keys: []
+Functions [3]: [sum(UnscaledValue(ws_ext_ship_cost#6)), sum(UnscaledValue(ws_net_profit#7)), count(distinct ws_order_number#5)]
+Aggregate Attributes [3]: [sum(UnscaledValue(ws_ext_ship_cost#6))#22, sum(UnscaledValue(ws_net_profit#7))#23, count(ws_order_number#5)#27]
+Results [3]: [count(ws_order_number#5)#27 AS order count #30, MakeDecimal(sum(UnscaledValue(ws_ext_ship_cost#6))#22,17,2) AS total shipping cost #31, MakeDecimal(sum(UnscaledValue(ws_net_profit#7))#23,17,2) AS total net profit #32]
+
+(41) Sort [codegen id : 8]
+Input [3]: [order count #30, total shipping cost #31, total net profit #32]
+Arguments: [order count #30 ASC NULLS FIRST], true, 0
+

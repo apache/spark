@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -29,10 +31,11 @@ import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
@@ -50,7 +53,9 @@ import org.apache.spark.util.Utils
 class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
-    val tracker: QueryPlanningTracker = new QueryPlanningTracker) {
+    val tracker: QueryPlanningTracker = new QueryPlanningTracker) extends Logging {
+
+  val id: Long = QueryExecution.nextExecutionId
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -138,26 +143,42 @@ class QueryExecution(
     tracker.measurePhase(phase)(block)
   }
 
-  def simpleString: String = simpleString(false)
-
-  def simpleString(formatted: Boolean): String = withRedaction {
+  def simpleString: String = {
     val concat = new PlanStringConcat()
-    concat.append("== Physical Plan ==\n")
+    simpleString(false, SQLConf.get.maxToStringFields, concat.append)
+    withRedaction {
+      concat.toString
+    }
+  }
+
+  private def simpleString(
+      formatted: Boolean,
+      maxFields: Int,
+      append: String => Unit): Unit = {
+    append("== Physical Plan ==\n")
     if (formatted) {
       try {
-        ExplainUtils.processPlan(executedPlan, concat.append)
+        ExplainUtils.processPlan(executedPlan, append)
       } catch {
-        case e: AnalysisException => concat.append(e.toString)
-        case e: IllegalArgumentException => concat.append(e.toString)
+        case e: AnalysisException => append(e.toString)
+        case e: IllegalArgumentException => append(e.toString)
       }
     } else {
-      QueryPlan.append(executedPlan, concat.append, verbose = false, addSuffix = false)
+      QueryPlan.append(executedPlan,
+        append, verbose = false, addSuffix = false, maxFields = maxFields)
     }
-    concat.append("\n")
-    concat.toString
+    append("\n")
   }
 
   def explainString(mode: ExplainMode): String = {
+    val concat = new PlanStringConcat()
+    explainString(mode, SQLConf.get.maxToStringFields, concat.append)
+    withRedaction {
+      concat.toString
+    }
+  }
+
+  private def explainString(mode: ExplainMode, maxFields: Int, append: String => Unit): Unit = {
     val queryExecution = if (logical.isStreaming) {
       // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
       // output mode does not matter since there is no `Sink`.
@@ -170,19 +191,19 @@ class QueryExecution(
 
     mode match {
       case SimpleMode =>
-        queryExecution.simpleString
+        queryExecution.simpleString(false, maxFields, append)
       case ExtendedMode =>
-        queryExecution.toString
+        queryExecution.toString(maxFields, append)
       case CodegenMode =>
         try {
-          org.apache.spark.sql.execution.debug.codegenString(queryExecution.executedPlan)
+          org.apache.spark.sql.execution.debug.writeCodegen(append, queryExecution.executedPlan)
         } catch {
-          case e: AnalysisException => e.toString
+          case e: AnalysisException => append(e.toString)
         }
       case CostMode =>
-        queryExecution.stringWithStats
+        queryExecution.stringWithStats(maxFields, append)
       case FormattedMode =>
-        queryExecution.simpleString(formatted = true)
+        queryExecution.simpleString(formatted = true, maxFields = maxFields, append)
     }
   }
 
@@ -209,27 +230,39 @@ class QueryExecution(
 
   override def toString: String = withRedaction {
     val concat = new PlanStringConcat()
-    writePlans(concat.append, SQLConf.get.maxToStringFields)
-    concat.toString
+    toString(SQLConf.get.maxToStringFields, concat.append)
+    withRedaction {
+      concat.toString
+    }
   }
 
-  def stringWithStats: String = withRedaction {
+  private def toString(maxFields: Int, append: String => Unit): Unit = {
+    writePlans(append, maxFields)
+  }
+
+  def stringWithStats: String = {
     val concat = new PlanStringConcat()
+    stringWithStats(SQLConf.get.maxToStringFields, concat.append)
+    withRedaction {
+      concat.toString
+    }
+  }
+
+  private def stringWithStats(maxFields: Int, append: String => Unit): Unit = {
     val maxFields = SQLConf.get.maxToStringFields
 
     // trigger to compute stats for logical plans
     try {
       optimizedPlan.stats
     } catch {
-      case e: AnalysisException => concat.append(e.toString + "\n")
+      case e: AnalysisException => append(e.toString + "\n")
     }
     // only show optimized logical plan and physical plan
-    concat.append("== Optimized Logical Plan ==\n")
-    QueryPlan.append(optimizedPlan, concat.append, verbose = true, addSuffix = true, maxFields)
-    concat.append("\n== Physical Plan ==\n")
-    QueryPlan.append(executedPlan, concat.append, verbose = true, addSuffix = false, maxFields)
-    concat.append("\n")
-    concat.toString
+    append("== Optimized Logical Plan ==\n")
+    QueryPlan.append(optimizedPlan, append, verbose = true, addSuffix = true, maxFields)
+    append("\n== Physical Plan ==\n")
+    QueryPlan.append(executedPlan, append, verbose = true, addSuffix = false, maxFields)
+    append("\n")
   }
 
   /**
@@ -266,19 +299,26 @@ class QueryExecution(
     /**
      * Dumps debug information about query execution into the specified file.
      *
+     * @param path path of the file the debug info is written to.
      * @param maxFields maximum number of fields converted to string representation.
+     * @param explainMode the explain mode to be used to generate the string
+     *                    representation of the plan.
      */
-    def toFile(path: String, maxFields: Int = Int.MaxValue): Unit = {
+    def toFile(
+        path: String,
+        maxFields: Int = Int.MaxValue,
+        explainMode: Option[String] = None): Unit = {
       val filePath = new Path(path)
       val fs = filePath.getFileSystem(sparkSession.sessionState.newHadoopConf())
       val writer = new BufferedWriter(new OutputStreamWriter(fs.create(filePath)))
-      val append = (s: String) => {
-        writer.write(s)
-      }
       try {
-        writePlans(append, maxFields)
-        writer.write("\n== Whole Stage Codegen ==\n")
-        org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
+        val mode = explainMode.map(ExplainMode.fromString(_)).getOrElse(ExtendedMode)
+        explainString(mode, maxFields, writer.write)
+        if (mode != CodegenMode) {
+          writer.write("\n== Whole Stage Codegen ==\n")
+          org.apache.spark.sql.execution.debug.writeCodegen(writer.write, executedPlan)
+        }
+        log.info(s"Debug information was written at: $filePath")
       } finally {
         writer.close()
       }
@@ -287,6 +327,10 @@ class QueryExecution(
 }
 
 object QueryExecution {
+  private val _nextExecutionId = new AtomicLong(0)
+
+  private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
+
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
    * These rules will make sure subqueries are planned, make use the data partitioning and ordering
@@ -300,17 +344,19 @@ object QueryExecution {
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
+      CoalesceBucketsInJoin,
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
-      EnsureRequirements(sparkSession.sessionState.conf),
-      // `RemoveRedundantSorts` needs to be added before `EnsureRequirements` to guarantee the same
+      RemoveRedundantProjects,
+      EnsureRequirements,
+      // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
-      RemoveRedundantSorts(sparkSession.sessionState.conf),
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
-        sparkSession.sessionState.columnarRules),
-      CollapseCodegenStages(sparkSession.sessionState.conf),
-      ReuseExchange(sparkSession.sessionState.conf),
-      ReuseSubquery(sparkSession.sessionState.conf)
+      RemoveRedundantSorts,
+      DisableUnnecessaryBucketedScan,
+      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
+      CollapseCodegenStages(),
+      ReuseExchange,
+      ReuseSubquery
     )
   }
 
@@ -321,7 +367,14 @@ object QueryExecution {
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
       plan: SparkPlan): SparkPlan = {
-    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
+    val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
+      val result = rule.apply(sp)
+      planChangeLogger.logRule(rule.ruleName, sp, result)
+      result
+    }
+    planChangeLogger.logBatch("Preparations", plan, preparedPlan)
+    preparedPlan
   }
 
   /**

@@ -44,12 +44,12 @@ class ExecutorMetrics private[spark] extends Serializable {
   /** Returns true if the values for the metrics have been set, false otherwise. */
   def isSet(): Boolean = metrics(0) > -1
 
-  private[spark] def this(metrics: Array[Long]) {
+  private[spark] def this(metrics: Array[Long]) = {
     this()
     Array.copy(metrics, 0, this.metrics, 0, Math.min(metrics.size, this.metrics.size))
   }
 
-  private[spark] def this(metrics: AtomicLongArray) {
+  private[spark] def this(metrics: AtomicLongArray) = {
     this()
     ExecutorMetricType.metricToOffset.foreach { case (_, i) =>
       this.metrics(i) = metrics.get(i)
@@ -61,7 +61,7 @@ class ExecutorMetrics private[spark] extends Serializable {
    *
    * @param executorMetrics map of executor metric name to value
    */
-  private[spark] def this(executorMetrics: Map[String, Long]) {
+  private[spark] def this(executorMetrics: Map[String, Long]) = {
     this()
     ExecutorMetricType.metricToOffset.foreach { case (name, idx) =>
       metrics(idx) = executorMetrics.getOrElse(name, 0L)

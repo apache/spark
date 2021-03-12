@@ -143,6 +143,7 @@ Summary metrics for all task are represented in a table and in a timeline.
 * **Shuffle Read Size / Records**. Total shuffle bytes read, includes both data read locally and data read from remote executors.
 * **Shuffle Read Blocked Time** is the time that tasks spent blocked waiting for shuffle data to be read from remote machines.
 * **Shuffle Remote Reads** is the total shuffle bytes read from remote executors.
+* **Shuffle Write Time** is the time that tasks spent writing shuffle data.
 * **Shuffle spill (memory)** is the size of the deserialized form of the shuffled data in memory.
 * **Shuffle spill (disk)** is the size of the serialized form of the data on disk.
 

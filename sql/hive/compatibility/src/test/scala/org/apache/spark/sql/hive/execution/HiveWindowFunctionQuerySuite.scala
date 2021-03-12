@@ -763,7 +763,7 @@ class HiveWindowFunctionQueryFileSuite
     }
   }
 
-  override def blackList: Seq[String] = Seq(
+  override def excludeList: Seq[String] = Seq(
     // Partitioned table functions are not supported.
     "ptf*",
     // tests of windowing.q are in HiveWindowFunctionQueryBaseSuite
@@ -791,12 +791,12 @@ class HiveWindowFunctionQueryFileSuite
     "windowing_adjust_rowcontainer_sz"
   )
 
-  override def whiteList: Seq[String] = Seq(
+  override def includeList: Seq[String] = Seq(
     "windowing_udaf2"
   )
 
-  // Only run those query tests in the realWhileList (do not try other ignored query files).
+  // Only run those query tests in the realIncludeList (do not try other ignored query files).
   override def testCases: Seq[(String, File)] = super.testCases.filter {
-    case (name, _) => realWhiteList.contains(name)
+    case (name, _) => realIncludeList.contains(name)
   }
 }

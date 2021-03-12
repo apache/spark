@@ -54,17 +54,22 @@ and install these libraries:
 
 ```sh
 $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "testthat", "rmarkdown"), repos="https://cloud.r-project.org/")'
-$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repos="https://cloud.r-project.org/")'
+$ sudo Rscript -e 'devtools::install_version("roxygen2", version = "7.1.1", repos="https://cloud.r-project.org/")'
 ```
 
-Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 5.0.1, which is updated if the version is mismatched.
+Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 7.1.1, which is updated if the version is mismatched.
 
 ### API Documentation
 
 To generate API docs for any language, you'll need to install these libraries:
 
+<!--
+TODO(SPARK-32407): Sphinx 3.1+ does not correctly index nested classes.
+See also https://github.com/sphinx-doc/sphinx/issues/7551.
+-->
+
 ```sh
-$ sudo pip install 'sphinx<3.5.0' mkdocs numpy
+$ sudo pip install 'sphinx<3.1.0' mkdocs numpy pydata_sphinx_theme ipython nbsphinx numpydoc
 ```
 
 ## Generating the Documentation HTML

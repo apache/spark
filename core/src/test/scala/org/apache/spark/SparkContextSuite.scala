@@ -32,12 +32,12 @@ import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.json4s.{DefaultFormats, Extraction}
-import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.TestUtils._
 import org.apache.spark.internal.config._
-import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
+import org.apache.spark.internal.config.Tests._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.resource.ResourceAllocation
 import org.apache.spark.resource.ResourceUtils._
@@ -155,6 +155,85 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           x
         }).count()
         assert(sc.listFiles().count(_.contains("somesuffix1")) == 1)
+      } finally {
+        sc.stop()
+      }
+    }
+  }
+
+  test("SPARK-33530: basic case for addArchive and listArchives") {
+    withTempDir { dir =>
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val file2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+      val file3 = File.createTempFile("someprefix3", "somesuffix3", dir)
+      val file4 = File.createTempFile("someprefix4", "somesuffix4", dir)
+
+      val jarFile = new File(dir, "test!@$jar.jar")
+      val zipFile = new File(dir, "test-zip.zip")
+      val relativePath1 =
+        s"${zipFile.getParent}/../${zipFile.getParentFile.getName}/${zipFile.getName}"
+      val relativePath2 =
+        s"${jarFile.getParent}/../${jarFile.getParentFile.getName}/${jarFile.getName}#zoo"
+
+      try {
+        Files.write("somewords1", file1, StandardCharsets.UTF_8)
+        Files.write("somewords22", file2, StandardCharsets.UTF_8)
+        Files.write("somewords333", file3, StandardCharsets.UTF_8)
+        Files.write("somewords4444", file4, StandardCharsets.UTF_8)
+        val length1 = file1.length()
+        val length2 = file2.length()
+        val length3 = file1.length()
+        val length4 = file2.length()
+
+        createJar(Seq(file1, file2), jarFile)
+        createJar(Seq(file3, file4), zipFile)
+
+        sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+        sc.addArchive(jarFile.getAbsolutePath)
+        sc.addArchive(relativePath1)
+        sc.addArchive(s"${jarFile.getAbsolutePath}#foo")
+        sc.addArchive(s"${zipFile.getAbsolutePath}#bar")
+        sc.addArchive(relativePath2)
+
+        sc.parallelize(Array(1), 1).map { x =>
+          val gotten1 = new File(SparkFiles.get(jarFile.getName))
+          val gotten2 = new File(SparkFiles.get(zipFile.getName))
+          val gotten3 = new File(SparkFiles.get("foo"))
+          val gotten4 = new File(SparkFiles.get("bar"))
+          val gotten5 = new File(SparkFiles.get("zoo"))
+
+          Seq(gotten1, gotten2, gotten3, gotten4, gotten5).foreach { gotten =>
+            if (!gotten.exists()) {
+              throw new SparkException(s"The archive doesn't exist: ${gotten.getAbsolutePath}")
+            }
+            if (!gotten.isDirectory) {
+              throw new SparkException(s"The archive was not unpacked: ${gotten.getAbsolutePath}")
+            }
+          }
+
+          // Jars
+          Seq(gotten1, gotten3, gotten5).foreach { gotten =>
+            val actualLength1 = new File(gotten, file1.getName).length()
+            val actualLength2 = new File(gotten, file2.getName).length()
+            if (actualLength1 != length1 || actualLength2 != length2) {
+              s"Unpacked files have different lengths $actualLength1 and $actualLength2. at " +
+                s"${gotten.getAbsolutePath}. They should be $length1 and $length2."
+            }
+          }
+
+          // Zip
+          Seq(gotten2, gotten4).foreach { gotten =>
+            val actualLength3 = new File(gotten, file1.getName).length()
+            val actualLength4 = new File(gotten, file2.getName).length()
+            if (actualLength3 != length3 || actualLength4 != length4) {
+              s"Unpacked files have different lengths $actualLength3 and $actualLength4. at " +
+                s"${gotten.getAbsolutePath}. They should be $length3 and $length4."
+            }
+          }
+          x
+        }.count()
+        assert(sc.listArchives().count(_.endsWith("test!@$jar.jar")) == 1)
+        assert(sc.listArchives().count(_.contains("test-zip.zip")) == 2)
       } finally {
         sc.stop()
       }
@@ -786,7 +865,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   }
 
   test(s"Avoid setting ${CPUS_PER_TASK.key} unreasonably (SPARK-27192)") {
-    val FAIL_REASON = s"has to be >= the task config: ${CPUS_PER_TASK.key}"
+    val FAIL_REASON = " has to be >= the number of cpus per task"
     Seq(
       ("local", 2, None),
       ("local[2]", 3, None),
@@ -865,9 +944,8 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount " +
-      "needs to be specified since a task requirement config: spark.task.resource.gpu.amount " +
-      "was specified"))
+    assert(error.contains("No executor resource configs were not specified for the following " +
+      "task configs: gpu"))
   }
 
   test("Test parsing resources executor config < task requirements") {
@@ -881,43 +959,26 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       sc = new SparkContext(conf)
     }.getMessage()
 
-    assert(error.contains("The executor resource config: spark.executor.resource.gpu.amount = 1 " +
-      "has to be >= the requested amount in task resource config: " +
-      "spark.task.resource.gpu.amount = 2"))
+    assert(error.contains("The executor resource: gpu, amount: 1 needs to be >= the task " +
+      "resource request amount of 2.0"))
   }
 
   test("Parse resources executor config not the same multiple numbers of the task requirements") {
     val conf = new SparkConf()
       .setMaster("local-cluster[1, 1, 1024]")
       .setAppName("test-cluster")
+    conf.set(RESOURCES_WARNING_TESTING, true)
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(EXECUTOR_GPU_ID.amountConf, "4")
-    conf.set(RESOURCES_WARNING_TESTING, true)
 
     var error = intercept[SparkException] {
       sc = new SparkContext(conf)
     }.getMessage()
 
     assert(error.contains(
-      "The configuration of resource: gpu (exec = 4, task = 2, runnable tasks = 2) will result " +
-        "in wasted resources due to resource CPU limiting the number of runnable tasks per " +
-        "executor to: 1. Please adjust your configuration."))
-  }
-
-  test("Parse resources executor config cpus not limiting resource") {
-    val conf = new SparkConf()
-      .setMaster("local-cluster[1, 8, 1024]")
-      .setAppName("test-cluster")
-    conf.set(TASK_GPU_ID.amountConf, "2")
-    conf.set(EXECUTOR_GPU_ID.amountConf, "4")
-
-    var error = intercept[IllegalArgumentException] {
-      sc = new SparkContext(conf)
-    }.getMessage()
-
-    assert(error.contains("The number of slots on an executor has to be " +
-      "limited by the number of cores, otherwise you waste resources and " +
-      "dynamic allocation doesn't work properly"))
+      "The configuration of resource: gpu (exec = 4, task = 2.0/1, runnable tasks = 2) will " +
+        "result in wasted resources due to resource cpus limiting the number of runnable " +
+        "tasks per executor to: 1. Please adjust your configuration."))
   }
 
   test("test resource scheduling under local-cluster mode") {
@@ -954,24 +1015,24 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     }
   }
 
-  test("SPARK-32160: Disallow to create SparkContext in executors if the config is set") {
+  test("SPARK-32160: Disallow to create SparkContext in executors") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
 
     val error = intercept[SparkException] {
       sc.range(0, 1).foreach { _ =>
-        new SparkContext(new SparkConf().setAppName("test").setMaster("local")
-          .set(EXECUTOR_ALLOW_SPARK_CONTEXT, false))
+        new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       }
     }.getMessage()
 
     assert(error.contains("SparkContext should only be created and accessed on the driver."))
   }
 
-  test("SPARK-32160: Allow to create SparkContext in executors") {
+  test("SPARK-32160: Allow to create SparkContext in executors if the config is set") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local-cluster[3, 1, 1024]"))
 
     sc.range(0, 1).foreach { _ =>
-      new SparkContext(new SparkConf().setAppName("test").setMaster("local")).stop()
+      new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+        .set(EXECUTOR_ALLOW_SPARK_CONTEXT, true)).stop()
     }
   }
 

@@ -18,12 +18,14 @@
 package org.apache.spark.sql.jdbc
 
 import java.net.ServerSocket
-import java.sql.Connection
+import java.sql.{Connection, DriverManager}
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._
+import com.spotify.docker.client.DockerClient.ListContainersParam
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import org.scalatest.concurrent.Eventually
@@ -54,26 +56,62 @@ abstract class DatabaseOnDocker {
   val jdbcPort: Int
 
   /**
+   * Parameter whether the container should run privileged.
+   */
+  val privileged: Boolean = false
+
+  /**
    * Return a JDBC URL that connects to the database running at the given IP address and port.
    */
   def getJdbcUrl(ip: String, port: Int): String
 
   /**
+   * Return the JDBC properties needed for the connection.
+   */
+  def getJdbcProperties(): Properties = new Properties()
+
+  /**
+   * Optional entry point when container starts
+   *
+   * Startup process is a parameter of entry point. This may or may not be considered during
+   * startup. Prefer entry point to startup process when you need a command always to be executed or
+   * you want to change the initialization order.
+   */
+  def getEntryPoint: Option[String] = None
+
+  /**
    * Optional process to run when container starts
    */
-  def getStartupProcessName: Option[String]
+  def getStartupProcessName: Option[String] = None
+
+  /**
+   * Optional step before container starts
+   */
+  def beforeContainerStart(
+      hostConfigBuilder: HostConfig.Builder,
+      containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
 abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
 
+  protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
-  val connectionTimeout = timeout(2.minutes)
+  val connectionTimeout = timeout(5.minutes)
+  val keepContainer =
+    sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
 
   private var docker: DockerClient = _
+  // Configure networking (necessary for boot2docker / Docker Machine)
+  protected lazy val externalPort: Int = {
+    val sock = new ServerSocket(0)
+    val port = sock.getLocalPort
+    sock.close()
+    port
+  }
   private var containerId: String = _
   protected var jdbcUrl: String = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()
@@ -93,31 +131,26 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
           docker.pull(db.imageName)
       }
-      // Configure networking (necessary for boot2docker / Docker Machine)
-      val externalPort: Int = {
-        val sock = new ServerSocket(0)
-        val port = sock.getLocalPort
-        sock.close()
-        port
-      }
-      val dockerIp = DockerUtils.getDockerIp()
-      val hostConfig: HostConfig = HostConfig.builder()
+      val hostConfigBuilder = HostConfig.builder()
+        .privileged(db.privileged)
         .networkMode("bridge")
         .ipcMode(if (db.usesIpc) "host" else "")
         .portBindings(
           Map(s"${db.jdbcPort}/tcp" -> List(PortBinding.of(dockerIp, externalPort)).asJava).asJava)
-        .build()
       // Create the database container:
       val containerConfigBuilder = ContainerConfig.builder()
         .image(db.imageName)
         .networkDisabled(false)
         .env(db.env.map { case (k, v) => s"$k=$v" }.toSeq.asJava)
-        .hostConfig(hostConfig)
         .exposedPorts(s"${db.jdbcPort}/tcp")
-      if(db.getStartupProcessName.isDefined) {
-        containerConfigBuilder
-        .cmd(db.getStartupProcessName.get)
+      if (db.getEntryPoint.isDefined) {
+        containerConfigBuilder.entrypoint(db.getEntryPoint.get)
       }
+      if (db.getStartupProcessName.isDefined) {
+        containerConfigBuilder.cmd(db.getStartupProcessName.get)
+      }
+      db.beforeContainerStart(hostConfigBuilder, containerConfigBuilder)
+      containerConfigBuilder.hostConfig(hostConfigBuilder.build())
       val config = containerConfigBuilder.build()
       // Create the database container:
       containerId = docker.createContainer(config).id
@@ -126,7 +159,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
       jdbcUrl = db.getJdbcUrl(dockerIp, externalPort)
       var conn: Connection = null
       eventually(connectionTimeout, interval(1.second)) {
-        conn = java.sql.DriverManager.getConnection(jdbcUrl)
+        conn = getConnection()
       }
       // Run any setup queries:
       try {
@@ -144,28 +177,45 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
     }
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
-      if (docker != null) {
-        try {
-          if (containerId != null) {
-            docker.killContainer(containerId)
-            docker.removeContainer(containerId)
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Could not stop container $containerId", e)
-        } finally {
-          docker.close()
-        }
-      }
+      cleanupContainer()
     } finally {
+      if (docker != null) {
+        docker.close()
+      }
       super.afterAll()
     }
+  }
+
+  /**
+   * Return the JDBC connection.
+   */
+  def getConnection(): Connection = {
+    DriverManager.getConnection(jdbcUrl, db.getJdbcProperties())
   }
 
   /**
    * Prepare databases and tables for testing.
    */
   def dataPreparation(connection: Connection): Unit
+
+  private def cleanupContainer(): Unit = {
+    if (docker != null && containerId != null && !keepContainer) {
+      try {
+        docker.killContainer(containerId)
+      } catch {
+        case NonFatal(e) =>
+          val exitContainerIds =
+            docker.listContainers(ListContainersParam.withStatusExited()).asScala.map(_.id())
+          if (exitContainerIds.contains(containerId)) {
+            logWarning(s"Container $containerId already stopped")
+          } else {
+            logWarning(s"Could not stop container $containerId", e)
+          }
+      } finally {
+        docker.removeContainer(containerId)
+      }
+    }
+  }
 }

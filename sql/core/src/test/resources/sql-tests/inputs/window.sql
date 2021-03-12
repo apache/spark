@@ -5,16 +5,36 @@
 
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
-(null, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), "a"),
-(1, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), "a"),
-(1, 2L, 2.5D, date("2017-08-02"), timestamp(1502000000), "a"),
-(2, 2147483650L, 100.001D, date("2020-12-31"), timestamp(1609372800), "a"),
-(1, null, 1.0D, date("2017-08-01"), timestamp(1501545600), "b"),
-(2, 3L, 3.3D, date("2017-08-03"), timestamp(1503000000), "b"),
-(3, 2147483650L, 100.001D, date("2020-12-31"), timestamp(1609372800), "b"),
+(null, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+(1, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "a"),
+(1, 2L, 2.5D, date("2017-08-02"), timestamp_seconds(1502000000), "a"),
+(2, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "a"),
+(1, null, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), "b"),
+(2, 3L, 3.3D, date("2017-08-03"), timestamp_seconds(1503000000), "b"),
+(3, 2147483650L, 100.001D, date("2020-12-31"), timestamp_seconds(1609372800), "b"),
 (null, null, null, null, null, null),
-(3, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), null)
+(3, 1L, 1.0D, date("2017-08-01"), timestamp_seconds(1501545600), null)
 AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
+
+CREATE OR REPLACE TEMPORARY VIEW basic_pays AS SELECT * FROM VALUES
+('Diane Murphy','Accounting',8435),
+('Mary Patterson','Accounting',9998),
+('Jeff Firrelli','Accounting',8992),
+('William Patterson','Accounting',8870),
+('Gerard Bondur','Accounting',11472),
+('Anthony Bow','Accounting',6627),
+('Leslie Jennings','IT',8113),
+('Leslie Thompson','IT',5186),
+('Julie Firrelli','Sales',9181),
+('Steve Patterson','Sales',9441),
+('Foon Yue Tseng','Sales',6660),
+('George Vanauf','Sales',10563),
+('Loui Bondur','SCM',10449),
+('Gerard Hernandez','SCM',6949),
+('Pamela Castillo','SCM',11303),
+('Larry Bott','SCM',11798),
+('Barry Jones','SCM',10586)
+AS basic_pays(employee_name, department, salary);
 
 -- RowsBetween
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
@@ -125,3 +145,121 @@ WINDOW w AS (PARTITION BY cate ORDER BY val);
 SELECT val, cate,
 count(val) FILTER (WHERE val > 1) OVER(PARTITION BY cate)
 FROM testData ORDER BY cate, val;
+
+-- nth_value()/first_value() over ()
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary RANGE BETWEEN 2000 PRECEDING AND 1000 FOLLOWING)
+ORDER BY salary;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
+ORDER BY salary DESC;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING)
+ORDER BY salary DESC;
+
+SELECT
+	employee_name,
+	department,
+	salary,
+	FIRST_VALUE(employee_name) OVER w highest_salary,
+	NTH_VALUE(employee_name, 2) OVER w second_highest_salary
+FROM
+	basic_pays
+WINDOW w AS (
+  PARTITION BY department
+  ORDER BY salary DESC
+  RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
+ORDER BY department;
+
+SELECT
+    employee_name,
+    salary,
+    first_value(employee_name) OVER w highest_salary,
+    nth_value(employee_name, 2) OVER w second_highest_salary
+FROM
+    basic_pays
+WINDOW
+    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING),
+    w AS (ORDER BY salary DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING)
+ORDER BY salary DESC;

@@ -61,14 +61,12 @@ class KeywordOnlyTests(unittest.TestCase):
 
 
 class UtilTests(PySparkTestCase):
-    def test_py4j_exception_message(self):
-        from pyspark.util import _exception_message
-
+    def test_py4j_str(self):
         with self.assertRaises(Py4JJavaError) as context:
             # This attempts java.lang.String(null) which throws an NPE.
             self.sc._jvm.java.lang.String(None)
 
-        self.assertTrue('NullPointerException' in _exception_message(context.exception))
+        self.assertTrue('NullPointerException' in str(context.exception))
 
     def test_parsing_version_string(self):
         from pyspark.util import VersionUtils
@@ -76,10 +74,10 @@ class UtilTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_util import *
+    from pyspark.tests.test_util import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -144,7 +144,7 @@ NULL
 #' @param y Column to compute on.
 #' @param pos In \itemize{
 #'                \item \code{locate}: a start position of search.
-#'                \item \code{overlay}: a start postiton for replacement.
+#'                \item \code{overlay}: a start position for replacement.
 #'                }
 #' @param len In \itemize{
 #'               \item \code{lpad} the maximum length of each output result.
@@ -225,6 +225,34 @@ NULL
 #'              the DDL-formatted string literal can also be accepted.
 #'          \item \code{from_csv}: a structType object, DDL-formatted string or \code{schema_of_csv}
 #'          }
+#'
+#' @param f a \code{function} mapping from \code{Column(s)} to \code{Column}.
+#'          \itemize{
+#'          \item \code{array_exists}
+#'          \item \code{array_filter} the Boolean \code{function} used to filter the data.
+#'            Either unary or binary. In the latter case the second argument
+#'            is the index in the array (0-based).
+#'          \item \code{array_forall} the Boolean unary \code{function} used to filter the data.
+#'          \item \code{array_transform} a \code{function} used to transform the data.
+#'            Either unary or binary. In the latter case the second argument
+#'            is the index in the array (0-based).
+#'          \item \code{arrays_zip_with}
+#'          \item \code{map_zip_with}
+#'          \item \code{map_filter} the Boolean binary \code{function} used to filter the data.
+#'            The first argument is the key, the second argument is the value.
+#'          \item \code{transform_keys} a binary \code{function}
+#'            used to transform the data.  The first argument is the key, the second argument
+#'            is the value.
+#'          \item \code{transform_values} a binary \code{function}
+#'            used to transform the data.  The first argument is the key, the second argument
+#'            is the value.
+#'          }
+#' @param initialValue a \code{Column} used as the initial value in \code{array_aggregate}
+#' @param merge a \code{function} a binary function \code{(Column, Column) -> Column}
+#'          used in \code{array_aggregate}to merge values (the second argument)
+#'          into accumulator (the first argument).
+#' @param finish an unary \code{function} \code{(Column) -> Column} used to
+#'          apply final transformation on the accumulated data in \code{array_aggregate}.
 #' @param ... additional argument(s).
 #'          \itemize{
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
@@ -250,6 +278,14 @@ NULL
 #' head(select(tmp, array_max(tmp$v1), array_min(tmp$v1), array_distinct(tmp$v1)))
 #' head(select(tmp, array_position(tmp$v1, 21), array_repeat(df$mpg, 3), array_sort(tmp$v1)))
 #' head(select(tmp, reverse(tmp$v1), array_remove(tmp$v1, 21)))
+#' head(select(tmp, array_transform("v1", function(x) x * 10)))
+#' head(select(tmp, array_exists("v1", function(x) x > 120)))
+#' head(select(tmp, array_forall("v1", function(x) x >= 8.0)))
+#' head(select(tmp, array_filter("v1", function(x) x < 10)))
+#' head(select(tmp, array_aggregate("v1", lit(0), function(acc, y) acc + y)))
+#' head(select(
+#'   tmp,
+#'   array_aggregate("v1", lit(0), function(acc, y) acc + y, function(acc) acc / 10)))
 #' tmp2 <- mutate(tmp, v2 = explode(tmp$v1))
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
@@ -259,17 +295,22 @@ NULL
 #' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
 #' head(select(tmp3, map_entries(tmp3$v3), map_keys(tmp3$v3), map_values(tmp3$v3)))
 #' head(select(tmp3, element_at(tmp3$v3, "Valiant"), map_concat(tmp3$v3, tmp3$v3)))
+#' head(select(tmp3, transform_keys("v3", function(k, v) upper(k))))
+#' head(select(tmp3, transform_values("v3", function(k, v) v * 10)))
+#' head(select(tmp3, map_filter("v3", function(k, v) v < 42)))
 #' tmp4 <- mutate(df, v4 = create_array(df$mpg, df$cyl), v5 = create_array(df$cyl, df$hp))
 #' head(select(tmp4, concat(tmp4$v4, tmp4$v5), arrays_overlap(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_except(tmp4$v4, tmp4$v5), array_intersect(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, array_union(tmp4$v4, tmp4$v5)))
 #' head(select(tmp4, arrays_zip(tmp4$v4, tmp4$v5)))
 #' head(select(tmp, concat(df$mpg, df$cyl, df$hp)))
+#' head(select(tmp4, arrays_zip_with(tmp4$v4, tmp4$v5, function(x, y) x * y)))
 #' tmp5 <- mutate(df, v6 = create_array(df$model, df$model))
 #' head(select(tmp5, array_join(tmp5$v6, "#"), array_join(tmp5$v6, "#", "NULL")))
 #' tmp6 <- mutate(df, v7 = create_array(create_array(df$model, df$model)))
 #' head(select(tmp6, flatten(tmp6$v7)))
 #' tmp7 <- mutate(df, v8 = create_array(df$model, df$cyl), v9 = create_array(df$model, df$hp))
+#' head(select(tmp7, arrays_zip_with("v8", "v9", function(x, y) (x * y) %% 3)))
 #' head(select(tmp7, map_from_arrays(tmp7$v8, tmp7$v9)))
 #' tmp8 <- mutate(df, v10 = create_array(struct(df$model, df$cyl)))
 #' head(select(tmp8, map_from_entries(tmp8$v10)))}
@@ -297,10 +338,77 @@ NULL
 #' tmp <- mutate(df, dist = over(cume_dist(), ws), dense_rank = over(dense_rank(), ws),
 #'               lag = over(lag(df$mpg), ws), lead = over(lead(df$mpg, 1), ws),
 #'               percent_rank = over(percent_rank(), ws),
-#'               rank = over(rank(), ws), row_number = over(row_number(), ws))
+#'               rank = over(rank(), ws), row_number = over(row_number(), ws),
+#'               nth_value = over(nth_value(df$mpg, 3), ws))
 #' # Get ntile group id (1-4) for hp
 #' tmp <- mutate(tmp, ntile = over(ntile(4), ws))
 #' head(tmp)}
+NULL
+
+#' ML functions for Column operations
+#'
+#' ML functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param ... additional argument(s).
+#' @name column_ml_functions
+#' @rdname column_ml_functions
+#' @family ml functions
+#' @examples
+#' \dontrun{
+#' df <- read.df("data/mllib/sample_libsvm_data.txt", source = "libsvm")
+#' head(
+#'   withColumn(
+#'     withColumn(df, "array", vector_to_array(df$features)),
+#'     "vector",
+#'     array_to_vector(column("array"))
+#'   )
+#' )
+#' }
+NULL
+
+#' Avro processing functions for Column operations
+#'
+#' Avro processing functions defined for \code{Column}.
+#'
+#' @param x Column to compute on.
+#' @param jsonFormatSchema character Avro schema in JSON string format
+#' @param ... additional argument(s) passed as parser options.
+#' @name column_avro_functions
+#' @rdname column_avro_functions
+#' @family avro functions
+#' @note Avro is built-in but external data source module since Spark 2.4.
+#'   Please deploy the application as per
+#'   \href{https://spark.apache.org/docs/latest/sql-data-sources-avro.html#deploying}{
+#'     the deployment section
+#'   } of "Apache Avro Data Source Guide".
+#' @examples
+#' \dontrun{
+#' df <- createDataFrame(iris)
+#' schema <- paste(
+#'   c(
+#'     '{"type": "record", "namespace": "example.avro", "name": "Iris", "fields": [',
+#'     '{"type": ["double", "null"], "name": "Sepal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Sepal_Width"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Length"},',
+#'     '{"type": ["double", "null"], "name": "Petal_Width"},',
+#'     '{"type": ["string", "null"], "name": "Species"}]}'
+#'   ),
+#'   collapse="\\n"
+#' )
+#'
+#' df_serialized <- select(
+#'   df,
+#'   alias(to_avro(alias(struct(column("*")), "fields")), "payload")
+#' )
+#'
+#' df_deserialized <- select(
+#'   df_serialized,
+#'   from_avro(df_serialized$payload, schema)
+#' )
+#'
+#' head(df_deserialized)
+#' }
 NULL
 
 #' @details
@@ -350,6 +458,19 @@ setMethod("acos",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "acos", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{acosh}: Computes inverse hyperbolic cosine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases acosh acosh,Column-method
+#' @note acosh since 3.1.0
+setMethod("acosh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "acosh", x@jc)
             column(jc)
           })
 
@@ -421,6 +542,19 @@ setMethod("asin",
           })
 
 #' @details
+#' \code{asinh}: Computes inverse hyperbolic sine of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases asinh asinh,Column-method
+#' @note asinh since 3.1.0
+setMethod("asinh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "asinh", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{atan}: Returns the inverse tangent of the given value,
 #' as if computed by \code{java.lang.Math.atan()}
 #'
@@ -431,6 +565,19 @@ setMethod("atan",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "atan", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{atanh}: Computes inverse hyperbolic tangent of the input column.
+#'
+#' @rdname column_math_functions
+#' @aliases atanh atanh,Column-method
+#' @note atanh since 3.1.0
+setMethod("atanh",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "atanh", x@jc)
             column(jc)
           })
 
@@ -765,6 +912,57 @@ setMethod("xxhash64",
               x@jc
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "xxhash64", jcols)
+            column(jc)
+          })
+
+#' @details
+#' \code{assert_true}: Returns null if the input column is true; throws an exception
+#' with the provided error message otherwise.
+#'
+#' @param errMsg (optional) The error message to be thrown.
+#'
+#' @rdname column_misc_functions
+#' @aliases assert_true assert_true,Column-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = assert_true(df$vs < 2),
+#'                   v2 = assert_true(df$vs < 2, "custom error message"),
+#'                   v3 = assert_true(df$vs < 2, df$vs))
+#' head(tmp)}
+#' @note assert_true since 3.1.0
+setMethod("assert_true",
+          signature(x = "Column"),
+          function(x, errMsg = NULL) {
+            jc <- if (is.null(errMsg)) {
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc)
+            } else {
+              if (is.character(errMsg)) {
+                stopifnot(length(errMsg) == 1)
+                errMsg <- lit(errMsg)
+              }
+              callJStatic("org.apache.spark.sql.functions", "assert_true", x@jc, errMsg@jc)
+            }
+            column(jc)
+          })
+
+#' @details
+#' \code{raise_error}: Throws an exception with the provided error message.
+#'
+#' @rdname column_misc_functions
+#' @aliases raise_error raise_error,characterOrColumn-method
+#' @examples
+#' \dontrun{
+#' tmp <- mutate(df, v1 = raise_error("error message"))
+#' head(tmp)}
+#' @note raise_error since 3.1.0
+setMethod("raise_error",
+          signature(x = "characterOrColumn"),
+          function(x) {
+            if (is.character(x)) {
+              stopifnot(length(x) == 1)
+              x <- lit(x)
+            }
+            jc <- callJStatic("org.apache.spark.sql.functions", "raise_error", x@jc)
             column(jc)
           })
 
@@ -1372,6 +1570,54 @@ setMethod("quarter",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "quarter", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{percentile_approx} Returns the approximate \code{percentile} of the numeric column
+#' \code{col} which is the smallest value in the ordered \code{col} values (sorted from least to
+#' greatest) such that no more than \code{percentage} of \code{col} values is less than the value
+#' or equal to that value.
+#'
+#' @param percentage Numeric percentage at which percentile should be computed
+#'                   All values should be between 0 and 1.
+#'                   If length equals to 1 resulting column is of type double,
+#'                   otherwise, array type of double.
+#' @param accuracy A positive numeric literal (default: 10000) which
+#'                 controls approximation accuracy at the cost of memory.
+#'                 Higher value of accuracy yields better accuracy, 1.0/accuracy
+#'                 is the relative error of the approximation.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases percentile_approx percentile_approx,Column-method
+#' @note percentile_approx since 3.1.0
+setMethod("percentile_approx",
+          signature(x = "characterOrColumn", percentage = "numericOrColumn"),
+          function(x, percentage, accuracy = 10000) {
+            col <- if (class(x) == "Column") {
+              x@jc
+            } else {
+              column(x)@jc
+            }
+
+            percentage <- if (class(percentage) == "Column") {
+              percentage@jc
+            } else if (length(percentage) > 1) {
+              do.call(create_array, lapply(percentage, lit))@jc
+            } else {
+              lit(percentage)@jc
+            }
+
+            accuracy <- if (class(accuracy) == "Column") {
+              accuracy@jc
+            } else {
+              lit(as.integer(accuracy))@jc
+            }
+
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "percentile_approx",
+              col, percentage, accuracy
+            )
             column(jc)
           })
 
@@ -2678,7 +2924,7 @@ setMethod("shiftRight", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRightUnsigned}: (Unigned) shifts the given value numBits right. If the given value is
+#' \code{shiftRightUnsigned}: (Unsigned) shifts the given value numBits right. If the given value is
 #' a long value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
@@ -3210,6 +3456,37 @@ setMethod("lead",
           })
 
 #' @details
+#' \code{nth_value}: Window function: returns the value that is the \code{offset}th
+#' row of the window frame# (counting from 1), and \code{null} if the size of window
+#' frame is less than \code{offset} rows.
+#'
+#' @param offset a numeric indicating number of row to use as the value
+#' @param na.rm a logical which indicates that the Nth value should skip null in the
+#'        determination of which row to use
+#'
+#' @rdname column_window_functions
+#' @aliases nth_value nth_value,characterOrColumn-method
+#' @note nth_value since 3.1.0
+setMethod("nth_value",
+          signature(x = "characterOrColumn", offset = "numeric"),
+          function(x, offset, na.rm = FALSE) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+            offset <- as.integer(offset)
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions",
+              "nth_value",
+              x@jc,
+              offset,
+              na.rm
+            )
+            column(jc)
+          })
+
+#' @details
 #' \code{ntile}: Returns the ntile group id (from 1 to n inclusive) in an ordered window
 #' partition. For example, if n is 4, the first quarter of the rows will get value 1, the second
 #' quarter will get 2, the third quarter will get 3, and the last quarter will get 4.
@@ -3287,6 +3564,121 @@ setMethod("row_number",
 
 ###################### Collection functions######################
 
+#' Create o.a.s.sql.expressions.UnresolvedNamedLambdaVariable,
+#' convert it to o.s.sql.Column and wrap with R Column.
+#' Used by higher order functions.
+#'
+#' @param ... character of length = 1
+#'        if length(...) > 1 then argument is interpreted as a nested
+#'        Column, for example \code{unresolved_named_lambda_var("a", "b", "c")}
+#'        yields unresolved \code{a.b.c}
+#' @return Column object wrapping JVM UnresolvedNamedLambdaVariable
+unresolved_named_lambda_var <- function(...) {
+  jc <- newJObject(
+    "org.apache.spark.sql.Column",
+    newJObject(
+      "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
+      list(...)
+    )
+  )
+  column(jc)
+}
+
+#' Create o.a.s.sql.expressions.LambdaFunction corresponding
+#' to transformation described by func.
+#' Used by higher order functions.
+#'
+#' @param fun R \code{function} (unary, binary or ternary)
+#'        that transforms \code{Columns} into a \code{Column}
+#' @return JVM \code{LambdaFunction} object
+create_lambda <- function(fun) {
+  as_jexpr <- function(x) callJMethod(x@jc, "expr")
+
+  # Process function arguments
+  parameters <- formals(fun)
+  nparameters <- length(parameters)
+
+  stopifnot(
+    nparameters >= 1 &
+    nparameters <= 3 &
+    !"..." %in% names(parameters)
+  )
+
+  args <- lapply(c("x", "y", "z")[seq_along(parameters)], function(p) {
+      unresolved_named_lambda_var(p)
+  })
+
+  # Invoke function and validate return type
+  result <- do.call(fun, args)
+  stopifnot(class(result) == "Column")
+
+  # Convert both Columns to Scala expressions
+  jexpr <- as_jexpr(result)
+
+  jargs <- handledCallJStatic(
+    "org.apache.spark.api.python.PythonUtils",
+    "toSeq",
+    handledCallJStatic(
+      "java.util.Arrays", "asList", lapply(args, as_jexpr)
+    )
+  )
+
+  # Create Scala LambdaFunction
+  newJObject(
+    "org.apache.spark.sql.catalyst.expressions.LambdaFunction",
+    jexpr,
+    jargs,
+    FALSE
+  )
+}
+
+#' Invokes higher order function expression identified by name,
+#' (relative to o.a.s.sql.catalyst.expressions)
+#'
+#' @param name character
+#' @param cols list of character or Column objects
+#' @param funs list of named list(fun = ..., expected_narg = ...)
+#' @return a \code{Column} representing name applied to cols with funs
+invoke_higher_order_function <- function(name, cols, funs) {
+  as_jexpr <- function(x) {
+    if (class(x) == "character") {
+      x <- column(x)
+    }
+    callJMethod(x@jc, "expr")
+  }
+
+  jexpr <- do.call(newJObject, c(
+    paste("org.apache.spark.sql.catalyst.expressions", name, sep = "."),
+    lapply(cols, as_jexpr),
+    lapply(funs, create_lambda)
+  ))
+
+  column(newJObject("org.apache.spark.sql.Column", jexpr))
+}
+
+#' @details
+#' \code{array_aggregate}  Applies a binary operator to an initial state
+#' and all elements in the array, and reduces this to a single state.
+#' The final state is converted into the final result by applying
+#' a finish function.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_aggregate array_aggregate,characterOrColumn,Column,function-method
+#' @note array_aggregate since 3.1.0
+setMethod("array_aggregate",
+          signature(x = "characterOrColumn", initialValue = "Column", merge = "function"),
+          function(x, initialValue, merge, finish = NULL) {
+            invoke_higher_order_function(
+              "ArrayAggregate",
+              cols = list(x, initialValue),
+              funs = if (is.null(finish)) {
+                list(merge)
+              } else {
+                list(merge, finish)
+              }
+            )
+          })
+
 #' @details
 #' \code{array_contains}: Returns null if the array is null, true if the array contains
 #' the value, and false otherwise.
@@ -3326,6 +3718,54 @@ setMethod("array_except",
           function(x, y) {
             jc <- callJStatic("org.apache.spark.sql.functions", "array_except", x@jc, y@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{array_exists} Returns whether a predicate holds for one or more elements in the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_exists array_exists,characterOrColumn,function-method
+#' @note array_exists since 3.1.0
+setMethod("array_exists",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "ArrayExists",
+              cols = list(x),
+              funs = list(f)
+            )
+          })
+
+#' @details
+#' \code{array_filter} Returns an array of elements for which a predicate holds in a given array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_filter array_filter,characterOrColumn,function-method
+#' @note array_filter since 3.1.0
+setMethod("array_filter",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "ArrayFilter",
+              cols = list(x),
+              funs = list(f)
+            )
+          })
+
+#' @details
+#' \code{array_forall} Returns whether a predicate holds for every element in the array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_forall array_forall,characterOrColumn,function-method
+#' @note array_forall since 3.1.0
+setMethod("array_forall",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "ArrayForAll",
+              cols = list(x),
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3453,6 +3893,23 @@ setMethod("array_sort",
           })
 
 #' @details
+#' \code{array_transform}  Returns an array of elements after applying
+#' a transformation to each element in the input array.
+#'
+#' @rdname column_collection_functions
+#' @aliases array_transform array_transform,characterOrColumn,characterOrColumn,function-method
+#' @note array_transform since 3.1.0
+setMethod("array_transform",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "ArrayTransform",
+              cols = list(x),
+              funs = list(f)
+            )
+          })
+
+#' @details
 #' \code{arrays_overlap}: Returns true if the input arrays have at least one non-null element in
 #' common. If not and both arrays are non-empty and any of them contains a null, it returns null.
 #' It returns false otherwise.
@@ -3497,6 +3954,24 @@ setMethod("arrays_zip",
             })
             jc <- callJStatic("org.apache.spark.sql.functions", "arrays_zip", jcols)
             column(jc)
+          })
+
+#' @details
+#' \code{arrays_zip_with} Merge two given arrays, element-wise, into a single array
+#' using a function. If one array is shorter, nulls are appended at the end
+#' to match the length of the longer array, before applying the function.
+#'
+#' @rdname column_collection_functions
+#' @aliases arrays_zip_with arrays_zip_with,characterOrColumn,characterOrColumn,function-method
+#' @note zip_with since 3.1.0
+setMethod("arrays_zip_with",
+          signature(x = "characterOrColumn", y = "characterOrColumn", f = "function"),
+          function(x, y, f) {
+            invoke_higher_order_function(
+              "ZipWith",
+              cols = list(x, y),
+              funs = list(f)
+            )
           })
 
 #' @details
@@ -3557,6 +4032,21 @@ setMethod("map_entries",
          })
 
 #' @details
+#' \code{map_filter} Returns a map whose key-value pairs satisfy a predicate.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_filter map_filter,characterOrColumn,function-method
+#' @note map_filter since 3.1.0
+setMethod("map_filter",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "MapFilter",
+              cols = list(x),
+              funs = list(f))
+          })
+
+#' @details
 #' \code{map_from_arrays}: Creates a new map column. The array in the first column is used for
 #' keys. The array in the second column is used for values. All elements in the array for key
 #' should not be null.
@@ -3598,6 +4088,41 @@ setMethod("map_keys",
          })
 
 #' @details
+#' \code{transform_keys} Applies a function to every key-value pair in a map and returns
+#' a map with the results of those applications as the new keys for the pairs.
+#'
+#' @rdname column_collection_functions
+#' @aliases transform_keys transform_keys,characterOrColumn,function-method
+#' @note transform_keys since 3.1.0
+setMethod("transform_keys",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "TransformKeys",
+              cols = list(x),
+              funs = list(f)
+            )
+          })
+
+#' @details
+#' \code{transform_values}    Applies a function to every key-value pair in a map and returns
+#' a map with the results of those applications as the new values for the pairs.
+#'
+#' @rdname column_collection_functions
+#' @aliases transform_values transform_values,characterOrColumn,function-method
+#' @note transform_values since 3.1.0
+setMethod("transform_values",
+          signature(x = "characterOrColumn", f = "function"),
+          function(x, f) {
+            invoke_higher_order_function(
+              "TransformValues",
+              cols = list(x),
+              funs = list(f)
+           )
+          })
+
+
+#' @details
 #' \code{map_values}: Returns an unordered array containing the values of the map.
 #'
 #' @rdname column_collection_functions
@@ -3608,6 +4133,23 @@ setMethod("map_values",
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "map_values", x@jc)
             column(jc)
+          })
+
+#' @details
+#' \code{map_zip} Merge two given maps, key-wise into a single map using a function.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_zip_with map_zip_with,characterOrColumn,characterOrColumn,function-method
+#'
+#' @note map_zip_with since 3.1.0
+setMethod("map_zip_with",
+          signature(x = "characterOrColumn", y = "characterOrColumn", f = "function"),
+          function(x, y, f) {
+            invoke_higher_order_function(
+              "MapZipWith",
+              cols = list(x, y),
+              funs = list(f)
+           )
           })
 
 #' @details
@@ -4055,5 +4597,117 @@ setMethod("current_timestamp",
           signature("missing"),
           function() {
             jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
+            column(jc)
+          })
+
+#' @details
+#' \code{timestamp_seconds}: Creates timestamp from the number of seconds since UTC epoch.
+#'
+#' @rdname column_datetime_functions
+#' @aliases timestamp_seconds timestamp_seconds,Column-method
+#' @note timestamp_seconds since 3.1.0
+setMethod("timestamp_seconds",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.sql.functions", "timestamp_seconds", x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{array_to_vector} Converts a column of array of numeric type into
+#' a column of dense vectors in MLlib
+#'
+#' @rdname column_ml_functions
+#' @aliases array_to_vector array_to_vector,Column-method
+#' @note array_to_vector since 3.1.0
+setMethod("array_to_vector",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "array_to_vector",
+              x@jc
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{vector_to_array} Converts a column of MLlib sparse/dense vectors into
+#' a column of dense arrays.
+#'
+#' @param dtype The data type of the output array. Valid values: "float64" or "float32".
+#'
+#' @rdname column_ml_functions
+#' @aliases vector_to_array vector_to_array,Column-method
+#' @note vector_to_array since 3.1.0
+setMethod("vector_to_array",
+          signature(x = "Column"),
+          function(x, dtype = c("float64", "float32")) {
+            dtype <- match.arg(dtype)
+            jc <- callJStatic(
+              "org.apache.spark.ml.functions",
+              "vector_to_array",
+              x@jc,
+              dtype
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{from_avro} Converts a binary column of Avro format into its corresponding catalyst value.
+#' The specified schema must match the read data, otherwise the behavior is undefined:
+#' it may fail or return arbitrary result.
+#' To deserialize the data with a compatible and evolved schema, the expected Avro schema can be
+#' set via the option avroSchema.
+#'
+#' @rdname column_avro_functions
+#' @aliases from_avro from_avro,Column-method
+#' @note from_avro since 3.1.0
+setMethod("from_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema, ...) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            options <- varargsToStrEnv(...)
+            jc <- callJStatic(
+              "org.apache.spark.sql.avro.functions", "from_avro",
+              x@jc,
+              jsonFormatSchema,
+              options
+            )
+            column(jc)
+          })
+
+#' @details
+#' \code{to_avro} Converts a column into binary of Avro format.
+#'
+#' @rdname column_avro_functions
+#' @aliases to_avro to_avro,Column-method
+#' @note to_avro since 3.1.0
+setMethod("to_avro",
+          signature(x = "characterOrColumn"),
+          function(x, jsonFormatSchema = NULL) {
+            x <- if (is.character(x)) {
+              column(x)
+            } else {
+              x
+            }
+
+            jc <- if (is.null(jsonFormatSchema)) {
+              callJStatic("org.apache.spark.sql.avro.functions", "to_avro", x@jc)
+            } else {
+              callJStatic(
+                "org.apache.spark.sql.avro.functions",
+                "to_avro",
+                x@jc,
+                jsonFormatSchema
+              )
+            }
             column(jc)
           })

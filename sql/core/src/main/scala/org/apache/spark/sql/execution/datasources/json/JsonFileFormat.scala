@@ -17,13 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.nio.charset.{Charset, StandardCharsets}
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -125,7 +122,11 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
 
     (file: PartitionedFile) => {
-      val parser = new JacksonParser(actualSchema, parsedOptions, allowArrayAsStructs = true)
+      val parser = new JacksonParser(
+        actualSchema,
+        parsedOptions,
+        allowArrayAsStructs = true,
+        filters)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
         file,

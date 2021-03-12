@@ -22,8 +22,6 @@ Run with:
 
   bin/spark-submit examples/src/main/python/ml/cross_validator.py
 """
-from __future__ import print_function
-
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression

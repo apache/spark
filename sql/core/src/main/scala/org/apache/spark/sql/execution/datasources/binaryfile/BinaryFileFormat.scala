@@ -22,14 +22,14 @@ import java.sql.Timestamp
 
 import com.google.common.io.{ByteStreams, Closeables}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, GlobFilter, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.internal.SQLConf.SOURCES_BINARY_FILE_MAX_LENGTH
 import org.apache.spark.sql.sources.{And, DataSourceRegister, EqualTo, Filter, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Not, Or}
@@ -111,7 +111,7 @@ class BinaryFileFormat extends FileFormat with DataSourceRegister {
           case (PATH, i) => writer.write(i, UTF8String.fromString(status.getPath.toString))
           case (LENGTH, i) => writer.write(i, status.getLen)
           case (MODIFICATION_TIME, i) =>
-            writer.write(i, DateTimeUtils.fromMillis(status.getModificationTime))
+            writer.write(i, DateTimeUtils.millisToMicros(status.getModificationTime))
           case (CONTENT, i) =>
             if (status.getLen > maxLength) {
               throw new SparkException(

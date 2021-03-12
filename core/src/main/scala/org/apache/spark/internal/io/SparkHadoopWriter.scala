@@ -227,7 +227,9 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
       if (path != null) {
         path.getFileSystem(getConf)
       } else {
+        // scalastyle:off FileSystemGet
         FileSystem.get(getConf)
+        // scalastyle:on FileSystemGet
       }
     }
 
@@ -290,7 +292,9 @@ class HadoopMapRedWriteConfigUtil[K, V: ClassTag](conf: SerializableJobConf)
 
     if (SparkHadoopWriterUtils.isOutputSpecValidationEnabled(conf)) {
       // FileOutputFormat ignores the filesystem parameter
+      // scalastyle:off FileSystemGet
       val ignoredFs = FileSystem.get(getConf)
+      // scalastyle:on FileSystemGet
       getOutputFormat().checkOutputSpecs(ignoredFs, getConf)
     }
   }

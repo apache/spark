@@ -27,15 +27,6 @@ import sys
 import array
 import struct
 
-if sys.version >= '3':
-    basestring = str
-    xrange = range
-    import copyreg as copy_reg
-    long = int
-else:
-    from itertools import izip as zip
-    import copy_reg
-
 import numpy as np
 
 from pyspark import since
@@ -47,13 +38,6 @@ from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayTyp
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
            'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
            'QRDecomposition']
-
-
-if sys.version_info[:2] == (2, 7):
-    # speed up pickling array in Python 2.7
-    def fast_pickle_array(ar):
-        return array.array, (ar.typecode, ar.tostring())
-    copy_reg.pickle(array.array, fast_pickle_array)
 
 
 # Check whether we have SciPy. MLlib works without it too, but if we have it, some methods,
@@ -70,7 +54,7 @@ except:
 def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
-    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
+    elif type(l) in (array.array, np.array, np.ndarray, list, tuple, range):
         return DenseVector(l)
     elif _have_scipy and scipy.sparse.issparse(l):
         assert l.shape[1] == 1, "Expected column vector"
@@ -87,6 +71,8 @@ def _vector_size(v):
     """
     Returns the size of the vector.
 
+    Examples
+    --------
     >>> _vector_size([1., 2., 3.])
     3
     >>> _vector_size((1., 2., 3.))
@@ -104,7 +90,7 @@ def _vector_size(v):
     """
     if isinstance(v, Vector):
         return len(v)
-    elif type(v) in (array.array, list, tuple, xrange):
+    elif type(v) in (array.array, list, tuple, range):
         return len(v)
     elif type(v) == np.ndarray:
         if v.ndim == 1 or (v.ndim == 2 and v.shape[1] == 1):
@@ -247,7 +233,9 @@ class Vector(object):
         """
         Convert the vector into an numpy.ndarray
 
-        :return: numpy.ndarray
+        Returns
+        -------
+        :py:class:`numpy.ndarray`
         """
         raise NotImplementedError
 
@@ -256,7 +244,9 @@ class Vector(object):
         Convert this vector to the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :return: :py:class:`pyspark.ml.linalg.Vector`
+        Returns
+        -------
+        :py:class:`pyspark.ml.linalg.Vector`
         """
         raise NotImplementedError
 
@@ -267,6 +257,8 @@ class DenseVector(Vector):
     storage and arithmetics will be delegated to the underlying numpy
     array.
 
+    Examples
+    --------
     >>> v = Vectors.dense([1.0, 2.0])
     >>> u = Vectors.dense([3.0, 4.0])
     >>> v + u
@@ -298,6 +290,8 @@ class DenseVector(Vector):
         """
         Parse string representation back into the DenseVector.
 
+        Examples
+        --------
         >>> DenseVector.parse(' [ 0.0,1.0,2.0,  3.0]')
         DenseVector([0.0, 1.0, 2.0, 3.0])
         """
@@ -328,6 +322,8 @@ class DenseVector(Vector):
         """
         Calculates the norm of a DenseVector.
 
+        Examples
+        --------
         >>> a = DenseVector([0, -1, 2, -3])
         >>> a.norm(2)
         3.7...
@@ -343,6 +339,8 @@ class DenseVector(Vector):
         and a target NumPy array that is either 1- or 2-dimensional.
         Equivalent to calling numpy.dot of the two vectors.
 
+        Examples
+        --------
         >>> dense = DenseVector(array.array('d', [1., 2.]))
         >>> dense.dot(dense)
         5.0
@@ -383,6 +381,8 @@ class DenseVector(Vector):
         """
         Squared distance of two Vectors.
 
+        Examples
+        --------
         >>> dense1 = DenseVector(array.array('d', [1., 2.]))
         >>> dense1.squared_distance(dense1)
         0.0
@@ -428,9 +428,11 @@ class DenseVector(Vector):
         Convert this vector to the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :return: :py:class:`pyspark.ml.linalg.DenseVector`
-
         .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :py:class:`pyspark.ml.linalg.DenseVector`
         """
         return newlinalg.DenseVector(self.array)
 
@@ -459,7 +461,7 @@ class DenseVector(Vector):
         elif isinstance(other, SparseVector):
             if len(self) != other.size:
                 return False
-            return Vectors._equals(list(xrange(len(self))), self.array, other.indices, other.values)
+            return Vectors._equals(list(range(len(self))), self.array, other.indices, other.values)
         return False
 
     def __ne__(self, other):
@@ -517,12 +519,18 @@ class SparseVector(Vector):
         (index, value) pairs, or two separate arrays of indices and
         values (sorted by index).
 
-        :param size: Size of the vector.
-        :param args: Active entries, as a dictionary {index: value, ...},
-          a list of tuples [(index, value), ...], or a list of strictly
-          increasing indices and a list of corresponding values [index, ...],
-          [value, ...]. Inactive entries are treated as zeros.
+        Parameters
+        ----------
+        size : int
+            Size of the vector.
+        args
+            Active entries, as a dictionary {index: value, ...},
+            a list of tuples [(index, value), ...], or a list of strictly
+            increasing indices and a list of corresponding values [index, ...],
+            [value, ...]. Inactive entries are treated as zeros.
 
+        Examples
+        --------
         >>> SparseVector(4, {1: 1.0, 3: 5.5})
         SparseVector(4, {1: 1.0, 3: 5.5})
         >>> SparseVector(4, [(1, 1.0), (3, 5.5)])
@@ -556,7 +564,7 @@ class SparseVector(Vector):
                 self.indices = np.array(args[0], dtype=np.int32)
                 self.values = np.array(args[1], dtype=np.float64)
             assert len(self.indices) == len(self.values), "index and value arrays not same length"
-            for i in xrange(len(self.indices) - 1):
+            for i in range(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError(
                         "Indices %s and %s are not strictly increasing"
@@ -572,6 +580,8 @@ class SparseVector(Vector):
         """
         Calculates the norm of a SparseVector.
 
+        Examples
+        --------
         >>> a = SparseVector(4, [0, 1], [3., -4.])
         >>> a.norm(1)
         7.0
@@ -590,6 +600,8 @@ class SparseVector(Vector):
         """
         Parse string representation back into the SparseVector.
 
+        Examples
+        --------
         >>> SparseVector.parse(' (4, [0,1 ],[ 4.0,5.0] )')
         SparseVector(4, {0: 4.0, 1: 5.0})
         """
@@ -638,6 +650,8 @@ class SparseVector(Vector):
         """
         Dot product with a SparseVector or 1- or 2-dimensional Numpy array.
 
+        Examples
+        --------
         >>> a = SparseVector(4, [1, 3], [3.0, 4.0])
         >>> a.dot(a)
         25.0
@@ -694,6 +708,8 @@ class SparseVector(Vector):
         """
         Squared distance from a SparseVector or 1-dimensional NumPy array.
 
+        Examples
+        --------
         >>> a = SparseVector(4, [1, 3], [3.0, 4.0])
         >>> a.squared_distance(a)
         0.0
@@ -770,9 +786,11 @@ class SparseVector(Vector):
         Convert this vector to the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :return: :py:class:`pyspark.ml.linalg.SparseVector`
-
         .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :py:class:`pyspark.ml.linalg.SparseVector`
         """
         return newlinalg.SparseVector(self.size, self.indices, self.values)
 
@@ -788,7 +806,7 @@ class SparseVector(Vector):
         inds = self.indices
         vals = self.values
         entries = ", ".join(["{0}: {1}".format(inds[i], _format_float(vals[i]))
-                             for i in xrange(len(inds))])
+                             for i in range(len(inds))])
         return "SparseVector({0}, {{{1}}})".format(self.size, entries)
 
     def __eq__(self, other):
@@ -798,7 +816,7 @@ class SparseVector(Vector):
         elif isinstance(other, DenseVector):
             if self.size != len(other):
                 return False
-            return Vectors._equals(self.indices, self.values, list(xrange(len(other))), other.array)
+            return Vectors._equals(self.indices, self.values, list(range(len(other))), other.array)
         return False
 
     def __getitem__(self, index):
@@ -844,10 +862,12 @@ class Vectors(object):
     """
     Factory methods for working with vectors.
 
-    .. note:: Dense vectors are simply represented as NumPy array objects,
-        so there is no need to covert them for use in MLlib. For sparse vectors,
-        the factory methods in this class create an MLlib-compatible type, or users
-        can pass in SciPy's `scipy.sparse` column vectors.
+    Notes
+    -----
+    Dense vectors are simply represented as NumPy array objects,
+    so there is no need to covert them for use in MLlib. For sparse vectors,
+    the factory methods in this class create an MLlib-compatible type, or users
+    can pass in SciPy's `scipy.sparse` column vectors.
     """
 
     @staticmethod
@@ -857,10 +877,16 @@ class Vectors(object):
         (index, value) pairs, or two separate arrays of indices and
         values (sorted by index).
 
-        :param size: Size of the vector.
-        :param args: Non-zero entries, as a dictionary, list of tuples,
-                     or two sorted lists containing indices and values.
+        Parameters
+        ----------
+        size : int
+            Size of the vector.
+        args
+            Non-zero entries, as a dictionary, list of tuples,
+            or two sorted lists containing indices and values.
 
+        Examples
+        --------
         >>> Vectors.sparse(4, {1: 1.0, 3: 5.5})
         SparseVector(4, {1: 1.0, 3: 5.5})
         >>> Vectors.sparse(4, [(1, 1.0), (3, 5.5)])
@@ -875,12 +901,14 @@ class Vectors(object):
         """
         Create a dense vector of 64-bit floats from a Python list or numbers.
 
+        Examples
+        --------
         >>> Vectors.dense([1, 2, 3])
         DenseVector([1.0, 2.0, 3.0])
         >>> Vectors.dense(1.0, 2.0)
         DenseVector([1.0, 2.0])
         """
-        if len(elements) == 1 and not isinstance(elements[0], (float, int, long)):
+        if len(elements) == 1 and not isinstance(elements[0], (float, int)):
             # it's list, numpy.array or other iterable object.
             elements = elements[0]
         return DenseVector(elements)
@@ -891,10 +919,15 @@ class Vectors(object):
         Convert a vector from the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :param vec: a :py:class:`pyspark.ml.linalg.Vector`
-        :return: a :py:class:`pyspark.mllib.linalg.Vector`
-
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        vec : :py:class:`pyspark.ml.linalg.Vector`
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Vector`
         """
         if isinstance(vec, newlinalg.DenseVector):
             return DenseVector(vec.array)
@@ -909,6 +942,8 @@ class Vectors(object):
         Converts a vector into a string, which can be recognized by
         Vectors.parse().
 
+        Examples
+        --------
         >>> Vectors.stringify(Vectors.sparse(2, [1], [1.0]))
         '(2,[1],[1.0])'
         >>> Vectors.stringify(Vectors.dense([0.0, 1.0]))
@@ -923,6 +958,8 @@ class Vectors(object):
         a and b can be of type SparseVector, DenseVector, np.ndarray
         or array.array.
 
+        Examples
+        --------
         >>> a = Vectors.sparse(4, [(0, 1), (3, 4)])
         >>> b = Vectors.dense([2, 5, 4, 1])
         >>> a.squared_distance(b)
@@ -942,6 +979,8 @@ class Vectors(object):
     def parse(s):
         """Parse a string representation back into the Vector.
 
+        Examples
+        --------
         >>> Vectors.parse('[2,1,2 ]')
         DenseVector([2.0, 1.0, 2.0])
         >>> Vectors.parse(' ( 100,  [0],  [2])')
@@ -1039,6 +1078,8 @@ class DenseMatrix(Matrix):
         """
         Pretty printing of a DenseMatrix
 
+        Examples
+        --------
         >>> dm = DenseMatrix(2, 2, range(4))
         >>> print(dm)
         DenseMatrix([[ 0.,  2.],
@@ -1060,6 +1101,8 @@ class DenseMatrix(Matrix):
         """
         Representation of a DenseMatrix
 
+        Examples
+        --------
         >>> dm = DenseMatrix(2, 2, range(4))
         >>> dm
         DenseMatrix(2, 2, [0.0, 1.0, 2.0, 3.0], False)
@@ -1083,6 +1126,8 @@ class DenseMatrix(Matrix):
         """
         Return an numpy.ndarray
 
+        Examples
+        --------
         >>> m = DenseMatrix(2, 2, range(4))
         >>> m.toArray()
         array([[ 0.,  2.],
@@ -1114,9 +1159,11 @@ class DenseMatrix(Matrix):
         Convert this matrix to the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :return: :py:class:`pyspark.ml.linalg.DenseMatrix`
-
         .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :py:class:`pyspark.ml.linalg.DenseMatrix`
         """
         return newlinalg.DenseMatrix(self.numRows, self.numCols, self.values, self.isTransposed)
 
@@ -1170,6 +1217,8 @@ class SparseMatrix(Matrix):
         """
         Pretty printing of a SparseMatrix
 
+        Examples
+        --------
         >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
         >>> print(sm1)
         2 X 2 CSCMatrix
@@ -1216,6 +1265,8 @@ class SparseMatrix(Matrix):
         """
         Representation of a SparseMatrix
 
+        Examples
+        --------
         >>> sm1 = SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2, 3, 4])
         >>> sm1
         SparseMatrix(2, 2, [0, 2, 3], [0, 1, 1], [2.0, 3.0, 4.0], False)
@@ -1279,7 +1330,7 @@ class SparseMatrix(Matrix):
         Return an numpy.ndarray
         """
         A = np.zeros((self.numRows, self.numCols), dtype=np.float64, order='F')
-        for k in xrange(self.colPtrs.size - 1):
+        for k in range(self.colPtrs.size - 1):
             startptr = self.colPtrs[k]
             endptr = self.colPtrs[k + 1]
             if self.isTransposed:
@@ -1297,9 +1348,11 @@ class SparseMatrix(Matrix):
         Convert this matrix to the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :return: :py:class:`pyspark.ml.linalg.SparseMatrix`
-
         .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :py:class:`pyspark.ml.linalg.SparseMatrix`
         """
         return newlinalg.SparseMatrix(self.numRows, self.numCols, self.colPtrs, self.rowIndices,
                                       self.values, self.isTransposed)
@@ -1330,10 +1383,15 @@ class Matrices(object):
         Convert a matrix from the new mllib-local representation.
         This does NOT copy the data; it copies references.
 
-        :param mat: a :py:class:`pyspark.ml.linalg.Matrix`
-        :return: a :py:class:`pyspark.mllib.linalg.Matrix`
-
         .. versionadded:: 2.0.0
+
+        Parameters
+        ----------
+        mat : :py:class:`pyspark.ml.linalg.Matrix`
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Matrix`
         """
         if isinstance(mat, newlinalg.DenseMatrix):
             return DenseMatrix(mat.numRows, mat.numCols, mat.values, mat.isTransposed)

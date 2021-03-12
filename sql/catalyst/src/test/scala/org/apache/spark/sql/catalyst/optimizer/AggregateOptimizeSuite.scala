@@ -17,21 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL}
 
-class AggregateOptimizeSuite extends PlanTest {
-  override val conf = new SQLConf().copy(CASE_SENSITIVE -> false, GROUP_BY_ORDINAL -> false)
-  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  val analyzer = new Analyzer(catalog, conf)
+class AggregateOptimizeSuite extends AnalysisTest {
+  val analyzer = getAnalyzer
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
@@ -51,11 +46,14 @@ class AggregateOptimizeSuite extends PlanTest {
   }
 
   test("do not remove all grouping expressions if they are all literals") {
-    val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum('b))
-    val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = analyzer.execute(testRelation.groupBy(Literal(0))(sum('b)))
+    withSQLConf(CASE_SENSITIVE.key -> "false", GROUP_BY_ORDINAL.key -> "false") {
+      val analyzer = getAnalyzer
+      val query = testRelation.groupBy(Literal("1"), Literal(1) + Literal(2))(sum('b))
+      val optimized = Optimize.execute(analyzer.execute(query))
+      val correctAnswer = analyzer.execute(testRelation.groupBy(Literal(0))(sum('b)))
 
-    comparePlans(optimized, correctAnswer)
+      comparePlans(optimized, correctAnswer)
+    }
   }
 
   test("Remove aliased literals") {

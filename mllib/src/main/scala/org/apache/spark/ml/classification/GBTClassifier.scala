@@ -197,7 +197,7 @@ class GBTClassifier @Since("1.4.0") (
     instr.logParams(this, labelCol, weightCol, featuresCol, predictionCol, leafCol,
       impurity, lossType, maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain,
       minInstancesPerNode, minWeightFractionPerNode, seed, stepSize, subsamplingRate, cacheNodeIds,
-      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol)
+      checkpointInterval, featureSubsetStrategy, validationIndicatorCol, validationTol, thresholds)
     instr.logNumClasses(numClasses)
 
     val categoricalFeatures = MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))

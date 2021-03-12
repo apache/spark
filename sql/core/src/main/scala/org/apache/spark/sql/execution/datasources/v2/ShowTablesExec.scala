@@ -49,6 +49,6 @@ case class ShowTablesExec(
       }
     }
 
-    rows
+    rows.toSeq
   }
 }

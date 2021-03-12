@@ -20,7 +20,7 @@ package org.apache.spark.mllib.optimization
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors

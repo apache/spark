@@ -23,8 +23,9 @@ import scala.util.Properties
 
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.fs.Path
-import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.Assertions._
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -152,7 +153,7 @@ class HiveSparkSubmitSuite
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     // TODO: revisit for Scala 2.13 support
     val version = Properties.versionNumberString match {
-      case v if v.startsWith("2.12") => v.substring(0, 4)
+      case v if v.startsWith("2.12") || v.startsWith("2.13") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
@@ -768,8 +769,6 @@ object SPARK_14244 extends QueryTest {
 
     val hiveContext = new TestHiveContext(sparkContext)
     spark = hiveContext.sparkSession
-
-    import hiveContext.implicits._
 
     try {
       val window = Window.orderBy("id")

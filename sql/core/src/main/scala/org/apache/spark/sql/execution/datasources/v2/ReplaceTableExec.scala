@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchTableException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -33,10 +33,13 @@ case class ReplaceTableExec(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
-    orCreate: Boolean) extends V2CommandExec {
+    orCreate: Boolean,
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends V2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
     if (catalog.tableExists(ident)) {
+      val table = catalog.loadTable(ident)
+      invalidateCache(catalog, table, ident)
       catalog.dropTable(ident)
     } else if (!orCreate) {
       throw new CannotReplaceMissingTableException(ident)
@@ -54,9 +57,14 @@ case class AtomicReplaceTableExec(
     tableSchema: StructType,
     partitioning: Seq[Transform],
     tableProperties: Map[String, String],
-    orCreate: Boolean) extends V2CommandExec {
+    orCreate: Boolean,
+    invalidateCache: (TableCatalog, Table, Identifier) => Unit) extends V2CommandExec {
 
   override protected def run(): Seq[InternalRow] = {
+    if (catalog.tableExists(identifier)) {
+      val table = catalog.loadTable(identifier)
+      invalidateCache(catalog, table, identifier)
+    }
     val staged = if (orCreate) {
       catalog.stageCreateOrReplace(
         identifier, tableSchema, partitioning.toArray, tableProperties.asJava)

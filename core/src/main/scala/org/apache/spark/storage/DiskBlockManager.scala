@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{File, IOException}
+import java.nio.file.Files
 import java.util.UUID
 
 import org.apache.spark.SparkConf
@@ -69,8 +70,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         old
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
-          throw new IOException(s"Failed to create local dir in $newDir.")
+        if (!newDir.exists()) {
+          Files.createDirectory(newDir.toPath)
         }
         subDirs(dirId)(subDirId) = newDir
         newDir
@@ -97,7 +98,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
       }
     }.filter(_ != null).flatMap { dir =>
       val files = dir.listFiles()
-      if (files != null) files else Seq.empty
+      if (files != null) files.toSeq else Seq.empty
     }
   }
 

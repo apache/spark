@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.adaptive.{DisableAdaptiveExecutionSuite, E
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
 
@@ -214,9 +214,9 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(`id`, 'x')#x, " +
-        "id#xL AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL as string), x) AS nvl(`id`, 'x')#x, " +
-        "x AS nvl2(`id`, 'x', 'y')#x]")
+      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+        "x AS nvl2(id, x, y)#x]")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
@@ -249,7 +249,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-        withTable("df1", "df2") {
           spark.range(1000).select(col("id"), col("id").as("k"))
             .write
             .partitionBy("k")
@@ -288,6 +287,22 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
             assert(expected_pattern3.r.findAllMatchIn(normalizedOutput).length == 2)
             assert(expected_pattern4.r.findAllMatchIn(normalizedOutput).length == 1)
           }
+        }
+    }
+  }
+
+  test("SPARK-33850: explain formatted - check presence of subquery in case of AQE") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      withTempView("df") {
+        val df = spark.range(1, 100)
+        df.createTempView("df")
+
+        val sqlText = "EXPLAIN FORMATTED SELECT (SELECT min(id) FROM df) as v"
+        val expected_pattern =
+          "Subquery:1 Hosting operator id = 2 Hosting Expression = Subquery subquery#x"
+
+        withNormalizedExplain(sqlText) { normalizedOutput =>
+          assert(expected_pattern.r.findAllMatchIn(normalizedOutput).length == 1)
         }
       }
     }
@@ -357,6 +372,86 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
       val df1 = spark.read.parquet(path.getAbsolutePath)
       val df2 = spark.read.parquet(path.getAbsolutePath)
       assert(getNormalizedExplain(df1, FormattedMode) === getNormalizedExplain(df2, FormattedMode))
+    }
+  }
+
+  test("Coalesced bucket info should be a part of explain string") {
+    withTable("t1", "t2") {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0",
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+        Seq(1, 2).toDF("i").write.bucketBy(8, "i").saveAsTable("t1")
+        Seq(2, 3).toDF("i").write.bucketBy(4, "i").saveAsTable("t2")
+        val df1 = spark.table("t1")
+        val df2 = spark.table("t2")
+        val joined = df1.join(df2, df1("i") === df2("i"))
+        checkKeywordsExistsInExplain(
+          joined,
+          SimpleMode,
+          "SelectedBucketsCount: 8 out of 8 (Coalesced to 4)" :: Nil: _*)
+      }
+    }
+  }
+
+  test("Explain formatted output for scan operator for datasource V2") {
+    withTempDir { dir =>
+      Seq("parquet", "orc", "csv", "json").foreach { fmt =>
+        val basePath = dir.getCanonicalPath + "/" + fmt
+        val pushFilterMaps = Map (
+          "parquet" ->
+            "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+          "orc" ->
+            "|PushedFilers: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+          "csv" ->
+            "|PushedFilers: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
+          "json" ->
+            "|remove_marker"
+        )
+        val expected_plan_fragment1 =
+          s"""
+             |\\(1\\) BatchScan
+             |Output \\[2\\]: \\[value#x, id#x\\]
+             |DataFilters: \\[isnotnull\\(value#x\\), \\(value#x > 2\\)\\]
+             |Format: $fmt
+             |Location: InMemoryFileIndex\\[.*\\]
+             |PartitionFilters: \\[isnotnull\\(id#x\\), \\(id#x > 1\\)\\]
+             ${pushFilterMaps.get(fmt).get}
+             |ReadSchema: struct\\<value:int\\>
+             |""".stripMargin.replaceAll("\nremove_marker", "").trim
+
+        spark.range(10)
+          .select(col("id"), col("id").as("value"))
+          .write.option("header", true)
+          .partitionBy("id")
+          .format(fmt)
+          .save(basePath)
+        val readSchema =
+          StructType(Seq(StructField("id", IntegerType), StructField("value", IntegerType)))
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+          val df = spark
+            .read
+            .schema(readSchema)
+            .option("header", true)
+            .format(fmt)
+            .load(basePath).where($"id" > 1 && $"value" > 2)
+          val normalizedOutput = getNormalizedExplain(df, FormattedMode)
+          assert(expected_plan_fragment1.r.findAllMatchIn(normalizedOutput).length == 1)
+        }
+      }
+    }
+  }
+
+  test("Explain UnresolvedRelation with CaseInsensitiveStringMap options") {
+    val tableName = "test"
+    withTable(tableName) {
+      val df1 = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df1.write.saveAsTable(tableName)
+      val df2 = spark.read
+        .option("key1", "value1")
+        .option("KEY2", "VALUE2")
+        .table(tableName)
+      // == Parsed Logical Plan ==
+      // 'UnresolvedRelation [test], [key1=value1, KEY2=VALUE2]
+      checkKeywordsExistsInExplain(df2, keywords = "[key1=value1, KEY2=VALUE2]")
     }
   }
 }

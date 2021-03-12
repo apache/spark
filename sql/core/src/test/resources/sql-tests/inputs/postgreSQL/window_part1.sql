@@ -95,7 +95,7 @@ SELECT last(ten) OVER (PARTITION BY four), ten, four FROM
 (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s
 ORDER BY four, ten;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-30707] Lead/Lag window function throws AnalysisException without ORDER BY clause
 -- SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
 -- FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s;
 
@@ -301,7 +301,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-30707] Lead/Lag window function throws AnalysisException without ORDER BY clause
 -- SELECT first_value(unique1) over w,
 -- nth_value(unique1, 2) over w AS nth_2,
 -- last_value(unique1) over w, unique1, four

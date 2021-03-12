@@ -63,10 +63,10 @@ object ArrowWriter {
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
       case (MapType(_, _, _), vector: MapVector) =>
-        val entryWriter = createFieldWriter(vector.getDataVector).asInstanceOf[StructWriter]
-        val keyWriter = createFieldWriter(entryWriter.valueVector.getChild(MapVector.KEY_NAME))
-        val valueWriter = createFieldWriter(entryWriter.valueVector.getChild(MapVector.VALUE_NAME))
-        new MapWriter(vector, keyWriter, valueWriter)
+        val structVector = vector.getDataVector.asInstanceOf[StructVector]
+        val keyWriter = createFieldWriter(structVector.getChild(MapVector.KEY_NAME))
+        val valueWriter = createFieldWriter(structVector.getChild(MapVector.VALUE_NAME))
+        new MapWriter(vector, structVector, keyWriter, valueWriter)
       case (StructType(_), vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
@@ -331,11 +331,11 @@ private[arrow] class StructWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val struct = input.getStruct(ordinal, children.length)
     var i = 0
+    valueVector.setIndexDefined(count)
     while (i < struct.numFields) {
       children(i).write(struct, i)
       i += 1
     }
-    valueVector.setIndexDefined(count)
   }
 
   override def finish(): Unit = {
@@ -351,6 +351,7 @@ private[arrow] class StructWriter(
 
 private[arrow] class MapWriter(
     val valueVector: MapVector,
+    val structVector: StructVector,
     val keyWriter: ArrowFieldWriter,
     val valueWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
@@ -363,6 +364,7 @@ private[arrow] class MapWriter(
     val values = map.valueArray()
     var i = 0
     while (i <  map.numElements()) {
+      structVector.setIndexDefined(keyWriter.count)
       keyWriter.write(keys, i)
       valueWriter.write(values, i)
       i += 1

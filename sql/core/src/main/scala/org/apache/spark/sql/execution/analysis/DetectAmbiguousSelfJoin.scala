@@ -40,7 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Note that, this rule removes all the Dataset id related metadata from `AttributeReference`, so
  * that they don't exist after analyzer.
  */
-class DetectAmbiguousSelfJoin(conf: SQLConf) extends Rule[LogicalPlan] {
+object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
 
   // Dataset column reference is an `AttributeReference` with 2 special metadata.
   private def isColumnReference(a: AttributeReference): Boolean = {

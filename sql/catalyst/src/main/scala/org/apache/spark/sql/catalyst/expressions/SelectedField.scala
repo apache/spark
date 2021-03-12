@@ -91,7 +91,7 @@ object SelectedField {
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _) =>
+      case GetMapValue(child, _, _) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val MapType(keyType, _, valueContainsNull) = child.dataType
@@ -119,7 +119,7 @@ object SelectedField {
             throw new AnalysisException(s"DataType '$x' is not supported by MapKeys.")
         }
         selectField(child, opt)
-      case GetArrayItem(child, _) =>
+      case GetArrayItem(child, _, _) =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val ArrayType(_, containsNull) = child.dataType

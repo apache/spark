@@ -62,6 +62,46 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(GetArrayItem(nestedArray, Literal(0)), Seq(1))
   }
 
+  test("SPARK-33386: GetArrayItem ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val array = Literal.create(Seq("a", "b"), ArrayType(StringType))
+
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            GetArrayItem(array, Literal(5)),
+            "Invalid index: 5, numElements: 2"
+          )
+
+          checkExceptionInExpression[Exception](
+            GetArrayItem(array, Literal(-1)),
+            "Invalid index: -1, numElements: 2"
+          )
+        } else {
+          checkEvaluation(GetArrayItem(array, Literal(5)), null)
+          checkEvaluation(GetArrayItem(array, Literal(-1)), null)
+        }
+      }
+    }
+  }
+
+  test("SPARK-33460: GetMapValue NoSuchElementException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
+
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            GetMapValue(map, Literal(5)),
+            "Key 5 does not exist."
+          )
+        } else {
+          checkEvaluation(GetMapValue(map, Literal(5)), null)
+        }
+      }
+    }
+  }
+
   test("SPARK-26637 handles GetArrayItem nullability correctly when input array size is constant") {
     // CreateArray case
     val a = AttributeReference("a", IntegerType, nullable = false)()
@@ -144,21 +184,26 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("GetArrayStructFields") {
-    val typeAS = ArrayType(StructType(StructField("a", IntegerType, false) :: Nil))
-    val typeNullAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
-    val arrayStruct = Literal.create(Seq(create_row(1)), typeAS)
-    val nullArrayStruct = Literal.create(null, typeNullAS)
+    // test 4 types: struct field nullability X array element nullability
+    val type1 = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val type2 = ArrayType(StructType(StructField("a", IntegerType, nullable = false) :: Nil))
+    val type3 = ArrayType(StructType(StructField("a", IntegerType) :: Nil), containsNull = false)
+    val type4 = ArrayType(
+      StructType(StructField("a", IntegerType, nullable = false) :: Nil), containsNull = false)
 
-    def getArrayStructFields(expr: Expression, fieldName: String): GetArrayStructFields = {
-      expr.dataType match {
-        case ArrayType(StructType(fields), containsNull) =>
-          val field = fields.find(_.name == fieldName).get
-          GetArrayStructFields(expr, field, fields.indexOf(field), fields.length, containsNull)
-      }
+    val input1 = Literal.create(Seq(create_row(1)), type4)
+    val input2 = Literal.create(Seq(create_row(null)), type3)
+    val input3 = Literal.create(Seq(null), type2)
+    val input4 = Literal.create(null, type1)
+
+    def getArrayStructFields(expr: Expression, fieldName: String): Expression = {
+      ExtractValue.apply(expr, Literal.create(fieldName, StringType), _ == _)
     }
 
-    checkEvaluation(getArrayStructFields(arrayStruct, "a"), Seq(1))
-    checkEvaluation(getArrayStructFields(nullArrayStruct, "a"), null)
+    checkEvaluation(getArrayStructFields(input1, "a"), Seq(1))
+    checkEvaluation(getArrayStructFields(input2, "a"), Seq(null))
+    checkEvaluation(getArrayStructFields(input3, "a"), Seq(null))
+    checkEvaluation(getArrayStructFields(input4, "a"), null)
   }
 
   test("SPARK-32167: nullability of GetArrayStructFields") {

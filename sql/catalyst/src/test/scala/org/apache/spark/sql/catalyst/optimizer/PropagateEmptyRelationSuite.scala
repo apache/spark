@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StructType}
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -55,6 +55,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
   val testRelation2 = LocalRelation.fromExternalRows(Seq('b.int), data = Seq(Row(1)))
+  val metadata = new MetadataBuilder().putLong("test", 1).build()
+  val testRelation3 =
+    LocalRelation.fromExternalRows(Seq('c.int.notNull.withMetadata(metadata)), data = Seq(Row(1)))
 
   test("propagate empty relation through Union") {
     val query = testRelation1
@@ -65,6 +68,39 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val correctAnswer = LocalRelation('a.int)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-32241: remove empty relation children from Union") {
+    val query = testRelation1.union(testRelation2.where(false))
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation1
+    comparePlans(optimized, correctAnswer)
+
+    val query2 = testRelation1.where(false).union(testRelation2)
+    val optimized2 = Optimize.execute(query2.analyze)
+    val correctAnswer2 = testRelation2.select('b.as('a)).analyze
+    comparePlans(optimized2, correctAnswer2)
+
+    val query3 = testRelation1.union(testRelation2.where(false)).union(testRelation3)
+    val optimized3 = Optimize.execute(query3.analyze)
+    val correctAnswer3 = testRelation1.union(testRelation3)
+    comparePlans(optimized3, correctAnswer3)
+
+    val query4 = testRelation1.where(false).union(testRelation2).union(testRelation3)
+    val optimized4 = Optimize.execute(query4.analyze)
+    val correctAnswer4 = testRelation2.union(testRelation3).select('b.as('a)).analyze
+    comparePlans(optimized4, correctAnswer4)
+
+    // Nullability can change from nullable to non-nullable
+    val query5 = testRelation1.where(false).union(testRelation3)
+    val optimized5 = Optimize.execute(query5.analyze)
+    assert(query5.output.head.nullable, "Original output should be nullable")
+    assert(!optimized5.output.head.nullable, "New output should be non-nullable")
+
+    // Keep metadata
+    val query6 = testRelation3.where(false).union(testRelation1)
+    val optimized6 = Optimize.execute(query6.analyze)
+    assert(optimized6.output.head.metadata == metadata, "New output should keep metadata")
   }
 
   test("propagate empty relation through Join") {

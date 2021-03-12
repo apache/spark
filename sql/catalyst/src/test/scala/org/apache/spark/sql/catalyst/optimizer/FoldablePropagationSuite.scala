@@ -156,8 +156,8 @@ class FoldablePropagationSuite extends PlanTest {
     val query = expand.where(a1.isNotNull).select(a1, a2).analyze
     val optimized = Optimize.execute(query)
     val correctExpand = expand.copy(projections = Seq(
-      Seq(Literal(null), c2),
-      Seq(c1, Literal(null))))
+      Seq(Literal(null), Literal(2)),
+      Seq(Literal(1), Literal(null))))
     val correctAnswer = correctExpand.where(a1.isNotNull).select(a1, a2).analyze
     comparePlans(optimized, correctAnswer)
   }
@@ -191,5 +191,17 @@ class FoldablePropagationSuite extends PlanTest {
     val query = join.analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-32951: Foldable propagation from Aggregate") {
+    val query = testRelation
+      .groupBy('a)('a, sum('b).as('b), Literal(1).as('c))
+      .select('a, 'b, 'c)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = testRelation
+      .groupBy('a)('a, sum('b).as('b), Literal(1).as('c))
+      .select('a, 'b, Literal(1).as('c)).analyze
+    comparePlans(optimized, correctAnswer)
   }
 }

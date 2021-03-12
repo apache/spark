@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.ref.WeakReference
 
-import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
@@ -220,13 +220,13 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     testSimpleSpilling()
   }
 
-  test("spilling with compression") {
+  private def testSimpleSpillingForAllCodecs(encrypt: Boolean) {
     // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {
       allCompressionCodecs.foreach { c =>
         lastCompressionCodec = Some(c)
-        testSimpleSpilling(Some(c))
+        testSimpleSpilling(Some(c), encrypt)
       }
     } catch {
       // Include compression codec used in test failure message
@@ -241,8 +241,12 @@ class ExternalAppendOnlyMapSuite extends SparkFunSuite
     }
   }
 
+  test("spilling with compression") {
+    testSimpleSpillingForAllCodecs(encrypt = false)
+  }
+
   test("spilling with compression and encryption") {
-    testSimpleSpilling(Some(CompressionCodec.DEFAULT_COMPRESSION_CODEC), encrypt = true)
+    testSimpleSpillingForAllCodecs(encrypt = true)
   }
 
   /**

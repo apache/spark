@@ -135,7 +135,7 @@ class Pipeline @Since("1.4.0") (
     val theStages = $(stages)
     // Search for the last estimator.
     var indexOfLastEstimator = -1
-    theStages.view.zipWithIndex.foreach { case (stage, index) =>
+    theStages.iterator.zipWithIndex.foreach { case (stage, index) =>
       stage match {
         case _: Estimator[_] =>
           indexOfLastEstimator = index
@@ -144,7 +144,7 @@ class Pipeline @Since("1.4.0") (
     }
     var curDataset = dataset
     val transformers = ListBuffer.empty[Transformer]
-    theStages.view.zipWithIndex.foreach { case (stage, index) =>
+    theStages.iterator.zipWithIndex.foreach { case (stage, index) =>
       if (index <= indexOfLastEstimator) {
         val transformer = stage match {
           case estimator: Estimator[_] =>

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.execution.SQLViewSuite
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.types.{NullType, StructType}
 
 /**
  * A test suite for Hive view related functionality.
@@ -135,6 +135,26 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         // Check the output schema.
         assert(df.schema.sameType(view.schema))
       }
+    }
+  }
+
+  test("SPARK-20680: Add HiveVoidType to compatible with Hive void type") {
+    withView("v1") {
+      sql("create view v1 as select null as c")
+      val df = sql("select * from v1")
+      assert(df.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df,
+        Row(null)
+      )
+
+      sql("alter view v1 as select null as c1, 1 as c2")
+      val df2 = sql("select * from v1")
+      assert(df2.schema.fields.head.dataType == NullType)
+      checkAnswer(
+        df2,
+        Row(null, 1)
+      )
     }
   }
 }

@@ -130,16 +130,37 @@ class FractionTimestampFormatter(zoneId: ZoneId)
   override protected lazy val formatter = DateTimeFormatterHelper.fractionFormatter
 
   // The new formatter will omit the trailing 0 in the timestamp string, but the legacy formatter
-  // can't. Here we borrow the code from Spark 2.4 DateTimeUtils.timestampToString to omit the
-  // trailing 0 for the legacy formatter as well.
+  // can't. Here we use the legacy formatter to format the given timestamp up to seconds fractions,
+  // and custom implementation to format the fractional part without trailing zeros.
   override def format(ts: Timestamp): String = {
-    val timestampString = ts.toString
     val formatted = legacyFormatter.format(ts)
-
-    if (timestampString.length > 19 && timestampString.substring(19) != ".0") {
-      formatted + timestampString.substring(19)
-    } else {
+    var nanos = ts.getNanos
+    if (nanos == 0) {
       formatted
+    } else {
+      // Formats non-zero seconds fraction w/o trailing zeros. For example:
+      //   formatted = '2020-05:27 15:55:30'
+      //   nanos = 001234000
+      // Counts the length of the fractional part: 001234000 -> 6
+      var fracLen = 9
+      while (nanos % 10 == 0) {
+        nanos /= 10
+        fracLen -= 1
+      }
+      // Places `nanos` = 1234 after '2020-05:27 15:55:30.'
+      val fracOffset = formatted.length + 1
+      val totalLen = fracOffset + fracLen
+      // The buffer for the final result: '2020-05:27 15:55:30.001234'
+      val buf = new Array[Char](totalLen)
+      formatted.getChars(0, formatted.length, buf, 0)
+      buf(formatted.length) = '.'
+      var i = totalLen
+      do {
+        i -= 1
+        buf(i) = ('0' + (nanos % 10)).toChar
+        nanos /= 10
+      } while (i > fracOffset)
+      new String(buf)
     }
   }
 }
@@ -158,7 +179,7 @@ class MicrosCalendar(tz: TimeZone, digitsInFraction: Int)
   // Converts parsed `MILLISECOND` field to seconds fraction in microsecond precision.
   // For example if the fraction pattern is `SSSS` then `digitsInFraction` = 4, and
   // if the `MILLISECOND` field was parsed to `1234`.
-  def getMicros(): SQLTimestamp = {
+  def getMicros(): Long = {
     // Append 6 zeros to the field: 1234 -> 1234000000
     val d = fields(Calendar.MILLISECOND) * MICROS_PER_SECOND
     // Take the first 6 digits from `d`: 1234000000 -> 123400
@@ -187,18 +208,18 @@ class LegacyFastTimestampFormatter(
     fastDateFormat.getTimeZone,
     fastDateFormat.getPattern.count(_ == 'S'))
 
-  override def parse(s: String): SQLTimestamp = {
+  override def parse(s: String): Long = {
     cal.clear() // Clear the calendar because it can be re-used many times
     if (!fastDateFormat.parse(s, new ParsePosition(0), cal)) {
       throw new IllegalArgumentException(s"'$s' is an invalid timestamp")
     }
     val micros = cal.getMicros()
     cal.set(Calendar.MILLISECOND, 0)
-    val julianMicros = Math.addExact(fromMillis(cal.getTimeInMillis), micros)
+    val julianMicros = Math.addExact(millisToMicros(cal.getTimeInMillis), micros)
     rebaseJulianToGregorianMicros(julianMicros)
   }
 
-  override def format(timestamp: SQLTimestamp): String = {
+  override def format(timestamp: Long): String = {
     val julianMicros = rebaseGregorianToJulianMicros(timestamp)
     cal.setTimeInMillis(Math.floorDiv(julianMicros, MICROS_PER_SECOND) * MILLIS_PER_SECOND)
     cal.setMicros(Math.floorMod(julianMicros, MICROS_PER_SECOND))
@@ -270,14 +291,14 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean): TimestampFormatter = {
     val pattern = format.getOrElse(defaultPattern)
-    if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
+    val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
       getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
     } else {
-      val tf = new Iso8601TimestampFormatter(
+      new Iso8601TimestampFormatter(
         pattern, zoneId, locale, legacyFormat, isParsing)
-      tf.validatePatternString()
-      tf
     }
+    formatter.validatePatternString()
+    formatter
   }
 
   def getLegacyFormatter(

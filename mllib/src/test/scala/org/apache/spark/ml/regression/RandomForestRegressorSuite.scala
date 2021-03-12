@@ -175,7 +175,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
     val testParams = Seq(
       (50, 5, 1.0, 0.75),
       (50, 10, 1.0, 0.75),
-      (50, 10, 0.95, 0.78)
+      (50, 10, 0.95, 0.75)
     )
 
     for ((numTrees, maxDepth, subsamplingRate, tol) <- testParams) {

@@ -21,20 +21,17 @@ import java.io.File
 import java.net.URI
 
 import org.mockito.Mockito._
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat, CatalogTable, CatalogTableType, ExternalCatalog, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
   private def getAnalyzer(externCatalog: ExternalCatalog, databasePath: File): Analyzer = {
-    val conf = new SQLConf()
-    val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin, conf)
+    val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin)
     catalog.createDatabase(
       CatalogDatabase("default", "", databasePath.toURI, Map.empty),
       ignoreIfExists = false)
@@ -45,7 +42,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
         CatalogStorageFormat.empty,
         StructType(Seq(StructField("a", IntegerType, nullable = true)))),
       ignoreIfExists = false)
-    new Analyzer(catalog, conf)
+    new Analyzer(catalog)
   }
 
   test("query builtin functions don't call the external catalog") {
@@ -67,7 +64,7 @@ class AnalysisExternalCatalogSuite extends AnalysisTest with Matchers {
     withTempDir { tempDir =>
       val inMemoryCatalog = new InMemoryCatalog
       val externCatalog = spy(inMemoryCatalog)
-      val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin, conf)
+      val catalog = new SessionCatalog(externCatalog, FunctionRegistry.builtin)
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI(tempDir.toString), Map.empty),
         ignoreIfExists = false)

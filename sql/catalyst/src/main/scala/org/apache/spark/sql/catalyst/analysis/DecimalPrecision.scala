@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -98,7 +97,7 @@ object DecimalPrecision extends TypeCoercionRule {
     // Skip nodes who is already promoted
     case e: BinaryArithmetic if e.left.isInstanceOf[PromotePrecision] => e
 
-    case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+    case a @ Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultScale = max(s1, s2)
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
@@ -106,10 +105,12 @@ object DecimalPrecision extends TypeCoercionRule {
       } else {
         DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
       }
-      CheckOverflow(Add(promotePrecision(e1, resultType), promotePrecision(e2, resultType)),
+      CheckOverflow(
+        a.withNewChildren(Seq(promotePrecision(e1, resultType), promotePrecision(e2, resultType))),
         resultType, nullOnOverflow)
 
-    case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+    case s @ Subtract(e1 @ DecimalType.Expression(p1, s1),
+        e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultScale = max(s1, s2)
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(max(p1 - s1, p2 - s2) + resultScale + 1,
@@ -117,20 +118,23 @@ object DecimalPrecision extends TypeCoercionRule {
       } else {
         DecimalType.bounded(max(p1 - s1, p2 - s2) + resultScale + 1, resultScale)
       }
-      CheckOverflow(Subtract(promotePrecision(e1, resultType), promotePrecision(e2, resultType)),
+      CheckOverflow(
+        s.withNewChildren(Seq(promotePrecision(e1, resultType), promotePrecision(e2, resultType))),
         resultType, nullOnOverflow)
 
-    case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+    case m @ Multiply(
+        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(p1 + p2 + 1, s1 + s2)
       } else {
         DecimalType.bounded(p1 + p2 + 1, s1 + s2)
       }
       val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(Multiply(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+      CheckOverflow(
+        m.withNewChildren(Seq(promotePrecision(e1, widerType), promotePrecision(e2, widerType))),
         resultType, nullOnOverflow)
 
-    case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+    case d @ Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         // Precision: p1 - s1 + s2 + max(6, s1 + p2 + 1)
         // Scale: max(6, s1 + p2 + 1)
@@ -149,10 +153,12 @@ object DecimalPrecision extends TypeCoercionRule {
         DecimalType.bounded(intDig + decDig, decDig)
       }
       val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(Divide(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+      CheckOverflow(
+        d.withNewChildren(Seq(promotePrecision(e1, widerType), promotePrecision(e2, widerType))),
         resultType, nullOnOverflow)
 
-    case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+    case r @ Remainder(
+        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
       } else {
@@ -160,10 +166,11 @@ object DecimalPrecision extends TypeCoercionRule {
       }
       // resultType may have lower precision, so we cast them into wider type first.
       val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(Remainder(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+      CheckOverflow(
+        r.withNewChildren(Seq(promotePrecision(e1, widerType), promotePrecision(e2, widerType))),
         resultType, nullOnOverflow)
 
-    case Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+    case p @ Pmod(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val resultType = if (SQLConf.get.decimalOperationsAllowPrecisionLoss) {
         DecimalType.adjustPrecisionScale(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
       } else {
@@ -171,15 +178,15 @@ object DecimalPrecision extends TypeCoercionRule {
       }
       // resultType may have lower precision, so we cast them into wider type first.
       val widerType = widerDecimalType(p1, s1, p2, s2)
-      CheckOverflow(Pmod(promotePrecision(e1, widerType), promotePrecision(e2, widerType)),
+      CheckOverflow(
+        p.withNewChildren(Seq(promotePrecision(e1, widerType), promotePrecision(e2, widerType))),
         resultType, nullOnOverflow)
 
     case expr @ IntegralDivide(
-        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2), _) =>
       val widerType = widerDecimalType(p1, s1, p2, s2)
-      val promotedExpr = IntegralDivide(
-        promotePrecision(e1, widerType),
-        promotePrecision(e2, widerType))
+      val promotedExpr = expr.withNewChildren(
+        Seq(promotePrecision(e1, widerType), promotePrecision(e2, widerType)))
       if (expr.dataType.isInstanceOf[DecimalType]) {
         // This follows division rule
         val intDig = p1 - s1 + s2

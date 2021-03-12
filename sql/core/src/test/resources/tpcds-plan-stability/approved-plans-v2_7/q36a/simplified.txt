@@ -1,0 +1,82 @@
+TakeOrderedAndProject [lochierarchy,i_category,rank_within_parent,gross_margin,i_class]
+  WholeStageCodegen (23)
+    Project [gross_margin,i_category,i_class,lochierarchy,rank_within_parent]
+      InputAdapter
+        Window [gross_margin,lochierarchy,_w0]
+          WholeStageCodegen (22)
+            Sort [lochierarchy,_w0,gross_margin]
+              InputAdapter
+                Exchange [lochierarchy,_w0] #1
+                  WholeStageCodegen (21)
+                    HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy] [_w0]
+                      InputAdapter
+                        Exchange [gross_margin,i_category,i_class,t_category,t_class,lochierarchy] #2
+                          WholeStageCodegen (20)
+                            HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
+                              InputAdapter
+                                Union
+                                  WholeStageCodegen (13)
+                                    HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
+                                      InputAdapter
+                                        Exchange [gross_margin,i_category,i_class,t_category,t_class,lochierarchy] #3
+                                          WholeStageCodegen (12)
+                                            HashAggregate [gross_margin,i_category,i_class,t_category,t_class,lochierarchy]
+                                              InputAdapter
+                                                Union
+                                                  WholeStageCodegen (5)
+                                                    HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),gross_margin,t_category,t_class,lochierarchy,sum,sum]
+                                                      InputAdapter
+                                                        Exchange [i_category,i_class] #4
+                                                          WholeStageCodegen (4)
+                                                            HashAggregate [i_category,i_class,ss_net_profit,ss_ext_sales_price] [sum,sum,sum,sum]
+                                                              Project [ss_ext_sales_price,ss_net_profit,i_class,i_category]
+                                                                BroadcastHashJoin [ss_store_sk,s_store_sk]
+                                                                  Project [ss_store_sk,ss_ext_sales_price,ss_net_profit,i_class,i_category]
+                                                                    BroadcastHashJoin [ss_item_sk,i_item_sk]
+                                                                      Project [ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit]
+                                                                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                          Filter [ss_sold_date_sk,ss_item_sk,ss_store_sk]
+                                                                            ColumnarToRow
+                                                                              InputAdapter
+                                                                                Scan parquet default.store_sales [ss_sold_date_sk,ss_item_sk,ss_store_sk,ss_ext_sales_price,ss_net_profit]
+                                                                          InputAdapter
+                                                                            BroadcastExchange #5
+                                                                              WholeStageCodegen (1)
+                                                                                Project [d_date_sk]
+                                                                                  Filter [d_year,d_date_sk]
+                                                                                    ColumnarToRow
+                                                                                      InputAdapter
+                                                                                        Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                      InputAdapter
+                                                                        BroadcastExchange #6
+                                                                          WholeStageCodegen (2)
+                                                                            Filter [i_item_sk]
+                                                                              ColumnarToRow
+                                                                                InputAdapter
+                                                                                  Scan parquet default.item [i_item_sk,i_class,i_category]
+                                                                  InputAdapter
+                                                                    BroadcastExchange #7
+                                                                      WholeStageCodegen (3)
+                                                                        Project [s_store_sk]
+                                                                          Filter [s_state,s_store_sk]
+                                                                            ColumnarToRow
+                                                                              InputAdapter
+                                                                                Scan parquet default.store [s_store_sk,s_state]
+                                                  WholeStageCodegen (11)
+                                                    HashAggregate [i_category,sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
+                                                      InputAdapter
+                                                        Exchange [i_category] #8
+                                                          WholeStageCodegen (10)
+                                                            HashAggregate [i_category,ss_net_profit,ss_ext_sales_price] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                                                              HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),ss_net_profit,ss_ext_sales_price,sum,sum]
+                                                                InputAdapter
+                                                                  ReusedExchange [i_category,i_class,sum,sum] #4
+                                  WholeStageCodegen (19)
+                                    HashAggregate [sum,isEmpty,sum,isEmpty] [sum(ss_net_profit),sum(ss_ext_sales_price),gross_margin,i_category,i_class,t_category,t_class,lochierarchy,sum,isEmpty,sum,isEmpty]
+                                      InputAdapter
+                                        Exchange #9
+                                          WholeStageCodegen (18)
+                                            HashAggregate [ss_net_profit,ss_ext_sales_price] [sum,isEmpty,sum,isEmpty,sum,isEmpty,sum,isEmpty]
+                                              HashAggregate [i_category,i_class,sum,sum] [sum(UnscaledValue(ss_net_profit)),sum(UnscaledValue(ss_ext_sales_price)),ss_net_profit,ss_ext_sales_price,sum,sum]
+                                                InputAdapter
+                                                  ReusedExchange [i_category,i_class,sum,sum] #4

@@ -23,12 +23,12 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
@@ -140,32 +140,5 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
         fail()
     }
 
-  }
-
-  test("executorOffHeapMemorySizeAsMb when MEMORY_OFFHEAP_ENABLED is false") {
-    val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(new SparkConf())
-    assert(executorOffHeapMemory == 0)
-  }
-
-  test("executorOffHeapMemorySizeAsMb when MEMORY_OFFHEAP_ENABLED is true") {
-    val offHeapMemoryInMB = 50
-    val offHeapMemory: Long = offHeapMemoryInMB * 1024 * 1024
-    val sparkConf = new SparkConf()
-      .set(MEMORY_OFFHEAP_ENABLED, true)
-      .set(MEMORY_OFFHEAP_SIZE, offHeapMemory)
-    val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
-    assert(executorOffHeapMemory == offHeapMemoryInMB)
-  }
-
-  test("executorMemoryOverhead when MEMORY_OFFHEAP_ENABLED is true, " +
-    "but MEMORY_OFFHEAP_SIZE not config scene") {
-    val sparkConf = new SparkConf()
-      .set(MEMORY_OFFHEAP_ENABLED, true)
-    val expected =
-      s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true"
-    val message = intercept[IllegalArgumentException] {
-      YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
-    }.getMessage
-    assert(message.contains(expected))
   }
 }

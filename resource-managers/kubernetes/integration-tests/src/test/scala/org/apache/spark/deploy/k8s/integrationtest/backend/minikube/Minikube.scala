@@ -126,7 +126,7 @@ private[spark] object Minikube extends Logging {
     }
   }
 
-  private def executeMinikube(action: String, args: String*): Seq[String] = {
+  def executeMinikube(action: String, args: String*): Seq[String] = {
     ProcessUtils.executeProcess(
       Array("bash", "-c", s"MINIKUBE_IN_STYLE=true minikube $action ${args.mkString(" ")}"),
       MINIKUBE_STARTUP_TIMEOUT_SECONDS).filter{x =>

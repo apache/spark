@@ -300,7 +300,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("show partitions test").count() == 100)
-          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() <= 10)
         }
       }
     }
@@ -323,7 +323,7 @@ class PartitionedTablePerfStatsSuite
 
           HiveCatalogMetrics.reset()
           assert(spark.sql("show partitions test").count() == 100)
-          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() < 10)
+          assert(HiveCatalogMetrics.METRIC_HIVE_CLIENT_CALLS.getCount() <= 10)
         }
       }
     }

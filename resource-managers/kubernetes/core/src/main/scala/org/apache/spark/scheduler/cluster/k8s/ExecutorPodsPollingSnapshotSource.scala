@@ -59,9 +59,10 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
         .pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
         .list()
         .getItems
-        .asScala)
+        .asScala.toSeq)
     }
   }
 
