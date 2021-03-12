@@ -730,6 +730,15 @@ object functions {
   }
 
   /**
+   * Aggregate function: returns the product of all numerical elements in a group.
+   *
+   * @group agg_funcs
+   * @since 3.2.0
+   */
+  def product(e: Column): Column =
+    withAggregateFunction { new Product(e.expr) }
+
+  /**
    * Aggregate function: returns the skewness of the values in a group.
    *
    * @group agg_funcs

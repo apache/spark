@@ -120,7 +120,8 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
     functionName.funcName.toLowerCase(Locale.ROOT) match {
       case "<>" =>
         Row(s"Function: $functionName") ::
@@ -140,6 +141,9 @@ case class DescribeFunctionCommand(
             "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
             "When `expr1` = `expr2`, returns `expr3`; " +
             "when `expr1` = `expr4`, return `expr5`; else return `expr6`.") :: Nil
+      case "||" =>
+        Row("Function: ||") ::
+          Row("Usage: expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.") :: Nil
       case _ =>
         try {
           val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
@@ -280,5 +284,5 @@ case class RefreshFunctionCommand(
 object FunctionsCommand {
   // operators that do not have corresponding functions.
   // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
-  val virtualOperators = Seq("!=", "<>", "between", "case")
+  val virtualOperators = Seq("!=", "<>", "between", "case", "||")
 }

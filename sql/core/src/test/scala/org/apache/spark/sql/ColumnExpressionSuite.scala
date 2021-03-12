@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -2374,5 +2375,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
     }
     assert(e2.getCause.isInstanceOf[RuntimeException])
     assert(e2.getCause.getMessage == "hello")
+  }
+
+  test("SPARK-34677: negate/add/subtract year-month and day-time intervals") {
+    import testImplicits._
+    val df = Seq((Period.ofMonths(10), Duration.ofDays(10), Period.ofMonths(1), Duration.ofDays(1)))
+      .toDF("year-month-A", "day-time-A", "year-month-B", "day-time-B")
+    val negatedDF = df.select(-$"year-month-A", -$"day-time-A")
+    checkAnswer(negatedDF, Row(Period.ofMonths(-10), Duration.ofDays(-10)))
+    val addDF = df.select($"year-month-A" + $"year-month-B", $"day-time-A" + $"day-time-B")
+    checkAnswer(addDF, Row(Period.ofMonths(11), Duration.ofDays(11)))
+    val subDF = df.select($"year-month-A" - $"year-month-B", $"day-time-A" - $"day-time-B")
+    checkAnswer(subDF, Row(Period.ofMonths(9), Duration.ofDays(9)))
   }
 }

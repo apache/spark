@@ -21,10 +21,11 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{ExplainUtils, SparkPlan}
+import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.collection.{BitSet, CompactBuffer}
 
@@ -33,7 +34,7 @@ case class BroadcastNestedLoopJoinExec(
     right: SparkPlan,
     buildSide: BuildSide,
     joinType: JoinType,
-    condition: Option[Expression]) extends BaseJoinExec {
+    condition: Option[Expression]) extends JoinCodegenSupport {
 
   override def leftKeys: Seq[Expression] = Nil
   override def rightKeys: Seq[Expression] = Nil
@@ -41,7 +42,7 @@ case class BroadcastNestedLoopJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  /** BuildRight means the right relation <=> the broadcast relation. */
+  /** BuildRight means the right relation is the broadcast relation. */
   private val (streamed, broadcast) = buildSide match {
     case BuildRight => (left, right)
     case BuildLeft => (right, left)
@@ -49,7 +50,7 @@ case class BroadcastNestedLoopJoinExec(
 
   override def simpleStringWithNodeId(): String = {
     val opId = ExplainUtils.getOpId(this)
-    s"$nodeName $joinType ${buildSide} ($opId)".trim
+    s"$nodeName $joinType $buildSide ($opId)".trim
   }
 
   override def requiredChildDistribution: Seq[Distribution] = buildSide match {
@@ -59,10 +60,22 @@ case class BroadcastNestedLoopJoinExec(
       UnspecifiedDistribution :: BroadcastDistribution(IdentityBroadcastMode) :: Nil
   }
 
+  override def outputPartitioning: Partitioning = (joinType, buildSide) match {
+    case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
+         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputPartitioning
+    case _ => UnknownPartitioning(left.outputPartitioning.numPartitions)
+  }
+
+  override def outputOrdering: Seq[SortOrder] = (joinType, buildSide) match {
+    case (_: InnerLike, _) | (LeftOuter, BuildRight) | (RightOuter, BuildLeft) |
+         (LeftSemi, BuildRight) | (LeftAnti, BuildRight) => streamed.outputOrdering
+    case _ => Nil
+  }
+
   private[this] def genResultProjection: UnsafeProjection = joinType match {
-    case LeftExistence(j) =>
+    case LeftExistence(_) =>
       UnsafeProjection.create(output, output)
-    case other =>
+    case _ =>
       // Always put the stream side on left to simplify implementation
       // both of left and right side could be null
       UnsafeProjection.create(
@@ -183,7 +196,7 @@ case class BroadcastNestedLoopJoinExec(
    * The implementation for these joins:
    *
    *   LeftSemi with BuildRight
-   *   Anti with BuildRight
+   *   LeftAnti with BuildRight
    */
   private def leftExistenceJoin(
       relation: Broadcast[Array[InternalRow]],
@@ -238,7 +251,6 @@ case class BroadcastNestedLoopJoinExec(
    *   ExistenceJoin with BuildLeft
    */
   private def defaultJoin(relation: Broadcast[Array[InternalRow]]): RDD[InternalRow] = {
-    /** All rows that either match both-way, or rows from streamed joined with nulls. */
     val streamRdd = streamed.execute()
 
     val matchedBuildRows = streamRdd.mapPartitionsInternal { streamedIter =>
@@ -275,7 +287,7 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
         return sparkContext.makeRDD(buf)
-      case j: ExistenceJoin =>
+      case _: ExistenceJoin =>
         val buf: CompactBuffer[InternalRow] = new CompactBuffer()
         var i = 0
         val rel = relation.value
@@ -296,7 +308,7 @@ case class BroadcastNestedLoopJoinExec(
           i += 1
         }
         return sparkContext.makeRDD(notMatched)
-      case o =>
+      case _ =>
     }
 
     val notMatchedBroadcastRows: Seq[InternalRow] = {
@@ -358,7 +370,7 @@ case class BroadcastNestedLoopJoinExec(
         leftExistenceJoin(broadcastedRelation, exists = true)
       case (LeftAnti, BuildRight) =>
         leftExistenceJoin(broadcastedRelation, exists = false)
-      case (j: ExistenceJoin, BuildRight) =>
+      case (_: ExistenceJoin, BuildRight) =>
         existenceJoin(broadcastedRelation)
       case _ =>
         /**
@@ -381,5 +393,63 @@ case class BroadcastNestedLoopJoinExec(
         resultProj(r)
       }
     }
+  }
+
+  override def supportCodegen: Boolean = {
+    joinType.isInstanceOf[InnerLike]
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    streamed.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  override def needCopyResult: Boolean = true
+
+  override def doProduce(ctx: CodegenContext): String = {
+    streamed.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    joinType match {
+      case _: InnerLike => codegenInner(ctx, input)
+      case _ =>
+        throw new IllegalArgumentException(
+          s"BroadcastNestedLoopJoin code-gen should not take $joinType as the JoinType")
+    }
+  }
+
+  /**
+   * Returns the variable name for [[Broadcast]] side.
+   */
+  private def prepareBroadcast(ctx: CodegenContext): String = {
+    // Create a name for broadcast side
+    val broadcastArray = broadcast.executeBroadcast[Array[InternalRow]]()
+    val broadcastTerm = ctx.addReferenceObj("broadcastTerm", broadcastArray)
+
+    // Inline mutable state since not many join operations in a task
+    ctx.addMutableState("InternalRow[]", "buildRowArray",
+      v => s"$v = (InternalRow[]) $broadcastTerm.value();", forceInline = true)
+  }
+
+  private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val buildRowArrayTerm = prepareBroadcast(ctx)
+    val (buildRow, checkCondition, buildVars) = getJoinCondition(ctx, input, streamed, broadcast)
+
+    val resultVars = buildSide match {
+      case BuildLeft => buildVars ++ input
+      case BuildRight => input ++ buildVars
+    }
+    val arrayIndex = ctx.freshName("arrayIndex")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+
+    s"""
+       |for (int $arrayIndex = 0; $arrayIndex < $buildRowArrayTerm.length; $arrayIndex++) {
+       |  UnsafeRow $buildRow = (UnsafeRow) $buildRowArrayTerm[$arrayIndex];
+       |  $checkCondition {
+       |    $numOutput.add(1);
+       |    ${consume(ctx, resultVars)}
+       |  }
+       |}
+     """.stripMargin
   }
 }
