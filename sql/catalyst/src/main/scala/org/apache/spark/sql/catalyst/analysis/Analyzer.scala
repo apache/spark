@@ -352,8 +352,6 @@ class Analyzer(override val catalogManager: CatalogManager)
         case s @ Subtract(l, r, f) if s.childrenResolved => (l.dataType, r.dataType) match {
           case (DateType, YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
-          case (YearMonthIntervalType, DateType) =>
-            DatetimeSub(r, l, DateAddYMInterval(r, UnaryMinus(l, f)))
           case (CalendarIntervalType, CalendarIntervalType) => s
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
