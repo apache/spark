@@ -2403,6 +2403,15 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
         val df = Seq((date, period)).toDF("date", "interval")
         checkAnswer(df.select($"date" + $"interval", $"interval" + $"date"), Row(result, result))
       }
+
+      val e = intercept[SparkException] {
+        Seq((LocalDate.of(2021, 3, 11), Period.ofMonths(Int.MaxValue)))
+          .toDF("date", "interval")
+          .select($"date" + $"interval")
+          .collect()
+      }.getCause
+      assert(e.isInstanceOf[ArithmeticException])
+      assert(e.getMessage.contains("integer overflow"))
     }
   }
 }
