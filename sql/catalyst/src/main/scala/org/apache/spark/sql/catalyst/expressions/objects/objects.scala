@@ -332,7 +332,7 @@ case class Invoke(
       val invokeMethod = if (method.isDefined) {
         method.get
       } else {
-        obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+        obj.getClass.getMethod(functionName, argClasses: _*)
       }
       invoke(obj, invokeMethod, arguments, input, dataType)
     }

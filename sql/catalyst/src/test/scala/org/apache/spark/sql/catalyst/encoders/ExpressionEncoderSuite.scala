@@ -161,10 +161,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Seq(Seq("abc", "xyz"), Seq[String](null), null, Seq("1", null, "2")),
     "seq of seq of string")
 
-  encodeDecodeTest(Array(31, -123, 4), "array of int", useFallback = true)
+  encodeDecodeTest(Array(31, -123, 4), "array of int")
   encodeDecodeTest(Array("abc", "xyz"), "array of string")
   encodeDecodeTest(Array("a", null, "x"), "array of string with null")
-  encodeDecodeTest(Array.empty[Int], "empty array of int", useFallback = true)
+  encodeDecodeTest(Array.empty[Int], "empty array of int")
   encodeDecodeTest(Array.empty[String], "empty array of string")
 
   encodeDecodeTest(Array(Array(31, -123), null, Array(4, 67)), "array of array of int",
