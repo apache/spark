@@ -930,7 +930,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
             |)
           """.stripMargin)
       }.getMessage
-      assert(msg.contains("cannot resolve '`c3`' given input columns"))
+      assert(msg.contains("cannot resolve 'c3' given input columns"))
     }
   }
 }

@@ -147,6 +147,14 @@ package object util extends Logging {
     "`" + name.replace("`", "``") + "`"
   }
 
+  def quoteIfNeeded(part: String): String = {
+    if (part.contains(".") || part.contains("`")) {
+      s"`${part.replace("`", "``")}`"
+    } else {
+      part
+    }
+  }
+
   def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
 
   def escapeSingleQuotedString(str: String): String = {

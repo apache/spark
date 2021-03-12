@@ -344,7 +344,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Console.withOut(outputStream) {
         spark.sql("SELECT f(a._1) FROM x").show
       }
-      assert(outputStream.toString.contains("f(a._1 AS `_1`)"))
+      assert(outputStream.toString.contains("f(a._1 AS _1)"))
     }
   }
 
@@ -728,7 +728,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select(lit(50).as("a"))
       .select(struct("a").as("col"))
     val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
-    assert(error.getMessage.contains("cannot resolve '`b`' given input columns: [a]"))
+    assert(error.getMessage.contains("cannot resolve 'b' given input columns: [a]"))
   }
 
   test("wrong order of input fields for case class") {
